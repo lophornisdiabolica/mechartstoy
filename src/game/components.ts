@@ -124,6 +124,9 @@ export interface Ai {
   /** Where to mass when not attacking (in front of our own base). */
   rallyX: number;
   rallyZ: number;
+  /** This unit's spot relative to a player-set rally point, so groups spread out. */
+  rallyOffsetX: number;
+  rallyOffsetZ: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
 

@@ -88,7 +88,16 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege),
   );
   const rally = rallyPoint(ctx, faction);
-  world.add(e, Ai, { objectiveX: objective.x, objectiveZ: objective.z, rallyX: rally.x, rallyZ: rally.z });
+  const spreadA = ctx.rng.range(0, Math.PI * 2);
+  const spreadR = Math.sqrt(ctx.rng.next()) * 6;
+  world.add(e, Ai, {
+    objectiveX: objective.x,
+    objectiveZ: objective.z,
+    rallyX: rally.x,
+    rallyZ: rally.z,
+    rallyOffsetX: Math.cos(spreadA) * spreadR,
+    rallyOffsetZ: Math.sin(spreadA) * spreadR,
+  });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;
 }

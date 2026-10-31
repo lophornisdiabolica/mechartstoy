@@ -8,7 +8,8 @@ import { distanceToTarget } from './targeting';
 /**
  * Unit movement decisions. With a target: close to weapon range and hold.
  * Without: on the offensive, push into the enemy base; otherwise, mass at
- * the rally point in front of our own base until the next attack.
+ * the rally point until the next attack. The faction's orders can force the
+ * stance and move the rally point.
  */
 export function aiSystem(ctx: SimContext): System {
   return {
@@ -32,11 +33,20 @@ export function aiSystem(ctx: SimContext): System {
           continue;
         }
 
-        if (!isAttacking(world.time, faction)) {
+        const orders = ctx.orders[faction];
+        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, faction));
+        if (!attacking) {
+          const custom = orders.rally;
+          let rx = custom ? custom.x + ai.rallyOffsetX : ai.rallyX;
+          let rz = custom ? custom.z + ai.rallyOffsetZ : ai.rallyZ;
+          if (custom && ctx.field.isWater(rx, rz)) {
+            rx = custom.x;
+            rz = custom.z;
+          }
           // Hold near the rally point; small tolerance so units settle rather than jostle.
-          const near = Math.hypot(ai.rallyX - t.x, ai.rallyZ - t.z) < 2.5;
-          mover.targetX = near ? null : ai.rallyX;
-          mover.targetZ = near ? null : ai.rallyZ;
+          const near = Math.hypot(rx - t.x, rz - t.z) < 2.5;
+          mover.targetX = near ? null : rx;
+          mover.targetZ = near ? null : rz;
           continue;
         }
 

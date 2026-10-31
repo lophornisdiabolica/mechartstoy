@@ -4,6 +4,7 @@ import { Building, Faction, Unit } from './game/components';
 import { FACTIONS } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
 import { Stage } from './render/stage';
+import { Controls } from './ui/controls';
 
 /** ?seed=anything reproduces a battlefield; without it, each load gets a fresh random seed. */
 function readSeed(): string {
@@ -30,34 +31,28 @@ function factionLine(): string {
     const f = game.world.req(e, Faction).id;
     if (f >= 0) buildings[f]++;
   }
-  return FACTIONS.map((f) => `${f.name}: ${alive[f.id]} units, ${buildings[f.id]} buildings, ${losses[f.id]} lost`).join('  ·  ');
+  return FACTIONS.map((f) => `${f.name}: ${alive[f.id]} units, ${buildings[f.id]} buildings, ${losses[f.id]} lost`).join('\n');
 }
 
 const loop = new FixedLoop(1 / SIM_HZ, {
   step: (dt) => game.step(dt),
   render: (alpha, frameSeconds) => {
     stage.render(alpha, frameSeconds, frameSeconds * loop.timeScale);
+    controls.update(frameSeconds);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
     hudTimer -= frameSeconds;
     if (hudTimer <= 0) {
       hudTimer = 0.5;
       hud.textContent =
         `${factionLine()}\n` +
-        `seed ${seedLabel}  ·  ${Math.round(fps)} fps  ·  ${game.world.entityCount} entities\n` +
-        `WASD / right-drag pan · wheel zoom · Q/E rotate · T tilt-shift · space pause`;
+        `seed ${seedLabel}  ·  ${Math.round(fps)} fps\n` +
+        `WASD / right-drag pan · wheel zoom · Q/E rotate · 1-4 speed · space pause`;
     }
   },
 });
-
-window.addEventListener('keydown', (e) => {
-  if (e.key === ' ') loop.timeScale = loop.timeScale === 0 ? 1 : 0;
-  if (e.key.toLowerCase() === 't') {
-    stage.tiltShift.settings.enabled = !stage.tiltShift.settings.enabled;
-    stage.tiltShift.apply();
-  }
-});
+const controls = new Controls(game, stage, loop);
 
 loop.start();
 
 // Handy for poking at things from the browser console.
-Object.assign(window, { game, stage, loop });
+Object.assign(window, { game, stage, loop, controls });

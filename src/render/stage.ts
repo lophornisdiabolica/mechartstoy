@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { Entity } from '../core/ecs';
 import { Rng } from '../core/rng';
 import { Game } from '../game/game';
 import { CameraRig } from './cameraRig';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
+import { Markers } from './markers';
 import './models/buildings';
 import './models/projectiles';
 import './models/units';
@@ -25,6 +27,11 @@ export class Stage {
   readonly tiltShift = new TiltShift();
   readonly entities: EntityView;
   readonly effects: Effects;
+  readonly markers: Markers;
+  /** Entity highlighted by the UI. */
+  selected: Entity | null = null;
+  private readonly raycaster = new THREE.Raycaster();
+  private ground!: THREE.Object3D;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -62,13 +69,17 @@ export class Stage {
     this.scene.add(this.sun, this.sun.target);
 
     const visualRng = new Rng(game.seed ^ 0x5eed);
-    this.scene.add(buildTerrain(field, visualRng));
+    const terrain = buildTerrain(field, visualRng);
+    this.ground = terrain.getObjectByName('ground')!;
+    this.scene.add(terrain);
     this.scene.add(buildProps(game.props, visualRng));
 
     this.entities = new EntityView(game.world);
     this.scene.add(this.entities.root);
     this.effects = new Effects(game.events, field);
     this.scene.add(this.effects.root);
+    this.markers = new Markers(game, this.entities);
+    this.scene.add(this.markers.root);
 
     // Multisampled HDR target so edges stay clean through the post chain.
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -86,7 +97,31 @@ export class Stage {
     this.rig.update(frameSeconds);
     this.entities.sync(alpha, simSeconds);
     this.effects.update(simSeconds);
+    this.markers.update(frameSeconds, this.selected);
     this.composer.render(frameSeconds);
+  }
+
+  /** Ground point under a screen position, or null if off the map. */
+  pickGround(clientX: number, clientY: number): { x: number; z: number } | null {
+    this.setRay(clientX, clientY);
+    const hit = this.raycaster.intersectObject(this.ground, false)[0];
+    return hit ? { x: hit.point.x, z: hit.point.z } : null;
+  }
+
+  /** Entity (unit or building) under a screen position, if any. */
+  pickEntity(clientX: number, clientY: number): Entity | null {
+    this.setRay(clientX, clientY);
+    for (const hit of this.raycaster.intersectObject(this.entities.root, true)) {
+      const e = this.entities.entityForObject(hit.object);
+      if (e !== null) return e;
+    }
+    return null;
+  }
+
+  private setRay(clientX: number, clientY: number): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.rig.camera);
   }
 
   private resize(): void {
