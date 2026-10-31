@@ -23,8 +23,11 @@ export function aiSystem(ctx: SimContext): System {
         const faction = world.req(e, Faction).id;
 
         if (armed.target !== null && world.isAlive(armed.target)) {
+          const tt = world.req(armed.target, Transform);
+          // Square up to whatever we're fighting.
+          mover.faceX = tt.x;
+          mover.faceZ = tt.z;
           if (distanceToTarget(world, e, armed.target) > armed.weapon.range * 0.85) {
-            const tt = world.req(armed.target, Transform);
             mover.targetX = tt.x;
             mover.targetZ = tt.z;
           } else {
@@ -43,7 +46,10 @@ export function aiSystem(ctx: SimContext): System {
             rx = custom.x;
             rz = custom.z;
           }
-          // Hold near the rally point; small tolerance so units settle rather than jostle.
+          // Hold near the rally point facing the enemy; small tolerance so units settle rather than jostle.
+          const enemy = ctx.field.baseSites.find((s) => s.faction !== faction)!;
+          mover.faceX = enemy.x;
+          mover.faceZ = enemy.z;
           const near = Math.hypot(rx - t.x, rz - t.z) < 2.5;
           mover.targetX = near ? null : rx;
           mover.targetZ = near ? null : rz;
@@ -58,6 +64,8 @@ export function aiSystem(ctx: SimContext): System {
         }
         mover.targetX = ai.objectiveX;
         mover.targetZ = ai.objectiveZ;
+        mover.faceX = ai.objectiveX;
+        mover.faceZ = ai.objectiveZ;
       }
     },
   };

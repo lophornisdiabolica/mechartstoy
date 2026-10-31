@@ -1,6 +1,6 @@
-import { System } from '../../core/ecs';
+import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { Building, Collider, Faction, GroundFollow, Mover, Transform, Unit } from '../components';
+import { Building, Collider, Faction, GroundFollow, Mover, NavState, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 
 export function wrapAngle(a: number): number {
@@ -15,42 +15,170 @@ export function turnToward(from: number, to: number, maxStep: number): number {
   return wrapAngle(from + Math.max(-maxStep, Math.min(maxStep, diff)));
 }
 
-/** Detour angles tried, in order, when the straight path runs into water. */
-const DETOURS = [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5];
+/** Route plans allowed per tick, so a crowd re-planning at once can't spike a frame. */
+const PLANS_PER_TICK = 10;
+/** Minimum seconds between re-plans for one unit chasing a moving goal. */
+const REPLAN_INTERVAL = 1;
+/** How far the goal can drift before the route is re-planned. */
+const GOAL_DRIFT = 2.5;
+/** Waypoint counts as reached within this distance. */
+const WAYPOINT_RADIUS = 1.2;
+/** Seconds between progress checks, and checks without progress before sidestepping. */
+const STUCK_CHECK = 0.75;
+const STUCK_LIMIT = 2;
+/** Seconds between re-checking whether the goal is in a clear straight line. */
+const DIRECT_CHECK = 0.4;
 
 /**
- * Turn toward the target, then drive forward. Ground units steer around
- * water by trying progressively wider detours. Arrival clears the target.
- * (Proper pathfinding can replace the detour probe later without touching AI.)
+ * Pick the point to steer at this tick: a sidestep detour, the goal itself
+ * if the straight line is clear, or the next waypoint of a planned route.
  */
-export function movementSystem(field: Battlefield): System {
+function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, budget: { plans: number }): { x: number; z: number } {
+  const nav = m.nav;
+  const goal = { x: m.targetX!, z: m.targetZ! };
+  if (world.time < nav.detourUntil) return { x: nav.detourX, z: nav.detourZ };
+
+  const here = { x: t.x, z: t.z };
+  if (world.time >= nav.directCheckAt) {
+    nav.directCheckAt = world.time + DIRECT_CHECK;
+    nav.direct = m.canCrossWater || ctx.nav.lineClear(here, goal);
+  }
+  if (nav.direct) {
+    nav.path = null;
+    return goal;
+  }
+
+  const drifted = Math.hypot(goal.x - nav.pathGoalX, goal.z - nav.pathGoalZ) > GOAL_DRIFT;
+  const stale = nav.path === null || nav.pathVersion !== ctx.nav.version || (drifted && world.time >= nav.replanAt);
+  if (stale && budget.plans > 0) {
+    budget.plans--;
+    nav.path = ctx.nav.findPath(here, goal);
+    nav.pathIndex = 0;
+    nav.pathGoalX = goal.x;
+    nav.pathGoalZ = goal.z;
+    nav.pathVersion = ctx.nav.version;
+    nav.replanAt = world.time + REPLAN_INTERVAL;
+  }
+  const path = nav.path;
+  if (!path || path.length === 0) return goal;
+
+  while (nav.pathIndex < path.length - 1 && Math.hypot(path[nav.pathIndex].x - t.x, path[nav.pathIndex].z - t.z) < WAYPOINT_RADIUS) {
+    nav.pathIndex++;
+  }
+  // Skip ahead when a later waypoint is already in clear view (e.g. after being pushed aside).
+  if (nav.pathIndex < path.length - 1 && ctx.nav.lineClear(here, path[nav.pathIndex + 1])) nav.pathIndex++;
+  return path[Math.min(nav.pathIndex, path.length - 1)];
+}
+
+/**
+ * Lateral nudge away from things sitting in our way: buildings, enemies, and
+ * friendlies that have stopped. Returns a sideways vector to add to the heading.
+ */
+function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX: number, dirZ: number): { x: number; z: number } {
+  const r = world.get(e, Collider)?.radius ?? 0.5;
+  const lookahead = r + 2.5;
+  const myFaction = world.get(e, Faction)?.id;
+  let ax = 0;
+  let az = 0;
+  ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other) => {
+    if (other === e) return;
+    const ot = world.req(other, Transform);
+    const or = world.get(other, Collider)?.radius ?? 0.5;
+    const isBuilding = world.has(other, Building);
+    if (!isBuilding && world.get(other, Faction)?.id === myFaction) {
+      // Friendlies on the move sort themselves out via separation; only steer around parked ones.
+      const om = world.get(other, Mover);
+      if (om && om.targetX !== null) return;
+    }
+    const vx = ot.x - t.x;
+    const vz = ot.z - t.z;
+    const ahead = vx * dirX + vz * dirZ;
+    if (ahead <= 0 || ahead > lookahead + or) return;
+    // Signed sideways offset of the obstacle from our line of travel (left is positive).
+    const side = vx * -dirZ + vz * dirX;
+    const clearance = r + or + 0.3;
+    if (Math.abs(side) >= clearance) return;
+    const urgency = (1 - Math.max(0, ahead - or) / lookahead) * (1 - Math.abs(side) / clearance);
+    // Steer to the side the obstacle isn't on; dead ahead, break the tie consistently per pair.
+    const away = Math.abs(side) > 0.05 ? -Math.sign(side) : (e + other) % 2 === 0 ? 1 : -1;
+    ax += -dirZ * away * urgency * 2;
+    az += dirX * away * urgency * 2;
+  });
+  return { x: ax, z: az };
+}
+
+/** Every so often check we've actually moved; if not, sidestep for a moment. */
+function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, nav: NavState, dirX: number, dirZ: number): void {
+  if (world.time < nav.checkAt) return;
+  nav.checkAt = world.time + STUCK_CHECK;
+  const moved = Math.hypot(t.x - nav.checkX, t.z - nav.checkZ);
+  nav.checkX = t.x;
+  nav.checkZ = t.z;
+  nav.stuckFor = moved < 0.35 ? nav.stuckFor + 1 : 0;
+  if (nav.stuckFor < STUCK_LIMIT) return;
+  nav.stuckFor = 0;
+  // Try a point off to one side (alternating by entity), then the other.
+  const r = (world.get(e, Collider)?.radius ?? 0.5) + 2.5;
+  const first = e % 2 === 0 ? 1 : -1;
+  for (const side of [first, -first]) {
+    const x = t.x + (-dirZ * side + dirX * 0.3) * r;
+    const z = t.z + (dirX * side + dirZ * 0.3) * r;
+    if (!ctx.nav.blockedAt(x, z) && ctx.field.contains(x, z, 1)) {
+      nav.detourX = x;
+      nav.detourZ = z;
+      nav.detourUntil = world.time + 1.2;
+      nav.path = null;
+      return;
+    }
+  }
+}
+
+/**
+ * Drives units toward their target: plans routes around water and buildings
+ * (A* on the nav grid, only when the straight line is blocked), steers
+ * around obstacles in the way, wriggles free when stuck, and turns idle
+ * units to face where they're told to look.
+ */
+export function movementSystem(ctx: SimContext): System {
   return {
     name: 'movement',
     update(world, dt) {
+      const budget = { plans: PLANS_PER_TICK };
       for (const e of world.query(Transform, Mover)) {
         const t = world.req(e, Transform);
         const m = world.req(e, Mover);
-        if (m.targetX === null || m.targetZ === null) continue;
-        const dx = m.targetX - t.x;
-        const dz = m.targetZ - t.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist < 0.3) {
+
+        if (m.targetX === null || m.targetZ === null) {
+          m.nav.path = null;
+          m.nav.stuckFor = 0;
+          if (m.faceX !== null && m.faceZ !== null) {
+            t.heading = turnToward(t.heading, Math.atan2(-(m.faceZ - t.z), m.faceX - t.x), m.turnRate * 0.5 * dt);
+          }
+          continue;
+        }
+        if (Math.hypot(m.targetX - t.x, m.targetZ - t.z) < 0.3) {
           m.targetX = m.targetZ = null;
           continue;
         }
 
-        let desired = Math.atan2(-dz, dx);
-        if (!m.canCrossWater) {
-          const probe = Math.min(dist, 3);
-          for (const detour of DETOURS) {
-            const a = desired + detour;
-            if (!field.isWater(t.x + Math.cos(a) * probe, t.z - Math.sin(a) * probe)) {
-              desired = a;
-              break;
-            }
-          }
+        const wp = nextWaypoint(ctx, world, t, m, budget);
+        const dx = wp.x - t.x;
+        const dz = wp.z - t.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 1e-4) continue;
+        let dirX = dx / dist;
+        let dirZ = dz / dist;
+        const avoid = avoidance(ctx, world, e, t, dirX, dirZ);
+        const sx = dirX + avoid.x;
+        const sz = dirZ + avoid.z;
+        const sl = Math.hypot(sx, sz);
+        if (sl > 1e-4) {
+          dirX = sx / sl;
+          dirZ = sz / sl;
         }
+        checkStuck(ctx, world, e, t, m.nav, dirX, dirZ);
 
+        const desired = Math.atan2(-dirZ, dirX);
         const diff = wrapAngle(desired - t.heading);
         t.heading = turnToward(t.heading, desired, m.turnRate * dt);
         // Slow down while facing away so units arc rather than strafe.
@@ -58,7 +186,7 @@ export function movementSystem(field: Battlefield): System {
         const stepLen = Math.min(dist, m.speed * throttle * dt);
         const nx = t.x + Math.cos(t.heading) * stepLen;
         const nz = t.z - Math.sin(t.heading) * stepLen;
-        if (m.canCrossWater || !field.isWater(nx, nz)) {
+        if (m.canCrossWater || !ctx.field.isWater(nx, nz)) {
           t.x = nx;
           t.z = nz;
         }
@@ -67,6 +195,29 @@ export function movementSystem(field: Battlefield): System {
   };
 }
 
+/** Keeps the nav grid's building obstacles in sync as buildings fall and rise. */
+export function navObstacleSystem(ctx: SimContext): System {
+  const marked = new Map<Entity, { x: number; z: number; r: number }>();
+  return {
+    name: 'navObstacles',
+    update(world) {
+      for (const [e, o] of marked) {
+        if (!world.has(e, Building)) {
+          ctx.nav.markObstacle(o.x, o.z, o.r, -1);
+          marked.delete(e);
+        }
+      }
+      for (const e of world.query(Building, Transform, Collider)) {
+        if (marked.has(e)) continue;
+        const t = world.req(e, Transform);
+        // A little clearance so routes don't scrape the walls.
+        const o = { x: t.x, z: t.z, r: world.req(e, Collider).radius + 0.5 };
+        ctx.nav.markObstacle(o.x, o.z, o.r, 1);
+        marked.set(e, o);
+      }
+    },
+  };
+}
 /** Pushes overlapping units apart, and out of buildings, so they don't stack up. */
 export function separationSystem(ctx: SimContext): System {
   return {

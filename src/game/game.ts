@@ -3,6 +3,7 @@ import { World } from '../core/ecs';
 import { Rng } from '../core/rng';
 import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield, generateBattlefield } from '../world/battlefield';
+import { NavGrid } from '../world/navGrid';
 import { Prop, scatterProps } from '../world/props';
 import { layoutBase, layoutTown } from '../world/settlements';
 import { BUILDING_DEFS } from './buildings';
@@ -13,7 +14,7 @@ import { spawnBuilding, spawnUnit } from './spawn';
 import { aiSystem } from './systems/ai';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
-import { groundFollowSystem, movementSystem, separationSystem } from './systems/movement';
+import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { DEFAULT_PRODUCTION, productionSystem } from './systems/production';
 import { projectileSystem } from './systems/projectiles';
 import { reinforcementSystem, spawnWave } from './systems/reinforcements';
@@ -53,17 +54,25 @@ export class Game {
     const root = new Rng(seed);
     this.field = generateBattlefield(root.fork(1));
     this.props = scatterProps(this.field, root.fork(2));
-    this.ctx = { field: this.field, events: this.events, grid: new SpatialGrid(6), rng: root.fork(3), orders: defaultOrders() };
+    this.ctx = {
+      field: this.field,
+      events: this.events,
+      grid: new SpatialGrid(6),
+      rng: root.fork(3),
+      nav: new NavGrid(this.field),
+      orders: defaultOrders(),
+    };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
     const ctx = this.ctx;
     const systems = [
       snapshotSystem,
       spatialIndexSystem(ctx),
+      navObstacleSystem(ctx),
       ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
-      movementSystem(this.field),
+      movementSystem(ctx),
       separationSystem(ctx),
       groundFollowSystem(this.field),
       weaponSystem(ctx),

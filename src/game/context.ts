@@ -3,6 +3,7 @@ import { EventBus } from '../core/events';
 import { Rng } from '../core/rng';
 import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield } from '../world/battlefield';
+import { NavGrid } from '../world/navGrid';
 import { BuildingDef } from './buildings';
 import { FactionOrders } from './orders';
 import { ProjectileKind, UnitDef } from './units';
@@ -26,6 +27,8 @@ export interface SimContext {
   /** Targetable entities indexed by position, rebuilt at the start of every tick. */
   grid: SpatialGrid;
   rng: Rng;
+  /** Route planning grid; buildings are kept marked on it as obstacles. */
+  nav: NavGrid;
   /** Player-set orders per faction. */
   orders: FactionOrders[];
 }

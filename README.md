@@ -39,6 +39,7 @@ src/
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites
     props.ts         scenery placement (trees, rocks)
     settlements.ts   base and town layouts (building placements as data)
+    navGrid.ts       route-planning grid (water, steep ground, buildings) and A*
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
     units.ts         unit and weapon definitions (stats are data)
@@ -80,6 +81,10 @@ src/
 - **Adding a building.** Add an entry to `BUILDING_DEFS` in
   `game/buildings.ts` (give it `production` to make units, or `weapon` to
   defend), register a model, and place it in `world/settlements.ts`.
+- **Movement.** AI only sets `Mover.targetX/Z` (and `faceX/Z` for where to
+  look when idle). The movement system goes straight when the line is clear,
+  otherwise plans an A* route on the nav grid, steers around obstacles in
+  the way, and sidesteps if it stops making progress.
 - **Factions.** `NEUTRAL` (-1) is the civilian town: nobody targets it, but
   splash damage hurts it.
 - **Adding a model.** Call `registerModel('key', faction => object3d)` and
