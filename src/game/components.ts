@@ -1,4 +1,5 @@
 import { defineComponent, Entity } from '../core/ecs';
+import { BuildingDef, ProductionEntry } from './buildings';
 import { ProjectileKind, UnitDef, WeaponDef } from './units';
 
 /**
@@ -22,7 +23,10 @@ export function makeTransform(x: number, y: number, z: number, heading = 0): Tra
   return { x, y, z, heading, px: x, py: y, pz: z, pheading: heading };
 }
 
-/** Which side an entity fights for (index into FACTIONS). */
+/** Faction id used for the civilian town, which nobody targets on purpose. */
+export const NEUTRAL = -1;
+
+/** Which side an entity belongs to (index into FACTIONS, or NEUTRAL). */
 export interface Faction {
   id: number;
 }
@@ -60,9 +64,17 @@ export interface Unit {
 }
 export const Unit = defineComponent<Unit>('Unit');
 
+/** Marks a structure and links it to its definition. */
+export interface Building {
+  def: BuildingDef;
+}
+export const Building = defineComponent<Building>('Building');
+
 export interface Health {
   hp: number;
   max: number;
+  /** Fraction of incoming damage ignored, 0..1. */
+  armor: number;
 }
 export const Health = defineComponent<Health>('Health');
 
@@ -72,9 +84,28 @@ export interface Collider {
 }
 export const Collider = defineComponent<Collider>('Collider');
 
+/**
+ * Can be shot at. Indexed in the spatial grid each tick; removed when the
+ * entity dies, which is how other systems know a target is gone.
+ */
+export interface Targetable {
+  kind: 'unit' | 'building';
+}
+export const Targetable = defineComponent<Targetable>('Targetable');
+
 export interface Armed {
   weapon: WeaponDef;
+  /** How far this weapon's owner looks for targets. */
+  sight: number;
+  /** Aims independently of the hull (turret) rather than turning the body. */
+  turret: boolean;
+  turnRate: number;
+  /** Distance from the entity centre to the muzzle, horizontally. */
+  muzzleOffset: number;
+  /** Prefer buildings over units when choosing targets (artillery). */
+  siege: boolean;
   target: Entity | null;
+  nextTargetAt: number;
   /** World-space heading the weapon/turret currently points. */
   aim: number;
   /** Seconds until the next trigger pull. */
@@ -85,14 +116,41 @@ export interface Armed {
 }
 export const Armed = defineComponent<Armed>('Armed');
 
-/** Battlefield AI: chase targets in sight, otherwise push toward the objective. */
+/** Battlefield AI: chase targets in sight, otherwise attack or hold depending on the tide. */
 export interface Ai {
+  /** Where to push when attacking (inside the enemy base). */
   objectiveX: number;
   objectiveZ: number;
-  /** Staggered so not every unit re-thinks on the same tick. */
-  nextThinkAt: number;
+  /** Where to mass when not attacking (in front of our own base). */
+  rallyX: number;
+  rallyZ: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
+
+/** Turns out units on a timer. */
+export interface Producer {
+  table: ProductionEntry[];
+  interval: number;
+  /** Seconds until the next batch. */
+  timer: number;
+}
+export const Producer = defineComponent<Producer>('Producer');
+
+/** A building going up. It's targetable but doesn't produce or shoot until done. */
+export interface Construction {
+  elapsed: number;
+  duration: number;
+}
+export const Construction = defineComponent<Construction>('Construction');
+
+/** What's left of a destroyed building; rebuilt after a delay. */
+export interface Rubble {
+  def: BuildingDef;
+  faction: number;
+  heading: number;
+  rebuildAt: number;
+}
+export const Rubble = defineComponent<Rubble>('Rubble');
 
 /**
  * A shot in flight. It travels from start to end over `duration`; the path is
@@ -102,7 +160,7 @@ export interface Projectile {
   kind: ProjectileKind;
   weapon: WeaponDef;
   faction: number;
-  /** The unit aimed at, which takes the hit if still near the impact point. */
+  /** The entity aimed at, which takes the hit if still near the impact point. */
   target: Entity | null;
   sx: number;
   sy: number;

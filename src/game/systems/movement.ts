@@ -1,6 +1,6 @@
 import { System } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { Collider, Faction, GroundFollow, Mover, Transform, Unit } from '../components';
+import { Building, Collider, Faction, GroundFollow, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 
 export function wrapAngle(a: number): number {
@@ -67,7 +67,7 @@ export function movementSystem(field: Battlefield): System {
   };
 }
 
-/** Pushes overlapping units apart so they don't stack on one spot. */
+/** Pushes overlapping units apart, and out of buildings, so they don't stack up. */
 export function separationSystem(ctx: SimContext): System {
   return {
     name: 'separation',
@@ -76,14 +76,16 @@ export function separationSystem(ctx: SimContext): System {
         const t = world.req(e, Transform);
         const r = world.req(e, Collider).radius;
         const myFaction = world.req(e, Faction).id;
-        ctx.grid.forEachNear(t.x, t.z, r + 2, (other, d2) => {
+        ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2) => {
           if (other === e || d2 < 1e-6) return;
           const ot = world.req(other, Transform);
           const minDist = r + world.req(other, Collider).radius;
           const d = Math.sqrt(d2);
           if (d >= minDist) return;
-          // Each unit moves half the overlap; enemies push a little harder so lines hold.
-          const push = ((minDist - d) / d) * (world.req(other, Faction).id === myFaction ? 0.25 : 0.35);
+          // Buildings don't budge, so the unit takes the whole overlap. Between units each
+          // moves part of it; enemies push a little harder so lines hold.
+          const share = world.has(other, Building) ? 1 : world.req(other, Faction).id === myFaction ? 0.25 : 0.35;
+          const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
           if (!ctx.field.isWater(nx, nz)) {

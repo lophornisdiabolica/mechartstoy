@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Faction, Renderable, Transform, Wreck } from '../game/components';
+import { Armed, Construction, Faction, Renderable, Transform, Wreck } from '../game/components';
 import { createModel, getRig } from './models';
 import { CHARRED } from './models/units';
 
@@ -65,6 +65,11 @@ export class EntityView {
         obj.position.set(x, y, z);
         obj.rotation.y = lerpAngle(t.pheading, t.heading, alpha);
       }
+
+      // Construction sites rise out of the ground.
+      const construction = w.get(e, Construction);
+      const scale = w.req(e, Renderable).scale;
+      obj.scale.y = construction ? scale * Math.max(0.04, construction.elapsed / construction.duration) : scale;
 
       if (!entry.wrecked && w.has(e, Wreck)) this.makeWreck(entry);
       if (entry.wrecked) continue;

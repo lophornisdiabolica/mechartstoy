@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
 import { GameEvents } from '../game/context';
 import { ProjectileKind } from '../game/units';
@@ -133,8 +134,10 @@ class ParticlePool {
   }
 }
 
-/** Something that keeps emitting smoke and flame for a while (a burning wreck). */
+/** Something that keeps emitting smoke and flame for a while (a burning wreck or building). */
 interface Burner {
+  /** Building it's attached to, so it can stop when the building falls. */
+  entity?: Entity;
   x: number;
   y: number;
   z: number;
@@ -175,6 +178,14 @@ export class Effects {
     events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.kind));
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
+    events.on('buildingDamaged', (e) => {
+      this.burners.push({ entity: e.entity, x: e.x, y: e.y + e.def.radius * 0.8, z: e.z, size: e.def.radius * 0.7, until: Infinity, nextPuff: 0 });
+    });
+    events.on('buildingDestroyed', (e) => {
+      for (let i = this.burners.length - 1; i >= 0; i--) if (this.burners[i].entity === e.entity) this.burners.splice(i, 1);
+      this.collapse(e.x, e.y, e.z, e.def.radius);
+    });
+    events.on('constructionStarted', (e) => this.dust(e.x, e.y, e.z, e.def.radius, 10));
   }
 
   update(dt: number): void {
@@ -269,6 +280,49 @@ export class Effects {
     // Dirt clods.
     for (let i = 0; i < 4; i++) {
       this.debris.spawn({ x, y: y + 0.1, z, vx: rand(-3, 3), vy: rand(3, 6), vz: rand(-3, 3), life: rand(1, 2), size: 0.12, endSize: 0.05, color: 0x5a4636, gravity: 14 });
+    }
+  }
+
+  /** A building coming down: a big blast, a dust cloud, flying masonry and a fire. */
+  private collapse(x: number, y: number, z: number, radius: number): void {
+    this.explosion(x, y + radius * 0.5, z, radius * 0.9, 0);
+    this.dust(x, y, z, radius, 16);
+    for (let i = 0; i < 10 * radius; i++) {
+      this.debris.spawn({
+        x: x + rand(-0.5, 0.5) * radius,
+        y: y + rand(0.5, 1.5) * radius,
+        z: z + rand(-0.5, 0.5) * radius,
+        vx: rand(-4, 4),
+        vy: rand(2, 7),
+        vz: rand(-4, 4),
+        life: rand(4, 8),
+        size: rand(0.15, 0.35),
+        endSize: 0.1,
+        color: Math.random() < 0.5 ? 0xd9cfbd : 0x5a544c,
+        gravity: 16,
+      });
+    }
+    this.burners.push({ x, y: y + 0.3, z, size: radius * 0.6, until: this.time + 25, nextPuff: this.time + 0.5 });
+  }
+
+  /** Billowing pale dust ring, for collapses and construction starting. */
+  private dust(x: number, y: number, z: number, radius: number, puffs: number): void {
+    for (let i = 0; i < puffs; i++) {
+      const a = (i / puffs) * Math.PI * 2;
+      this.smoke.spawn({
+        x: x + Math.cos(a) * radius * 0.8,
+        y: y + 0.3,
+        z: z + Math.sin(a) * radius * 0.8,
+        vx: Math.cos(a) * rand(0.8, 1.6),
+        vy: rand(0.3, 0.8),
+        vz: Math.sin(a) * rand(0.8, 1.6),
+        life: rand(2, 3.5),
+        size: 0.4 * Math.max(1, radius * 0.5),
+        endSize: 1.0 * Math.max(1, radius * 0.5),
+        color: 0xb8ab94,
+        endColor: 0xd8d0c0,
+        drag: 0.9,
+      });
     }
   }
 

@@ -16,12 +16,9 @@ function unitCount(game: Game, faction: number): number {
   return n;
 }
 
-/** A game with the opening armies cleared, for controlled scenarios. */
+/** An empty battlefield with no automatic spawning, for controlled scenarios. */
 function emptyGame(seed = 11): Game {
-  const game = new Game(seed);
-  for (const e of game.world.query(Unit)) game.world.destroy(e);
-  game.step(DT);
-  return game;
+  return new Game(seed, { populate: false, autoSpawn: false });
 }
 
 describe('combat', () => {

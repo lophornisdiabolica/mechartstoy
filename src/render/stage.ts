@@ -7,6 +7,7 @@ import { Game } from '../game/game';
 import { CameraRig } from './cameraRig';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
+import './models/buildings';
 import './models/projectiles';
 import './models/units';
 import { buildProps } from './propsMesh';

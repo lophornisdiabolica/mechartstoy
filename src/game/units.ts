@@ -49,6 +49,8 @@ export interface UnitDef {
   weapon: WeaponDef;
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
+  /** Siege units shell buildings in sight before bothering with units. */
+  siege: boolean;
 }
 
 const rifle: WeaponDef = {
@@ -83,6 +85,7 @@ export const UNIT_DEFS = {
     turretTurnRate: 6,
     weapon: rifle,
     wreckTime: 0,
+    siege: false,
   },
   strider: {
     id: 'strider',
@@ -113,6 +116,7 @@ export const UNIT_DEFS = {
       muzzleHeight: 1.6,
     },
     wreckTime: 18,
+    siege: false,
   },
   tank: {
     id: 'tank',
@@ -143,6 +147,7 @@ export const UNIT_DEFS = {
       muzzleHeight: 1.0,
     },
     wreckTime: 25,
+    siege: false,
   },
   titan: {
     id: 'titan',
@@ -173,6 +178,7 @@ export const UNIT_DEFS = {
       muzzleHeight: 3.6,
     },
     wreckTime: 35,
+    siege: true,
   },
   howitzer: {
     id: 'howitzer',
@@ -203,6 +209,7 @@ export const UNIT_DEFS = {
       muzzleHeight: 1.2,
     },
     wreckTime: 25,
+    siege: true,
   },
 } satisfies Record<string, UnitDef>;
 

@@ -33,10 +33,13 @@ src/
   world/     battlefield data (no rendering)
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites
     props.ts         scenery placement (trees, rocks)
+    settlements.ts   base and town layouts (building placements as data)
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
     units.ts         unit and weapon definitions (stats are data)
-    spawn.ts         assembles a unit entity from its definition
+    buildings.ts     building definitions: production, defences, civic
+    spawn.ts         assembles unit and building entities from definitions
+    tide.ts          alternating offensives that keep the front moving
     context.ts       shared services and the game event types
     factions.ts      faction names and colours
     systems/         one file per system (ai, movement, weapons, ...)
@@ -48,7 +51,7 @@ src/
     terrainMesh.ts   low-poly ground, soil skirt and water
     propsMesh.ts     instanced scenery
     models.ts        model registry and rig (turret / animation hooks)
-    models/          unit and projectile models
+    models/          unit, building and projectile models
     entityView.ts    mirrors ECS entities into the scene each frame
     effects.ts       particles for flashes, explosions, smoke, debris
 ```
@@ -65,6 +68,11 @@ src/
 - **Adding a unit.** Add an entry to `UNIT_DEFS` in `game/units.ts`, register
   a model under its `model` key (see `render/models/units.ts`), and add it to
   the wave table in `game/systems/reinforcements.ts`.
+- **Adding a building.** Add an entry to `BUILDING_DEFS` in
+  `game/buildings.ts` (give it `production` to make units, or `weapon` to
+  defend), register a model, and place it in `world/settlements.ts`.
+- **Factions.** `NEUTRAL` (-1) is the civilian town: nobody targets it, but
+  splash damage hurts it.
 - **Adding a model.** Call `registerModel('key', faction => object3d)` and
   give entities `Renderable { model: 'key' }`. Use `setRig` to expose a
   `turret` (aimed automatically from the `Armed` component) or an `animate`
@@ -74,6 +82,17 @@ src/
 - **Transforms** keep previous-tick values (`px`, `py`, ...) so rendering can
   interpolate between sim steps. The snapshot system must stay first.
 
+## How the battle keeps going
+
+- Each base has an HQ, barracks, vehicle factory and mech bay that produce
+  units on timers, plus guard towers. A civilian town sits in no-man's land.
+- The **tide** (`game/tide.ts`) alternates the sides between massing at a
+  rally point and attacking in force, with production surging for whoever
+  is attacking. A mild rubber band helps a badly outnumbered side.
+- Siege units (Titans, Howitzers) prefer shelling buildings.
+- Destroyed buildings leave rubble and are rebuilt once no enemies are
+  nearby; a faction with no production left gets fallback waves.
+
 ## Roadmap
 
 1. ~~Foundations: project setup, isometric camera, tilt-shift, procedural
@@ -81,7 +100,7 @@ src/
 2. ~~Units and combat: data-driven unit definitions, low-poly mechs and
    vehicles, sprite infantry, targeting, weapons, health, endless
    reinforcement.~~
-3. Buildings and destruction: procedural bases, production buildings that
-   spawn units on a timer, decorative buildings, debris, explosions, smoke.
+3. ~~Buildings and destruction: procedural bases, production buildings that
+   spawn units on a timer, decorative buildings, debris, explosions, smoke.~~
 4. Light interaction: spawn units, rally points, pick a side, tilt-shift and
    speed controls.

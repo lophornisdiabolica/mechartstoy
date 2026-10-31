@@ -1,6 +1,6 @@
 import { FixedLoop } from './core/loop';
 import { hashSeed } from './core/rng';
-import { Faction, Unit } from './game/components';
+import { Building, Faction, Unit } from './game/components';
 import { FACTIONS } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
 import { Stage } from './render/stage';
@@ -24,8 +24,13 @@ game.events.on('unitDestroyed', (e) => losses[e.faction]++);
 
 function factionLine(): string {
   const alive = FACTIONS.map(() => 0);
+  const buildings = FACTIONS.map(() => 0);
   for (const e of game.world.query(Unit, Faction)) alive[game.world.req(e, Faction).id]++;
-  return FACTIONS.map((f) => `${f.name}: ${alive[f.id]} units, ${losses[f.id]} lost`).join('  ·  ');
+  for (const e of game.world.query(Building, Faction)) {
+    const f = game.world.req(e, Faction).id;
+    if (f >= 0) buildings[f]++;
+  }
+  return FACTIONS.map((f) => `${f.name}: ${alive[f.id]} units, ${buildings[f.id]} buildings, ${losses[f.id]} lost`).join('  ·  ');
 }
 
 const loop = new FixedLoop(1 / SIM_HZ, {
