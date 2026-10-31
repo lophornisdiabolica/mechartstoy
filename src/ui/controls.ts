@@ -1,11 +1,13 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
 import { Armed, Building, Construction, Faction, Health, NEUTRAL, Producer, Rubble, Unit, Wreck } from '../game/components';
-import { FACTIONS } from '../game/factions';
+import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { Stance } from '../game/orders';
-import { UNIT_DEFS, UnitId } from '../game/units';
+import { UNIT_IDS } from '../game/settings';
+import { UnitId } from '../game/units';
 import { Stage } from '../render/stage';
+import { el, hex, segmented } from './dom';
 
 type Tool = { kind: 'spawn'; unit: UnitId } | { kind: 'rally' } | null;
 
@@ -14,37 +16,18 @@ const SPEEDS = [0, 1, 2, 4];
 const CLICK_SLOP = 6;
 const CLICK_MS = 400;
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  if (text) node.textContent = text;
-  return node;
-}
-
-/** A row of mutually exclusive buttons. */
-function segmented<T>(options: { label: string; value: T; title?: string }[], onPick: (v: T) => void) {
-  const row = el('div', { class: 'seg' });
-  const buttons = options.map((o) => {
-    const b = el('button', { type: 'button', title: o.title ?? o.label }, o.label);
-    b.addEventListener('click', () => onPick(o.value));
-    row.append(b);
-    return { b, value: o.value };
-  });
-  return {
-    row,
-    set(value: T) {
-      for (const { b, value: v } of buttons) b.classList.toggle('on', v === value);
-    },
-  };
-}
-
-function hex(c: number): string {
-  return `#${c.toString(16).padStart(6, '0')}`;
+/** What the battle section of the panel asks the app to do. */
+export interface MatchControls {
+  /** End this battle now and go to the setup screen. */
+  endBattle(): void;
+  /** Whether to go to setup (instead of straight into a new map) when this battle is won. */
+  setupAfterBattle: boolean;
 }
 
 /**
  * The in-battle control panel and map clicks. Talks to the sim only through
- * Game's command methods, and to the view through Stage.
+ * Game's command methods, and to the view through Stage. One per battle;
+ * dispose() removes it.
  */
 export class Controls {
   private playerFaction: number | null = null;
@@ -56,20 +39,36 @@ export class Controls {
   private readonly inspect = el('div', { class: 'inspect' });
   private readonly sync: (() => void)[] = [];
   private inspectTimer = 0;
+  /** Removes every listener this panel added outside itself. */
+  private readonly listeners = new AbortController();
 
   constructor(
     private readonly game: Game,
     private readonly stage: Stage,
     private readonly loop: FixedLoop,
+    private readonly factions: readonly FactionDef[],
+    private readonly match: MatchControls,
+    collapsed: boolean,
   ) {
     this.build();
     document.body.append(this.panel, this.toast);
-    // Start folded away on phones so the battle is visible.
-    if (window.matchMedia('(max-width: 600px)').matches) this.panel.querySelector<HTMLButtonElement>('.collapse')?.click();
+    if (collapsed) this.panel.querySelector<HTMLButtonElement>('.collapse')?.click();
     this.bindCanvas(stage.renderer.domElement);
     this.bindKeys();
     this.refresh();
   }
+
+  get collapsed(): boolean {
+    return this.panel.classList.contains('collapsed');
+  }
+
+  dispose(): void {
+    this.listeners.abort();
+    this.panel.remove();
+    this.toast.remove();
+    this.stage.renderer.domElement.style.cursor = '';
+  }
+
 
   /** Called every frame. */
   update(frameSeconds: number): void {
@@ -101,6 +100,34 @@ export class Controls {
       return s;
     };
 
+    // Battle
+    const conquest = this.game.settings.mode === 'conquest';
+    const battle = section('Battle');
+    battle.append(
+      el(
+        'p',
+        { class: 'hint' },
+        conquest ? 'Conquest: destroy the enemy HQ and every production building to win.' : 'Eternal: ruins are rebuilt and the war never ends.',
+      ),
+    );
+    const endRow = el('div', { class: 'row' });
+    const end = el('button', { type: 'button', title: 'End this battle now and change the settings' }, 'End battle and set up');
+    end.addEventListener('click', () => this.match.endBattle());
+    endRow.append(end);
+    battle.append(endRow);
+    if (conquest) {
+      const queueLabel = el('label', { class: 'check' });
+      const queue = el('input', { type: 'checkbox' });
+      queue.addEventListener('change', () => {
+        this.match.setupAfterBattle = queue.checked;
+        this.refresh();
+      });
+      queueLabel.append(queue, document.createTextNode(' Set up after this battle'));
+      queueLabel.title = 'When this battle is won, go to the setup screen instead of straight into a new map';
+      battle.append(queueLabel);
+      this.sync.push(() => (queue.checked = this.match.setupAfterBattle));
+    }
+
     // Speed
     const speed = segmented(
       SPEEDS.map((v) => ({ label: v === 0 ? '❚❚' : `${v}×`, value: v, title: v === 0 ? 'Pause (space)' : `${v}× speed` })),
@@ -114,7 +141,7 @@ export class Controls {
       [
         { label: 'Watch', value: null, title: 'Just watch' },
         // Short names fit the buttons; the full name is in the tooltip.
-        ...FACTIONS.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
+        ...this.factions.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
       ],
       (v) => this.setSide(v),
     );
@@ -124,8 +151,9 @@ export class Controls {
     // Spawn palette
     const spawn = section('Drop units', 'needs-side');
     const grid = el('div', { class: 'grid' });
-    const spawnButtons = (Object.keys(UNIT_DEFS) as UnitId[]).map((id) => {
-      const b = el('button', { type: 'button', title: `Drop a ${UNIT_DEFS[id].name}` }, UNIT_DEFS[id].name);
+    const units = this.game.ctx.units;
+    const spawnButtons = UNIT_IDS.map((id) => {
+      const b = el('button', { type: 'button', title: `Drop a ${units[id].name}` }, units[id].name);
       b.addEventListener('click', () => this.setTool(this.tool?.kind === 'spawn' && this.tool.unit === id ? null : { kind: 'spawn', unit: id }));
       grid.append(b);
       return { b, id };
@@ -262,7 +290,7 @@ export class Controls {
     const building = w.get(e, Building);
     const rubble = w.get(e, Rubble);
     const factionId = w.get(e, Faction)?.id ?? rubble?.faction ?? NEUTRAL;
-    const faction = FACTIONS[factionId];
+    const faction = this.factions[factionId];
     const name = unit?.def.name ?? building?.def.name ?? (rubble ? `${rubble.def.name} (ruins)` : 'Wreck');
 
     const title = el('div', { class: 'title' });
@@ -289,10 +317,12 @@ export class Controls {
     if (construction) lines.push(`Under construction: ${Math.round((construction.elapsed / construction.duration) * 100)}%`);
     const producer = w.get(e, Producer);
     if (producer && !construction) {
-      const names = [...new Set(producer.table.map((p) => UNIT_DEFS[p.unit].name))].join(', ');
+      const names = [...new Set(producer.table.map((p) => this.game.ctx.units[p.unit].name))].join(', ');
       lines.push(`Builds ${names}`);
     }
-    if (rubble) lines.push(`Rebuilding in ${Math.max(0, Math.ceil(rubble.rebuildAt - w.time))}s`);
+    if (rubble) {
+      lines.push(this.game.settings.mode === 'eternal' ? `Rebuilding in ${Math.max(0, Math.ceil(rubble.rebuildAt - w.time))}s` : 'Ruins');
+    }
     if (w.has(e, Wreck)) lines.push('Destroyed');
     for (const line of lines) this.inspect.append(el('div', { class: 'line' }, line));
   }
@@ -305,16 +335,21 @@ export class Controls {
   }
 
   private bindCanvas(canvas: HTMLCanvasElement): void {
+    const { signal } = this.listeners;
     let down: { x: number; y: number; t: number } | null = null;
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button === 0) down = { x: e.clientX, y: e.clientY, t: performance.now() };
-    });
+    canvas.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (e.button === 0) down = { x: e.clientX, y: e.clientY, t: performance.now() };
+      },
+      { signal },
+    );
     canvas.addEventListener('pointerup', (e) => {
       if (!down || e.button !== 0) return;
       const isClick = Math.hypot(e.clientX - down.x, e.clientY - down.y) < CLICK_SLOP && performance.now() - down.t < CLICK_MS;
       down = null;
       if (isClick) this.click(e.clientX, e.clientY);
-    });
+    }, { signal });
   }
 
   private bindKeys(): void {
@@ -334,6 +369,6 @@ export class Controls {
       } else if (['1', '2', '3', '4'].includes(key)) {
         this.setSpeed(SPEEDS[Number(key) - 1]);
       }
-    });
+    }, { signal: this.listeners.signal });
   }
 }

@@ -6,25 +6,25 @@ import { Battlefield, generateBattlefield } from '../world/battlefield';
 import { NavGrid } from '../world/navGrid';
 import { Prop, scatterProps } from '../world/props';
 import { layoutBase, layoutTown } from '../world/settlements';
-import { BUILDING_DEFS } from './buildings';
-import { Faction, Unit } from './components';
-import { GameEvents, SimContext } from './context';
+import { GameEvents, Outcome, SimContext } from './context';
 import { defaultOrders, Stance } from './orders';
+import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { spawnBuilding, spawnUnit } from './spawn';
 import { aiSystem } from './systems/ai';
+import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
-import { DEFAULT_PRODUCTION, productionSystem } from './systems/production';
+import { countUnits, productionSystem } from './systems/production';
 import { projectileSystem } from './systems/projectiles';
 import { reinforcementSystem, spawnWave } from './systems/reinforcements';
 import { snapshotSystem } from './systems/snapshot';
 import { spatialIndexSystem } from './systems/spatialIndex';
 import { targetingSystem } from './systems/targeting';
 import { weaponSystem } from './systems/weapons';
-import { UNIT_DEFS, UnitId } from './units';
+import { UnitId } from './units';
 
-export type { GameEvents } from './context';
+export type { GameEvents, Outcome } from './context';
 
 export const SIM_HZ = 30;
 
@@ -33,6 +33,8 @@ export interface GameOptions {
   populate: boolean;
   /** Run production and fallback reinforcements. */
   autoSpawn: boolean;
+  /** Map, army and unit tuning. The seed field is ignored here; pass the hashed seed separately. */
+  settings: BattleSettings;
 }
 
 /**
@@ -45,14 +47,16 @@ export class Game {
   readonly field: Battlefield;
   readonly props: Prop[];
   readonly ctx: SimContext;
+  readonly settings: BattleSettings;
 
   constructor(
     readonly seed: number,
     options: Partial<GameOptions> = {},
   ) {
-    const { populate = true, autoSpawn = true } = options;
+    const { populate = true, autoSpawn = true, settings = defaultSettings() } = options;
+    this.settings = settings;
     const root = new Rng(seed);
-    this.field = generateBattlefield(root.fork(1));
+    this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
     this.ctx = {
       field: this.field,
@@ -61,6 +65,12 @@ export class Game {
       rng: root.fork(3),
       nav: new NavGrid(this.field),
       orders: defaultOrders(),
+      settings,
+      units: tunedUnits(settings),
+      buildings: tunedBuildings(settings),
+      // Whoever surges first has an edge, so it's a coin flip (on its own stream, so nothing else shifts).
+      tideOrder: root.fork(6).chance(0.5) ? 1 : 0,
+      outcome: null,
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -80,6 +90,7 @@ export class Game {
       deathSystem(ctx),
       wreckSystem(),
       constructionSystem(ctx),
+      conquestSystem(ctx),
     ];
     for (const system of systems) this.world.addSystem(system);
 
@@ -90,15 +101,18 @@ export class Game {
     this.world.step(dt);
   }
 
+  /** Conquest result, once decided. Always null in Eternal mode. */
+  get outcome(): Outcome | null {
+    return this.ctx.outcome;
+  }
+
   // Player commands. The UI calls these; they're the only way it changes the sim.
 
   /** Drop a unit at a point. Returns false if the spot is unusable or the side is at its cap. */
   spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
     if (!this.field.contains(x, z, 1) || this.field.isWater(x, z)) return false;
-    let alive = 0;
-    for (const e of this.world.query(Unit, Faction)) if (this.world.req(e, Faction).id === faction) alive++;
-    if (alive >= DEFAULT_PRODUCTION.maxUnitsPerFaction) return false;
-    spawnUnit(this.world, this.ctx, UNIT_DEFS[unit], faction, x, z);
+    if (countUnits(this.world)[faction] >= this.settings.armies.unitCap) return false;
+    spawnUnit(this.world, this.ctx, this.ctx.units[unit], faction, x, z);
     return true;
   }
 
@@ -117,11 +131,10 @@ export class Game {
       ...this.field.townSites.flatMap((site) => layoutTown(this.field, site, rng)),
     ];
     for (const p of placements) {
-      spawnBuilding(this.world, this.ctx, BUILDING_DEFS[p.building], p.faction, p.x, p.z, p.heading);
+      spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
     // Opening armies muster partway forward so the first clash comes quickly.
-    for (const site of this.field.baseSites) {
-      spawnWave(this.world, this.ctx, site.faction, 4, 0.4);
-    }
+    const picks = this.settings.armies.startingArmy;
+    if (picks > 0) for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, picks, 0.4);
   }
 }

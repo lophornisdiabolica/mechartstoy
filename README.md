@@ -1,7 +1,8 @@
 # Mech Battle Toy
 
-A browser toy where two factions of little low-poly mechs fight an endless,
-procedurally generated battle on a tilt-shifted isometric diorama.
+A browser toy where two factions of little low-poly mechs fight a
+procedurally generated battle on a tilt-shifted isometric diorama, either
+forever or until one side is wiped out.
 
 ## Running
 
@@ -12,7 +13,17 @@ npm test         # unit tests (headless, no browser needed)
 npm run build    # typecheck + production build into dist/
 ```
 
-Add `?seed=anything` to the URL to reproduce a battlefield.
+The page opens on a **setup screen** over a battle that's already running.
+Pick a mode, map size, water and hills, army pacing, per-unit stat
+multipliers and faction names and colours, then start. Everything you change
+is written to the page URL, so a link reproduces a setup (and, during a
+battle, its exact map via `seed`).
+
+- **Eternal:** ruined buildings are rebuilt and the war never ends.
+- **Conquest:** no rebuilding. A side loses when its HQ and every production
+  building are destroyed; after a short victory banner a fresh map starts
+  with the same settings. "Set up after this battle" goes to the setup
+  screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
 rotate, T toggles tilt-shift, space pauses, 1-4 set speed, Esc cancels.
@@ -48,11 +59,13 @@ src/
     tide.ts          alternating offensives that keep the front moving
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
-    factions.ts      faction names and colours
+    factions.ts      default faction names and colours
+    settings.ts      BattleSettings: everything the setup screen tunes, and what it derives
     systems/         one file per system (ai, movement, weapons, ...)
     game.ts          wires world + battlefield + systems together
   render/    Three.js view
-    stage.ts         renderer, scene, lights, post-processing chain
+    stage.ts         renderer, scene, lights, post-processing; load(game) swaps battles
+    dispose.ts       frees a battle's GPU resources (shared model caches are kept)
     cameraRig.ts     isometric orthographic camera and controls
     tiltShift.ts     tilt-shift blur + colour grade passes
     terrainMesh.ts   low-poly ground, soil skirt and water
@@ -63,7 +76,11 @@ src/
     effects.ts       particles for flashes, explosions, smoke, debris
     markers.ts       rally flags and the selection ring
   ui/
-    controls.ts      control panel and map clicks; changes the sim only via Game commands
+    controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
+    setupScreen.ts   pre-battle settings screen
+    settingsUrl.ts   settings <-> URL query string (only non-default values)
+    dom.ts           small DOM helpers
+  app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
 
 ### Conventions
@@ -85,6 +102,13 @@ src/
   look when idle). The movement system goes straight when the line is clear,
   otherwise plans an A* route on the nav grid, steers around obstacles in
   the way, and sidesteps if it stops making progress.
+- **Settings.** Tuning the player can change lives in `BattleSettings`
+  (`game/settings.ts`). Systems read it from `ctx.settings` every tick, and
+  use `ctx.units` / `ctx.buildings` (the definitions with multipliers
+  applied) rather than `UNIT_DEFS` / `BUILDING_DEFS` directly. To add a
+  setting: add it to the type and `defaultSettings()`, give it a range in
+  `LIMITS`, a URL key in `ui/settingsUrl.ts` and a control in
+  `ui/setupScreen.ts`.
 - **Factions.** `NEUTRAL` (-1) is the civilian town: nobody targets it, but
   splash damage hurts it.
 - **Adding a model.** Call `registerModel('key', faction => object3d)` and
@@ -102,10 +126,13 @@ src/
   units on timers, plus guard towers. A civilian town sits in no-man's land.
 - The **tide** (`game/tide.ts`) alternates the sides between massing at a
   rally point and attacking in force, with production surging for whoever
-  is attacking. A mild rubber band helps a badly outnumbered side.
+  is attacking. Which side surges first is a coin flip per map. In Eternal
+  mode a mild rubber band helps a badly outnumbered side; Conquest lets an
+  advantage snowball so battles end (about 4 to 12 minutes on a medium map).
 - Siege units (Titans, Howitzers) prefer shelling buildings.
-- Destroyed buildings leave rubble and are rebuilt once no enemies are
-  nearby; a faction with no production left gets fallback waves.
+- In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
+  enemies are nearby, and a faction with no production left gets fallback
+  waves. In Conquest, ruins stay ruins.
 
 ## Roadmap
 
@@ -118,5 +145,7 @@ src/
    spawn units on a timer, decorative buildings, debris, explosions, smoke.~~
 4. ~~Light interaction: spawn units, rally points, pick a side, tilt-shift and
    speed controls.~~
-5. Pre-battle setup screen: map size and seed, battle pacing, per-unit stat
-   multipliers, faction names and colours, saved in the URL.
+5. ~~Pre-battle setup screen and Conquest mode: map size and seed, battle
+   pacing, per-unit stat multipliers, faction names and colours, saved in
+   the URL; battles that end and roll into a new map.~~
+6. Smarter tactics: flanking lanes, so armies use the whole map.

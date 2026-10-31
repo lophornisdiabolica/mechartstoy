@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FACTIONS } from '../game/factions';
+import { FACTIONS, FactionDef } from '../game/factions';
 
 /**
  * Model registry: maps a Renderable.model key to a factory that builds a
@@ -64,7 +64,7 @@ export function glowMaterial(color: number): THREE.Material {
   const key = `glow-${color.toString(16)}`;
   let m = materialCache.get(key);
   if (!m) {
-    m = new THREE.MeshBasicMaterial({ color });
+    m = markShared(new THREE.MeshBasicMaterial({ color }));
     materialCache.set(key, m);
   }
   return m;
@@ -75,7 +75,7 @@ export function flatMaterial(color: number): THREE.Material {
   const key = color.toString(16);
   let m = materialCache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.7, metalness: 0.15 });
+    m = markShared(new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.7, metalness: 0.15 }));
     materialCache.set(key, m);
   }
   return m;
@@ -84,15 +84,45 @@ export function flatMaterial(color: number): THREE.Material {
 /** Civilian palette for the neutral town. */
 const NEUTRAL_COLORS = { primary: 0xb5654a, secondary: 0x6d7b86 };
 
+let palette: readonly FactionDef[] = FACTIONS;
+
+/** Set the faction colours models are built with (from the battle settings). Affects models built afterwards. */
+export function setFactionPalette(defs: readonly FactionDef[]): void {
+  palette = defs;
+}
+
 export function factionColors(faction: number): { primary: number; secondary: number } {
-  const def = FACTIONS[faction];
+  const def = palette[faction];
   return def ? { primary: def.primary, secondary: def.secondary } : NEUTRAL_COLORS;
+}
+
+/**
+ * Geometry and materials from the caches here are shared by every model and
+ * live for the whole session. Anything else in a model belongs to it alone.
+ */
+const shared = new WeakSet<object>();
+
+export function isShared(resource: object): boolean {
+  return shared.has(resource);
+}
+
+/** Mark a resource a model module creates once and reuses, so scene teardown leaves it alone. */
+export function markShared<T extends object>(resource: T): T {
+  shared.add(resource);
+  return resource;
 }
 
 /** Box mesh helper: size, position, colour. Most low-poly parts are just boxes. */
 export function box(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(boxGeometry(w, h, d), flatMaterial(color));
   m.position.set(x, y, z);
+  return m;
+}
+
+/** Unlit box, for lights and tracers. */
+export function glowBox(w: number, h: number, d: number, color: number): THREE.Mesh {
+  const m = new THREE.Mesh(boxGeometry(w, h, d), glowMaterial(color));
+  m.userData.noShadow = true;
   return m;
 }
 
@@ -107,7 +137,7 @@ export function gableRoof(length: number, width: number, height: number, color: 
     g.rotateX(-Math.PI / 2);
     g.scale(1, height / 1.5, width / Math.sqrt(3));
     g.translate(0, height / 3, 0);
-    geometryCache.set(key, g);
+    geometryCache.set(key, markShared(g));
   }
   const m = new THREE.Mesh(g, flatMaterial(color));
   m.position.y = y;
@@ -119,7 +149,7 @@ export function cylinder(radiusTop: number, radiusBottom: number, height: number
   let g = geometryCache.get(key);
   if (!g) {
     g = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
-    geometryCache.set(key, g);
+    geometryCache.set(key, markShared(g));
   }
   const m = new THREE.Mesh(g, flatMaterial(color));
   m.position.set(x, y, z);
@@ -133,7 +163,7 @@ function boxGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
   let g = geometryCache.get(key);
   if (!g) {
     g = new THREE.BoxGeometry(w, h, d);
-    geometryCache.set(key, g);
+    geometryCache.set(key, markShared(g));
   }
   return g;
 }

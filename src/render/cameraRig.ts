@@ -31,10 +31,16 @@ export class CameraRig {
 
   constructor(
     private readonly dom: HTMLElement,
-    private readonly bounds: Bounds,
+    private bounds: Bounds,
   ) {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
     this.bindInput();
+  }
+
+  /** Switch to a new map: re-centre and clamp panning to its bounds. */
+  setBounds(bounds: Bounds): void {
+    this.bounds = bounds;
+    this.target.set(0, 2, 0);
   }
 
   setSize(width: number, height: number): void {
@@ -95,6 +101,8 @@ export class CameraRig {
 
   private bindInput(): void {
     window.addEventListener('keydown', (e) => {
+      // Typing in a text box shouldn't fly the camera around.
+      if (e.target instanceof HTMLElement && e.target.matches('input:not([type=range]):not([type=checkbox]), textarea')) return;
       const key = e.key.toLowerCase();
       this.keys.add(key);
       if (key === 'q') this.targetAzimuth -= Math.PI / 2;

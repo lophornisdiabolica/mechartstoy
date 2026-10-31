@@ -3,16 +3,6 @@ import { Building, Construction, Faction, Producer, Transform, Unit } from '../c
 import { SimContext } from '../context';
 import { spawnUnit } from '../spawn';
 import { tide } from '../tide';
-import { UNIT_DEFS } from '../units';
-
-export interface ProductionConfig {
-  /** No new units while a faction has this many alive. */
-  maxUnitsPerFaction: number;
-}
-
-export const DEFAULT_PRODUCTION: ProductionConfig = {
-  maxUnitsPerFaction: 60,
-};
 
 /** Units alive per faction (index 0 and 1). */
 export function countUnits(world: World): number[] {
@@ -26,24 +16,28 @@ export function countUnits(world: World): number[] {
 
 /**
  * Production buildings turn out units on their own timers. Two things scale
- * the rate: the tide (see tide.ts), and a mild rubber band that helps a badly
- * outnumbered side recover.
+ * the rate: the tide (see tide.ts), and (in Eternal mode) a mild rubber band
+ * that helps a badly outnumbered side recover. The settings' production multiplier and unit cap
+ * apply on top.
  */
-export function productionSystem(ctx: SimContext, config = DEFAULT_PRODUCTION): System {
+export function productionSystem(ctx: SimContext): System {
   return {
     name: 'production',
     update(world, dt) {
       const alive = countUnits(world);
+      const { armies } = ctx.settings;
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
         const faction = world.req(e, Faction).id;
         const producer = world.req(e, Producer);
         // Ratio > 1 means this side is outnumbered.
         const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
-        producer.timer -= dt * Math.min(1.8, Math.max(0.75, ratio)) * tide(world.time, faction);
+        // Conquest needs a winner, so it skips the rubber band and lets an advantage snowball.
+        const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
+        producer.timer -= dt * armies.production * band * tide(world.time, faction ^ ctx.tideOrder, armies);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
-        if (alive[faction] >= config.maxUnitsPerFaction) continue;
+        if (alive[faction] >= armies.unitCap) continue;
 
         const total = producer.table.reduce((s, p) => s + p.weight, 0);
         let roll = ctx.rng.range(0, total);
@@ -58,7 +52,7 @@ export function productionSystem(ctx: SimContext, config = DEFAULT_PRODUCTION): 
           const x = doorX + ctx.rng.range(-1.2, 1.2);
           const z = doorZ + ctx.rng.range(-1.2, 1.2);
           if (!ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1)) {
-            spawnUnit(world, ctx, UNIT_DEFS[entry.unit], faction, x, z);
+            spawnUnit(world, ctx, ctx.units[entry.unit], faction, x, z);
             alive[faction]++;
           }
         }

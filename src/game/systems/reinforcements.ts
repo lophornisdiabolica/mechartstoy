@@ -2,7 +2,7 @@ import { System, World } from '../../core/ecs';
 import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { spawnUnit } from '../spawn';
-import { UNIT_DEFS, UnitId } from '../units';
+import { UnitId } from '../units';
 import { countUnits } from './production';
 
 /** One pick from the wave table: what to spawn and how many at once. */
@@ -25,14 +25,11 @@ export interface ReinforcementConfig {
   interval: number;
   /** Picks from the wave table per wave. */
   picksPerWave: number;
-  /** No new waves while a faction has this many units alive. */
-  maxUnitsPerFaction: number;
 }
 
 export const DEFAULT_REINFORCEMENTS: ReinforcementConfig = {
   interval: 20,
   picksPerWave: 2,
-  maxUnitsPerFaction: 60,
 };
 
 function pickEntry(ctx: SimContext): WaveEntry {
@@ -60,7 +57,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
     for (let n = 0; n < entry.count; n++) {
       const x = gx + ctx.rng.range(-1.5, 1.5);
       const z = gz + ctx.rng.range(-1.5, 1.5);
-      if (!ctx.field.isWater(x, z)) spawnUnit(world, ctx, UNIT_DEFS[entry.unit], faction, x, z);
+      if (!ctx.field.isWater(x, z)) spawnUnit(world, ctx, ctx.units[entry.unit], faction, x, z);
     }
   }
 }
@@ -68,12 +65,15 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
 /**
  * Fallback for a faction whose production buildings are all destroyed: timed,
  * rubber-banded waves from its base keep it in the fight until it rebuilds.
+ * Conquest has no rebuilding (losing production loses the battle), so this
+ * only runs in Eternal mode.
  */
 export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEMENTS): System {
   const nextWaveAt = [0, 0].map(() => ctx.rng.range(config.interval * 0.5, config.interval));
   return {
     name: 'reinforcements',
     update(world) {
+      if (ctx.settings.mode !== 'eternal') return;
       const producing = [false, false];
       for (const e of world.query(Producer, Faction)) {
         if (!world.has(e, Construction)) producing[world.req(e, Faction).id] = true;
@@ -84,7 +84,7 @@ export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEM
         // Ratio > 1 means this side is outnumbered.
         const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
         nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
-        if (producing[faction] || alive[faction] >= config.maxUnitsPerFaction) continue;
+        if (producing[faction] || alive[faction] >= ctx.settings.armies.unitCap) continue;
         const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
         spawnWave(world, ctx, faction, Math.max(1, picks), 0.12);
       }

@@ -8,13 +8,16 @@ const BLOCKED_RETRY = 5;
 
 /**
  * Keeps the destruction cycle going: rubble becomes a construction site once
- * the area is clear of hostile units, and sites rise until complete.
+ * the area is clear of hostile units, and sites rise until complete. In
+ * Conquest mode nothing is rebuilt, so ruins stay ruins.
  */
 export function constructionSystem(ctx: SimContext): System {
   return {
     name: 'construction',
     update(world, dt) {
+      const rebuild = ctx.settings.mode === 'eternal';
       for (const e of world.query(Rubble, Transform)) {
+        if (!rebuild) break;
         const rubble = world.req(e, Rubble);
         if (world.time < rubble.rebuildAt) continue;
         const t = world.req(e, Transform);

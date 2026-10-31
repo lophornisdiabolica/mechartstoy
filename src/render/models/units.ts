@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AnimState, box, factionColors, flatMaterial, registerModel, setRig } from '../models';
+import { AnimState, box, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
 
 /**
  * Low-poly unit models. Each is a handful of boxes built facing +x, with
@@ -192,15 +192,18 @@ function trooperSheet(faction: number): THREE.CanvasTexture {
   return tex;
 }
 
-const trooperSheets = new Map<number, THREE.CanvasTexture>();
-const blobShadowGeometry = new THREE.CircleGeometry(0.22, 8).rotateX(-Math.PI / 2);
-const blobShadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
+/** Sheets are keyed by colours, since faction colours can change between battles. */
+const trooperSheets = new Map<string, THREE.CanvasTexture>();
+const blobShadowGeometry = markShared(new THREE.CircleGeometry(0.22, 8).rotateX(-Math.PI / 2));
+const blobShadowMaterial = markShared(new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
 
 registerModel('trooper', (faction) => {
-  let sheet = trooperSheets.get(faction);
+  const { primary, secondary } = factionColors(faction);
+  const key = `${primary}|${secondary}`;
+  let sheet = trooperSheets.get(key);
   if (!sheet) {
-    sheet = trooperSheet(faction);
-    trooperSheets.set(faction, sheet);
+    sheet = markShared(trooperSheet(faction));
+    trooperSheets.set(key, sheet);
   }
   // Each sprite gets its own texture view (sharing the image) so frames animate independently.
   const tex = sheet.clone();

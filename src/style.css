@@ -228,7 +228,252 @@ body {
   opacity: 1;
 }
 
+#hud[hidden] {
+  display: none;
+}
+
+/* Setup screen: a card over the backdrop battle. */
+#setup {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(18, 24, 32, 0.35);
+  color: #e6edf3;
+  font-size: 12px;
+  z-index: 10;
+}
+
+#setup[hidden] {
+  display: none;
+}
+
+#setup .card {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 10px;
+  background: rgba(16, 20, 28, 0.88);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+#setup header {
+  padding: 16px 18px 8px;
+}
+
+#setup h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+#setup header p {
+  margin: 4px 0 0;
+  color: #8b98a8;
+}
+
+#setup .body {
+  padding: 0 18px 8px;
+  overflow-y: auto;
+}
+
+#setup section {
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#setup h2 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b98a8;
+}
+
+#setup .field {
+  display: grid;
+  grid-template-columns: 96px 1fr 84px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+#setup .field .value {
+  text-align: right;
+  color: #b3becb;
+  white-space: nowrap;
+}
+
+/* Rows without a value readout use the full width. */
+#setup .field > :nth-child(2):last-child {
+  grid-column: 2 / 4;
+}
+
+#setup .hint {
+  margin: 6px 0 0;
+  color: #8b98a8;
+  font-size: 11px;
+}
+
+#setup .inline {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+#setup .inline input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+
+#setup button,
+#setup input[type='text'],
+#setup input[type='number'] {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 5px 7px;
+}
+
+#setup button {
+  cursor: pointer;
+}
+
+#setup button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#setup button.on,
+#setup button.primary {
+  background: #e8d27a;
+  border-color: #e8d27a;
+  color: #1a1d24;
+}
+
+#setup button.primary {
+  font-weight: 600;
+  padding: 7px 16px;
+}
+
+#setup .seg {
+  display: flex;
+  gap: 4px;
+}
+
+#setup .seg button {
+  flex: 1;
+}
+
+#setup input[type='range'] {
+  width: 100%;
+  accent-color: #e8d27a;
+}
+
+#setup input[type='color'] {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+#setup label.check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+#setup table.stats {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+}
+
+#setup table.stats th {
+  font-weight: normal;
+  color: #8b98a8;
+  text-align: left;
+  padding: 2px 4px;
+}
+
+#setup table.stats td {
+  padding: 2px;
+}
+
+#setup table.stats input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#setup table.stats input.changed {
+  border-color: #e8d27a;
+}
+
+#setup footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Conquest result. */
+#banner {
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  padding: 14px 28px;
+  border-radius: 10px;
+  border-bottom: 4px solid var(--accent, #e8d27a);
+  background: rgba(16, 20, 28, 0.82);
+  color: #e6edf3;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#banner[hidden] {
+  display: none;
+}
+
+#banner .title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+#banner .next {
+  margin-top: 4px;
+  color: #8b98a8;
+  font-size: 12px;
+}
+
 @media (max-width: 600px) {
+  #setup {
+    padding: 8px;
+  }
+
+  #setup .field {
+    grid-template-columns: 72px 1fr 64px;
+    gap: 6px;
+  }
+
+  #banner .title {
+    font-size: 17px;
+  }
+
   #panel {
     top: 8px;
     right: 8px;
