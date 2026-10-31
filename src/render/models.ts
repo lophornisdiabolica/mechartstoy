@@ -81,14 +81,47 @@ export function flatMaterial(color: number): THREE.Material {
   return m;
 }
 
+/** Civilian palette for the neutral town. */
+const NEUTRAL_COLORS = { primary: 0xb5654a, secondary: 0x6d7b86 };
+
 export function factionColors(faction: number): { primary: number; secondary: number } {
-  const def = FACTIONS[faction] ?? FACTIONS[0];
-  return { primary: def.primary, secondary: def.secondary };
+  const def = FACTIONS[faction];
+  return def ? { primary: def.primary, secondary: def.secondary } : NEUTRAL_COLORS;
 }
 
 /** Box mesh helper: size, position, colour. Most low-poly parts are just boxes. */
 export function box(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(boxGeometry(w, h, d), flatMaterial(color));
+  m.position.set(x, y, z);
+  return m;
+}
+
+/** Triangular-prism gable roof spanning `length` along x, `width` along z. */
+export function gableRoof(length: number, width: number, height: number, color: number, y: number): THREE.Mesh {
+  const key = `roof|${length}|${width}|${height}`;
+  let g = geometryCache.get(key);
+  if (!g) {
+    // A 3-sided cylinder lying along x is a prism; scale it to the footprint.
+    g = new THREE.CylinderGeometry(1, 1, length, 3, 1);
+    g.rotateZ(Math.PI / 2);
+    g.rotateX(-Math.PI / 2);
+    g.scale(1, height / 1.5, width / Math.sqrt(3));
+    g.translate(0, height / 3, 0);
+    geometryCache.set(key, g);
+  }
+  const m = new THREE.Mesh(g, flatMaterial(color));
+  m.position.y = y;
+  return m;
+}
+
+export function cylinder(radiusTop: number, radiusBottom: number, height: number, segments: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
+  const key = `cyl|${radiusTop}|${radiusBottom}|${height}|${segments}`;
+  let g = geometryCache.get(key);
+  if (!g) {
+    g = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
+    geometryCache.set(key, g);
+  }
+  const m = new THREE.Mesh(g, flatMaterial(color));
   m.position.set(x, y, z);
   return m;
 }

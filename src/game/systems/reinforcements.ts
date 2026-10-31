@@ -1,8 +1,9 @@
 import { System, World } from '../../core/ecs';
-import { Faction, Unit } from '../components';
+import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { spawnUnit } from '../spawn';
 import { UNIT_DEFS, UnitId } from '../units';
+import { countUnits } from './production';
 
 /** One pick from the wave table: what to spawn and how many at once. */
 interface WaveEntry {
@@ -29,9 +30,9 @@ export interface ReinforcementConfig {
 }
 
 export const DEFAULT_REINFORCEMENTS: ReinforcementConfig = {
-  interval: 14,
-  picksPerWave: 3,
-  maxUnitsPerFaction: 55,
+  interval: 20,
+  picksPerWave: 2,
+  maxUnitsPerFaction: 60,
 };
 
 function pickEntry(ctx: SimContext): WaveEntry {
@@ -65,28 +66,27 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
 }
 
 /**
- * Keeps the battle going forever by sending timed waves from each base.
- * Waves are rubber-banded: the side with fewer units gets bigger, more
- * frequent waves, so neither side is wiped out and the front swings back and
- * forth. Step 3's production buildings take over most of this job.
+ * Fallback for a faction whose production buildings are all destroyed: timed,
+ * rubber-banded waves from its base keep it in the fight until it rebuilds.
  */
 export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEMENTS): System {
-  const nextWaveAt = [0, 0].map(() => ctx.rng.range(2, config.interval));
+  const nextWaveAt = [0, 0].map(() => ctx.rng.range(config.interval * 0.5, config.interval));
   return {
     name: 'reinforcements',
     update(world) {
-      const alive = [0, 0];
-      for (const e of world.query(Unit, Faction)) alive[world.req(e, Faction).id]++;
+      const producing = [false, false];
+      for (const e of world.query(Producer, Faction)) {
+        if (!world.has(e, Construction)) producing[world.req(e, Faction).id] = true;
+      }
+      const alive = countUnits(world);
       for (let faction = 0; faction < nextWaveAt.length; faction++) {
+        if (world.time < nextWaveAt[faction]) continue;
         // Ratio > 1 means this side is outnumbered.
         const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
-        // An outnumbered side doesn't wait out a long timer.
-        const due = world.time >= nextWaveAt[faction] || (ratio > 2 && world.time >= nextWaveAt[faction] - config.interval * 0.5);
-        if (!due) continue;
         nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
-        if (alive[faction] >= config.maxUnitsPerFaction) continue;
+        if (producing[faction] || alive[faction] >= config.maxUnitsPerFaction) continue;
         const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
-        spawnWave(world, ctx, faction, Math.max(1, picks));
+        spawnWave(world, ctx, faction, Math.max(1, picks), 0.12);
       }
     },
   };

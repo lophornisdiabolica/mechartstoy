@@ -22,7 +22,7 @@ export function scatterProps(field: Battlefield, rng: Rng, count = 420): Prop[] 
     const z = rng.range(b.minZ + 1, b.maxZ - 1);
     const y = field.heightAt(x, z);
     if (y < field.seaLevel + 0.3) continue;
-    if (field.baseSites.some((s) => Math.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
+    if ([...field.baseSites, ...field.townSites].some((s) => Math.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
     const slope = field.slopeAt(x, z);
     // Trees cluster on gentle slopes, rocks on steeper ground.
     const kind: PropKind = slope > 0.6 || rng.chance(0.18) ? 'rock' : 'tree';

@@ -1,7 +1,8 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Armed, Faction, makeTransform, Mover, Projectile, Renderable, Transform, Unit } from '../components';
+import { Armed, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
+import { distanceToTarget } from './targeting';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -9,21 +10,20 @@ const AIM_TOLERANCE = 0.12;
 function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity): void {
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
-  const def = world.req(e, Unit).def;
   const w = armed.weapon;
 
-  const sx = t.x + Math.cos(armed.aim) * def.radius * 0.8;
-  const sz = t.z - Math.sin(armed.aim) * def.radius * 0.8;
+  const sx = t.x + Math.cos(armed.aim) * armed.muzzleOffset;
+  const sz = t.z - Math.sin(armed.aim) * armed.muzzleOffset;
   const sy = t.y + w.muzzleHeight;
 
+  const targetRadius = world.get(target, Collider)?.radius ?? 0.5;
   const dist = Math.hypot(tt.x - sx, tt.z - sz);
   // Miss distance grows with range; sqrt keeps the scatter evenly spread over the disc.
   const missR = w.spread * dist * Math.sqrt(ctx.rng.next());
   const missA = ctx.rng.range(0, Math.PI * 2);
   const ex = tt.x + Math.cos(missA) * missR;
   const ez = tt.z + Math.sin(missA) * missR;
-  const targetDef = world.get(target, Unit)?.def;
-  const ey = ctx.field.surfaceAt(ex, ez) + (targetDef ? Math.min(1, targetDef.radius * 0.6) : 0.3);
+  const ey = ctx.field.surfaceAt(ex, ez) + Math.min(1.5, targetRadius * 0.6);
 
   const p = world.create();
   world.add(p, Transform, makeTransform(sx, sy, sz, armed.aim));
@@ -51,28 +51,28 @@ export function weaponSystem(ctx: SimContext): System {
   return {
     name: 'weapons',
     update(world, dt) {
-      for (const e of world.query(Armed, Transform, Unit)) {
+      for (const e of world.query(Armed, Transform)) {
+        if (world.has(e, Construction)) continue;
         const armed = world.req(e, Armed);
         const t = world.req(e, Transform);
-        const def = world.req(e, Unit).def;
         armed.cooldown -= dt;
 
-        const target = armed.target !== null && world.has(armed.target, Unit) ? armed.target : null;
+        const target = armed.target !== null && world.has(armed.target, Targetable) ? armed.target : null;
         if (target === null) {
           armed.burstLeft = 0;
           // Turrets drift back to face forward when idle.
-          armed.aim = def.turret ? turnToward(armed.aim, t.heading, def.turretTurnRate * dt) : t.heading;
+          armed.aim = armed.turret ? turnToward(armed.aim, t.heading, armed.turnRate * dt) : t.heading;
           continue;
         }
 
         const tt = world.req(target, Transform);
         const desired = Math.atan2(-(tt.z - t.z), tt.x - t.x);
-        if (def.turret) {
-          armed.aim = turnToward(armed.aim, desired, def.turretTurnRate * dt);
+        if (armed.turret) {
+          armed.aim = turnToward(armed.aim, desired, armed.turnRate * dt);
         } else {
           // Turret-less units turn the whole body once they've stopped to shoot.
           const mover = world.get(e, Mover);
-          if (!mover || mover.targetX === null) t.heading = turnToward(t.heading, desired, def.turnRate * dt);
+          if (!mover || mover.targetX === null) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
           armed.aim = t.heading;
         }
 
@@ -86,7 +86,7 @@ export function weaponSystem(ctx: SimContext): System {
           continue;
         }
 
-        const d = Math.hypot(tt.x - t.x, tt.z - t.z);
+        const d = distanceToTarget(world, e, target);
         const inRange = d <= armed.weapon.range && d >= armed.weapon.minRange;
         const aligned = Math.abs(wrapAngle(desired - armed.aim)) < AIM_TOLERANCE;
         if (armed.cooldown <= 0 && inRange && aligned) {

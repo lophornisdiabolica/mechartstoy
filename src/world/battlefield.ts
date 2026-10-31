@@ -20,7 +20,7 @@ export interface BattlefieldConfig {
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
-  cols: 96,
+  cols: 84,
   rows: 64,
   cellSize: 1.5,
   maxHeight: 9,
@@ -34,6 +34,14 @@ export interface BaseSite {
   z: number;
   radius: number;
   /** Ground height of the flattened pad. */
+  height: number;
+}
+
+/** A flattened clearing in no-man's land where a civilian town stands. */
+export interface TownSite {
+  x: number;
+  z: number;
+  radius: number;
   height: number;
 }
 
@@ -54,6 +62,7 @@ export class Battlefield {
     /** Vertex heights, (cols + 1) * (rows + 1), row-major along x. */
     readonly heights: Float32Array,
     readonly baseSites: BaseSite[],
+    readonly townSites: TownSite[] = [],
   ) {
     this.width = config.cols * config.cellSize;
     this.depth = config.rows * config.cellSize;
@@ -182,20 +191,45 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     }
   }
 
-  const field = new Battlefield(config, heights, baseSites);
+  const townSites: TownSite[] = [];
+  const field = new Battlefield(config, heights, baseSites, townSites);
+
+  const flatten = (cx: number, cz: number, radius: number, height: number) => {
+    for (let j = 0; j <= rows; j++) {
+      for (let i = 0; i <= cols; i++) {
+        const d = Math.hypot(field.vertexX(i) - cx, field.vertexZ(j) - cz);
+        const t = 1 - smoothstep(radius * 0.8, radius * 1.35, d);
+        if (t <= 0) continue;
+        const k = j * (cols + 1) + i;
+        heights[k] = heights[k] * (1 - t) + height * t;
+      }
+    }
+  };
 
   // Flatten each base pad, keeping it safely above water.
   for (const site of baseSites) {
     site.height = Math.max(seaLevel + 1.2, field.heightAt(site.x, site.z));
-    for (let j = 0; j <= rows; j++) {
-      for (let i = 0; i <= cols; i++) {
-        const d = Math.hypot(field.vertexX(i) - site.x, field.vertexZ(j) - site.z);
-        const t = 1 - smoothstep(site.radius * 0.8, site.radius * 1.35, d);
-        if (t <= 0) continue;
-        const k = j * (cols + 1) + i;
-        heights[k] = heights[k] * (1 - t) + site.height * t;
-      }
+    flatten(site.x, site.z, site.radius, site.height);
+  }
+
+  // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
+  const townRadius = 11;
+  let best: { x: number; z: number; score: number } | null = null;
+  for (let n = 0; n < 40; n++) {
+    const x = rng.range(-width * 0.16, width * 0.16);
+    const z = rng.range(-depth / 2 + townRadius + 2, depth / 2 - townRadius - 2);
+    let score = 0;
+    for (let a = 0; a < 8; a++) {
+      const px = x + Math.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
+      const pz = z + Math.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
+      score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
     }
+    if (!best || score < best.score) best = { x, z, score };
+  }
+  if (best) {
+    const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
+    townSites.push({ x: best.x, z: best.z, radius: townRadius, height });
+    flatten(best.x, best.z, townRadius, height);
   }
 
   return field;
