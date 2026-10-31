@@ -9,6 +9,7 @@ import {
   Faction,
   GroundFollow,
   Health,
+  makeNavState,
   makeTransform,
   Mover,
   NEUTRAL,
@@ -79,7 +80,16 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   world.add(e, Targetable, { kind: 'unit' });
   world.add(e, Renderable, { model: def.model, scale: 1 });
   world.add(e, GroundFollow, { offset: 0 });
-  world.add(e, Mover, { speed: def.speed, turnRate: def.turnRate, targetX: null, targetZ: null, canCrossWater: false });
+  world.add(e, Mover, {
+    speed: def.speed,
+    turnRate: def.turnRate,
+    targetX: null,
+    targetZ: null,
+    faceX: null,
+    faceZ: null,
+    canCrossWater: false,
+    nav: makeNavState(),
+  });
   world.add(e, Health, { hp: def.hp, max: def.hp, armor: def.armor });
   world.add(e, Collider, { radius: def.radius });
   world.add(

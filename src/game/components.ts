@@ -46,17 +46,65 @@ export interface GroundFollow {
 }
 export const GroundFollow = defineComponent<GroundFollow>('GroundFollow');
 
-/** Simple movement toward a target point. AI systems set the target. */
+/** Movement toward a target point. AI systems set the target; the movement system finds the way. */
 export interface Mover {
   speed: number;
   /** Max turn rate, radians per second. */
   turnRate: number;
   targetX: number | null;
   targetZ: number | null;
+  /** Where to face while standing idle (e.g. toward the enemy), if anywhere. */
+  faceX: number | null;
+  faceZ: number | null;
   /** Hover units may cross water; everything else steers around it. */
   canCrossWater: boolean;
+  /** Route-following and unsticking state, owned by the movement system. */
+  nav: NavState;
 }
 export const Mover = defineComponent<Mover>('Mover');
+
+export interface NavState {
+  /** Planned waypoints toward pathGoal, or null when heading straight there. */
+  path: { x: number; z: number }[] | null;
+  pathIndex: number;
+  pathGoalX: number;
+  pathGoalZ: number;
+  /** NavGrid version the path was planned against. */
+  pathVersion: number;
+  replanAt: number;
+  /** Cached "straight line to the goal is clear" answer, and when to re-check it. */
+  direct: boolean;
+  directCheckAt: number;
+  /** Progress check for stuck detection. */
+  checkAt: number;
+  checkX: number;
+  checkZ: number;
+  stuckFor: number;
+  /** Temporary sidestep point used to wriggle free when stuck. */
+  detourX: number;
+  detourZ: number;
+  detourUntil: number;
+}
+
+export function makeNavState(): NavState {
+  return {
+    path: null,
+    pathIndex: 0,
+    pathGoalX: 0,
+    pathGoalZ: 0,
+    pathVersion: -1,
+    replanAt: 0,
+    direct: false,
+    directCheckAt: 0,
+    checkAt: 0,
+    checkX: 0,
+    checkZ: 0,
+    stuckFor: 0,
+    detourX: 0,
+    detourZ: 0,
+    detourUntil: -1,
+  };
+}
 
 /** Marks a combat unit and links it to its definition. */
 export interface Unit {
