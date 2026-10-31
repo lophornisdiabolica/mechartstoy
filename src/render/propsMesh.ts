@@ -24,7 +24,8 @@ function treeGeometry(): THREE.BufferGeometry {
     g.deleteAttribute('uv');
     return g;
   };
-  return mergeNonIndexed([paint(canopy, 0xffffff), paint(trunk, 0x6b4a32)]);
+  // Scaled down so trees sit at a believable size next to the units.
+  return mergeNonIndexed([paint(canopy, 0xffffff), paint(trunk, 0x6b4a32)]).scale(0.65, 0.65, 0.65);
 }
 
 function rockGeometry(): THREE.BufferGeometry {

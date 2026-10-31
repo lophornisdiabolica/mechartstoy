@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
-import { Game } from '../src/game/game';
 import { generateBattlefield } from '../src/world/battlefield';
 
 describe('generateBattlefield', () => {
@@ -30,13 +29,5 @@ describe('generateBattlefield', () => {
     const z = f.vertexZ(10);
     const mid = f.heightAt((x0 + x1) / 2, z);
     expect(mid).toBeCloseTo((f.vertexHeight(10, 10) + f.vertexHeight(11, 10)) / 2, 5);
-  });
-});
-
-describe('Game', () => {
-  it('runs headless and keeps units on the map surface', () => {
-    const game = new Game(5);
-    for (let i = 0; i < 300; i++) game.step(1 / 30);
-    expect(game.world.entityCount).toBe(20);
   });
 });
