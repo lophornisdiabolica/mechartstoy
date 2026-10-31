@@ -101,7 +101,11 @@ src/
 - **Movement.** AI only sets `Mover.targetX/Z` (and `faceX/Z` for where to
   look when idle). The movement system goes straight when the line is clear,
   otherwise plans an A* route on the nav grid, steers around obstacles in
-  the way, and sidesteps if it stops making progress.
+  the way, and sidesteps if it stops making progress. Routes respect the
+  unit's radius: the nav grid keeps a clearance map, so a Titan only plans
+  through gaps it fits. Spawning (`spawnSpot` in `systems/production.ts`)
+  also checks there's room, and base layouts keep an apron clear in front of
+  production doors.
 - **Settings.** Tuning the player can change lives in `BattleSettings`
   (`game/settings.ts`). Systems read it from `ctx.settings` every tick, and
   use `ctx.units` / `ctx.buildings` (the definitions with multipliers
@@ -115,6 +119,9 @@ src/
   give entities `Renderable { model: 'key' }`. Use `setRig` to expose a
   `turret` (aimed automatically from the `Armed` component) or an `animate`
   hook (walk cycles etc.).
+  `test/models.test.ts` builds every model and fails if two parts have
+  faces in the same plane (z-fighting); make trim a touch larger or smaller
+  than the part it sits on rather than flush.
 - **Effects** listen to game events (`fired`, `impact`, `unitDestroyed`) and
   never touch the simulation.
 - **Transforms** keep previous-tick values (`px`, `py`, ...) so rendering can

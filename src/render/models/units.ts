@@ -117,7 +117,7 @@ registerModel('tank', (faction) => {
   const root = new THREE.Group();
   root.add(...tracks(2.3, 0.4, 0.45, 0.6));
   root.add(box(2.1, 0.45, 1.1, primary, 0, 0.6, 0));
-  root.add(box(0.5, 0.25, 1.1, secondary, 0.85, 0.5, 0));
+  root.add(box(0.5, 0.25, 1.16, secondary, 0.85, 0.5, 0)); // bumper, a touch wider than the hull
 
   const turret = new THREE.Group();
   turret.position.set(-0.1, 0.83, 0);

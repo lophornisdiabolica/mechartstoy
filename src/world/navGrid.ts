@@ -10,6 +10,12 @@ const STEEP = 0.7;
 const STEEP_COST = 3;
 /** Cap on A* node expansions per search, so a hopeless search can't stall a tick. */
 const MAX_EXPANSIONS = 8000;
+/**
+ * Extra room a unit wants beyond its radius, measured from the centre of the
+ * nearest blocked cell. Obstacles are already marked a little larger than
+ * the buildings, so this stays small.
+ */
+const CLEARANCE_MARGIN = 0.1;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -74,6 +80,10 @@ class Heap {
  * Coarse grid for route planning. Water is impassable, steep ground costs
  * more, and buildings are added/removed as obstacles while the game runs
  * (`version` bumps on every change so cached routes know to re-plan).
+ *
+ * Big units only fit through wide gaps, so every query takes the unit's
+ * radius. A clearance map (distance from each cell to the nearest blocked
+ * cell) keeps routes to gaps the unit fits through.
  */
 export class NavGrid {
   readonly cols: number;
@@ -85,6 +95,9 @@ export class NavGrid {
   private readonly cost: Float32Array;
   /** Number of obstacles covering each cell. */
   private readonly occupied: Uint16Array;
+  /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
+  private readonly clearance: Float32Array;
+  private clearanceVersion = -1;
 
   // Scratch buffers reused across searches.
   private readonly g: Float32Array;
@@ -105,6 +118,7 @@ export class NavGrid {
     this.water = new Uint8Array(n);
     this.cost = new Float32Array(n);
     this.occupied = new Uint16Array(n);
+    this.clearance = new Float32Array(n);
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
         const { x, z } = this.center(i, j);
@@ -145,6 +159,68 @@ export class NavGrid {
     return this.blocked(i, j);
   }
 
+  /** Whether a unit of this radius can stand in a cell. Radius 0 means "any open cell". */
+  fits(i: number, j: number, radius = 0): boolean {
+    if (this.blocked(i, j)) return false;
+    if (radius <= 0) return true;
+    this.updateClearance();
+    return this.clearance[j * this.cols + i] >= radius + CLEARANCE_MARGIN;
+  }
+
+  fitsAt(x: number, z: number, radius = 0): boolean {
+    const [i, j] = this.cellOf(x, z);
+    return this.fits(i, j, radius);
+  }
+
+  /** Room around a point: distance to the nearest blocked cell or the map edge. */
+  clearanceAt(x: number, z: number): number {
+    const [i, j] = this.cellOf(x, z);
+    if (this.blocked(i, j)) return 0;
+    this.updateClearance();
+    return this.clearance[j * this.cols + i];
+  }
+
+  /** Rebuild the clearance map after obstacles change (two-pass chamfer distance transform). */
+  private updateClearance(): void {
+    if (this.clearanceVersion === this.version) return;
+    this.clearanceVersion = this.version;
+    const { cols, rows, cellSize } = this;
+    const c = this.clearance;
+    const diag = cellSize * SQRT2;
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const k = j * cols + i;
+        // The map edge counts as a wall just outside the outermost cells.
+        c[k] = this.blocked(i, j) ? 0 : Math.min(i + 1, cols - i, j + 1, rows - j) * cellSize;
+      }
+    }
+    const relax = (k: number, i: number, j: number, d: number) => {
+      if (i < 0 || j < 0 || i >= cols || j >= rows) return;
+      const v = c[j * cols + i] + d;
+      if (v < c[k]) c[k] = v;
+    };
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const k = j * cols + i;
+        if (c[k] === 0) continue;
+        relax(k, i - 1, j, cellSize);
+        relax(k, i, j - 1, cellSize);
+        relax(k, i - 1, j - 1, diag);
+        relax(k, i + 1, j - 1, diag);
+      }
+    }
+    for (let j = rows - 1; j >= 0; j--) {
+      for (let i = cols - 1; i >= 0; i--) {
+        const k = j * cols + i;
+        if (c[k] === 0) continue;
+        relax(k, i + 1, j, cellSize);
+        relax(k, i, j + 1, cellSize);
+        relax(k, i + 1, j + 1, diag);
+        relax(k, i - 1, j + 1, diag);
+      }
+    }
+  }
+
   /** Mark (or with delta -1, unmark) the cells a circular obstacle covers. */
   markObstacle(x: number, z: number, radius: number, delta: 1 | -1): void {
     const [i0, j0] = this.cellOf(x - radius, z - radius);
@@ -160,28 +236,28 @@ export class NavGrid {
     this.version++;
   }
 
-  /** True if a straight walk between two points crosses no blocked cell. */
-  lineClear(a: Point, b: Point): boolean {
+  /** True if a unit of this radius can walk straight between two points. */
+  lineClear(a: Point, b: Point, radius = 0): boolean {
     const dist = Math.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.ceil(dist / (this.cellSize * 0.5));
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
-      if (this.blockedAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false;
+      if (!this.fitsAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, radius)) return false;
     }
     return true;
   }
 
-  /** The closest unblocked cell to a point (searching outward in rings). */
-  nearestOpen(x: number, z: number, maxRing = 12): [number, number] | null {
+  /** The closest cell a unit of this radius fits in (searching outward in rings). */
+  nearestOpen(x: number, z: number, maxRing = 12, radius = 0): [number, number] | null {
     const [ci, cj] = this.cellOf(x, z);
-    if (!this.blocked(ci, cj)) return [ci, cj];
+    if (this.fits(ci, cj, radius)) return [ci, cj];
     for (let r = 1; r <= maxRing; r++) {
       let best: [number, number] | null = null;
       let bestD = Infinity;
       for (let dj = -r; dj <= r; dj++) {
         for (let di = -r; di <= r; di++) {
           if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
-          if (this.blocked(ci + di, cj + dj)) continue;
+          if (!this.fits(ci + di, cj + dj, radius)) continue;
           const d = di * di + dj * dj;
           if (d < bestD) {
             bestD = d;
@@ -199,10 +275,27 @@ export class NavGrid {
    * walk straight lines between turning points. Returns waypoints excluding
    * the start, ending at the goal (or the nearest reachable spot to it).
    * Returns null if no route exists.
+   *
+   * With a radius, the route only uses gaps that wide. If there's no such
+   * route (say the goal is tucked between buildings), it falls back to a
+   * tighter fit, and finally to any open cell.
    */
-  findPath(from: Point, to: Point): Point[] | null {
-    const start = this.nearestOpen(from.x, from.z);
-    const goal = this.nearestOpen(to.x, to.z);
+  findPath(from: Point, to: Point, radius = 0): Point[] | null {
+    // Every open cell has at least a cell's width of room, so small units need no special treatment.
+    const wide = radius + CLEARANCE_MARGIN > this.cellSize;
+    for (const r of wide ? [radius, radius * 0.5] : []) {
+      const route = this.route(from, to, r);
+      if (route?.found) return route.points;
+    }
+    return this.route(from, to, 0)?.points ?? null;
+  }
+
+  private route(from: Point, to: Point, radius: number): { points: Point[]; found: boolean } | null {
+    // A wide unit standing somewhere tight starts by backing out to the nearest roomy spot,
+    // rather than planning onward through a gap it can't fit.
+    const start = (radius > 0 ? this.nearestOpen(from.x, from.z, 3, radius) : null) ?? this.nearestOpen(from.x, from.z);
+    // A wide unit settles for a spot near the goal; much further away and it's better to squeeze in.
+    const goal = this.nearestOpen(to.x, to.z, radius > 0 ? 6 : 12, radius);
     if (!start || !goal) return null;
     const cols = this.cols;
     const sk = start[1] * cols + start[0];
@@ -245,7 +338,7 @@ export class NavGrid {
       for (const [di, dj, step] of NEIGHBOURS) {
         const ni = i + di;
         const nj = j + dj;
-        if (this.blocked(ni, nj)) continue;
+        if (!this.fits(ni, nj, radius)) continue;
         // No squeezing diagonally between two blocked cells.
         if (di !== 0 && dj !== 0 && (this.blocked(i + di, j) || this.blocked(i, j + dj))) continue;
         const nk = nj * cols + ni;
@@ -266,18 +359,18 @@ export class NavGrid {
     for (let k = end; k !== -1; k = this.parent[k]) cells.push(k);
     cells.reverse();
     const points = cells.map((k) => this.center(k % cols, Math.floor(k / cols)));
-    if (found) points[points.length - 1] = this.blockedAt(to.x, to.z) ? points[points.length - 1] : { x: to.x, z: to.z };
-    return this.smooth(from, points);
+    if (found) points[points.length - 1] = this.fitsAt(to.x, to.z, radius) ? { x: to.x, z: to.z } : points[points.length - 1];
+    return { points: this.smooth(from, points, radius), found };
   }
 
   /** String-pulling: drop waypoints that can be skipped with a clear straight line. */
-  private smooth(from: Point, points: Point[]): Point[] {
+  private smooth(from: Point, points: Point[], radius: number): Point[] {
     const out: Point[] = [];
     let anchor = from;
     let i = 0;
     while (i < points.length) {
       let j = points.length - 1;
-      while (j > i && !this.lineClear(anchor, points[j])) j--;
+      while (j > i && !this.lineClear(anchor, points[j], radius)) j--;
       out.push(points[j]);
       anchor = points[j];
       i = j + 1;

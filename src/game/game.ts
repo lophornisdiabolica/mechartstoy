@@ -75,10 +75,11 @@ export class Game {
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
     const ctx = this.ctx;
+    const navObstacles = navObstacleSystem(ctx);
     const systems = [
       snapshotSystem,
       spatialIndexSystem(ctx),
-      navObstacleSystem(ctx),
+      navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
@@ -94,7 +95,12 @@ export class Game {
     ];
     for (const system of systems) this.world.addSystem(system);
 
-    if (populate) this.populate(root.fork(5));
+    if (populate) {
+      this.populate(root.fork(5));
+      // Mark the new buildings on the nav grid now, so the opening armies form up around them.
+      navObstacles.update(this.world, 0);
+      this.spawnOpeningArmies();
+    }
   }
 
   step(dt: number): void {
@@ -134,6 +140,9 @@ export class Game {
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
     // Opening armies muster partway forward so the first clash comes quickly.
+  }
+
+  private spawnOpeningArmies(): void {
     const picks = this.settings.armies.startingArmy;
     if (picks > 0) for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, picks, 0.4);
   }

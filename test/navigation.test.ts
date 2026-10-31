@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { BUILDING_DEFS } from '../src/game/buildings';
-import { Ai, Mover, Transform } from '../src/game/components';
+import { Ai, Building, Collider, Mover, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { spawnBuilding, spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
@@ -102,6 +102,58 @@ describe('unit movement', () => {
     for (const e of squad) goTo(game, e, s.x + 7, s.z);
     run(game, 30);
     for (const e of squad) expect(game.world.req(e, Transform).x).toBeGreaterThan(s.x + 3);
+  });
+
+  it('a big unit goes around a gap it does not fit through', () => {
+    const game = quietGame();
+    const s = game.field.baseSites[0];
+    // A wall of houses with a gap troopers fit through but a Titan doesn't.
+    for (const dz of [-8.2, -5.4, -2.6, 2.6, 5.4, 8.2]) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.house, 1, s.x, s.z + dz, 0);
+    const titan = puppet(game, 'titan', s.x - 7, s.z);
+    const trooper = puppet(game, 'trooper', s.x - 7, s.z + 1);
+    goTo(game, titan, s.x + 7, s.z);
+    goTo(game, trooper, s.x + 7, s.z + 1);
+    run(game, 40);
+    expect(game.world.req(trooper, Transform).x).toBeGreaterThan(s.x + 4);
+    expect(game.world.req(titan, Transform).x).toBeGreaterThan(s.x + 4);
+  });
+
+  it('wide units only fit through wide gaps', () => {
+    const game = quietGame();
+    const s = game.field.baseSites[0];
+    for (const dz of [-2.6, 2.6]) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.house, 1, s.x, s.z + dz, 0);
+    run(game, 0.1);
+    const a = { x: s.x - 5, z: s.z };
+    const b = { x: s.x + 5, z: s.z };
+    expect(game.ctx.nav.lineClear(a, b, UNIT_DEFS.trooper.radius)).toBe(true);
+    expect(game.ctx.nav.lineClear(a, b, UNIT_DEFS.titan.radius)).toBe(false);
+    // The Titan's route goes around the houses rather than between them.
+    const path = game.ctx.nav.findPath(a, b, UNIT_DEFS.titan.radius)!;
+    let prev = a;
+    for (const p of path) {
+      expect(game.ctx.nav.lineClear(prev, p, UNIT_DEFS.titan.radius)).toBe(true);
+      prev = p;
+    }
+  });
+
+  it('new units roll out where they fit, not wedged between buildings', () => {
+    const game = new Game(4, { populate: false });
+    const s = game.field.baseSites[0];
+    // A mech bay with houses crowding its door.
+    spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, s.x, s.z, 0);
+    for (const dz of [-2.4, 2.4]) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.house, 0, s.x + 4.4, s.z + dz, 0);
+    let titan = -1;
+    game.events.on('spawned', (e) => {
+      if (e.def.id === 'titan') titan = e.entity;
+    });
+    run(game, BUILDING_DEFS.mechbay.production.interval * 1.2);
+    expect(titan).toBeGreaterThanOrEqual(0);
+    const t = game.world.req(titan, Transform);
+    // Clear of every building by its own radius.
+    for (const e of game.world.query(Building, Transform, Collider)) {
+      const bt = game.world.req(e, Transform);
+      expect(Math.hypot(bt.x - t.x, bt.z - t.z)).toBeGreaterThan(game.world.req(e, Collider).radius + UNIT_DEFS.titan.radius - 0.2);
+    }
   });
 
   it('idle units turn to face the enemy while holding', () => {

@@ -4,6 +4,25 @@ import { SimContext } from '../context';
 import { spawnUnit } from '../spawn';
 import { tide } from '../tide';
 
+/**
+ * The nearest spot to (x, z) with room for a unit of this radius, searching a
+ * few rings outward. Keeps big units from rolling out wedged between buildings.
+ */
+export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number): { x: number; z: number } | null {
+  const ok = (px: number, pz: number) => ctx.field.contains(px, pz, 1) && ctx.nav.fitsAt(px, pz, radius);
+  if (ok(x, z)) return { x, z };
+  for (let ring = 1; ring <= 4; ring++) {
+    const d = ring * 1.5;
+    for (let a = 0; a < 8; a++) {
+      const px = x + Math.cos((a / 8) * Math.PI * 2) * d;
+      const pz = z + Math.sin((a / 8) * Math.PI * 2) * d;
+      if (ok(px, pz)) return { x: px, z: pz };
+    }
+  }
+  // Nowhere roomy: anywhere dry will do.
+  return !ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1) ? { x, z } : null;
+}
+
 /** Units alive per faction (index 0 and 1). */
 export function countUnits(world: World): number[] {
   const alive = [0, 0];
@@ -48,11 +67,11 @@ export function productionSystem(ctx: SimContext): System {
         const r = world.req(e, Building).def.radius + 1.2;
         const doorX = t.x + Math.cos(t.heading) * r;
         const doorZ = t.z - Math.sin(t.heading) * r;
+        const def = ctx.units[entry.unit];
         for (let n = 0; n < entry.count; n++) {
-          const x = doorX + ctx.rng.range(-1.2, 1.2);
-          const z = doorZ + ctx.rng.range(-1.2, 1.2);
-          if (!ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1)) {
-            spawnUnit(world, ctx, ctx.units[entry.unit], faction, x, z);
+          const spot = spawnSpot(ctx, doorX + ctx.rng.range(-1.2, 1.2), doorZ + ctx.rng.range(-1.2, 1.2), def.radius);
+          if (spot) {
+            spawnUnit(world, ctx, def, faction, spot.x, spot.z);
             alive[faction]++;
           }
         }
