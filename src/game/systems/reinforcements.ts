@@ -1,0 +1,93 @@
+import { System, World } from '../../core/ecs';
+import { Faction, Unit } from '../components';
+import { SimContext } from '../context';
+import { spawnUnit } from '../spawn';
+import { UNIT_DEFS, UnitId } from '../units';
+
+/** One pick from the wave table: what to spawn and how many at once. */
+interface WaveEntry {
+  unit: UnitId;
+  weight: number;
+  count: number;
+}
+
+const WAVE_TABLE: WaveEntry[] = [
+  { unit: 'trooper', weight: 5, count: 5 },
+  { unit: 'strider', weight: 3, count: 2 },
+  { unit: 'tank', weight: 2.5, count: 1 },
+  { unit: 'howitzer', weight: 1, count: 1 },
+  { unit: 'titan', weight: 0.6, count: 1 },
+];
+
+export interface ReinforcementConfig {
+  /** Seconds between waves, per faction. */
+  interval: number;
+  /** Picks from the wave table per wave. */
+  picksPerWave: number;
+  /** No new waves while a faction has this many units alive. */
+  maxUnitsPerFaction: number;
+}
+
+export const DEFAULT_REINFORCEMENTS: ReinforcementConfig = {
+  interval: 14,
+  picksPerWave: 3,
+  maxUnitsPerFaction: 55,
+};
+
+function pickEntry(ctx: SimContext): WaveEntry {
+  const total = WAVE_TABLE.reduce((s, w) => s + w.weight, 0);
+  let roll = ctx.rng.range(0, total);
+  for (const entry of WAVE_TABLE) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry;
+  }
+  return WAVE_TABLE[0];
+}
+
+/** `advance` (0..1) moves the muster point from the base toward the map centre. */
+export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, advance = 0): void {
+  const base = ctx.field.baseSites.find((s) => s.faction === faction)!;
+  const cx = base.x * (1 - advance);
+  const cz = base.z * (1 - advance);
+  for (let i = 0; i < picks; i++) {
+    const entry = pickEntry(ctx);
+    // Each pick forms up as a group at a random spot on the base pad.
+    const a = ctx.rng.range(0, Math.PI * 2);
+    const r = ctx.rng.range(0, base.radius * 0.6);
+    const gx = cx + Math.cos(a) * r;
+    const gz = cz + Math.sin(a) * r;
+    for (let n = 0; n < entry.count; n++) {
+      const x = gx + ctx.rng.range(-1.5, 1.5);
+      const z = gz + ctx.rng.range(-1.5, 1.5);
+      if (!ctx.field.isWater(x, z)) spawnUnit(world, ctx, UNIT_DEFS[entry.unit], faction, x, z);
+    }
+  }
+}
+
+/**
+ * Keeps the battle going forever by sending timed waves from each base.
+ * Waves are rubber-banded: the side with fewer units gets bigger, more
+ * frequent waves, so neither side is wiped out and the front swings back and
+ * forth. Step 3's production buildings take over most of this job.
+ */
+export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEMENTS): System {
+  const nextWaveAt = [0, 0].map(() => ctx.rng.range(2, config.interval));
+  return {
+    name: 'reinforcements',
+    update(world) {
+      const alive = [0, 0];
+      for (const e of world.query(Unit, Faction)) alive[world.req(e, Faction).id]++;
+      for (let faction = 0; faction < nextWaveAt.length; faction++) {
+        // Ratio > 1 means this side is outnumbered.
+        const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
+        // An outnumbered side doesn't wait out a long timer.
+        const due = world.time >= nextWaveAt[faction] || (ratio > 2 && world.time >= nextWaveAt[faction] - config.interval * 0.5);
+        if (!due) continue;
+        nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
+        if (alive[faction] >= config.maxUnitsPerFaction) continue;
+        const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
+        spawnWave(world, ctx, faction, Math.max(1, picks));
+      }
+    },
+  };
+}

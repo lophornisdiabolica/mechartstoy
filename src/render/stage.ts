@@ -5,7 +5,10 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { Rng } from '../core/rng';
 import { Game } from '../game/game';
 import { CameraRig } from './cameraRig';
+import { Effects } from './effects';
 import { EntityView } from './entityView';
+import './models/projectiles';
+import './models/units';
 import { buildProps } from './propsMesh';
 import { buildTerrain } from './terrainMesh';
 import { TiltShift } from './tiltShift';
@@ -20,6 +23,7 @@ export class Stage {
   readonly rig: CameraRig;
   readonly tiltShift = new TiltShift();
   readonly entities: EntityView;
+  readonly effects: Effects;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -62,6 +66,8 @@ export class Stage {
 
     this.entities = new EntityView(game.world);
     this.scene.add(this.entities.root);
+    this.effects = new Effects(game.events, field);
+    this.scene.add(this.effects.root);
 
     // Multisampled HDR target so edges stay clean through the post chain.
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -74,9 +80,11 @@ export class Stage {
     this.resize();
   }
 
-  render(alpha: number, frameSeconds: number): void {
+  /** `simSeconds` is frame time scaled by sim speed, so animations pause with the game. */
+  render(alpha: number, frameSeconds: number, simSeconds: number): void {
     this.rig.update(frameSeconds);
-    this.entities.sync(alpha);
+    this.entities.sync(alpha, simSeconds);
+    this.effects.update(simSeconds);
     this.composer.render(frameSeconds);
   }
 

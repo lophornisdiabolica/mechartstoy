@@ -1,5 +1,7 @@
 import { FixedLoop } from './core/loop';
 import { hashSeed } from './core/rng';
+import { Faction, Unit } from './game/components';
+import { FACTIONS } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
 import { Stage } from './render/stage';
 
@@ -17,16 +19,25 @@ const stage = new Stage(container, game);
 
 let fps = 0;
 let hudTimer = 0;
+const losses = FACTIONS.map(() => 0);
+game.events.on('unitDestroyed', (e) => losses[e.faction]++);
+
+function factionLine(): string {
+  const alive = FACTIONS.map(() => 0);
+  for (const e of game.world.query(Unit, Faction)) alive[game.world.req(e, Faction).id]++;
+  return FACTIONS.map((f) => `${f.name}: ${alive[f.id]} units, ${losses[f.id]} lost`).join('  ·  ');
+}
 
 const loop = new FixedLoop(1 / SIM_HZ, {
   step: (dt) => game.step(dt),
   render: (alpha, frameSeconds) => {
-    stage.render(alpha, frameSeconds);
+    stage.render(alpha, frameSeconds, frameSeconds * loop.timeScale);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
     hudTimer -= frameSeconds;
     if (hudTimer <= 0) {
       hudTimer = 0.5;
       hud.textContent =
+        `${factionLine()}\n` +
         `seed ${seedLabel}  ·  ${Math.round(fps)} fps  ·  ${game.world.entityCount} entities\n` +
         `WASD / right-drag pan · wheel zoom · Q/E rotate · T tilt-shift · space pause`;
     }

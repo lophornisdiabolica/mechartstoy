@@ -10,6 +10,35 @@ import { FACTIONS } from '../game/factions';
  */
 export type ModelFactory = (faction: number) => THREE.Object3D;
 
+/** Per-frame state handed to a model's animate hook. */
+export interface AnimState {
+  /** Frame time in seconds, already scaled by sim speed (0 when paused). */
+  dt: number;
+  /** Ground speed this frame, world units per second. */
+  speed: number;
+}
+
+/**
+ * Optional moving parts a model exposes, stored on `object.userData.rig`.
+ * The entity view drives them; models never read game state.
+ */
+export interface ModelRig {
+  /** Rotated around y to point the weapon (relative to the hull). */
+  turret?: THREE.Object3D;
+  /** Orient the whole model along its velocity (projectiles). Build these facing +z. */
+  faceVelocity?: boolean;
+  animate?(state: AnimState): void;
+}
+
+export function setRig(obj: THREE.Object3D, rig: ModelRig): THREE.Object3D {
+  obj.userData.rig = rig;
+  return obj;
+}
+
+export function getRig(obj: THREE.Object3D): ModelRig | undefined {
+  return obj.userData.rig as ModelRig | undefined;
+}
+
 const factories = new Map<string, ModelFactory>();
 const materialCache = new Map<string, THREE.Material>();
 
@@ -22,12 +51,23 @@ export function createModel(key: string, faction: number): THREE.Object3D {
   if (!factory) throw new Error(`No model registered for "${key}"`);
   const obj = factory(faction);
   obj.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) {
+    if ((o as THREE.Mesh).isMesh && !(o.userData.noShadow ?? false)) {
       o.castShadow = true;
       o.receiveShadow = true;
     }
   });
   return obj;
+}
+
+/** Unlit material for glowing things (tracers, muzzle flashes). */
+export function glowMaterial(color: number): THREE.Material {
+  const key = `glow-${color.toString(16)}`;
+  let m = materialCache.get(key);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ color });
+    materialCache.set(key, m);
+  }
+  return m;
 }
 
 /** Shared flat-shaded material per colour, so many units share GPU state. */
@@ -46,26 +86,21 @@ export function factionColors(faction: number): { primary: number; secondary: nu
   return { primary: def.primary, secondary: def.secondary };
 }
 
-// Placeholder unit used in step 1 to prove the sim-to-render pipeline. Replaced by real mechs in step 2.
-const probeBody = new THREE.BoxGeometry(1.4, 0.5, 1);
-const probeTurret = new THREE.BoxGeometry(0.6, 0.35, 0.6);
-const probeBarrel = new THREE.BoxGeometry(0.7, 0.12, 0.12);
-const probeTrack = new THREE.BoxGeometry(1.5, 0.3, 0.25);
+/** Box mesh helper: size, position, colour. Most low-poly parts are just boxes. */
+export function box(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
+  const m = new THREE.Mesh(boxGeometry(w, h, d), flatMaterial(color));
+  m.position.set(x, y, z);
+  return m;
+}
 
-registerModel('probe', (faction) => {
-  const { primary, secondary } = factionColors(faction);
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(probeBody, flatMaterial(primary));
-  body.position.y = 0.45;
-  const turret = new THREE.Mesh(probeTurret, flatMaterial(secondary));
-  turret.position.set(-0.1, 0.87, 0);
-  const barrel = new THREE.Mesh(probeBarrel, flatMaterial(0x333333));
-  barrel.position.set(0.5, 0.87, 0);
-  const trackMat = flatMaterial(0x2a2a2a);
-  const left = new THREE.Mesh(probeTrack, trackMat);
-  left.position.set(0, 0.15, 0.55);
-  const right = new THREE.Mesh(probeTrack, trackMat);
-  right.position.set(0, 0.15, -0.55);
-  g.add(body, turret, barrel, left, right);
+const geometryCache = new Map<string, THREE.BufferGeometry>();
+
+function boxGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
+  const key = `${w}|${h}|${d}`;
+  let g = geometryCache.get(key);
+  if (!g) {
+    g = new THREE.BoxGeometry(w, h, d);
+    geometryCache.set(key, g);
+  }
   return g;
-});
+}
