@@ -27,6 +27,7 @@ const _ahead = new THREE.Vector3();
 export class EntityView {
   readonly root = new THREE.Group();
   private readonly entries = new Map<Entity, ViewEntry>();
+  private readonly owners = new WeakMap<THREE.Object3D, Entity>();
 
   constructor(private readonly world: World) {
     this.root.name = 'entities';
@@ -48,6 +49,7 @@ export class EntityView {
         obj.scale.setScalar(r.scale);
         entry = { obj, lastX: t.px, lastZ: t.pz, wrecked: false };
         this.entries.set(e, entry);
+        this.owners.set(obj, e);
         this.root.add(obj);
       }
       const { obj } = entry;
@@ -87,6 +89,20 @@ export class EntityView {
 
   get count(): number {
     return this.entries.size;
+  }
+
+  /** The scene object drawing an entity, if any. */
+  objectFor(e: Entity): THREE.Object3D | undefined {
+    return this.entries.get(e)?.obj;
+  }
+
+  /** Which entity a raycast hit belongs to (walks up to the model's root). */
+  entityForObject(hit: THREE.Object3D): Entity | null {
+    for (let o: THREE.Object3D | null = hit; o; o = o.parent) {
+      const e = this.owners.get(o);
+      if (e !== undefined) return e;
+    }
+    return null;
   }
 
   /** Burnt-out look: charred materials and a slight slump. */

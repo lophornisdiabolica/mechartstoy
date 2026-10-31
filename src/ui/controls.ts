@@ -1,0 +1,339 @@
+import { Entity } from '../core/ecs';
+import { FixedLoop } from '../core/loop';
+import { Armed, Building, Construction, Faction, Health, NEUTRAL, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { FACTIONS } from '../game/factions';
+import { Game } from '../game/game';
+import { Stance } from '../game/orders';
+import { UNIT_DEFS, UnitId } from '../game/units';
+import { Stage } from '../render/stage';
+
+type Tool = { kind: 'spawn'; unit: UnitId } | { kind: 'rally' } | null;
+
+const SPEEDS = [0, 1, 2, 4];
+/** A press that moves less than this (px) and is shorter than CLICK_MS counts as a click, not a pan. */
+const CLICK_SLOP = 6;
+const CLICK_MS = 400;
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ''): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (text) node.textContent = text;
+  return node;
+}
+
+/** A row of mutually exclusive buttons. */
+function segmented<T>(options: { label: string; value: T; title?: string }[], onPick: (v: T) => void) {
+  const row = el('div', { class: 'seg' });
+  const buttons = options.map((o) => {
+    const b = el('button', { type: 'button', title: o.title ?? o.label }, o.label);
+    b.addEventListener('click', () => onPick(o.value));
+    row.append(b);
+    return { b, value: o.value };
+  });
+  return {
+    row,
+    set(value: T) {
+      for (const { b, value: v } of buttons) b.classList.toggle('on', v === value);
+    },
+  };
+}
+
+function hex(c: number): string {
+  return `#${c.toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * The in-battle control panel and map clicks. Talks to the sim only through
+ * Game's command methods, and to the view through Stage.
+ */
+export class Controls {
+  private playerFaction: number | null = null;
+  private tool: Tool = null;
+  private selected: Entity | null = null;
+  private lastSpeed = 1;
+  private readonly panel = el('div', { id: 'panel' });
+  private readonly toast = el('div', { id: 'toast' });
+  private readonly inspect = el('div', { class: 'inspect' });
+  private readonly sync: (() => void)[] = [];
+  private inspectTimer = 0;
+
+  constructor(
+    private readonly game: Game,
+    private readonly stage: Stage,
+    private readonly loop: FixedLoop,
+  ) {
+    this.build();
+    document.body.append(this.panel, this.toast);
+    // Start folded away on phones so the battle is visible.
+    if (window.matchMedia('(max-width: 600px)').matches) this.panel.querySelector<HTMLButtonElement>('.collapse')?.click();
+    this.bindCanvas(stage.renderer.domElement);
+    this.bindKeys();
+    this.refresh();
+  }
+
+  /** Called every frame. */
+  update(frameSeconds: number): void {
+    // Drop the selection when the thing is gone (destroyed, or a wreck sank).
+    if (this.selected !== null && !this.game.world.isAlive(this.selected)) this.select(null);
+    this.inspectTimer -= frameSeconds;
+    if (this.inspectTimer <= 0) {
+      this.inspectTimer = 0.2;
+      this.renderInspect();
+    }
+  }
+
+  private build(): void {
+    const header = el('header');
+    header.append(el('span', {}, 'Battle controls'));
+    const collapse = el('button', { type: 'button', class: 'collapse', title: 'Collapse panel', 'aria-label': 'Collapse panel' }, '–');
+    collapse.addEventListener('click', () => {
+      const collapsed = this.panel.classList.toggle('collapsed');
+      collapse.textContent = collapsed ? '+' : '–';
+    });
+    header.append(collapse);
+    const body = el('div', { class: 'body' });
+    this.panel.append(header, body);
+
+    const section = (title: string, cls = '') => {
+      const s = el('section', cls ? { class: cls } : {});
+      s.append(el('h3', {}, title));
+      body.append(s);
+      return s;
+    };
+
+    // Speed
+    const speed = segmented(
+      SPEEDS.map((v) => ({ label: v === 0 ? '❚❚' : `${v}×`, value: v, title: v === 0 ? 'Pause (space)' : `${v}× speed` })),
+      (v) => this.setSpeed(v),
+    );
+    section('Speed').append(speed.row);
+    this.sync.push(() => speed.set(this.loop.timeScale));
+
+    // Side
+    const side = segmented<number | null>(
+      [
+        { label: 'Watch', value: null, title: 'Just watch' },
+        // Short names fit the buttons; the full name is in the tooltip.
+        ...FACTIONS.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
+      ],
+      (v) => this.setSide(v),
+    );
+    section('Your side').append(side.row);
+    this.sync.push(() => side.set(this.playerFaction));
+
+    // Spawn palette
+    const spawn = section('Drop units', 'needs-side');
+    const grid = el('div', { class: 'grid' });
+    const spawnButtons = (Object.keys(UNIT_DEFS) as UnitId[]).map((id) => {
+      const b = el('button', { type: 'button', title: `Drop a ${UNIT_DEFS[id].name}` }, UNIT_DEFS[id].name);
+      b.addEventListener('click', () => this.setTool(this.tool?.kind === 'spawn' && this.tool.unit === id ? null : { kind: 'spawn', unit: id }));
+      grid.append(b);
+      return { b, id };
+    });
+    spawn.append(grid, el('p', { class: 'hint' }, 'Pick a unit, then click the map. Esc to stop.'));
+    this.sync.push(() => {
+      for (const { b, id } of spawnButtons) b.classList.toggle('on', this.tool?.kind === 'spawn' && this.tool.unit === id);
+    });
+
+    // Orders
+    const orders = section('Orders', 'needs-side');
+    const stance = segmented<Stance>(
+      [
+        { label: 'Auto', value: 'auto', title: 'Attack and regroup with the ebb and flow of battle' },
+        { label: 'Attack', value: 'attack', title: 'Everyone push into the enemy base' },
+        { label: 'Hold', value: 'hold', title: 'Everyone gather at the rally point' },
+      ],
+      (v) => {
+        if (this.playerFaction !== null) this.game.setStance(this.playerFaction, v);
+        this.refresh();
+      },
+    );
+    const rallyRow = el('div', { class: 'row' });
+    const setRally = el('button', { type: 'button', title: 'Click the map to place the rally flag' }, 'Set rally point');
+    setRally.addEventListener('click', () => this.setTool(this.tool?.kind === 'rally' ? null : { kind: 'rally' }));
+    const clearRally = el('button', { type: 'button' }, 'Clear');
+    clearRally.addEventListener('click', () => {
+      if (this.playerFaction !== null) this.game.setRally(this.playerFaction, null);
+      this.refresh();
+    });
+    rallyRow.append(setRally, clearRally);
+    orders.append(stance.row, rallyRow);
+    this.sync.push(() => {
+      const o = this.playerFaction !== null ? this.game.ctx.orders[this.playerFaction] : null;
+      stance.set(o?.stance ?? 'auto');
+      setRally.classList.toggle('on', this.tool?.kind === 'rally');
+      clearRally.disabled = !o?.rally;
+    });
+
+    // Camera
+    const cam = section('Camera');
+    const ts = this.stage.tiltShift;
+    const toggleLabel = el('label', { class: 'check' });
+    const toggle = el('input', { type: 'checkbox' });
+    toggle.addEventListener('change', () => {
+      ts.settings.enabled = toggle.checked;
+      ts.apply();
+    });
+    toggleLabel.append(toggle, document.createTextNode(' Tilt-shift (T)'));
+    cam.append(toggleLabel);
+    const slider = (label: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void) => {
+      const wrap = el('label', { class: 'slider' });
+      const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step) });
+      input.addEventListener('input', () => {
+        set(Number(input.value));
+        ts.apply();
+      });
+      wrap.append(el('span', {}, label), input);
+      cam.append(wrap);
+      this.sync.push(() => (input.value = String(get())));
+    };
+    slider('Blur', 0, 14, 0.5, () => ts.settings.maxBlur, (v) => (ts.settings.maxBlur = v));
+    slider('Focus', 0.2, 0.8, 0.01, () => ts.settings.focus, (v) => (ts.settings.focus = v));
+    slider('Colour', 0.6, 1.8, 0.05, () => ts.settings.saturation, (v) => (ts.settings.saturation = v));
+    this.sync.push(() => (toggle.checked = ts.settings.enabled));
+
+    body.append(this.inspect);
+  }
+
+  /** Re-sync every control with current state. */
+  private refresh(): void {
+    this.panel.classList.toggle('has-side', this.playerFaction !== null);
+    for (const s of this.sync) s();
+    this.stage.renderer.domElement.style.cursor = this.tool ? 'crosshair' : '';
+  }
+
+  private setSpeed(v: number): void {
+    if (v > 0) this.lastSpeed = v;
+    this.loop.timeScale = v;
+    this.refresh();
+  }
+
+  private setSide(f: number | null): void {
+    // Hand the old side back to the AI.
+    if (this.playerFaction !== null && this.playerFaction !== f) {
+      this.game.setStance(this.playerFaction, 'auto');
+      this.game.setRally(this.playerFaction, null);
+    }
+    this.playerFaction = f;
+    if (f === null) this.tool = null;
+    this.refresh();
+  }
+
+  private setTool(tool: Tool): void {
+    this.tool = this.playerFaction === null ? null : tool;
+    this.refresh();
+  }
+
+  private select(e: Entity | null): void {
+    this.selected = e;
+    this.stage.selected = e;
+    this.renderInspect();
+  }
+
+  private click(x: number, y: number): void {
+    const tool = this.tool;
+    if (tool && this.playerFaction !== null) {
+      const p = this.stage.pickGround(x, y);
+      if (!p) return;
+      if (tool.kind === 'spawn') {
+        if (!this.game.spawnUnitAt(tool.unit, this.playerFaction, p.x, p.z)) this.showToast("Can't drop a unit there");
+      } else {
+        this.game.setRally(this.playerFaction, p);
+        this.setTool(null);
+      }
+      return;
+    }
+    const e = this.stage.pickEntity(x, y);
+    const w = this.game.world;
+    const inspectable = e !== null && (w.has(e, Unit) || w.has(e, Building) || w.has(e, Wreck) || w.has(e, Rubble));
+    this.select(inspectable ? e : null);
+  }
+
+  private renderInspect(): void {
+    const w = this.game.world;
+    const e = this.selected;
+    this.inspect.replaceChildren();
+    this.inspect.classList.toggle('empty', e === null);
+    if (e === null) {
+      this.inspect.append(el('p', { class: 'hint' }, 'Click a unit or building to inspect it.'));
+      return;
+    }
+    const unit = w.get(e, Unit);
+    const building = w.get(e, Building);
+    const rubble = w.get(e, Rubble);
+    const factionId = w.get(e, Faction)?.id ?? rubble?.faction ?? NEUTRAL;
+    const faction = FACTIONS[factionId];
+    const name = unit?.def.name ?? building?.def.name ?? (rubble ? `${rubble.def.name} (ruins)` : 'Wreck');
+
+    const title = el('div', { class: 'title' });
+    const swatch = el('span', { class: 'swatch' });
+    swatch.style.background = faction ? hex(faction.primary) : '#b5654a';
+    title.append(swatch, el('strong', {}, name));
+    this.inspect.append(title, el('div', { class: 'sub' }, faction ? faction.name : 'Civilian'));
+
+    const h = w.get(e, Health);
+    if (h) {
+      const bar = el('div', { class: 'hp' });
+      const fill = el('div');
+      const frac = Math.max(0, h.hp / h.max);
+      fill.style.width = `${frac * 100}%`;
+      fill.style.background = frac > 0.5 ? '#6cc070' : frac > 0.25 ? '#e0b040' : '#e05a40';
+      bar.append(fill);
+      this.inspect.append(bar, el('div', { class: 'sub' }, `${Math.ceil(Math.max(0, h.hp))} / ${h.max} HP`));
+    }
+    const lines: string[] = [];
+    const armed = w.get(e, Armed);
+    if (armed) lines.push(`${armed.weapon.name}: ${armed.target !== null ? 'engaging' : 'no target'}`);
+    if (unit) lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);
+    const construction = w.get(e, Construction);
+    if (construction) lines.push(`Under construction: ${Math.round((construction.elapsed / construction.duration) * 100)}%`);
+    const producer = w.get(e, Producer);
+    if (producer && !construction) {
+      const names = [...new Set(producer.table.map((p) => UNIT_DEFS[p.unit].name))].join(', ');
+      lines.push(`Builds ${names}`);
+    }
+    if (rubble) lines.push(`Rebuilding in ${Math.max(0, Math.ceil(rubble.rebuildAt - w.time))}s`);
+    if (w.has(e, Wreck)) lines.push('Destroyed');
+    for (const line of lines) this.inspect.append(el('div', { class: 'line' }, line));
+  }
+
+  private showToast(text: string): void {
+    this.toast.textContent = text;
+    this.toast.classList.add('show');
+    clearTimeout((this.toast as unknown as { timer?: number }).timer);
+    (this.toast as unknown as { timer?: number }).timer = window.setTimeout(() => this.toast.classList.remove('show'), 1400);
+  }
+
+  private bindCanvas(canvas: HTMLCanvasElement): void {
+    let down: { x: number; y: number; t: number } | null = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (!down || e.button !== 0) return;
+      const isClick = Math.hypot(e.clientX - down.x, e.clientY - down.y) < CLICK_SLOP && performance.now() - down.t < CLICK_MS;
+      down = null;
+      if (isClick) this.click(e.clientX, e.clientY);
+    });
+  }
+
+  private bindKeys(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+      const key = e.key.toLowerCase();
+      if (key === ' ') {
+        e.preventDefault();
+        this.setSpeed(this.loop.timeScale === 0 ? this.lastSpeed : 0);
+      } else if (key === 't') {
+        this.stage.tiltShift.settings.enabled = !this.stage.tiltShift.settings.enabled;
+        this.stage.tiltShift.apply();
+        this.refresh();
+      } else if (key === 'escape') {
+        if (this.tool) this.setTool(null);
+        else this.select(null);
+      } else if (['1', '2', '3', '4'].includes(key)) {
+        this.setSpeed(SPEEDS[Number(key) - 1]);
+      }
+    });
+  }
+}

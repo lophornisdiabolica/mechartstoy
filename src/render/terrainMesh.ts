@@ -81,6 +81,7 @@ export function buildTerrain(field: Battlefield, rng: Rng): THREE.Group {
     ground,
     new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }),
   );
+  groundMesh.name = 'ground';
   groundMesh.receiveShadow = true;
   groundMesh.castShadow = true;
 

@@ -15,7 +15,12 @@ npm run build    # typecheck + production build into dist/
 Add `?seed=anything` to the URL to reproduce a battlefield.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, T toggles tilt-shift, space pauses the simulation.
+rotate, T toggles tilt-shift, space pauses, 1-4 set speed, Esc cancels.
+
+The **Battle controls** panel (top right) sets speed and camera effects. Pick a
+side to drop units anywhere on the map, place a rally flag, and override the
+AI with Attack / Hold (Auto follows the ebb and flow of the battle). Click any
+unit or building to inspect it.
 
 ## Architecture
 
@@ -40,6 +45,7 @@ src/
     buildings.ts     building definitions: production, defences, civic
     spawn.ts         assembles unit and building entities from definitions
     tide.ts          alternating offensives that keep the front moving
+    orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      faction names and colours
     systems/         one file per system (ai, movement, weapons, ...)
@@ -54,6 +60,9 @@ src/
     models/          unit, building and projectile models
     entityView.ts    mirrors ECS entities into the scene each frame
     effects.ts       particles for flashes, explosions, smoke, debris
+    markers.ts       rally flags and the selection ring
+  ui/
+    controls.ts      control panel and map clicks; changes the sim only via Game commands
 ```
 
 ### Conventions
@@ -102,5 +111,7 @@ src/
    reinforcement.~~
 3. ~~Buildings and destruction: procedural bases, production buildings that
    spawn units on a timer, decorative buildings, debris, explosions, smoke.~~
-4. Light interaction: spawn units, rally points, pick a side, tilt-shift and
-   speed controls.
+4. ~~Light interaction: spawn units, rally points, pick a side, tilt-shift and
+   speed controls.~~
+5. Pre-battle setup screen: map size and seed, battle pacing, per-unit stat
+   multipliers, faction names and colours, saved in the URL.
