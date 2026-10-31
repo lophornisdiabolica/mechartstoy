@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { ProjectileKind } from '../../game/units';
-import { glowMaterial, registerModel, setRig } from '../models';
+import { glowBox, registerModel, setRig } from '../models';
 
 /** Projectiles are built along +z and oriented along their velocity by the rig. */
 function projectile(length: number, width: number, color: number): THREE.Object3D {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(width, width, length), glowMaterial(color));
-  m.userData.noShadow = true;
+  const m = glowBox(width, width, length, color);
   const root = new THREE.Group();
   root.add(m);
   return setRig(root, { faceVelocity: true });

@@ -37,7 +37,7 @@ export function aiSystem(ctx: SimContext): System {
         }
 
         const orders = ctx.orders[faction];
-        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, faction));
+        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, faction ^ ctx.tideOrder, ctx.settings.armies));
         if (!attacking) {
           const custom = orders.rally;
           let rx = custom ? custom.x + ai.rallyOffsetX : ai.rallyX;

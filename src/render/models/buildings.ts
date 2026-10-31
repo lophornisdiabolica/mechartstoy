@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cylinder, factionColors, gableRoof, glowMaterial, registerModel, setRig } from '../models';
+import { box, cylinder, factionColors, gableRoof, glowBox, registerModel, setRig } from '../models';
 
 /**
  * Low-poly building models, built facing +x (the front door side) and sized
@@ -14,6 +14,12 @@ const CIVIC_ROOFS = [0xb5654a, 0x8c4a3a, 0x6d7b86, 0x5d6b5a];
 const WINDOW = 0x40525e;
 
 const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
+
+/**
+ * A random size from a handful of steps. Box geometry is cached by size, so
+ * continuous random sizes would add new geometry for every building forever.
+ */
+const stepped = (min: number, max: number, steps = 5) => min + ((max - min) * Math.floor(Math.random() * steps)) / (steps - 1);
 
 /** Civilian buildings get a varied roof; faction buildings use the faction colour. */
 function roofColor(faction: number): number {
@@ -32,9 +38,8 @@ registerModel('bld:hq', (faction) => {
   for (const z of [-1.4, 1.4]) g.add(box(0.06, 0.5, 0.8, WINDOW, 2.21, 1.9, z));
   g.add(box(0.12, 2.6, 0.12, METAL, -1.0, 5.4, 0.8)); // antenna mast
   g.add(box(0.7, 0.08, 0.7, METAL, -1.0, 6.2, 0.8));
-  const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), glowMaterial(0xff5040));
+  const beacon = glowBox(0.2, 0.2, 0.2, 0xff5040);
   beacon.position.set(-1.0, 6.75, 0.8);
-  beacon.userData.noShadow = true;
   g.add(beacon);
   return g;
 });
@@ -104,7 +109,7 @@ registerModel('bld:tower', (faction) => {
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
   const walls = pick(WALLS);
-  const h = 0.9 + Math.random() * 0.4;
+  const h = stepped(0.9, 1.3);
   g.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
   g.add(gableRoof(2.1, 1.75, 0.7, roofColor(faction), h));
   g.add(box(0.05, 0.6, 0.4, DARK, 0.96, 0.3, 0));
@@ -137,9 +142,8 @@ registerModel('bld:spire', (faction) => {
   g.add(cylinder(0.45, 0.75, 4.5, 6, pick(WALLS), 0, 2.75, 0));
   g.add(cylinder(0.65, 0.65, 0.5, 6, accent, 0, 4.2, 0));
   g.add(box(0.08, 1.6, 0.08, METAL, 0, 5.8, 0));
-  const light = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), glowMaterial(0xffd060));
+  const light = glowBox(0.16, 0.16, 0.16, 0xffd060);
   light.position.y = 6.65;
-  light.userData.noShadow = true;
   g.add(light);
   return g;
 });
@@ -160,7 +164,7 @@ registerModel('rubble', () => {
   for (let i = 0; i < 9; i++) {
     const a = Math.random() * Math.PI * 2;
     const r = Math.random() * 0.75;
-    const s = 0.2 + Math.random() * 0.3;
+    const s = stepped(0.2, 0.5);
     const chunk = box(s * 1.4, s * 0.7, s, pick(colors), Math.cos(a) * r, s * 0.25, Math.sin(a) * r);
     chunk.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.6);
     g.add(chunk);

@@ -17,6 +17,8 @@ export interface BattlefieldConfig {
   seaLevel: number;
   /** Radius of the flattened pad reserved for each faction's base. */
   baseRadius: number;
+  /** Put a civilian town in no-man's land. */
+  town: boolean;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -26,6 +28,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   maxHeight: 9,
   seaLevel: 1.4,
   baseRadius: 16,
+  town: true,
 };
 
 export interface BaseSite {
@@ -146,6 +149,54 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * With lots of water a base can end up on an island. If the bases aren't
+ * joined by dry land, raise a causeway straight between them.
+ */
+function ensureLandBridge(field: Battlefield, heights: Float32Array): void {
+  const { cols, rows, cellSize } = field.config;
+  const [a, b] = field.baseSites;
+  const index = (x: number, z: number) => {
+    const i = Math.round((x - field.bounds.minX) / cellSize);
+    const j = Math.round((z - field.bounds.minZ) / cellSize);
+    return j * (cols + 1) + i;
+  };
+  const dry = (k: number) => heights[k] >= field.seaLevel;
+  const start = index(a.x, a.z);
+  const goal = index(b.x, b.z);
+  const seen = new Uint8Array(heights.length);
+  const stack = [start];
+  seen[start] = 1;
+  while (stack.length > 0) {
+    const k = stack.pop()!;
+    if (k === goal) return;
+    const i = k % (cols + 1);
+    const j = (k - i) / (cols + 1);
+    for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+      if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+      const nk = nj * (cols + 1) + ni;
+      if (!seen[nk] && dry(nk)) {
+        seen[nk] = 1;
+        stack.push(nk);
+      }
+    }
+  }
+  const length = Math.hypot(b.x - a.x, b.z - a.z);
+  const deck = field.seaLevel + 0.5;
+  for (let j = 0; j <= rows; j++) {
+    for (let i = 0; i <= cols; i++) {
+      const px = field.vertexX(i);
+      const pz = field.vertexZ(j);
+      // Distance from the segment between the two bases.
+      const t = Math.max(0, Math.min(1, ((px - a.x) * (b.x - a.x) + (pz - a.z) * (b.z - a.z)) / (length * length)));
+      const d = Math.hypot(px - (a.x + (b.x - a.x) * t), pz - (a.z + (b.z - a.z) * t));
+      const w = 1 - smoothstep(3, 6, d);
+      const k = j * (cols + 1) + i;
+      if (w > 0 && heights[k] < deck) heights[k] = heights[k] * (1 - w) + deck * w;
+    }
+  }
+}
+
 export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAULT_BATTLEFIELD): Battlefield {
   const { cols, rows, cellSize, maxHeight, seaLevel, baseRadius } = config;
   const noise = createNoise2D(() => rng.next());
@@ -212,6 +263,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     flatten(site.x, site.z, site.radius, site.height);
   }
 
+  ensureLandBridge(field, heights);
+
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = 11;
   let best: { x: number; z: number; score: number } | null = null;
@@ -226,7 +279,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     }
     if (!best || score < best.score) best = { x, z, score };
   }
-  if (best) {
+  // Candidates are always rolled so the rest of the map doesn't change with the town toggle.
+  if (best && config.town) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
     townSites.push({ x: best.x, z: best.z, radius: townRadius, height });
     flatten(best.x, best.z, townRadius, height);

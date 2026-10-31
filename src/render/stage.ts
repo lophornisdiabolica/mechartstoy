@@ -4,11 +4,14 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { Entity } from '../core/ecs';
 import { Rng } from '../core/rng';
+import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { CameraRig } from './cameraRig';
+import { disposeTree } from './dispose';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
 import { Markers } from './markers';
+import { setFactionPalette } from './models';
 import './models/buildings';
 import './models/projectiles';
 import './models/units';
@@ -19,26 +22,28 @@ import { TiltShift } from './tiltShift';
 /**
  * Everything visual: renderer, scene, lights, camera and post-processing.
  * Reads game state, never writes it.
+ *
+ * The renderer, camera and post chain live for the whole session; each
+ * battle's terrain, entities and effects are loaded into `battle` and torn
+ * down when the next battle loads.
  */
 export class Stage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly rig: CameraRig;
   readonly tiltShift = new TiltShift();
-  readonly entities: EntityView;
-  readonly effects: Effects;
-  readonly markers: Markers;
+  entities!: EntityView;
+  effects!: Effects;
+  markers!: Markers;
   /** Entity highlighted by the UI. */
   selected: Entity | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private ground!: THREE.Object3D;
+  private battle: THREE.Group | null = null;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
-  constructor(
-    private readonly container: HTMLElement,
-    game: Game,
-  ) {
+  constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
@@ -47,39 +52,18 @@ export class Stage {
 
     this.scene.background = new THREE.Color(0x9fb4c4);
 
-    const field = game.field;
-    this.rig = new CameraRig(this.renderer.domElement, field.bounds);
-    this.rig.target.set(0, 2, 0);
+    this.rig = new CameraRig(this.renderer.domElement, { minX: 0, maxX: 0, minZ: 0, maxZ: 0 });
 
     this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x4a4436, 1.3));
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.position.set(-60, 90, 40);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(4096, 4096);
-    const half = Math.max(field.width, field.depth) * 0.6;
-    const sc = this.sun.shadow.camera;
-    sc.left = -half;
-    sc.right = half;
-    sc.top = half;
-    sc.bottom = -half;
-    sc.near = 1;
-    sc.far = 300;
+    this.sun.shadow.camera.near = 1;
+    this.sun.shadow.camera.far = 300;
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun, this.sun.target);
-
-    const visualRng = new Rng(game.seed ^ 0x5eed);
-    const terrain = buildTerrain(field, visualRng);
-    this.ground = terrain.getObjectByName('ground')!;
-    this.scene.add(terrain);
-    this.scene.add(buildProps(game.props, visualRng));
-
-    this.entities = new EntityView(game.world);
-    this.scene.add(this.entities.root);
-    this.effects = new Effects(game.events, field);
-    this.scene.add(this.effects.root);
-    this.markers = new Markers(game, this.entities);
-    this.scene.add(this.markers.root);
 
     // Multisampled HDR target so edges stay clean through the post chain.
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -92,8 +76,43 @@ export class Stage {
     this.resize();
   }
 
+  /** Show a new battle, replacing whatever was loaded before. */
+  load(game: Game, factions: readonly FactionDef[]): void {
+    if (this.battle) {
+      this.scene.remove(this.battle);
+      disposeTree(this.battle);
+    }
+    this.selected = null;
+    setFactionPalette(factions);
+    const field = game.field;
+    const battle = new THREE.Group();
+    battle.name = 'battle';
+
+    const visualRng = new Rng(game.seed ^ 0x5eed);
+    const terrain = buildTerrain(field, visualRng);
+    this.ground = terrain.getObjectByName('ground')!;
+    battle.add(terrain, buildProps(game.props, visualRng));
+    this.entities = new EntityView(game.world);
+    this.effects = new Effects(game.events, field);
+    this.markers = new Markers(game, this.entities);
+    battle.add(this.entities.root, this.effects.root, this.markers.root);
+    this.scene.add(battle);
+    this.battle = battle;
+
+    // Fit the sun's shadow camera to the map.
+    const half = Math.max(field.width, field.depth) * 0.6;
+    const sc = this.sun.shadow.camera;
+    sc.left = -half;
+    sc.right = half;
+    sc.top = half;
+    sc.bottom = -half;
+    sc.updateProjectionMatrix();
+    this.rig.setBounds(field.bounds);
+  }
+
   /** `simSeconds` is frame time scaled by sim speed, so animations pause with the game. */
   render(alpha: number, frameSeconds: number, simSeconds: number): void {
+    if (!this.battle) return;
     this.rig.update(frameSeconds);
     this.entities.sync(alpha, simSeconds);
     this.effects.update(simSeconds);
@@ -103,6 +122,7 @@ export class Stage {
 
   /** Ground point under a screen position, or null if off the map. */
   pickGround(clientX: number, clientY: number): { x: number; z: number } | null {
+    if (!this.battle) return null;
     this.setRay(clientX, clientY);
     const hit = this.raycaster.intersectObject(this.ground, false)[0];
     return hit ? { x: hit.point.x, z: hit.point.z } : null;
@@ -110,6 +130,7 @@ export class Stage {
 
   /** Entity (unit or building) under a screen position, if any. */
   pickEntity(clientX: number, clientY: number): Entity | null {
+    if (!this.battle) return null;
     this.setRay(clientX, clientY);
     for (const hit of this.raycaster.intersectObject(this.entities.root, true)) {
       const e = this.entities.entityForObject(hit.object);
