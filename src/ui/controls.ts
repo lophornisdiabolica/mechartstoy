@@ -4,7 +4,7 @@ import { Armed, Building, Construction, Faction, Health, NEUTRAL, Producer, Rubb
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { Stance } from '../game/orders';
-import { LIMITS, UNIT_IDS } from '../game/settings';
+import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
 import { UnitId } from '../game/units';
 import { Stage } from '../render/stage';
@@ -82,7 +82,8 @@ export class Controls {
     if (this.inspectTimer <= 0) {
       this.inspectTimer = 0.2;
       this.renderInspect();
-      this.intensity.textContent = `Intensity now ${(1 + this.game.ctx.escalation).toFixed(2)}×`;
+      const { tide, siege } = this.game.ctx.escalation;
+      this.intensity.textContent = `Now: tide ${(1 + tide).toFixed(2)}×, siege ${(1 + siege).toFixed(2)}×`;
     }
   }
 
@@ -115,23 +116,29 @@ export class Controls {
         conquest ? 'Conquest: destroy the enemy HQ and every production building to win.' : 'Eternal: ruins are rebuilt and the war never ends.',
       ),
     );
-    // Ramp: live, so an Eternal war can be wound up or calmed down while watching.
+    // Ramps: live, so an Eternal war can be wound up or calmed down while watching.
     const mode = this.game.settings.mode;
-    const ramps = this.game.settings.armies.ramp;
-    const rampWrap = el('label', { class: 'slider valued', title: `How much the tide's swing and damage to buildings grow every ${RAMP_INTERVAL / 60} minutes` });
-    const ramp = el('input', { type: 'range', min: String(LIMITS.ramp.min), max: String(LIMITS.ramp.max), step: '0.05' });
-    const rampValue = el('span', { class: 'value' });
-    ramp.addEventListener('input', () => {
-      ramps[mode] = Number(ramp.value);
-      this.match.settingsChanged();
-      this.refresh();
-    });
-    rampWrap.append(el('span', {}, 'Ramp'), ramp, rampValue);
-    battle.append(rampWrap, this.intensity);
-    this.sync.push(() => {
-      ramp.value = String(ramps[mode]);
-      rampValue.textContent = ramps[mode] === 0 ? 'Off' : `+${Math.round(ramps[mode] * 100)}%`;
-    });
+    const ramp = this.game.settings.armies.ramp[mode];
+    battle.append(el('p', { class: 'hint' }, `Ramp, every ${RAMP_INTERVAL / 60} minutes:`));
+    const rampSlider = (label: string, key: keyof RampSettings, title: string) => {
+      const wrap = el('label', { class: 'slider valued', title });
+      const input = el('input', { type: 'range', min: String(LIMITS.ramp.min), max: String(LIMITS.ramp.max), step: '0.05' });
+      const value = el('span', { class: 'value' });
+      input.addEventListener('input', () => {
+        ramp[key] = Number(input.value);
+        this.match.settingsChanged();
+        this.refresh();
+      });
+      wrap.append(el('span', {}, label), input, value);
+      battle.append(wrap);
+      this.sync.push(() => {
+        input.value = String(ramp[key]);
+        value.textContent = ramp[key] === 0 ? 'Off' : `+${Math.round(ramp[key] * 100)}%`;
+      });
+    };
+    rampSlider('Tide', 'tide', `How much harder production surges swing every ${RAMP_INTERVAL / 60} minutes`);
+    rampSlider('Siege', 'siege', `How much harder hits on buildings land every ${RAMP_INTERVAL / 60} minutes`);
+    battle.append(this.intensity);
 
     const endRow = el('div', { class: 'row' });
     const end = el('button', { type: 'button', title: 'End this battle now and change the settings' }, 'End battle and set up');

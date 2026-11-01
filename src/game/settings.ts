@@ -19,6 +19,17 @@ export interface UnitTuning {
   range: number;
 }
 
+/**
+ * Escalation rates: each grows by this fraction every RAMP_INTERVAL seconds
+ * (see tide.ts). 0 is off.
+ */
+export interface RampSettings {
+  /** How much harder the tide swings production. */
+  tide: number;
+  /** How much harder hits on buildings land. */
+  siege: number;
+}
+
 export interface FactionSettings {
   name: string;
   /** Main hull colour as 0xRRGGBB. */
@@ -52,11 +63,8 @@ export interface BattleSettings {
     buildingHp: number;
     /** Share of squads sent down the flanks instead of the centre, 0 to 1. */
     flanking: number;
-    /**
-     * How fast the battle escalates, per mode: the tide's swing and damage
-     * to buildings grow by this fraction every RAMP_INTERVAL seconds (see tide.ts).
-     */
-    ramp: Record<BattleMode, number>;
+    /** How fast the battle escalates, per mode (see RampSettings). */
+    ramp: Record<BattleMode, RampSettings>;
   };
   units: Record<UnitId, UnitTuning>;
   factions: [FactionSettings, FactionSettings];
@@ -94,7 +102,7 @@ export function defaultSettings(): BattleSettings {
     seed: '',
     mode: 'eternal',
     map: { size: 'medium', water: 0.5, hills: 1, town: true },
-    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5, ramp: { conquest: 0.5, eternal: 0 } },
+    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5, ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } } },
     units: defaultUnitTuning(),
     factions: [
       { name: FACTIONS[0].name, color: FACTIONS[0].primary },
@@ -107,8 +115,8 @@ export function cloneSettings(s: BattleSettings): BattleSettings {
   return structuredClone(s);
 }
 
-/** The escalation rate for the settings' mode. */
-export function rampFor(s: BattleSettings): number {
+/** The escalation rates for the settings' mode. */
+export function rampFor(s: BattleSettings): RampSettings {
   return s.armies.ramp[s.mode];
 }
 

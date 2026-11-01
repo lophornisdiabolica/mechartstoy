@@ -20,10 +20,11 @@ is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
-- **Ramp** (both modes, its own value for each): how fast a battle
-  escalates. On by default in Conquest so long battles build to a finish,
-  off by default in Eternal; it can also be changed mid-battle from the
-  Battle controls panel.
+- **Tide ramp** and **siege ramp** (both modes, their own values for each):
+  how fast a battle escalates. On by default in Conquest so long battles
+  build to a finish, off by default in Eternal (both off gives the steadier,
+  longer battles). They can also be changed mid-battle from the Battle
+  controls panel.
 - **Unit stats** take multipliers in steps of 0.05, and show what each stat
   works out to (HP, damage per second, speed, range) under its box.
 - **Conquest:** no rebuilding. A side loses when its HQ and every production
@@ -145,12 +146,13 @@ src/
   mode a mild rubber band helps a badly outnumbered side; Conquest lets an
   advantage snowball so battles end. The tide's cycle stretches on maps
   longer than medium, so attacks have time to cross the map.
-- The **ramp** escalates a battle over time (`escalate` in `game/tide.ts`):
-  the tide swings harder, starving the defending side, and hits on
-  buildings do more damage, so a won field turns into a won battle. Overall
+- The **ramps** escalate a battle over time (`escalate` in `game/tide.ts`):
+  the tide ramp makes the tide swing harder, starving the defending side,
+  and the siege ramp makes hits on buildings do more damage, so a won field
+  turns into a won battle. Overall
   production deliberately doesn't grow: more units for both sides favours
   the defender, whose reinforcements roll straight out of the door (measured:
-  it made Conquest battles longer). With the default ramp, Conquest runs
+  it made Conquest battles longer). With the default ramps, Conquest runs
   about 4 to 12 minutes on a medium map and 8 to 14 on a large one.
 - **Battle stats** (`game/stats.ts`) keep score from events only. Every hit
   records who landed it (`Health.lastHit`), and the death events carry that

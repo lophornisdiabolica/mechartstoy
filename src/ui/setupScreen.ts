@@ -11,8 +11,8 @@ const MODE_HINTS: Record<BattleMode, string> = {
 const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damage', speed: 'Speed', range: 'Range' };
 
 const RAMP_HINTS: Record<BattleMode, string> = {
-  eternal: `Escalation: the tide's swing and damage to buildings grow by this much every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×. Off keeps the war at a steady pace.`,
-  conquest: `Escalation: the tide's swing and damage to buildings grow by this much every ${RAMP_INTERVAL / 60} minutes, so long battles build to a finish.`,
+  eternal: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Off keeps the war at a steady pace.`,
+  conquest: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×, so long battles build to a finish. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Both off gives the steadier pacing (and longer battles).`,
 };
 
 /** Trim to a readable number of digits: 8.6, 45, 520. */
@@ -207,8 +207,10 @@ export class SetupScreen {
     armies.append(el('p', { class: 'hint' }, 'The tide makes the sides take turns attacking. Swing is how strongly production surges; length is one full cycle.'));
     slider(armies, 'Flanking', 'flanking', 0.05, (s) => s.armies.flanking, (s, v) => (s.armies.flanking = v), (v) => (v === 0 ? 'None' : percent(v)));
     armies.append(el('p', { class: 'hint' }, 'Share of squads that swing wide down the sides of the map instead of attacking straight down the middle.'));
-    // One slider, but each mode keeps its own value: Conquest ramps by default, Eternal doesn't.
-    slider(armies, 'Ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode], (s, v) => (s.armies.ramp[s.mode] = v), (v) => (v === 0 ? 'Off' : `+${percent(v)}`));
+    // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
+    const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
+    slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);
+    slider(armies, 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].siege, (s, v) => (s.armies.ramp[s.mode].siege = v), ramped);
     const rampHint = el('p', { class: 'hint' });
     armies.append(rampHint);
     this.sync.push(() => (rampHint.textContent = RAMP_HINTS[this.settings.mode]));

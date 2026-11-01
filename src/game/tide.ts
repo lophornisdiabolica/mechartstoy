@@ -1,4 +1,6 @@
-import { MAP_SIZES } from './settings';
+import { System } from '../core/ecs';
+import { SimContext } from './context';
+import { MAP_SIZES, rampFor } from './settings';
 
 /**
  * The tide of battle. Each side alternates between building up (defending,
@@ -37,19 +39,21 @@ export const RAMP_INTERVAL = 300;
 export const RAMP_MAX = 2;
 
 /**
- * Advance a battle's escalation level by one tick. The level starts at 0 and
- * grows by `ramp` every RAMP_INTERVAL seconds, up to RAMP_MAX. The tide swings
- * (1 + level) times as hard, so late in a battle the surging side floods the
- * field while the other side is starved, and hits on buildings do
- * (1 + level) times the damage, so a won field turns into a won battle.
+ * Advance an escalation level by one tick. A level starts at 0 and grows by
+ * its ramp rate every RAMP_INTERVAL seconds, up to RAMP_MAX. There are two,
+ * set separately (see RampSettings):
+ * - tide: the tide swings (1 + level) times as hard, so late in a battle the
+ *   surging side floods the field while the other side is starved;
+ * - siege: hits on buildings do (1 + level) times the damage, so a won field
+ *   turns into a won battle.
  *
  * Overall production deliberately doesn't grow: more units for both sides
  * favours the defender, whose reinforcements roll straight out of the door
  * while the attacker's have to cross the map (measured: it made Conquest
  * battles longer, not shorter).
  *
- * It's integrated tick by tick (rather than computed from the clock) so
- * changing the ramp mid-battle only changes how fast it grows from here.
+ * Levels are integrated tick by tick (rather than computed from the clock) so
+ * changing a ramp mid-battle only changes how fast it grows from here.
  */
 export function escalate(level: number, ramp: number, dt: number): number {
   return Math.min(RAMP_MAX, level + (ramp * dt) / RAMP_INTERVAL);
@@ -79,4 +83,16 @@ export function isAttacking(time: number, faction: number, t: TideSettings = DEF
  */
 export function attackNumber(time: number, faction: number, t: TideSettings = DEFAULT_TIDE): number {
   return Math.floor(time / t.tidePeriod + (faction === 1 ? 0.5 : 0) - ATTACK_END);
+}
+
+/** Advances the battle's escalation levels. */
+export function escalationSystem(ctx: SimContext): System {
+  return {
+    name: 'escalation',
+    update(_world, dt) {
+      const ramp = rampFor(ctx.settings);
+      ctx.escalation.tide = escalate(ctx.escalation.tide, ramp.tide, dt);
+      ctx.escalation.siege = escalate(ctx.escalation.siege, ramp.siege, dt);
+    },
+  };
 }

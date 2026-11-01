@@ -17,9 +17,10 @@ function run(game: Game, seconds: number): void {
 describe('ramp', () => {
   it('ramps Conquest by default but not Eternal', () => {
     const s = defaultSettings();
-    expect(rampFor(s)).toBe(0);
+    expect(rampFor(s)).toEqual({ tide: 0, siege: 0 });
     s.mode = 'conquest';
-    expect(rampFor(s)).toBeGreaterThan(0);
+    expect(rampFor(s).tide).toBeGreaterThan(0);
+    expect(rampFor(s).siege).toBeGreaterThan(0);
   });
 
   it('escalation grows by the ramp each interval and levels off', () => {
@@ -53,12 +54,14 @@ describe('ramp', () => {
   it('a running Conquest battle escalates, an Eternal one stays level', () => {
     const conquest = defaultSettings();
     conquest.mode = 'conquest';
+    conquest.armies.ramp.conquest = { tide: 0.5, siege: 0.2 };
     const a = new Game(3, { settings: conquest, populate: false });
     run(a, 60);
-    expect(a.ctx.escalation).toBeCloseTo((rampFor(conquest) * 60) / RAMP_INTERVAL, 2);
+    expect(a.ctx.escalation.tide).toBeCloseTo((0.5 * 60) / RAMP_INTERVAL, 2);
+    expect(a.ctx.escalation.siege).toBeCloseTo((0.2 * 60) / RAMP_INTERVAL, 2);
     const b = new Game(3, { populate: false });
     run(b, 60);
-    expect(b.ctx.escalation).toBe(0);
+    expect(b.ctx.escalation).toEqual({ tide: 0, siege: 0 });
   });
 
   it('escalation makes hits on buildings (not units) land harder', () => {
@@ -74,19 +77,22 @@ describe('ramp', () => {
     };
     const calmBuilding = damageTaken(b);
     const calmTank = damageTaken(tank);
-    game.ctx.escalation = 1;
+    // Only the siege level matters here.
+    game.ctx.escalation = { tide: 3, siege: 1 };
     expect(damageTaken(b)).toBeCloseTo(calmBuilding * 2);
     expect(damageTaken(tank)).toBeCloseTo(calmTank);
   });
 
   it('each mode keeps its own ramp in the link', () => {
     const s = defaultSettings();
-    s.armies.ramp = { conquest: 0.3, eternal: 0.45 };
+    s.armies.ramp = { conquest: { tide: 0.3, siege: 0 }, eternal: { tide: 0.45, siege: 0.1 } };
     const p = settingsToParams(s);
     expect(p.get('ramp')).toBe('0.3');
+    expect(p.get('siege')).toBe('0');
     expect(p.get('eramp')).toBe('0.45');
+    expect(p.get('esiege')).toBe('0.1');
     expect(settingsFromParams(p).armies.ramp).toEqual(s.armies.ramp);
-    expect(settingsFromParams(new URLSearchParams('ramp=7')).armies.ramp.conquest).toBe(1);
+    expect(settingsFromParams(new URLSearchParams('ramp=7')).armies.ramp.conquest.tide).toBe(1);
   });
 });
 

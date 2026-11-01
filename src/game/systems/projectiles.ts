@@ -8,7 +8,7 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
   const before = h.hp;
   const building = world.get(e, Building);
   // As a battle escalates, sieges bite harder so a won field turns into a won battle.
-  if (building) amount *= 1 + ctx.escalation;
+  if (building) amount *= 1 + ctx.escalation.siege;
   h.hp -= amount * (1 - h.armor);
   // Only the blow that lands while it's still standing counts.
   if (by && before > 0) h.lastHit = by;

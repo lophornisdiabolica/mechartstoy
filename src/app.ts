@@ -24,6 +24,12 @@ function clock(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
 }
 
+/** The HUD's escalation note, e.g. " · tide 1.4× · siege 1.4×", or nothing before it starts. */
+function escalation(game: Game): string {
+  const { tide, siege } = game.ctx.escalation;
+  return (tide > 0.005 ? ` · tide ${(1 + tide).toFixed(1)}×` : '') + (siege > 0.005 ? ` · siege ${(1 + siege).toFixed(1)}×` : '');
+}
+
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 8);
 }
@@ -237,7 +243,7 @@ export class App implements MatchControls {
     );
     return (
       `${lines.join('\n')}\n` +
-      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${game.ctx.escalation > 0.005 ? ` · intensity ${(1 + game.ctx.escalation).toFixed(1)}×` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
+      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
       `WASD / right-drag pan · wheel zoom · Q/E rotate · 1-4 speed · space pause`
     );
   }

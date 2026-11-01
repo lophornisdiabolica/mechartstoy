@@ -24,7 +24,7 @@ import { snapshotSystem } from './systems/snapshot';
 import { spatialIndexSystem } from './systems/spatialIndex';
 import { targetingSystem } from './systems/targeting';
 import { weaponSystem } from './systems/weapons';
-import { tideForMap } from './tide';
+import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 
 export type { GameEvents, Outcome } from './context';
@@ -81,7 +81,7 @@ export class Game {
       tideOrder: root.fork(6).chance(0.5) ? 1 : 0,
       lanes: new Lanes(this.field, nav, seed),
       squads: 0,
-      escalation: 0,
+      escalation: { tide: 0, siege: 0 },
       outcome: null,
     };
 
@@ -90,6 +90,7 @@ export class Game {
     const navObstacles = navObstacleSystem(ctx);
     const systems = [
       snapshotSystem,
+      escalationSystem(ctx),
       spatialIndexSystem(ctx),
       navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx)] : []),

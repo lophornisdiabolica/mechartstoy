@@ -58,8 +58,8 @@ export interface SimContext {
   lanes: Lanes;
   /** Counter for squad ids (see spawn.newSquad). */
   squads: number;
-  /** How far the battle has escalated (see tide.escalate); 0 at the start. */
-  escalation: number;
+  /** How far the battle has escalated, per effect (see tide.escalate); 0 at the start. */
+  escalation: { tide: number; siege: number };
   /** Set once a conquest battle is decided. */
   outcome: Outcome | null;
 }
