@@ -2,7 +2,8 @@ import { System, World } from '../../core/ecs';
 import { Building, Construction, Faction, Producer, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
-import { tide } from '../tide';
+import { rampFor } from '../settings';
+import { escalate, tide } from '../tide';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius, searching a
@@ -35,8 +36,8 @@ export function countUnits(world: World): number[] {
 
 /**
  * Production buildings turn out units on their own timers. Two things scale
- * the rate: the tide (see tide.ts), and (in Eternal mode) a mild rubber band
- * that helps a badly outnumbered side recover. The settings' production multiplier and unit cap
+ * the rate: the tide, which the ramp makes swing harder (see tide.ts), and (in Eternal mode) a mild
+ * rubber band that helps a badly outnumbered side recover. The settings' production multiplier and unit cap
  * apply on top.
  */
 export function productionSystem(ctx: SimContext): System {
@@ -45,6 +46,7 @@ export function productionSystem(ctx: SimContext): System {
     update(world, dt) {
       const alive = countUnits(world);
       const { armies } = ctx.settings;
+      const level = (ctx.escalation = escalate(ctx.escalation, rampFor(ctx.settings), dt));
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
         const faction = world.req(e, Faction).id;
@@ -53,7 +55,7 @@ export function productionSystem(ctx: SimContext): System {
         const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
         // Conquest needs a winner, so it skips the rubber band and lets an advantage snowball.
         const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
-        producer.timer -= dt * armies.production * band * tide(world.time, faction ^ ctx.tideOrder, armies);
+        producer.timer -= dt * armies.production * band * tide(world.time, faction ^ ctx.tideOrder, ctx.tide, level);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
         if (alive[faction] >= armies.unitCap) continue;

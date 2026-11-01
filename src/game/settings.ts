@@ -52,6 +52,11 @@ export interface BattleSettings {
     buildingHp: number;
     /** Share of squads sent down the flanks instead of the centre, 0 to 1. */
     flanking: number;
+    /**
+     * How fast the battle escalates, per mode: the tide's swing and damage
+     * to buildings grow by this fraction every RAMP_INTERVAL seconds (see tide.ts).
+     */
+    ramp: Record<BattleMode, number>;
   };
   units: Record<UnitId, UnitTuning>;
   factions: [FactionSettings, FactionSettings];
@@ -76,6 +81,7 @@ export const LIMITS = {
   tidePeriod: { min: 60, max: 400 },
   buildingHp: { min: 0.25, max: 4 },
   flanking: { min: 0, max: 1 },
+  ramp: { min: 0, max: 1 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -88,7 +94,7 @@ export function defaultSettings(): BattleSettings {
     seed: '',
     mode: 'eternal',
     map: { size: 'medium', water: 0.5, hills: 1, town: true },
-    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5 },
+    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5, ramp: { conquest: 0.5, eternal: 0 } },
     units: defaultUnitTuning(),
     factions: [
       { name: FACTIONS[0].name, color: FACTIONS[0].primary },
@@ -99,6 +105,11 @@ export function defaultSettings(): BattleSettings {
 
 export function cloneSettings(s: BattleSettings): BattleSettings {
   return structuredClone(s);
+}
+
+/** The escalation rate for the settings' mode. */
+export function rampFor(s: BattleSettings): number {
+  return s.armies.ramp[s.mode];
 }
 
 /** Terrain parameters for these settings. */

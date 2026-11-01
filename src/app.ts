@@ -1,17 +1,28 @@
 import { FixedLoop } from './core/loop';
 import { hashSeed } from './core/rng';
 import { Building, Faction, Producer, Unit } from './game/components';
+import { BuildingId } from './game/buildings';
 import { FactionDef } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
 import { BattleSettings, factionDefs } from './game/settings';
+import { UnitId } from './game/units';
 import { Stage } from './render/stage';
 import { Controls, MatchControls } from './ui/controls';
-import { el } from './ui/dom';
+import { el, hex } from './ui/dom';
 import { settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
 
-/** Seconds of battle (sim time) the victory banner shows before the next battle. */
-const VICTORY_PAUSE = 12;
+/** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
+const VICTORY_PAUSE = 15;
+
+/** Battle time as m:ss (or h:mm:ss). */
+function clock(seconds: number): string {
+  const s = Math.floor(seconds);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -23,7 +34,6 @@ interface Battle {
   factions: FactionDef[];
   /** The control panel; null while the battle is only a backdrop behind the setup screen. */
   controls: Controls | null;
-  losses: number[];
 }
 
 /**
@@ -45,6 +55,8 @@ export class App implements MatchControls {
   private fps = 0;
   private hudTimer = 0;
   private bannerShownFor: Game | null = null;
+  /** Unpaused seconds the banner has been up. */
+  private bannerTime = 0;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
 
   constructor(container: HTMLElement, hud: HTMLElement) {
@@ -82,6 +94,10 @@ export class App implements MatchControls {
     this.writeUrl(this.settings);
   }
 
+  settingsChanged(): void {
+    this.writeUrl({ ...this.settings, seed: this.battle.seed });
+  }
+
   private startFromSetup(settings: BattleSettings): void {
     this.settings = settings;
     this.setup.hide();
@@ -103,9 +119,7 @@ export class App implements MatchControls {
     this.stage.load(game, factions);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
-    const losses = factions.map(() => 0);
-    game.events.on('unitDestroyed', (e) => losses[e.faction]++);
-    this.battle = { game, seed, factions, controls, losses };
+    this.battle = { game, seed, factions, controls };
     this.banner.hidden = true;
     this.bannerShownFor = null;
     this.hudTimer = 0;
@@ -122,7 +136,8 @@ export class App implements MatchControls {
     const outcome = game.outcome;
     if (outcome && !this.setup.visible) {
       if (this.bannerShownFor !== game) this.showBanner();
-      const left = Math.ceil(VICTORY_PAUSE - (game.world.time - outcome.time));
+      if (this.loop.timeScale > 0) this.bannerTime += frameSeconds;
+      const left = Math.ceil(VICTORY_PAUSE - this.bannerTime);
       this.banner.querySelector('.next')!.textContent = this.setupAfterBattle ? `Setup in ${Math.max(0, left)}s` : `New battle in ${Math.max(0, left)}s`;
       if (left <= 0) this.nextBattle();
     }
@@ -146,20 +161,64 @@ export class App implements MatchControls {
 
   private showBanner(): void {
     const { game, factions } = this.battle;
-    const winner = game.outcome?.winner;
+    const outcome = game.outcome!;
+    const winner = outcome.winner;
     this.bannerShownFor = game;
+    this.bannerTime = 0;
     this.banner.replaceChildren(
-      el('div', { class: 'title' }, winner === null || winner === undefined ? 'Mutual destruction' : `${factions[winner].name} wins`),
+      el('div', { class: 'title' }, winner === null ? 'Mutual destruction' : `${factions[winner].name} wins`),
+      el('div', { class: 'sub' }, `after ${clock(outcome.time)}`),
+      this.summary(),
       el('div', { class: 'next' }),
     );
-    if (winner !== null && winner !== undefined) {
-      this.banner.style.setProperty('--accent', `#${factions[winner].primary.toString(16).padStart(6, '0')}`);
-    }
+    this.banner.style.setProperty('--accent', winner === null ? '#e8d27a' : hex(factions[winner].primary));
     this.banner.hidden = false;
   }
 
+  /** The end-of-battle numbers, one column per side. */
+  private summary(): HTMLElement {
+    const { game, factions } = this.battle;
+    const { stats, ctx } = game;
+    const table = el('table', { class: 'summary' });
+    const head = el('tr');
+    head.append(el('th'));
+    // Phones only have room for the first word of each name.
+    const narrow = window.matchMedia('(max-width: 600px)').matches;
+    for (const f of factions) {
+      const th = el('th', { title: f.name }, narrow ? f.name.split(' ')[0] : f.name);
+      th.style.color = hex(f.primary);
+      head.append(th);
+    }
+    table.append(head);
+    const typeName = (id: string) => ctx.units[id as UnitId]?.name ?? ctx.buildings[id as BuildingId]?.name ?? id;
+    const rows: [string, (f: number) => string][] = [
+      ['Units fielded', (f) => String(stats.sides[f].fielded)],
+      ['Units lost', (f) => String(stats.sides[f].lost)],
+      ['Kills', (f) => String(stats.sides[f].kills)],
+      ['Buildings razed', (f) => String(stats.sides[f].razed)],
+      [
+        'Top unit',
+        (f) => {
+          const best = stats.best(f);
+          return best ? `${typeName(best.source)} (${best.kills})` : '—';
+        },
+      ],
+    ];
+    for (const [label, value] of rows) {
+      const tr = el('tr');
+      tr.append(el('th', {}, label));
+      for (const f of factions) tr.append(el('td', {}, value(f.id)));
+      table.append(tr);
+    }
+    const wrap = el('div', { class: 'stats' });
+    wrap.append(table);
+    if (stats.townRazed > 0) wrap.append(el('div', { class: 'town' }, `${stats.townRazed} town ${stats.townRazed === 1 ? 'building' : 'buildings'} caught in the crossfire`));
+    return wrap;
+  }
+
   private hudText(): string {
-    const { game, factions, losses, seed } = this.battle;
+    const { game, factions, seed } = this.battle;
+    const losses = game.stats.sides.map((s) => s.lost);
     const w = game.world;
     const alive = factions.map(() => 0);
     const buildings = factions.map(() => 0);
@@ -178,7 +237,7 @@ export class App implements MatchControls {
     );
     return (
       `${lines.join('\n')}\n` +
-      `${conquest ? 'Conquest' : 'Eternal'} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
+      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${game.ctx.escalation > 0.005 ? ` · intensity ${(1 + game.ctx.escalation).toFixed(1)}×` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
       `WASD / right-drag pan · wheel zoom · Q/E rotate · 1-4 speed · space pause`
     );
   }

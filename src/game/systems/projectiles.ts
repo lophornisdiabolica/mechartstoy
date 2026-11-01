@@ -1,13 +1,17 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Collider, Faction, Health, Projectile, Targetable, Transform } from '../components';
+import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
 
-export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number): void {
+export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null): void {
   const h = world.get(e, Health);
   if (!h) return;
   const before = h.hp;
-  h.hp -= amount * (1 - h.armor);
   const building = world.get(e, Building);
+  // As a battle escalates, sieges bite harder so a won field turns into a won battle.
+  if (building) amount *= 1 + ctx.escalation;
+  h.hp -= amount * (1 - h.armor);
+  // Only the blow that lands while it's still standing counts.
+  if (by && before > 0) h.lastHit = by;
   if (building && before > h.max / 2 && h.hp <= h.max / 2 && h.hp > 0) {
     const t = world.req(e, Transform);
     ctx.events.emit('buildingDamaged', { entity: e, x: t.x, y: t.y, z: t.z, def: building.def });
@@ -32,12 +36,13 @@ export function projectileSystem(ctx: SimContext): System {
 
         const hit = new Set<Entity>();
         const w = p.weapon;
+        const by: Hit = { source: p.source, faction: p.faction };
         // Direct hit on the intended target if it's still where the shot landed.
         if (p.target !== null && world.has(p.target, Targetable)) {
           const tt = world.req(p.target, Transform);
           const r = world.req(p.target, Collider).radius + 0.4;
           if ((tt.x - p.ex) ** 2 + (tt.z - p.ez) ** 2 <= r * r) {
-            applyDamage(world, ctx, p.target, w.damage);
+            applyDamage(world, ctx, p.target, w.damage, by);
             hit.add(p.target);
           }
         }
@@ -48,7 +53,7 @@ export function projectileSystem(ctx: SimContext): System {
             if (world.req(other, Faction).id === p.faction) return;
             const edge = Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius);
             if (edge > w.splash) return;
-            applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)));
+            applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);
           });
         }
         ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: w.splash });

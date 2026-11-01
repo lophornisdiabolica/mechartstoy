@@ -41,13 +41,13 @@ export function aiSystem(ctx: SimContext): System {
         const { armies } = ctx.settings;
         const slot = faction ^ ctx.tideOrder;
         // Each attack, the squad gets its lane for that attack (and the build-up before it).
-        const attack = attackNumber(world.time, slot, armies);
+        const attack = attackNumber(world.time, slot, ctx.tide);
         if (ai.laneAttack !== attack) {
           ai.lane = ctx.lanes.laneFor(faction, attack, ai.squad, armies.flanking);
           ai.laneAttack = attack;
         }
 
-        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, slot, armies));
+        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, slot, ctx.tide));
         if (!attacking) {
           // Form up at the player's flag, or in front of the base leaning toward this squad's lane.
           const rally = orders.rally ?? ctx.lanes.rally(faction, ai.lane);

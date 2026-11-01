@@ -4,7 +4,8 @@ import { Armed, Building, Construction, Faction, Health, NEUTRAL, Producer, Rubb
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { Stance } from '../game/orders';
-import { UNIT_IDS } from '../game/settings';
+import { LIMITS, UNIT_IDS } from '../game/settings';
+import { RAMP_INTERVAL } from '../game/tide';
 import { UnitId } from '../game/units';
 import { Stage } from '../render/stage';
 import { el, hex, segmented } from './dom';
@@ -22,6 +23,8 @@ export interface MatchControls {
   endBattle(): void;
   /** Whether to go to setup (instead of straight into a new map) when this battle is won. */
   setupAfterBattle: boolean;
+  /** The panel changed a battle setting (so the page link can follow). */
+  settingsChanged(): void;
 }
 
 /**
@@ -37,6 +40,7 @@ export class Controls {
   private readonly panel = el('div', { id: 'panel' });
   private readonly toast = el('div', { id: 'toast' });
   private readonly inspect = el('div', { class: 'inspect' });
+  private readonly intensity = el('p', { class: 'hint' });
   private readonly sync: (() => void)[] = [];
   private inspectTimer = 0;
   /** Removes every listener this panel added outside itself. */
@@ -78,6 +82,7 @@ export class Controls {
     if (this.inspectTimer <= 0) {
       this.inspectTimer = 0.2;
       this.renderInspect();
+      this.intensity.textContent = `Intensity now ${(1 + this.game.ctx.escalation).toFixed(2)}×`;
     }
   }
 
@@ -110,6 +115,24 @@ export class Controls {
         conquest ? 'Conquest: destroy the enemy HQ and every production building to win.' : 'Eternal: ruins are rebuilt and the war never ends.',
       ),
     );
+    // Ramp: live, so an Eternal war can be wound up or calmed down while watching.
+    const mode = this.game.settings.mode;
+    const ramps = this.game.settings.armies.ramp;
+    const rampWrap = el('label', { class: 'slider valued', title: `How much the tide's swing and damage to buildings grow every ${RAMP_INTERVAL / 60} minutes` });
+    const ramp = el('input', { type: 'range', min: String(LIMITS.ramp.min), max: String(LIMITS.ramp.max), step: '0.05' });
+    const rampValue = el('span', { class: 'value' });
+    ramp.addEventListener('input', () => {
+      ramps[mode] = Number(ramp.value);
+      this.match.settingsChanged();
+      this.refresh();
+    });
+    rampWrap.append(el('span', {}, 'Ramp'), ramp, rampValue);
+    battle.append(rampWrap, this.intensity);
+    this.sync.push(() => {
+      ramp.value = String(ramps[mode]);
+      rampValue.textContent = ramps[mode] === 0 ? 'Off' : `+${Math.round(ramps[mode] * 100)}%`;
+    });
+
     const endRow = el('div', { class: 'row' });
     const end = el('button', { type: 'button', title: 'End this battle now and change the settings' }, 'End battle and set up');
     end.addEventListener('click', () => this.match.endBattle());

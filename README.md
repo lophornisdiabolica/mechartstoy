@@ -20,9 +20,16 @@ is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
+- **Ramp** (both modes, its own value for each): how fast a battle
+  escalates. On by default in Conquest so long battles build to a finish,
+  off by default in Eternal; it can also be changed mid-battle from the
+  Battle controls panel.
+- **Unit stats** take multipliers in steps of 0.05, and show what each stat
+  works out to (HP, damage per second, speed, range) under its box.
 - **Conquest:** no rebuilding. A side loses when its HQ and every production
-  building are destroyed; after a short victory banner a fresh map starts
-  with the same settings. "Set up after this battle" goes to the setup
+  building are destroyed; after a victory banner with a summary of the
+  battle (units fielded and lost, kills, buildings razed, each side's top
+  unit) a fresh map starts with the same settings. "Set up after this battle" goes to the setup
   screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
@@ -136,7 +143,19 @@ src/
   rally point and attacking in force, with production surging for whoever
   is attacking. Which side surges first is a coin flip per map. In Eternal
   mode a mild rubber band helps a badly outnumbered side; Conquest lets an
-  advantage snowball so battles end (about 4 to 12 minutes on a medium map).
+  advantage snowball so battles end. The tide's cycle stretches on maps
+  longer than medium, so attacks have time to cross the map.
+- The **ramp** escalates a battle over time (`escalate` in `game/tide.ts`):
+  the tide swings harder, starving the defending side, and hits on
+  buildings do more damage, so a won field turns into a won battle. Overall
+  production deliberately doesn't grow: more units for both sides favours
+  the defender, whose reinforcements roll straight out of the door (measured:
+  it made Conquest battles longer). With the default ramp, Conquest runs
+  about 4 to 12 minutes on a medium map and 8 to 14 on a large one.
+- **Battle stats** (`game/stats.ts`) keep score from events only. Every hit
+  records who landed it (`Health.lastHit`), and the death events carry that
+  as `killer`, so kills are credited to the unit or building type that
+  landed the last blow.
 - Attacks follow **lanes** (`game/lanes.ts`): one down the middle and one
   swinging wide along each side. Units built together form a squad and
   share a lane. Each attack a side favours one flank, and the Flanking
@@ -162,3 +181,9 @@ src/
    pacing, per-unit stat multipliers, faction names and colours, saved in
    the URL; battles that end and roll into a new map.~~
 6. ~~Smarter tactics: flanking lanes, so armies use the whole map.~~
+7. ~~Pacing and readability: ramp, finer unit stats with resulting values,
+   end-of-battle summary.~~
+8. More than two factions: free-for-all and teams (2v2, 1v3, ...).
+9. Damage types and armour classes (rock-paper-scissors or richer), and
+   asymmetric faction rosters.
+10. Capturable outposts on the flank lanes and squad morale.

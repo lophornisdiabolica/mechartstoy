@@ -10,6 +10,7 @@ import { GameEvents, Outcome, SimContext } from './context';
 import { Lanes } from './lanes';
 import { defaultOrders, Stance } from './orders';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
+import { BattleStats } from './stats';
 import { spawnBuilding, spawnUnit } from './spawn';
 import { aiSystem } from './systems/ai';
 import { conquestSystem } from './systems/conquest';
@@ -23,6 +24,7 @@ import { snapshotSystem } from './systems/snapshot';
 import { spatialIndexSystem } from './systems/spatialIndex';
 import { targetingSystem } from './systems/targeting';
 import { weaponSystem } from './systems/weapons';
+import { tideForMap } from './tide';
 import { UnitId } from './units';
 
 export type { GameEvents, Outcome } from './context';
@@ -49,6 +51,8 @@ export class Game {
   readonly props: Prop[];
   readonly ctx: SimContext;
   readonly settings: BattleSettings;
+  /** Running score for the end-of-battle summary. */
+  readonly stats: BattleStats;
 
   constructor(
     readonly seed: number,
@@ -56,6 +60,8 @@ export class Game {
   ) {
     const { populate = true, autoSpawn = true, settings = defaultSettings() } = options;
     this.settings = settings;
+    // Subscribe before anything spawns, so the opening armies count.
+    this.stats = new BattleStats(this.events, 2);
     const root = new Rng(seed);
     this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
@@ -71,9 +77,11 @@ export class Game {
       units: tunedUnits(settings),
       buildings: tunedBuildings(settings),
       // Whoever surges first has an edge, so it's a coin flip (on its own stream, so nothing else shifts).
+      tide: tideForMap(settings.armies, this.field.config.cols),
       tideOrder: root.fork(6).chance(0.5) ? 1 : 0,
       lanes: new Lanes(this.field, nav, seed),
       squads: 0,
+      escalation: 0,
       outcome: null,
     };
 

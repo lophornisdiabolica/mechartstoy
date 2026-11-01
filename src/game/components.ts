@@ -119,11 +119,19 @@ export interface Building {
 }
 export const Building = defineComponent<Building>('Building');
 
+/** Who dealt a blow: the attacker's unit or building id and side. */
+export interface Hit {
+  source: string;
+  faction: number;
+}
+
 export interface Health {
   hp: number;
   max: number;
   /** Fraction of incoming damage ignored, 0..1. */
   armor: number;
+  /** The last thing that hurt this, which gets the credit if it dies. */
+  lastHit: Hit | null;
 }
 export const Health = defineComponent<Health>('Health');
 
@@ -214,6 +222,8 @@ export interface Projectile {
   kind: ProjectileKind;
   weapon: WeaponDef;
   faction: number;
+  /** The firing unit's or building's definition id, for kill credit. */
+  source: string;
   /** The entity aimed at, which takes the hit if still near the impact point. */
   target: Entity | null;
   sx: number;
