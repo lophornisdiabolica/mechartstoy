@@ -1,5 +1,6 @@
-import { BattleMode, BattleSettings, cloneSettings, defaultSettings, LIMITS, MAP_SIZES, MapSize, UNIT_IDS, UnitTuning } from '../game/settings';
-import { UNIT_DEFS } from '../game/units';
+import { BattleMode, BattleSettings, cloneSettings, defaultSettings, LIMITS, MAP_SIZES, MapSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
+import { UNIT_DEFS, UnitDef } from '../game/units';
 import { el, hex, segmented } from './dom';
 
 const MODE_HINTS: Record<BattleMode, string> = {
@@ -8,6 +9,33 @@ const MODE_HINTS: Record<BattleMode, string> = {
 };
 
 const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damage', speed: 'Speed', range: 'Range' };
+
+const RAMP_HINTS: Record<BattleMode, string> = {
+  eternal: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Off keeps the war at a steady pace.`,
+  conquest: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×, so long battles build to a finish. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Both off gives the steadier pacing (and longer battles).`,
+};
+
+/** Trim to a readable number of digits: 8.6, 45, 520. */
+function short(v: number): string {
+  return v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
+}
+
+/** Damage per second, counting bursts. */
+function dps(def: UnitDef): number {
+  const w = def.weapon;
+  return (w.damage * w.burst) / w.cooldown;
+}
+
+/** What a stat works out to after its multiplier, for the stats table. */
+const STAT_RESULTS: Record<keyof UnitTuning, (def: UnitDef) => { text: string; title: string }> = {
+  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points` }),
+  damage: (d) => ({
+    text: `${short(dps(d))}/s`,
+    title: `${short(dps(d))} damage per second: ${short(d.weapon.damage)} per shot${d.weapon.burst > 1 ? ` × ${d.weapon.burst}` : ''}, every ${d.weapon.cooldown}s`,
+  }),
+  speed: (d) => ({ text: short(d.speed), title: `${short(d.speed)} metres per second` }),
+  range: (d) => ({ text: `${short(d.weapon.range)}m`, title: `Range ${short(d.weapon.range)} metres` }),
+};
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -179,6 +207,13 @@ export class SetupScreen {
     armies.append(el('p', { class: 'hint' }, 'The tide makes the sides take turns attacking. Swing is how strongly production surges; length is one full cycle.'));
     slider(armies, 'Flanking', 'flanking', 0.05, (s) => s.armies.flanking, (s, v) => (s.armies.flanking = v), (v) => (v === 0 ? 'None' : percent(v)));
     armies.append(el('p', { class: 'hint' }, 'Share of squads that swing wide down the sides of the map instead of attacking straight down the middle.'));
+    // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
+    const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
+    slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);
+    slider(armies, 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].siege, (s, v) => (s.armies.ramp[s.mode].siege = v), ramped);
+    const rampHint = el('p', { class: 'hint' });
+    armies.append(rampHint);
+    this.sync.push(() => (rampHint.textContent = RAMP_HINTS[this.settings.mode]));
 
     // Factions
     const factions = section('Factions');
@@ -210,22 +245,29 @@ export class SetupScreen {
     for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) headRow.append(el('th', {}, STAT_LABELS[k]));
     table.append(headRow);
     const { min, max } = LIMITS.unitStat;
+    let tuned = tunedUnits(this.settings);
+    this.sync.push(() => (tuned = tunedUnits(this.settings)));
     for (const id of UNIT_IDS) {
       const tr = el('tr');
       tr.append(el('th', {}, UNIT_DEFS[id].name));
       for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) {
         const td = el('td');
-        const input = el('input', { type: 'number', min: String(min), max: String(max), step: '0.25', 'aria-label': `${UNIT_DEFS[id].name} ${STAT_LABELS[k]}` });
+        const input = el('input', { type: 'number', min: String(min), max: String(max), step: '0.05', 'aria-label': `${UNIT_DEFS[id].name} ${STAT_LABELS[k]} multiplier` });
         input.addEventListener('change', () => {
-          const v = Number(input.value);
+          const v = Math.round(Number(input.value) * 100) / 100;
           this.settings.units[id][k] = Number.isFinite(v) && v > 0 ? Math.max(min, Math.min(max, v)) : 1;
           this.changed();
         });
-        td.append(input);
+        const result = el('span', { class: 'result' });
+        td.append(input, result);
         tr.append(td);
         this.sync.push(() => {
           input.value = String(this.settings.units[id][k]);
           input.classList.toggle('changed', this.settings.units[id][k] !== 1);
+          const r = STAT_RESULTS[k](tuned[id]);
+          result.textContent = r.text;
+          result.title = r.title;
+          result.classList.toggle('changed', this.settings.units[id][k] !== 1);
         });
       }
       table.append(tr);
@@ -235,7 +277,7 @@ export class SetupScreen {
       this.settings.units = defaultSettings().units;
       this.changed();
     });
-    units.append(el('p', { class: 'hint' }, 'Multipliers on each unit’s normal stats. 1 is as designed.'), table, resetUnits);
+    units.append(el('p', { class: 'hint' }, 'Multipliers on each unit’s normal stats, in steps of 0.05. 1 is as designed. The number under each box is what the stat works out to (damage is per second).'), table, resetUnits);
 
     // Footer
     const foot = el('footer');

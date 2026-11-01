@@ -17,6 +17,11 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'tide', limit: 'tideStrength', get: (s) => s.armies.tideStrength, set: (s, v) => (s.armies.tideStrength = v) },
   { key: 'tidelen', limit: 'tidePeriod', get: (s) => s.armies.tidePeriod, set: (s, v) => (s.armies.tidePeriod = v) },
   { key: 'flank', limit: 'flanking', get: (s) => s.armies.flanking, set: (s, v) => (s.armies.flanking = v) },
+  // Ramps: plain keys for Conquest, e-prefixed for Eternal.
+  { key: 'ramp', limit: 'ramp', get: (s) => s.armies.ramp.conquest.tide, set: (s, v) => (s.armies.ramp.conquest.tide = v) },
+  { key: 'siege', limit: 'ramp', get: (s) => s.armies.ramp.conquest.siege, set: (s, v) => (s.armies.ramp.conquest.siege = v) },
+  { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
+  { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
 

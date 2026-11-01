@@ -34,10 +34,11 @@ export function deathSystem(ctx: SimContext): System {
         if (world.req(e, Health).hp > 0) continue;
         const t = world.req(e, Transform);
         const faction = world.req(e, Faction).id;
+        const killer = world.req(e, Health).lastHit;
 
         const unit = world.get(e, Unit);
         if (unit) {
-          ctx.events.emit('unitDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def: unit.def, faction });
+          ctx.events.emit('unitDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def: unit.def, faction, killer });
           if (unit.def.wreckTime <= 0) {
             world.destroy(e);
             continue;
@@ -50,7 +51,7 @@ export function deathSystem(ctx: SimContext): System {
         const building = world.get(e, Building);
         if (building) {
           const def = building.def;
-          ctx.events.emit('buildingDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def, faction });
+          ctx.events.emit('buildingDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def, faction, killer });
           world.destroy(e);
           const r = world.create();
           world.add(r, Transform, makeTransform(t.x, t.y, t.z, t.heading));

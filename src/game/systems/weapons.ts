@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Armed, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform } from '../components';
+import { Armed, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
 import { distanceToTarget } from './targeting';
@@ -32,6 +32,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     kind: w.projectile,
     weapon: w,
     faction: world.req(e, Faction).id,
+    source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown',
     target,
     sx,
     sy,

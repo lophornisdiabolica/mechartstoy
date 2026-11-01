@@ -167,6 +167,16 @@ body {
   margin-top: 4px;
 }
 
+#panel label.slider.valued {
+  grid-template-columns: 48px 1fr 40px;
+}
+
+#panel label.slider .value {
+  color: #8b98a8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 #panel input[type='range'] {
   width: 100%;
   accent-color: #e8d27a;
@@ -420,6 +430,18 @@ body {
   border-color: #e8d27a;
 }
 
+#setup table.stats .result {
+  display: block;
+  padding: 1px 2px 0;
+  color: #8b98a8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#setup table.stats .result.changed {
+  color: #e8d27a;
+}
+
 #setup footer {
   display: flex;
   justify-content: space-between;
@@ -454,8 +476,48 @@ body {
   letter-spacing: 0.04em;
 }
 
+#banner .sub {
+  margin-top: 2px;
+  color: #8b98a8;
+  font-size: 12px;
+}
+
+#banner .stats {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+#banner table.summary {
+  margin: 0 auto;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+#banner table.summary th,
+#banner table.summary td {
+  padding: 2px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#banner table.summary tr:first-child th {
+  font-weight: 700;
+  padding-bottom: 4px;
+}
+
+#banner table.summary tr:not(:first-child) th {
+  color: #8b98a8;
+  font-weight: normal;
+  text-align: left;
+}
+
+#banner .town {
+  margin-top: 6px;
+  color: #8b98a8;
+}
+
 #banner .next {
-  margin-top: 4px;
+  margin-top: 8px;
   color: #8b98a8;
   font-size: 12px;
 }
@@ -472,6 +534,27 @@ body {
 
   #banner .title {
     font-size: 17px;
+  }
+
+  #banner {
+    top: 12%;
+    padding: 10px 12px;
+    max-width: calc(100vw - 16px);
+    box-sizing: border-box;
+  }
+
+  #banner table.summary th,
+  #banner table.summary td {
+    padding: 2px 4px;
+  }
+
+  #banner table.summary td {
+    white-space: normal;
+  }
+
+  #setup table.stats input {
+    padding-left: 4px;
+    padding-right: 0;
   }
 
   #panel {
