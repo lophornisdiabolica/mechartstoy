@@ -32,6 +32,20 @@ function escalation(game: Game): string {
   return (tide > 0.005 ? ` · tide ${(1 + tide).toFixed(1)}×` : '') + (siege > 0.005 ? ` · siege ${(1 + siege).toFixed(1)}×` : '');
 }
 
+/** What a side's army is up to, for the HUD: " · attacking Ember", " · massing 70%" and so on. */
+function plan(game: Game, faction: number, factions: FactionDef[]): string {
+  const { offensive, sides } = game.ctx;
+  const time = game.world.time;
+  const target = sides.target(faction, offensive.attack(faction, time));
+  const name = target !== null ? factions[target]?.name ?? '' : '';
+  if (offensive.attacking(faction, time)) return target !== null ? ` · attacking ${name}` : '';
+  if (game.settings.armies.attackTiming === 'tide') return ' · building up';
+  const p = offensive.plan(faction);
+  if (p.state === 'regrouping') return ' · regrouping';
+  if (p.state === 'defending') return ' · defending';
+  return p.state === 'massing' ? ` · massing ${Math.min(99, Math.round(p.ready * 100))}%` : '';
+}
+
 /** "A", "A and B", "A, B and C". */
 function listNames(names: string[]): string {
   return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
@@ -270,7 +284,8 @@ export class App implements MatchControls {
       const out = game.ctx.sides.eliminated[f.id] ? ' · out' : '';
       const held = outpostsHeldBy(game.ctx, f.id);
       const outposts = game.ctx.outposts.length > 0 ? `, ${held} ${held === 1 ? 'outpost' : 'outposts'}` : '';
-      return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}${outposts}, ${losses[f.id]} lost${out}`;
+      const doing = out ? '' : plan(game, f.id, factions);
+      return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}${outposts}, ${losses[f.id]} lost${out}${doing}`;
     });
     return (
       `${lines.join('\n')}\n` +

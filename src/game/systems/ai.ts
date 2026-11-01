@@ -3,7 +3,6 @@ import { Ai, Armed, Faction, Guard, Mover, Transform } from '../components';
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
-import { attackNumber, isAttacking } from '../tide';
 import { distanceToTarget } from './targeting';
 
 /** How far an outpost's guards chase from the post before going back. */
@@ -68,9 +67,8 @@ export function aiSystem(ctx: SimContext): System {
 
         const orders = ctx.orders[faction];
         const { armies } = ctx.settings;
-        const phase = ctx.sides.phase[faction];
         // Each attack, the squad gets its target and lane for that attack (and the build-up before it).
-        const attack = attackNumber(world.time, phase, ctx.tide);
+        const attack = ctx.offensive.attack(faction, world.time);
         const target = ctx.sides.target(faction, attack) ?? -1;
         if (ai.laneAttack !== attack || ai.target !== target) {
           ai.lane = target >= 0 ? ctx.lanes.laneFor(faction, target, attack, ai.squad, armies.flanking) : 0;
@@ -89,7 +87,7 @@ export function aiSystem(ctx: SimContext): System {
 
         // On auto, an attack is called off while the side's own base can't hold (Sides.recalling).
         const recalled = ctx.sides.recalling[faction];
-        const auto = orders.stance === 'auto' && !recalled && isAttacking(world.time, phase, ctx.tide);
+        const auto = orders.stance === 'auto' && !recalled && ctx.offensive.attacking(faction, world.time);
         const attacking = target >= 0 && (orders.stance === 'attack' || auto);
         if (!attacking) {
           // Form up at the player's flag; else hold this lane's outpost (unless the base itself
