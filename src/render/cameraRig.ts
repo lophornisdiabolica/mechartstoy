@@ -28,6 +28,9 @@ export class CameraRig {
   viewHeight = 70;
   panSpeed = 40;
 
+  /** Called when the player pans the camera themselves (keys, drag), e.g. to stop following fights. */
+  onManualPan: (() => void) | null = null;
+
   private targetAzimuth = this.azimuth;
   private targetZoom = this.zoom;
   private readonly keys = new Set<string>();
@@ -66,7 +69,10 @@ export class CameraRig {
     if (this.keys.has('s') || this.keys.has('arrowdown')) fy -= 1;
     if (this.keys.has('d') || this.keys.has('arrowright')) fx += 1;
     if (this.keys.has('a') || this.keys.has('arrowleft')) fx -= 1;
-    if (fx || fy) this.panScreen(fx * this.panSpeed * dt / this.zoom, fy * this.panSpeed * dt / this.zoom);
+    if (fx || fy) {
+      this.onManualPan?.();
+      this.panScreen(fx * this.panSpeed * dt / this.zoom, fy * this.panSpeed * dt / this.zoom);
+    }
 
     const k = 1 - Math.exp(-dt * 10);
     this.azimuth += (this.targetAzimuth - this.azimuth) * k;
@@ -81,6 +87,21 @@ export class CameraRig {
     );
     this.camera.lookAt(this.target);
     this.updateProjection();
+  }
+
+  /** Glide toward a ground point, taking about `seconds` to get most of the way there. */
+  glideTo(x: number, z: number, frameSeconds: number, seconds = 1.2): void {
+    const k = 1 - Math.exp(-Math.min(frameSeconds, 0.1) / seconds);
+    this.target.x += (Math.max(this.bounds.minX, Math.min(this.bounds.maxX, x)) - this.target.x) * k;
+    this.target.z += (Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, z)) - this.target.z) * k;
+  }
+
+  /** Ground distance from the view's centre to its farthest visible corner, roughly. */
+  get viewRadius(): number {
+    const h = this.viewHeight / this.zoom;
+    // Screen-up covers more ground than its height, because the view is tilted.
+    const depth = h / Math.sin(this.elevation);
+    return 0.5 * Math.hypot(h * this.aspect, depth);
   }
 
   /** Move the target by an amount expressed in screen directions (right, up). */
@@ -129,6 +150,7 @@ export class CameraRig {
     });
     this.dom.addEventListener('pointermove', (e) => {
       if (!this.drag) return;
+      if (e.clientX !== this.drag.x || e.clientY !== this.drag.y) this.onManualPan?.();
       const worldPerPixel = this.viewHeight / this.zoom / this.dom.clientHeight;
       this.panScreen(-(e.clientX - this.drag.x) * worldPerPixel, (e.clientY - this.drag.y) * worldPerPixel);
       this.drag = { x: e.clientX, y: e.clientY };

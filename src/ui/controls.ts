@@ -7,8 +7,9 @@ import { Stance } from '../game/orders';
 import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
 import { UnitId } from '../game/units';
-import { Stage } from '../render/stage';
+import { ShadowQuality, Stage } from '../render/stage';
 import { dropdown, el, hex, segmented } from './dom';
+import { saveViewPrefs } from './viewPrefs';
 
 type Tool = { kind: 'spawn'; unit: UnitId } | { kind: 'rally' } | null;
 
@@ -70,6 +71,7 @@ export class Controls {
     this.listeners.abort();
     this.panel.remove();
     this.toast.remove();
+    this.stage.onFollowStopped = null;
     this.stage.renderer.domElement.style.cursor = '';
   }
 
@@ -232,6 +234,32 @@ export class Controls {
 
     // Camera
     const cam = section('Camera');
+    const followLabel = el('label', { class: 'check', title: 'Glide to wherever the fighting is. Panning the camera yourself turns this off.' });
+    const follow = el('input', { type: 'checkbox' });
+    follow.addEventListener('change', () => this.setFollow(follow.checked));
+    followLabel.append(follow, document.createTextNode(' Follow the fighting (F)'));
+    cam.append(followLabel);
+    this.sync.push(() => (follow.checked = this.stage.followFights));
+    this.stage.onFollowStopped = () => {
+      this.refresh();
+      this.showToast('Stopped following. F to follow again');
+    };
+    const shadows = segmented<ShadowQuality>(
+      [
+        { label: 'High', value: 'high', title: 'Sharp shadows' },
+        { label: 'Low', value: 'low', title: 'Softer, cheaper shadows' },
+        { label: 'Off', value: 'off', title: 'No shadows: fastest with big armies' },
+      ],
+      (q) => {
+        this.stage.shadows = q;
+        this.saveView();
+        this.refresh();
+      },
+    );
+    const shadowRow = el('div', { class: 'labelled' });
+    shadowRow.append(el('span', {}, 'Shadows'), shadows.row);
+    cam.append(shadowRow);
+    this.sync.push(() => shadows.set(this.stage.shadows));
     const ts = this.stage.tiltShift;
     const toggleLabel = el('label', { class: 'check' });
     const toggle = el('input', { type: 'checkbox' });
@@ -265,6 +293,17 @@ export class Controls {
     this.panel.classList.toggle('has-side', this.playerFaction !== null);
     for (const s of this.sync) s();
     this.stage.renderer.domElement.style.cursor = this.tool ? 'crosshair' : '';
+  }
+
+  private setFollow(on: boolean): void {
+    this.stage.followFights = on;
+    this.saveView();
+    this.refresh();
+    if (on && !this.stage.fights.focus) this.showToast('Following: waiting for a fight');
+  }
+
+  private saveView(): void {
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights });
   }
 
   private setSpeed(v: number): void {
@@ -400,6 +439,8 @@ export class Controls {
         this.stage.tiltShift.settings.enabled = !this.stage.tiltShift.settings.enabled;
         this.stage.tiltShift.apply();
         this.refresh();
+      } else if (key === 'f') {
+        this.setFollow(!this.stage.followFights);
       } else if (key === 'escape') {
         if (this.tool) this.setTool(null);
         else this.select(null);

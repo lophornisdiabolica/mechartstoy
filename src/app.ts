@@ -7,6 +7,7 @@ import { Game, SIM_HZ } from './game/game';
 import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
 import { Stage } from './render/stage';
+import { loadViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
 import { el, hex } from './ui/dom';
 import { settingsFromParams, settingsToParams } from './ui/settingsUrl';
@@ -74,6 +75,9 @@ export class App implements MatchControls {
     this.hud = hud;
     this.settings = settingsFromParams(new URLSearchParams(location.search));
     this.stage = new Stage(container);
+    const view = loadViewPrefs();
+    this.stage.shadows = view.shadows;
+    this.stage.followFights = view.follow;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => this.battle.game.step(dt),
       render: (alpha, frameSeconds) => this.frame(alpha, frameSeconds),
@@ -262,7 +266,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · 1-4 speed · space pause`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause`
     );
   }
 
