@@ -11,7 +11,24 @@ npm install
 npm run dev      # local dev server with hot reload
 npm test         # unit tests (headless, no browser needed)
 npm run build    # typecheck + production build into dist/
+npm run sims     # balance runs: play many battles headlessly, print stats
 ```
+
+### Balance runs
+
+`npm run sims` plays a representative set of battles (1v1 on each map size,
+without outposts, with attacks on the tide, 2v2, 1v3, free-for-alls of 3, 4
+and 6 sides, and a stretch of Eternal) at full speed with no rendering,
+several at once, and prints a table per scenario: battle length (median,
+mean, range), wins per team, and per-battle kills, buildings razed,
+outposts taken and attacks launched. `--quick` runs about a third as many,
+`--only 1v1,2v2` picks scenarios, `--battles N` and `--workers N` override
+the counts, and `--list` shows the scenarios. Every battle is saved to
+`sims-results/` (JSON and CSV) with a link that replays it in the browser:
+each battle's seed is named after its scenario and number (`1v1-7`), so the
+same battle plays out the same way on any machine. The scenarios live in
+`src/sim/simulate.ts`; PRs that change the balance add to them and say which
+to run.
 
 The page opens on a **setup screen** over a battle that's already running.
 Pick a mode, map size, water and hills, army pacing, per-unit stat
@@ -120,6 +137,8 @@ src/
     settingsUrl.ts   settings <-> URL query string (only non-default values)
     viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
+  sim/
+    simulate.ts      headless balance scenarios and stats (npm run sims; scripts/sims.mjs runs them)
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
 
