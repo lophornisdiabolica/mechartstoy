@@ -1,12 +1,14 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
-import { Armed, Building, Construction, Faction, Health, NEUTRAL, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { describeBonus } from '../game/outposts';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { Stance } from '../game/orders';
 import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
 import { UnitId } from '../game/units';
+import { factionColors } from '../render/models';
 import { ShadowQuality, Stage } from '../render/stage';
 import { dropdown, el, hex, segmented } from './dom';
 import { saveViewPrefs } from './viewPrefs';
@@ -371,9 +373,10 @@ export class Controls {
 
     const title = el('div', { class: 'title' });
     const swatch = el('span', { class: 'swatch' });
-    swatch.style.background = faction ? hex(faction.primary) : '#b5654a';
+    const garrison = factionId === GARRISON;
+    swatch.style.background = faction ? hex(faction.primary) : garrison ? hex(factionColors(GARRISON).primary) : '#b5654a';
     title.append(swatch, el('strong', {}, name));
-    this.inspect.append(title, el('div', { class: 'sub' }, faction ? faction.name : 'Civilian'));
+    this.inspect.append(title, el('div', { class: 'sub' }, faction ? faction.name : garrison ? 'Garrison (fights everyone)' : 'Civilian'));
 
     const h = w.get(e, Health);
     if (h) {
@@ -389,6 +392,14 @@ export class Controls {
     const armed = w.get(e, Armed);
     if (armed) lines.push(`${armed.weapon.name}: ${armed.target !== null ? 'engaging' : 'no target'}`);
     if (unit) lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);
+    const guard = w.get(e, Guard);
+    if (guard) lines.push('Guarding its outpost');
+    const part = w.get(e, OutpostPart);
+    if (part) {
+      const o = this.game.ctx.outposts[part.outpost];
+      lines.push(`Outpost: ${describeBonus(o.bonus, this.game.settings.armies.outpostBonus)} for its holder`);
+      if (o.claimant >= 0) lines.push(`${this.factions[o.claimant].name} taking it: ${Math.round(o.progress * 100)}%`);
+    }
     const construction = w.get(e, Construction);
     if (construction) lines.push(`Under construction: ${Math.round((construction.elapsed / construction.duration) * 100)}%`);
     const producer = w.get(e, Producer);

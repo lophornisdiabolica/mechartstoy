@@ -22,6 +22,8 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'siege', limit: 'ramp', get: (s) => s.armies.ramp.conquest.siege, set: (s, v) => (s.armies.ramp.conquest.siege = v) },
   { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
   { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
+  { key: 'ohold', limit: 'outpostHold', get: (s) => s.armies.outpostHold, set: (s, v) => (s.armies.outpostHold = v) },
+  { key: 'obonus', limit: 'outpostBonus', get: (s) => s.armies.outpostBonus, set: (s, v) => (s.armies.outpostBonus = v) },
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
 
@@ -48,6 +50,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.mode !== d.mode) p.set('mode', s.mode);
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.town !== d.map.town) p.set('town', s.map.town ? '1' : '0');
+  if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
   for (const id of UNIT_IDS) {
     const t = s.units[id];
@@ -74,6 +77,10 @@ export function settingsFromParams(p: URLSearchParams): BattleSettings {
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   const town = p.get('town');
   if (town === '0' || town === '1') s.map.town = town === '1';
+  const outposts = p.get('outposts');
+  if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
+    s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
+  }
   for (const n of NUMBERS) {
     const raw = p.get(n.key);
     const v = raw === null ? NaN : Number(raw);

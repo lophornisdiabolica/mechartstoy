@@ -11,6 +11,7 @@ import { disposeTree } from './dispose';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
 import { FightWatch } from './fightWatch';
+import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
 import { setFactionPalette } from './models';
 import './models/buildings';
@@ -56,6 +57,7 @@ export class Stage {
   entities!: EntityView;
   effects!: Effects;
   markers!: Markers;
+  outpostRings!: OutpostRings;
   /** Finds the fighting for the spectator camera. */
   fights!: FightWatch;
   /** Entity highlighted by the UI. */
@@ -130,7 +132,8 @@ export class Stage {
     this.entities = new EntityView(game.world);
     this.effects = new Effects(game.events, field);
     this.markers = new Markers(game, this.entities);
-    battle.add(this.entities.root, this.effects.root, this.markers.root);
+    this.outpostRings = new OutpostRings(game);
+    battle.add(this.entities.root, this.effects.root, this.markers.root, this.outpostRings.root);
     this.scene.add(battle);
     this.battle = battle;
 
@@ -196,6 +199,7 @@ export class Stage {
     this.entities.sync(alpha, simSeconds);
     this.effects.update(simSeconds);
     this.markers.update(frameSeconds, this.selected);
+    this.outpostRings.update();
     this.composer.render(frameSeconds);
   }
 

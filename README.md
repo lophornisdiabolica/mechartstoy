@@ -35,6 +35,9 @@ battle, its exact map via `seed`).
   (on by default) gives sides on smaller teams more production and a bigger
   unit cap, so one side against three gets three times as much. More sides
   make a bigger map.
+- **Outposts:** small capturable forts in no-man's land (see below). Pick
+  how many (Auto is one per side), how strong their bonuses are, and how many
+  squads hold them between attacks (off by default).
 - **Conquest:** no rebuilding. A side is knocked out when its HQ and every
   production building are destroyed, and the battle ends when only one team
   is left standing; after a victory banner with a summary of the
@@ -80,7 +83,8 @@ src/
     buildings.ts     building definitions: production, defences, civic
     spawn.ts         assembles unit and building entities from definitions
     tide.ts          alternating offensives that keep the front moving
-    lanes.ts         attack routes (centre and two flanks) and which squad takes which
+    lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
+    outposts.ts      capturable outposts: garrisons, capturing, bonuses
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
@@ -100,6 +104,7 @@ src/
     entityView.ts    mirrors ECS entities into the scene each frame
     effects.ts       particles for flashes, explosions, smoke, debris
     markers.ts       rally flags and the selection ring
+    outpostRings.ts  capture rings round outposts, filling as a side takes one
   ui/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
@@ -193,12 +198,32 @@ src/
   records who landed it (`Health.lastHit`), and the death events carry that
   as `killer`, so kills are credited to the unit or building type that
   landed the last blow.
-- Attacks follow **lanes** (`game/lanes.ts`): one straight from base to base
-  and one swinging wide to each side, worked out for each pair of bases
-  that actually fight. Units built together form a squad and
-  share a lane. Each attack a side favours one flank, and the Flanking
-  setting decides how many squads go wide, so fights break out all over
-  the map rather than along one front line.
+- Attacks follow **lanes** (`game/lanes.ts`): one straight from base to base,
+  and one through each outpost or town that lies roughly between the two
+  (where nothing does on one side of that line, a lane swings wide on that
+  side instead), worked out for each
+  pair of bases that actually fight. Units built together form a squad and
+  share a lane. Each attack a side favours one of the side lanes, and the
+  Flanking setting decides how many squads leave the centre, so fights
+  break out all over the map rather than along one front line.
+- **Outposts** (`game/outposts.ts`) are small forts in no-man's land:
+  a post, two towers and a bunker that keeps four guards about (but can't
+  send new ones out while enemies are in the ring). Each starts
+  held by its own garrison (faction `GARRISON`), which fights every side and
+  wears the colours of a faction not in the battle. A side takes one by
+  having units inside the ring with no defenders there; more units take it
+  faster, and two attacking teams at once stall each other. The towers and
+  bunker then switch sides. Holding one gives a bonus (`OutpostBonus`):
+  most speed up production, some repair the holder's units nearby; the
+  Outposts bonus setting scales them. A production bonus adds the same to
+  every side (+10% of a normal side's rate), so a side boosted for uneven
+  teams doesn't get three times as much from it. Attacking squads take any
+  outpost on their lane on the way. The Holding setting keeps a share of
+  the squads on an outpost's lane there between attacks (unless their own
+  base is under attack); it's off by default because thinner bases made
+  Conquest battles about a minute shorter. Outposts aren't
+  production, so they never keep a side alive in Conquest, and a knocked-out
+  side's outposts go back to their garrisons. They're rebuilt in both modes.
 - Siege units (Titans, Howitzers) prefer shelling buildings.
 - In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
   enemies are nearby, and a faction with no production left gets fallback
@@ -222,6 +247,7 @@ src/
 7. ~~Pacing and readability: ramp, finer unit stats with resulting values,
    end-of-battle summary.~~
 8. ~~More than two factions: free-for-all and teams (2v2, 1v3, ...).~~
-9. Damage types and armour classes (rock-paper-scissors or richer), and
-   asymmetric faction rosters.
-10. Capturable outposts on the flank lanes and squad morale.
+9. ~~Capturable outposts, with lanes through outposts and towns.~~
+10. Readiness: attack when the army is ready rather than on the tide's clock.
+11. Asymmetric faction rosters, outpost unit unlocks, squad morale; maybe
+    damage types and armour classes.

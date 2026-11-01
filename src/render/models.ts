@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GARRISON } from '../game/components';
 import { FACTIONS, FactionDef } from '../game/factions';
 
 /**
@@ -89,14 +90,25 @@ export function flatMaterial(color: number): THREE.Material {
 /** Civilian palette for the neutral town. */
 const NEUTRAL_COLORS = { primary: 0xb5654a, secondary: 0x6d7b86 };
 
-let palette: readonly FactionDef[] = FACTIONS;
+/** Outpost garrisons when every faction colour is in use. */
+const GARRISON_FALLBACK = { primary: 0x7d8457, secondary: 0x3f4433 };
 
-/** Set the faction colours models are built with (from the battle settings). Affects models built afterwards. */
+let palette: readonly FactionDef[] = FACTIONS;
+let garrison = GARRISON_FALLBACK;
+
+/**
+ * Set the faction colours models are built with (from the battle settings).
+ * Affects models built afterwards. Outpost garrisons wear the colours of the
+ * first faction not in this battle, so they read as a different army.
+ */
 export function setFactionPalette(defs: readonly FactionDef[]): void {
   palette = defs;
+  const spare = FACTIONS.slice(defs.length).find((f) => !defs.some((d) => d.primary === f.primary));
+  garrison = spare ? { primary: spare.primary, secondary: spare.secondary } : GARRISON_FALLBACK;
 }
 
 export function factionColors(faction: number): { primary: number; secondary: number } {
+  if (faction === GARRISON) return garrison;
   const def = palette[faction];
   return def ? { primary: def.primary, secondary: def.secondary } : NEUTRAL_COLORS;
 }

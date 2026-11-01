@@ -15,7 +15,8 @@ function run(game: Game, seconds: number): void {
 
 describe('battle settings', () => {
   it('defaults reproduce the hand-tuned map', () => {
-    expect(battlefieldConfig(defaultSettings())).toEqual(DEFAULT_BATTLEFIELD);
+    // The same terrain and town; outposts (one per side by default) are added on top.
+    expect(battlefieldConfig(defaultSettings())).toEqual({ ...DEFAULT_BATTLEFIELD, outposts: 2 });
   });
 
   it('applies unit multipliers without touching the base definitions', () => {
@@ -91,8 +92,8 @@ describe('settings in the URL', () => {
     const s = defaultSettings();
     s.seed = 'hello world';
     s.mode = 'conquest';
-    s.map = { size: 'small', water: 0.2, hills: 1.35, town: false };
-    s.armies = { unitCap: 90, production: 1.5, startingArmy: 0, tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: false, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } } };
+    s.map = { size: 'small', water: 0.2, hills: 1.35, town: false, outposts: 3 };
+    s.armies = { unitCap: 90, production: 1.5, startingArmy: 0, tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: false, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1 };
     const back = settingsFromParams(new URLSearchParams(settingsToParams(s).toString()));

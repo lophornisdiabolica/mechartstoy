@@ -107,6 +107,40 @@ registerModel('bld:tower', (faction) => {
   return setRig(g, { turret });
 });
 
+/** An outpost's post: a small hut on a round pad, with a radio mast flying its holder's flag. */
+registerModel('bld:outpost', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.6, 1.75, 0.25, 8, CONCRETE, 0, 0.125, 0));
+  g.add(box(1.2, 0.9, 1.0, WALLS[2], -0.25, 0.7, -0.15));
+  g.add(box(1.34, 0.12, 1.14, secondary, -0.25, 1.2, -0.15));
+  g.add(box(0.06, 0.6, 0.4, DARK, 0.36, 0.55, -0.15)); // door
+  g.add(box(0.1, 3.4, 0.1, METAL, 0.75, 1.85, 0.55)); // mast
+  const flag = box(0.9, 0.55, 0.04, primary, 1.24, 3.2, 0.55);
+  g.add(flag);
+  const beacon = glowBox(0.16, 0.16, 0.16, 0xffd060);
+  beacon.position.set(0.75, 3.63, 0.55);
+  g.add(beacon);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      // The flag flutters.
+      flag.userData.t = (flag.userData.t ?? Math.random() * 10) + dt;
+      flag.rotation.y = Math.sin(flag.userData.t * 3) * 0.2;
+    },
+  });
+});
+
+/** An outpost bunker: a low concrete blockhouse with a firing slit. */
+registerModel('bld:bunker', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.0, 1.0, 2.4, 0x9a9588, 0, 0.5, 0));
+  g.add(box(3.2, 0.2, 2.6, primary, 0, 1.08, 0));
+  g.add(box(0.06, 0.2, 1.4, DARK, 1.52, 0.72, 0)); // firing slit
+  g.add(box(0.06, 0.7, 0.6, DARK, -1.52, 0.38, 0.5)); // back door
+  return g;
+});
+
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
   const walls = pick(WALLS);

@@ -27,7 +27,13 @@ export function makeTransform(x: number, y: number, z: number, heading = 0): Tra
 /** Faction id used for the civilian town, which nobody targets on purpose. */
 export const NEUTRAL = -1;
 
-/** Which side an entity belongs to (index into FACTIONS, or NEUTRAL). */
+/**
+ * Faction id for an outpost's own defenders before anyone captures it: they
+ * fight every side, and every side fights them.
+ */
+export const GARRISON = -2;
+
+/** Which side an entity belongs to (index into FACTIONS, NEUTRAL or GARRISON). */
 export interface Faction {
   id: number;
 }
@@ -240,6 +246,26 @@ export interface Projectile {
   duration: number;
 }
 export const Projectile = defineComponent<Projectile>('Projectile');
+
+/** Part of an outpost (its post, towers or bunker), or the rubble of one. */
+export interface OutpostPart {
+  /** Index in SimContext.outposts. */
+  outpost: number;
+}
+export const OutpostPart = defineComponent<OutpostPart>('OutpostPart');
+
+/** An outpost bunker that keeps a few guards at the post for whoever holds it. */
+export interface Garrison {
+  /** Seconds until the next guard. */
+  timer: number;
+}
+export const Garrison = defineComponent<Garrison>('Garrison');
+
+/** A unit that stays at an outpost and defends it instead of joining the army. */
+export interface Guard {
+  outpost: number;
+}
+export const Guard = defineComponent<Guard>('Guard');
 
 /** A destroyed unit's hulk, left on the field for a while before sinking away. */
 export interface Wreck {

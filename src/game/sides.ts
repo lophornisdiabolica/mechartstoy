@@ -1,7 +1,7 @@
 import { System } from '../core/ecs';
 import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
-import { Faction, Transform, Unit } from './components';
+import { Faction, GARRISON, Transform, Unit } from './components';
 import { SimContext } from './context';
 
 /**
@@ -88,6 +88,11 @@ export class Sides {
     return { x: base.x + (at.x - base.x) * 0.8, z: base.z + (at.z - base.z) * 0.8, face: at };
   }
 
+  /** Whether enemies are at a side's own base in strength (see defencePoint). */
+  underAttack(faction: number): boolean {
+    return this.threat[faction] >= DEFEND_THRESHOLD;
+  }
+
   /** Update a side's threat count and recall state (see defenceSystem). */
   assess(faction: number, threat: number, x: number, z: number, guard: number): void {
     this.threat[faction] = threat;
@@ -130,8 +135,12 @@ export class Sides {
     this.eliminatedAt[faction] = time;
   }
 
-  /** Whether a and b fight each other. The neutral town (-1) is nobody's enemy and nobody's ally. */
+  /**
+   * Whether a and b fight each other. The neutral town is nobody's enemy and
+   * nobody's ally; an outpost's garrison fights every side.
+   */
   hostile(a: number, b: number): boolean {
+    if (a === GARRISON || b === GARRISON) return a !== b && (a >= 0 || b >= 0);
     return a >= 0 && b >= 0 && a !== b && this.teams[a] !== this.teams[b];
   }
 

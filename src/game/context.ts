@@ -7,6 +7,7 @@ import { NavGrid } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Hit } from './components';
 import { Lanes } from './lanes';
+import { Outpost } from './outposts';
 import { Sides } from './sides';
 import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
@@ -24,6 +25,8 @@ export type GameEvents = {
   buildingDamaged: { entity: Entity; x: number; y: number; z: number; def: BuildingDef };
   buildingDestroyed: { entity: Entity; x: number; y: number; z: number; def: BuildingDef; faction: number; killer: Hit | null };
   constructionStarted: { entity: Entity; x: number; y: number; z: number; def: BuildingDef };
+  /** A side took an outpost (from its garrison or another side); `faction` is GARRISON when a knocked-out side's outpost reverts. */
+  outpostCaptured: { outpost: number; faction: number; previous: number; x: number; z: number };
   /** Conquest only: a side has lost its last production building. */
   sideEliminated: { faction: number; time: number };
   /** Conquest only: one team is left standing (or nobody is). */
@@ -62,6 +65,8 @@ export interface SimContext {
   sides: Sides;
   /** Attack routes across the map. */
   lanes: Lanes;
+  /** Capturable outposts, one per Battlefield.outpostSites entry. */
+  outposts: Outpost[];
   /** Counter for squad ids (see spawn.newSquad). */
   squads: number;
   /** How far the battle has escalated, per effect (see tide.escalate); 0 at the start. */

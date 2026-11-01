@@ -16,7 +16,7 @@ const SWITCH_RATIO = 1.6;
 const FIZZLED = 0.15;
 
 /** How much each kind of event says "something worth watching is happening here". */
-const HEAT = { fired: 1, impact: 0.5, unitDestroyed: 4, buildingDamaged: 3, buildingDestroyed: 10 };
+const HEAT = { fired: 1, impact: 0.5, unitDestroyed: 4, buildingDamaged: 3, buildingDestroyed: 10, outpostCaptured: 12 };
 
 /**
  * Finds where the fighting is, for the spectator camera. Shots, hits and

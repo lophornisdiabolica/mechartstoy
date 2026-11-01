@@ -50,6 +50,8 @@ export interface BattleSettings {
     /** Terrain height multiplier, 0 (flat) to 2. */
     hills: number;
     town: boolean;
+    /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
+    outposts: number | 'auto';
   };
   armies: {
     unitCap: number;
@@ -69,6 +71,13 @@ export interface BattleSettings {
     evenTeams: boolean;
     /** How fast the battle escalates, per mode (see RampSettings). */
     ramp: Record<BattleMode, RampSettings>;
+    /** Multiplier on what holding an outpost gives (see outposts.ts); 0 makes them worth nothing but ground. */
+    outpostBonus: number;
+    /**
+     * Share of the squads on an outpost's lane that hold it between attacks, 0 to 1. Off by
+     * default: holding leaves bases thinner, which made Conquest battles about a minute shorter.
+     */
+    outpostHold: number;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -95,6 +104,9 @@ export const LIMITS = {
   buildingHp: { min: 0.25, max: 4 },
   flanking: { min: 0, max: 1 },
   ramp: { min: 0, max: 1 },
+  outposts: { min: 0, max: 12 },
+  outpostBonus: { min: 0, max: 3 },
+  outpostHold: { min: 0, max: 1 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -106,8 +118,20 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, town: true },
-    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5, evenTeams: true, ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } } },
+    map: { size: 'medium', water: 0.5, hills: 1, town: true, outposts: 'auto' },
+    armies: {
+      unitCap: 60,
+      production: 1,
+      startingArmy: 4,
+      tideStrength: 0.6,
+      tidePeriod: 150,
+      buildingHp: 1,
+      flanking: 0.5,
+      evenTeams: true,
+      ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } },
+      outpostBonus: 1,
+      outpostHold: 0,
+    },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],
   };
@@ -160,6 +184,11 @@ export function seating(s: BattleSettings): number[] {
   return s.factions.map((_, i) => i).sort((a, b) => firstOf.get(s.factions[a].team)! - firstOf.get(s.factions[b].team)! || a - b);
 }
 
+/** How many outposts to place: 'auto' is one per side. */
+export function outpostCount(s: BattleSettings): number {
+  return s.map.outposts === 'auto' ? s.factions.length : s.map.outposts;
+}
+
 /** Terrain parameters for these settings. */
 export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
   const size = MAP_SIZES[s.map.size];
@@ -180,6 +209,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     seaLevel,
     town: s.map.town,
     seats: seating(s),
+    outposts: outpostCount(s),
   };
 }
 
