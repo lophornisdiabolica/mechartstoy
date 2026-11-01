@@ -4,6 +4,7 @@ import { Building, Faction, Producer, Unit } from './game/components';
 import { BuildingId } from './game/buildings';
 import { FactionDef } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
+import { outpostsHeldBy } from './game/outposts';
 import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
 import { Stage } from './render/stage';
@@ -202,6 +203,9 @@ export class App implements MatchControls {
       ['Lost', 'Units lost', (f) => String(stats.sides[f].lost)],
       ['Kills', 'Enemy units destroyed', (f) => String(stats.sides[f].kills)],
       ['Razed', 'Buildings destroyed', (f) => String(stats.sides[f].razed)],
+      ...(ctx.outposts.length > 0
+        ? ([['Outposts', 'Outposts captured', (f) => String(stats.sides[f].captured)]] as [string, string, (f: number) => string][])
+        : []),
       [
         'Top unit',
         'The unit type with the most kills',
@@ -247,7 +251,10 @@ export class App implements MatchControls {
     const alive = factions.map(() => 0);
     const buildings = factions.map(() => 0);
     const producers = factions.map(() => 0);
-    for (const e of w.query(Unit, Faction)) alive[w.req(e, Faction).id]++;
+    for (const e of w.query(Unit, Faction)) {
+      const f = w.req(e, Faction).id;
+      if (f >= 0) alive[f]++;
+    }
     for (const e of w.query(Building, Faction)) {
       const f = w.req(e, Faction).id;
       if (f < 0) continue;
@@ -261,7 +268,9 @@ export class App implements MatchControls {
       const notes = [labels[f.id], strength !== 1 ? `${Math.round(strength * 100) / 100}× army` : ''].filter(Boolean).join(', ');
       const team = notes ? ` (${notes})` : '';
       const out = game.ctx.sides.eliminated[f.id] ? ' · out' : '';
-      return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}, ${losses[f.id]} lost${out}`;
+      const held = outpostsHeldBy(game.ctx, f.id);
+      const outposts = game.ctx.outposts.length > 0 ? `, ${held} ${held === 1 ? 'outpost' : 'outposts'}` : '';
+      return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}${outposts}, ${losses[f.id]} lost${out}`;
     });
     return (
       `${lines.join('\n')}\n` +

@@ -11,6 +11,8 @@ export interface SideStats {
   kills: number;
   /** Buildings this side destroyed, including the civilian town. */
   razed: number;
+  /** Outposts this side took. */
+  captured: number;
   /** Kills (units and buildings) by the unit or building type that landed the last blow. */
   killsBy: Record<string, number>;
 }
@@ -25,7 +27,7 @@ export class BattleStats {
   townRazed = 0;
 
   constructor(events: EventBus<GameEvents>, factions: number) {
-    this.sides = Array.from({ length: factions }, () => ({ fielded: 0, lost: 0, kills: 0, razed: 0, killsBy: {} }));
+    this.sides = Array.from({ length: factions }, () => ({ fielded: 0, lost: 0, kills: 0, razed: 0, captured: 0, killsBy: {} }));
     events.on('spawned', (e) => this.side(e.faction) && this.sides[e.faction].fielded++);
     events.on('unitDestroyed', (e) => {
       if (this.side(e.faction)) this.sides[e.faction].lost++;
@@ -35,6 +37,7 @@ export class BattleStats {
         this.credit(k.faction, k.source);
       }
     });
+    events.on('outpostCaptured', (e) => this.side(e.faction) && this.sides[e.faction].captured++);
     events.on('buildingDestroyed', (e) => {
       if (e.faction === NEUTRAL) this.townRazed++;
       const k = e.killer;

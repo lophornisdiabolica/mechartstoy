@@ -2,6 +2,7 @@ import { System, World } from '../../core/ecs';
 import { Building, Construction, Faction, Producer, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
+import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
 
 /**
@@ -45,7 +46,8 @@ export function outnumbered(ctx: SimContext, alive: number[], faction: number): 
 
 /**
  * Production buildings turn out units on their own timers. Two things scale
- * the rate: the tide, which the ramp makes swing harder (see tide.ts), and (in Eternal mode) a mild
+ * the rate: the tide, which the ramp makes swing harder (see tide.ts), outposts held
+ * (see outposts.ts), and (in Eternal mode) a mild
  * rubber band that helps a badly outnumbered side recover. The settings' production multiplier and unit cap
  * apply on top.
  */
@@ -63,7 +65,9 @@ export function productionSystem(ctx: SimContext): System {
         const ratio = outnumbered(ctx, alive, faction);
         // Conquest needs a winner, so it skips the rubber band and lets an advantage snowball.
         const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
-        producer.timer -= dt * armies.production * ctx.sides.strength[faction] * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide);
+        // An outpost adds the same to every side, not a share of a big side's boosted rate.
+        const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
+        producer.timer -= dt * armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
         if (alive[faction] >= ctx.sides.unitCap(faction, armies.unitCap)) continue;

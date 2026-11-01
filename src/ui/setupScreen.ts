@@ -1,7 +1,7 @@
 import { BattleMode, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
-import { el, hex, segmented } from './dom';
+import { dropdown, el, hex, segmented } from './dom';
 
 const MODE_HINTS: Record<BattleMode, string> = {
   eternal: 'Ruined buildings are rebuilt and the war goes on forever.',
@@ -271,7 +271,7 @@ export class SetupScreen {
     slider(armies, 'Tide length', 'tidePeriod', 10, (s) => s.armies.tidePeriod, (s, v) => (s.armies.tidePeriod = v), (v) => `${v}s`);
     armies.append(el('p', { class: 'hint' }, 'The tide makes the sides take turns attacking. Swing is how strongly production surges; length is one full cycle.'));
     slider(armies, 'Flanking', 'flanking', 0.05, (s) => s.armies.flanking, (s, v) => (s.armies.flanking = v), (v) => (v === 0 ? 'None' : percent(v)));
-    armies.append(el('p', { class: 'hint' }, 'Share of squads that swing wide down the sides of the map instead of attacking straight down the middle.'));
+    armies.append(el('p', { class: 'hint' }, 'Share of squads sent down the other lanes instead of straight down the middle: through outposts and towns, or swinging wide where there are none.'));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);
@@ -279,6 +279,33 @@ export class SetupScreen {
     const rampHint = el('p', { class: 'hint' });
     armies.append(rampHint);
     this.sync.push(() => (rampHint.textContent = RAMP_HINTS[this.settings.mode]));
+
+    // Outposts
+    const outposts = section('Outposts', false);
+    const counts: { label: string; value: number | 'auto' }[] = [
+      { label: 'Auto (one per side)', value: 'auto' },
+      { label: 'None', value: 0 },
+      ...Array.from({ length: LIMITS.outposts.max }, (_, i) => ({ label: String(i + 1), value: i + 1 })),
+    ];
+    const count = dropdown(
+      counts,
+      (v) => {
+        this.settings.map.outposts = v;
+        this.changed();
+      },
+      'Number of outposts',
+    );
+    row(outposts, 'Outposts', count.row);
+    this.sync.push(() => count.set(this.settings.map.outposts));
+    slider(outposts, 'Bonus', 'outpostBonus', 0.05, (s) => s.armies.outpostBonus, (s, v) => (s.armies.outpostBonus = v), (v) => (v === 0 ? 'None' : times(v)));
+    slider(outposts, 'Holding', 'outpostHold', 0.05, (s) => s.armies.outpostHold, (s, v) => (s.armies.outpostHold = v), (v) => (v === 0 ? 'Off' : percent(v)));
+    outposts.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it. Most speed up the holder’s production (+10% each at 1×); some repair nearby units. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+      ),
+    );
 
     // Factions
     // The start button lives in the footer (built below); it's disabled while nobody has an enemy.

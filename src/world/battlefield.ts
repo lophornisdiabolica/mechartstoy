@@ -25,6 +25,8 @@ export interface BattlefieldConfig {
    * neighbouring seats.
    */
   seats: number[];
+  /** Capturable outposts to place in no-man's land (fewer if they don't fit). */
+  outposts: number;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -36,7 +38,11 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   baseRadius: 16,
   town: true,
   seats: [0, 1],
+  outposts: 0,
 };
+
+/** Radius of an outpost's flattened pad. */
+export const OUTPOST_RADIUS = 7;
 
 /** Clear ground between neighbouring base pads, on top of their radii. */
 const BASE_GAP = 12;
@@ -86,6 +92,16 @@ export interface TownSite {
   height: number;
 }
 
+/** A flattened clearing in no-man's land where a capturable outpost stands. */
+export interface OutpostSite {
+  /** Index in Battlefield.outpostSites (and SimContext.outposts). */
+  index: number;
+  x: number;
+  z: number;
+  radius: number;
+  height: number;
+}
+
 export interface Bounds {
   minX: number;
   maxX: number;
@@ -104,6 +120,7 @@ export class Battlefield {
     readonly heights: Float32Array,
     readonly baseSites: BaseSite[],
     readonly townSites: TownSite[] = [],
+    readonly outpostSites: OutpostSite[] = [],
   ) {
     this.width = config.cols * config.cellSize;
     this.depth = config.rows * config.cellSize;
@@ -295,7 +312,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   }
 
   const townSites: TownSite[] = [];
-  const field = new Battlefield(config, heights, baseSites, townSites);
+  const field = new Battlefield(config, heights, baseSites, townSites, []);
 
   const flatten = (cx: number, cz: number, radius: number, height: number) => {
     for (let j = 0; j <= rows; j++) {
@@ -340,5 +357,90 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     flatten(best.x, best.z, townRadius, height);
   }
 
+  // Outposts come last, so a map with none is the same map as before outposts existed.
+  for (const p of placeOutposts(field, rng, config.outposts)) {
+    const height = Math.max(seaLevel + 1, field.heightAt(p.x, p.z));
+    field.outpostSites.push({ index: field.outpostSites.length, x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
+    flatten(p.x, p.z, OUTPOST_RADIUS, height);
+  }
+
   return field;
+}
+
+/**
+ * Where outposts go: contested ground (about as far from the nearest base as
+ * from the next nearest, so no side gets one for free), flat and dry, on land
+ * the bases can walk to, and spread out from the town and each other. Picked
+ * greedily, best spot first, from random candidates.
+ */
+function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number; z: number }[] {
+  if (count <= 0) return [];
+  const { cols, rows } = field.config;
+  // Land the bases can reach (after the land bridges).
+  const reach = new Uint8Array((cols + 1) * (rows + 1));
+  const index = (x: number, z: number) => {
+    const i = Math.round((x - field.bounds.minX) / field.config.cellSize);
+    const j = Math.round((z - field.bounds.minZ) / field.config.cellSize);
+    return Math.max(0, Math.min(rows, j)) * (cols + 1) + Math.max(0, Math.min(cols, i));
+  };
+  const start = index(field.baseSites[0].x, field.baseSites[0].z);
+  const stack = [start];
+  reach[start] = 1;
+  while (stack.length > 0) {
+    const k = stack.pop()!;
+    const i = k % (cols + 1);
+    const j = (k - i) / (cols + 1);
+    for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+      if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+      const nk = nj * (cols + 1) + ni;
+      if (!reach[nk] && field.heights[nk] >= field.seaLevel) {
+        reach[nk] = 1;
+        stack.push(nk);
+      }
+    }
+  }
+
+  const r = OUTPOST_RADIUS;
+  const candidates: { x: number; z: number; flat: number; contest: number }[] = [];
+  for (let n = 0; n < 300; n++) {
+    const x = rng.range(field.bounds.minX + r + 4, field.bounds.maxX - r - 4);
+    const z = rng.range(field.bounds.minZ + r + 4, field.bounds.maxZ - r - 4);
+    if (!reach[index(x, z)]) continue;
+    const near = field.baseSites.map((b) => Math.hypot(b.x - x, b.z - z) - b.radius).sort((a, b) => a - b);
+    if (near[0] < r + 8) continue;
+    let flat = 0;
+    for (let a = 0; a < 8; a++) {
+      const px = x + Math.cos((a / 8) * Math.PI * 2) * r * 0.8;
+      const pz = z + Math.sin((a / 8) * Math.PI * 2) * r * 0.8;
+      flat += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
+    }
+    // 0 when exactly between two bases, growing as one base gets the closer claim.
+    const contest = near.length > 1 ? (near[1] - near[0]) / (near[0] + 1) : 0;
+    candidates.push({ x, z, flat, contest });
+  }
+
+  // The town's edge counts as close as it can get: an outpost by a town is fine, two outposts together aren't.
+  const placed: { x: number; z: number; r: number }[] = field.townSites.map((t) => ({ x: t.x, z: t.z, r: t.radius - 6 }));
+  const out: { x: number; z: number }[] = [];
+  const cap = Math.max(field.width, field.depth) * 0.5;
+  for (let k = 0; k < count; k++) {
+    let best: (typeof candidates)[number] | null = null;
+    let bestScore = -Infinity;
+    for (const c of candidates) {
+      const gap = placed.reduce((m, p) => Math.min(m, Math.hypot(p.x - c.x, p.z - c.z) - p.r - r), cap);
+      if (gap < 6) continue;
+      // As far from the town and other outposts as possible (so they spread over the
+      // map), on contested ground, and flat.
+      // One side's backyard is a last resort.
+      const score = gap * (1 - Math.min(c.contest, 0.9)) - c.flat * 4 - (c.contest > 0.4 ? 1000 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    if (!best) break;
+    placed.push({ x: best.x, z: best.z, r });
+    out.push({ x: best.x, z: best.z });
+  }
+  return out;
 }

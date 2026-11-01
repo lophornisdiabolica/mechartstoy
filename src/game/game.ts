@@ -10,6 +10,7 @@ import { GameEvents, Outcome, SimContext } from './context';
 import { Lanes } from './lanes';
 import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
+import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
 import { spawnBuilding, spawnUnit } from './spawn';
@@ -79,6 +80,7 @@ export class Game {
       buildings: tunedBuildings(settings),
       tide: tideForMap(settings.armies, this.field.config.cols),
       lanes: new Lanes(this.field, nav, seed),
+      outposts: createOutposts(this.field.outpostSites, seed),
       // Whoever surges first has an edge, so the order of the teams' tides is rolled per map (on its own stream, so nothing else shifts).
       sides: new Sides(
         settings.factions.map((f) => f.team),
@@ -101,7 +103,7 @@ export class Game {
       spatialIndexSystem(ctx),
       defenceSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       movementSystem(ctx),
@@ -111,6 +113,7 @@ export class Game {
       projectileSystem(ctx),
       deathSystem(ctx),
       wreckSystem(),
+      outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),
     ];
@@ -160,6 +163,9 @@ export class Game {
     for (const p of placements) {
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
+    // Outposts on their own stream, so adding them doesn't reshuffle the bases and town.
+    const outpostRng = new Rng(this.seed ^ 0x6f7574);
+    for (const outpost of this.ctx.outposts) buildOutpost(this.world, this.ctx, outpost, outpostRng);
   }
 
   /** Opening armies form up where they'll mass for the first attack, so the first clash comes quickly. */

@@ -13,6 +13,8 @@ function lerpAngle(a: number, b: number, t: number): number {
 
 interface ViewEntry {
   obj: THREE.Object3D;
+  /** Faction the model was built for; a captured outpost building is rebuilt in its new colours. */
+  faction: number;
   lastX: number;
   lastZ: number;
   wrecked: boolean;
@@ -43,11 +45,16 @@ export class EntityView {
     for (const e of w.query(Transform, Renderable)) {
       let entry = this.entries.get(e);
       const t = w.req(e, Transform);
+      const faction = w.get(e, Faction)?.id ?? 0;
+      if (entry && entry.faction !== faction) {
+        this.remove(e);
+        entry = undefined;
+      }
       if (!entry) {
         const r = w.req(e, Renderable);
-        const obj = createModel(r.model, w.get(e, Faction)?.id ?? 0);
+        const obj = createModel(r.model, faction);
         obj.scale.setScalar(r.scale);
-        entry = { obj, lastX: t.px, lastZ: t.pz, wrecked: false };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false };
         this.entries.set(e, entry);
         this.owners.set(obj, e);
         this.root.add(obj);

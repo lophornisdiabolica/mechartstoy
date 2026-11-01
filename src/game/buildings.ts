@@ -116,6 +116,27 @@ export const BUILDING_DEFS = {
     rebuildDelay: 30,
     buildTime: 6,
   },
+  outpost: {
+    id: 'outpost',
+    name: 'Outpost',
+    model: 'bld:outpost',
+    // The post itself can't be destroyed, only captured (see outposts.ts).
+    hp: 1,
+    armor: 0,
+    radius: 1.4,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  bunker: {
+    id: 'bunker',
+    name: 'Garrison Bunker',
+    model: 'bld:bunker',
+    hp: 600,
+    armor: 0.4,
+    radius: 1.8,
+    rebuildDelay: 40,
+    buildTime: 8,
+  },
   house: {
     id: 'house',
     name: 'House',

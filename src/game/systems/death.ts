@@ -9,6 +9,7 @@ import {
   Health,
   makeTransform,
   Mover,
+  OutpostPart,
   Renderable,
   Rubble,
   Targetable,
@@ -51,12 +52,14 @@ export function deathSystem(ctx: SimContext): System {
         const building = world.get(e, Building);
         if (building) {
           const def = building.def;
+          const part = world.get(e, OutpostPart);
           ctx.events.emit('buildingDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def, faction, killer });
           world.destroy(e);
           const r = world.create();
           world.add(r, Transform, makeTransform(t.x, t.y, t.z, t.heading));
           world.add(r, Renderable, { model: 'rubble', scale: def.radius });
           world.add(r, Rubble, { def, faction, heading: t.heading, rebuildAt: world.time + def.rebuildDelay });
+          if (part) world.add(r, OutpostPart, { outpost: part.outpost });
         }
       }
     },
