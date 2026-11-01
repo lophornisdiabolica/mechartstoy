@@ -16,6 +16,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'army', limit: 'startingArmy', get: (s) => s.armies.startingArmy, set: (s, v) => (s.armies.startingArmy = Math.round(v)) },
   { key: 'tide', limit: 'tideStrength', get: (s) => s.armies.tideStrength, set: (s, v) => (s.armies.tideStrength = v) },
   { key: 'tidelen', limit: 'tidePeriod', get: (s) => s.armies.tidePeriod, set: (s, v) => (s.armies.tidePeriod = v) },
+  { key: 'flank', limit: 'flanking', get: (s) => s.armies.flanking, set: (s, v) => (s.armies.flanking = v) },
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
 

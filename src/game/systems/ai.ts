@@ -2,14 +2,15 @@ import { System } from '../../core/ecs';
 import { Ai, Armed, Faction, Mover, Transform } from '../components';
 import { SimContext } from '../context';
 import { enemyObjective } from '../spawn';
-import { isAttacking } from '../tide';
+import { attackNumber, isAttacking } from '../tide';
 import { distanceToTarget } from './targeting';
 
 /**
  * Unit movement decisions. With a target: close to weapon range and hold.
- * Without: on the offensive, push into the enemy base; otherwise, mass at
- * the rally point until the next attack. The faction's orders can force the
- * stance and move the rally point.
+ * Without: on the offensive, march down the squad's lane (centre or a
+ * flank, see lanes.ts) and into the enemy base; otherwise, mass at the
+ * lane's rally point until the next attack. The faction's orders can force
+ * the stance and move the rally point.
  */
 export function aiSystem(ctx: SimContext): System {
   return {
@@ -37,14 +38,24 @@ export function aiSystem(ctx: SimContext): System {
         }
 
         const orders = ctx.orders[faction];
-        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, faction ^ ctx.tideOrder, ctx.settings.armies));
+        const { armies } = ctx.settings;
+        const slot = faction ^ ctx.tideOrder;
+        // Each attack, the squad gets its lane for that attack (and the build-up before it).
+        const attack = attackNumber(world.time, slot, armies);
+        if (ai.laneAttack !== attack) {
+          ai.lane = ctx.lanes.laneFor(faction, attack, ai.squad, armies.flanking);
+          ai.laneAttack = attack;
+        }
+
+        const attacking = orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, slot, armies));
         if (!attacking) {
-          const custom = orders.rally;
-          let rx = custom ? custom.x + ai.rallyOffsetX : ai.rallyX;
-          let rz = custom ? custom.z + ai.rallyOffsetZ : ai.rallyZ;
-          if (custom && ctx.field.isWater(rx, rz)) {
-            rx = custom.x;
-            rz = custom.z;
+          // Form up at the player's flag, or in front of the base leaning toward this squad's lane.
+          const rally = orders.rally ?? ctx.lanes.rally(faction, ai.lane);
+          let rx = rally.x + ai.rallyOffsetX;
+          let rz = rally.z + ai.rallyOffsetZ;
+          if (ctx.field.isWater(rx, rz)) {
+            rx = rally.x;
+            rz = rally.z;
           }
           // Hold near the rally point facing the enemy; small tolerance so units settle rather than jostle.
           const enemy = ctx.field.baseSites.find((s) => s.faction !== faction)!;
@@ -56,6 +67,16 @@ export function aiSystem(ctx: SimContext): System {
           continue;
         }
 
+        // March down the lane, then into the enemy base.
+        const waypoint = ctx.lanes.nextWaypoint(faction, ai.lane, t.x);
+        if (waypoint) {
+          // Squads spread out a little around the waypoint rather than queueing for one spot.
+          mover.targetX = waypoint.x + ai.rallyOffsetX * 0.6;
+          mover.targetZ = waypoint.z + ai.rallyOffsetZ * 0.6;
+          mover.faceX = mover.targetX;
+          mover.faceZ = mover.targetZ;
+          continue;
+        }
         if (Math.hypot(ai.objectiveX - t.x, ai.objectiveZ - t.z) < 3) {
           // Reached the objective: pick another spot in the enemy base.
           const next = enemyObjective(ctx, faction);
