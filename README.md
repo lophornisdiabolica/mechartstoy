@@ -43,9 +43,15 @@ battle, its exact map via `seed`).
   screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, T toggles tilt-shift, space pauses, 1-4 set speed, Esc cancels.
+rotate, F follows the fighting, T toggles tilt-shift, space pauses, 1-4 set
+speed, Esc cancels.
 
-The **Battle controls** panel (top right) sets speed and camera effects. Pick a
+The **Battle controls** panel (top right) sets speed and camera effects.
+**Follow the fighting** turns the camera into a spectator that glides to
+wherever the biggest fight is (panning by hand turns it off). **Shadows**
+High / Low / Off trades looks for speed in huge battles; shadows are only
+drawn around the part of the map in view either way. Both are remembered
+in this browser rather than in the battle link. Pick a
 side to drop units anywhere on the map, place a rally flag, and override the
 AI with Attack / Hold (Auto follows the ebb and flow of the battle). Click any
 unit or building to inspect it.
@@ -85,6 +91,7 @@ src/
     stage.ts         renderer, scene, lights, post-processing; load(game) swaps battles
     dispose.ts       frees a battle's GPU resources (shared model caches are kept)
     cameraRig.ts     isometric orthographic camera and controls
+    fightWatch.ts    finds the fighting (from sim events) for the spectator camera
     tiltShift.ts     tilt-shift blur + colour grade passes
     terrainMesh.ts   low-poly ground, soil skirt and water
     propsMesh.ts     instanced scenery
@@ -97,6 +104,7 @@ src/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
     settingsUrl.ts   settings <-> URL query string (only non-default values)
+    viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```

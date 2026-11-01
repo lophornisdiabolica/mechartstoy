@@ -10,6 +10,7 @@ import { CameraRig } from './cameraRig';
 import { disposeTree } from './dispose';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
+import { FightWatch } from './fightWatch';
 import { Markers } from './markers';
 import { setFactionPalette } from './models';
 import './models/buildings';
@@ -18,6 +19,26 @@ import './models/units';
 import { buildProps } from './propsMesh';
 import { buildTerrain } from './terrainMesh';
 import { TiltShift } from './tiltShift';
+
+const _dir = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _up2 = new THREE.Vector3();
+const _snap = new THREE.Vector3();
+
+/**
+ * Shadow detail. Shadows are drawn only around what the camera can see;
+ * `low` uses a coarser shadow map, `off` skips the shadow pass, which
+ * otherwise draws every visible unit and building a second time.
+ */
+export type ShadowQuality = 'high' | 'low' | 'off';
+
+const SHADOW_MAP: Record<Exclude<ShadowQuality, 'off'>, number> = { high: 4096, low: 2048 };
+
+/** Where the sun sits relative to the point it lights. */
+const SUN_OFFSET = new THREE.Vector3(-60, 90, 40);
+/** Extra shadow coverage past the view's edge, for tall things and long shadows just off screen. */
+const SHADOW_MARGIN = 14;
 
 /**
  * Everything visual: renderer, scene, lights, camera and post-processing.
@@ -35,8 +56,17 @@ export class Stage {
   entities!: EntityView;
   effects!: Effects;
   markers!: Markers;
+  /** Finds the fighting for the spectator camera. */
+  fights!: FightWatch;
   /** Entity highlighted by the UI. */
   selected: Entity | null = null;
+  /** Spectator camera: glide to wherever the fighting is. Panning by hand turns it off. */
+  followFights = false;
+  /** Called when panning by hand turns `followFights` off. */
+  onFollowStopped: (() => void) | null = null;
+  private shadowQuality: ShadowQuality = 'high';
+  /** Half the size of the whole map, the most shadow coverage ever needed. */
+  private mapHalf = 100;
   private readonly raycaster = new THREE.Raycaster();
   private ground!: THREE.Object3D;
   private battle: THREE.Group | null = null;
@@ -53,12 +83,17 @@ export class Stage {
     this.scene.background = new THREE.Color(0x9fb4c4);
 
     this.rig = new CameraRig(this.renderer.domElement, { minX: 0, maxX: 0, minZ: 0, maxZ: 0 });
+    this.rig.onManualPan = () => {
+      if (!this.followFights) return;
+      this.followFights = false;
+      this.onFollowStopped?.();
+    };
 
     this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x4a4436, 1.3));
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
-    this.sun.position.set(-60, 90, 40);
+    this.sun.position.copy(SUN_OFFSET);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(4096, 4096);
+    this.sun.shadow.mapSize.set(SHADOW_MAP.high, SHADOW_MAP.high);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 300;
     this.sun.shadow.bias = -0.0005;
@@ -99,21 +134,65 @@ export class Stage {
     this.scene.add(battle);
     this.battle = battle;
 
-    // Fit the sun's shadow camera to the map.
-    const half = Math.max(field.width, field.depth) * 0.6;
-    const sc = this.sun.shadow.camera;
-    sc.left = -half;
-    sc.right = half;
-    sc.top = half;
-    sc.bottom = -half;
-    sc.updateProjectionMatrix();
+    this.fights = new FightWatch(game.events, field.bounds);
+    this.mapHalf = Math.max(field.width, field.depth) * 0.6;
     this.rig.setBounds(field.bounds);
+  }
+
+  get shadows(): ShadowQuality {
+    return this.shadowQuality;
+  }
+
+  set shadows(q: ShadowQuality) {
+    if (q === this.shadowQuality) return;
+    this.shadowQuality = q;
+    // Materials pick up the change in light setup by recompiling on the next frame.
+    this.sun.castShadow = q !== 'off';
+    if (q !== 'off' && this.sun.shadow.mapSize.x !== SHADOW_MAP[q]) {
+      this.sun.shadow.mapSize.set(SHADOW_MAP[q], SHADOW_MAP[q]);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+  }
+
+  /**
+   * Fit the sun's shadow to what the camera can see. Only things inside it
+   * are drawn into the shadow map, so a zoomed-in view skips the rest of the
+   * battle, and the map's detail goes where you're looking. The shadow moves
+   * in whole shadow-map texels so its edges don't shimmer as the camera pans.
+   */
+  private fitShadow(): void {
+    if (this.shadowQuality === 'off') return;
+    const sc = this.sun.shadow.camera;
+    // Coverage in steps of 4 units, so zooming doesn't resize it every frame.
+    const half = Math.min(this.mapHalf, Math.ceil((this.rig.viewRadius + SHADOW_MARGIN) / 4) * 4);
+    if (sc.right !== half) {
+      sc.left = -half;
+      sc.right = half;
+      sc.top = half;
+      sc.bottom = -half;
+      sc.updateProjectionMatrix();
+    }
+    const texel = (2 * half) / this.sun.shadow.mapSize.x;
+    const dir = _dir.copy(SUN_OFFSET).negate().normalize();
+    const right = _right.crossVectors(dir, _up).normalize();
+    const up = _up2.crossVectors(right, dir);
+    const t = this.rig.target;
+    const u = t.dot(right);
+    const v = t.dot(up);
+    const snapped = _snap.copy(t).addScaledVector(right, Math.round(u / texel) * texel - u).addScaledVector(up, Math.round(v / texel) * texel - v);
+    this.sun.target.position.copy(snapped);
+    this.sun.position.copy(snapped).add(SUN_OFFSET);
+    this.sun.target.updateMatrixWorld();
   }
 
   /** `simSeconds` is frame time scaled by sim speed, so animations pause with the game. */
   render(alpha: number, frameSeconds: number, simSeconds: number): void {
     if (!this.battle) return;
+    this.fights.update(simSeconds);
+    if (this.followFights && this.fights.focus) this.rig.glideTo(this.fights.focus.x, this.fights.focus.z, frameSeconds);
     this.rig.update(frameSeconds);
+    this.fitShadow();
     this.entities.sync(alpha, simSeconds);
     this.effects.update(simSeconds);
     this.markers.update(frameSeconds, this.selected);
