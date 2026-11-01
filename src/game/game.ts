@@ -7,6 +7,7 @@ import { NavGrid } from '../world/navGrid';
 import { Prop, scatterProps } from '../world/props';
 import { layoutBase, layoutTown } from '../world/settlements';
 import { GameEvents, Outcome, SimContext } from './context';
+import { Lanes } from './lanes';
 import { defaultOrders, Stance } from './orders';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { spawnBuilding, spawnUnit } from './spawn';
@@ -58,18 +59,21 @@ export class Game {
     const root = new Rng(seed);
     this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
+    const nav = new NavGrid(this.field);
     this.ctx = {
       field: this.field,
       events: this.events,
       grid: new SpatialGrid(6),
       rng: root.fork(3),
-      nav: new NavGrid(this.field),
+      nav,
       orders: defaultOrders(),
       settings,
       units: tunedUnits(settings),
       buildings: tunedBuildings(settings),
       // Whoever surges first has an edge, so it's a coin flip (on its own stream, so nothing else shifts).
       tideOrder: root.fork(6).chance(0.5) ? 1 : 0,
+      lanes: new Lanes(this.field, nav, seed),
+      squads: 0,
       outcome: null,
     };
 

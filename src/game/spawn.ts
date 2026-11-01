@@ -48,6 +48,11 @@ function armed(
   };
 }
 
+/** A fresh squad id, for a group of units that should move together. */
+export function newSquad(ctx: SimContext): number {
+  return ctx.squads++;
+}
+
 /** Pick a point inside the enemy base for a unit to push toward. */
 export function enemyObjective(ctx: SimContext, faction: number): { x: number; z: number } {
   const base = ctx.field.baseSites.find((s) => s.faction !== faction)!;
@@ -57,20 +62,11 @@ export function enemyObjective(ctx: SimContext, faction: number): { x: number; z
   };
 }
 
-/** A spot in front of a faction's own base where idle units gather. */
-export function rallyPoint(ctx: SimContext, faction: number): { x: number; z: number } {
-  const base = ctx.field.baseSites.find((s) => s.faction === faction)!;
-  const forward = faction === 0 ? 1 : -1;
-  for (let tries = 0; tries < 10; tries++) {
-    const x = base.x + forward * (base.radius + ctx.rng.range(4, 12));
-    const z = base.z + ctx.rng.range(-0.8, 0.8) * base.radius;
-    if (!ctx.field.isWater(x, z)) return { x, z };
-  }
-  return { x: base.x + forward * base.radius, z: base.z };
-}
-
-/** Create a combat unit from its definition. The single place units are assembled. */
-export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: number, x: number, z: number): Entity {
+/**
+ * Create a combat unit from its definition. The single place units are assembled.
+ * Units spawned with the same `squad` (see newSquad) stick together on the same lane.
+ */
+export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: number, x: number, z: number, squad = newSquad(ctx)): Entity {
   const objective = enemyObjective(ctx, faction);
   const heading = Math.atan2(-(objective.z - z), objective.x - x);
   const e = world.create();
@@ -97,16 +93,16 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     Armed,
     armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege),
   );
-  const rally = rallyPoint(ctx, faction);
   const spreadA = ctx.rng.range(0, Math.PI * 2);
   const spreadR = Math.sqrt(ctx.rng.next()) * 6;
   world.add(e, Ai, {
     objectiveX: objective.x,
     objectiveZ: objective.z,
-    rallyX: rally.x,
-    rallyZ: rally.z,
     rallyOffsetX: Math.cos(spreadA) * spreadR,
     rallyOffsetZ: Math.sin(spreadA) * spreadR,
+    squad,
+    lane: 0,
+    laneAttack: -1,
   });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;

@@ -98,6 +98,8 @@ export class NavGrid {
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   private clearanceVersion = -1;
+  /** Which patch of dry land each cell is on (-1 for water); cells with different ids can't reach each other. */
+  private readonly region: Int32Array;
 
   // Scratch buffers reused across searches.
   private readonly g: Float32Array;
@@ -127,12 +129,48 @@ export class NavGrid {
         this.cost[k] = field.slopeAt(x, z) > STEEP ? STEEP_COST : 1;
       }
     }
+    this.region = this.labelRegions();
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
     this.parent = new Int32Array(n);
     this.stamp = new Uint32Array(n);
     this.closed = new Uint32Array(n);
     this.open = new Heap(this.f);
+  }
+
+  /** Flood-fill the dry land into connected regions. Buildings come and go, so only water counts. */
+  private labelRegions(): Int32Array {
+    const { cols, rows } = this;
+    const region = new Int32Array(cols * rows).fill(-1);
+    let next = 0;
+    const stack: number[] = [];
+    for (let start = 0; start < region.length; start++) {
+      if (this.water[start] || region[start] >= 0) continue;
+      region[start] = next;
+      stack.push(start);
+      while (stack.length > 0) {
+        const k = stack.pop()!;
+        const i = k % cols;
+        const j = (k - i) / cols;
+        for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+          if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+          const nk = nj * cols + ni;
+          if (this.water[nk] || region[nk] >= 0) continue;
+          region[nk] = next;
+          stack.push(nk);
+        }
+      }
+      next++;
+    }
+    return region;
+  }
+
+  /** True if dry land connects the two points (ignoring buildings). */
+  connected(a: Point, b: Point): boolean {
+    const [ai, aj] = this.cellOf(a.x, a.z);
+    const [bi, bj] = this.cellOf(b.x, b.z);
+    const ra = this.region[aj * this.cols + ai];
+    return ra >= 0 && ra === this.region[bj * this.cols + bi];
   }
 
   cellOf(x: number, z: number): [number, number] {

@@ -1,7 +1,7 @@
 import { System, World } from '../../core/ecs';
 import { Building, Construction, Faction, Producer, Transform, Unit } from '../components';
 import { SimContext } from '../context';
-import { spawnUnit } from '../spawn';
+import { newSquad, spawnUnit } from '../spawn';
 import { tide } from '../tide';
 
 /**
@@ -68,10 +68,12 @@ export function productionSystem(ctx: SimContext): System {
         const doorX = t.x + Math.cos(t.heading) * r;
         const doorZ = t.z - Math.sin(t.heading) * r;
         const def = ctx.units[entry.unit];
+        // A batch is a squad: it takes the same lane.
+        const squad = newSquad(ctx);
         for (let n = 0; n < entry.count; n++) {
           const spot = spawnSpot(ctx, doorX + ctx.rng.range(-1.2, 1.2), doorZ + ctx.rng.range(-1.2, 1.2), def.radius);
           if (spot) {
-            spawnUnit(world, ctx, def, faction, spot.x, spot.z);
+            spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
             alive[faction]++;
           }
         }

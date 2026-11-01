@@ -1,7 +1,7 @@
 import { System, World } from '../../core/ecs';
 import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
-import { spawnUnit } from '../spawn';
+import { newSquad, spawnUnit } from '../spawn';
 import { UnitId } from '../units';
 import { countUnits } from './production';
 
@@ -55,6 +55,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
     const gx = cx + Math.cos(a) * r;
     const gz = cz + Math.sin(a) * r;
     const def = ctx.units[entry.unit];
+    const squad = newSquad(ctx);
     for (let n = 0; n < entry.count; n++) {
       // Find a spot with room for the unit (not in water, not wedged between buildings).
       for (let tries = 0; tries < 6; tries++) {
@@ -62,7 +63,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
         const x = gx + ctx.rng.range(-spread, spread);
         const z = gz + ctx.rng.range(-spread, spread);
         if (ctx.field.contains(x, z, 1) && ctx.nav.fitsAt(x, z, def.radius)) {
-          spawnUnit(world, ctx, def, faction, x, z);
+          spawnUnit(world, ctx, def, faction, x, z, squad);
           break;
         }
       }

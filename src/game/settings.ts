@@ -50,6 +50,8 @@ export interface BattleSettings {
     tidePeriod: number;
     /** Building health multiplier. */
     buildingHp: number;
+    /** Share of squads sent down the flanks instead of the centre, 0 to 1. */
+    flanking: number;
   };
   units: Record<UnitId, UnitTuning>;
   factions: [FactionSettings, FactionSettings];
@@ -73,6 +75,7 @@ export const LIMITS = {
   tideStrength: { min: 0, max: 1 },
   tidePeriod: { min: 60, max: 400 },
   buildingHp: { min: 0.25, max: 4 },
+  flanking: { min: 0, max: 1 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -85,7 +88,7 @@ export function defaultSettings(): BattleSettings {
     seed: '',
     mode: 'eternal',
     map: { size: 'medium', water: 0.5, hills: 1, town: true },
-    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1 },
+    armies: { unitCap: 60, production: 1, startingArmy: 4, tideStrength: 0.6, tidePeriod: 150, buildingHp: 1, flanking: 0.5 },
     units: defaultUnitTuning(),
     factions: [
       { name: FACTIONS[0].name, color: FACTIONS[0].primary },

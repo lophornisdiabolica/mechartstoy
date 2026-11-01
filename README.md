@@ -57,6 +57,7 @@ src/
     buildings.ts     building definitions: production, defences, civic
     spawn.ts         assembles unit and building entities from definitions
     tide.ts          alternating offensives that keep the front moving
+    lanes.ts         attack routes (centre and two flanks) and which squad takes which
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
@@ -136,6 +137,11 @@ src/
   is attacking. Which side surges first is a coin flip per map. In Eternal
   mode a mild rubber band helps a badly outnumbered side; Conquest lets an
   advantage snowball so battles end (about 4 to 12 minutes on a medium map).
+- Attacks follow **lanes** (`game/lanes.ts`): one down the middle and one
+  swinging wide along each side. Units built together form a squad and
+  share a lane. Each attack a side favours one flank, and the Flanking
+  setting decides how many squads go wide, so fights break out all over
+  the map rather than along one front line.
 - Siege units (Titans, Howitzers) prefer shelling buildings.
 - In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
   enemies are nearby, and a faction with no production left gets fallback
@@ -155,4 +161,4 @@ src/
 5. ~~Pre-battle setup screen and Conquest mode: map size and seed, battle
    pacing, per-unit stat multipliers, faction names and colours, saved in
    the URL; battles that end and roll into a new map.~~
-6. Smarter tactics: flanking lanes, so armies use the whole map.
+6. ~~Smarter tactics: flanking lanes, so armies use the whole map.~~

@@ -12,6 +12,10 @@ export interface TideSettings {
   tidePeriod: number;
 }
 
+/** The attack window, as a fraction of the tide cycle. */
+const ATTACK_START = 0.12;
+const ATTACK_END = 0.62;
+
 export const DEFAULT_TIDE: TideSettings = { tideStrength: 0.6, tidePeriod: 150 };
 
 /** Production multiplier for a faction at a given time, around 1. */
@@ -25,5 +29,13 @@ export function tide(time: number, faction: number, t: TideSettings = DEFAULT_TI
  */
 export function isAttacking(time: number, faction: number, t: TideSettings = DEFAULT_TIDE): boolean {
   const phase = (((time / t.tidePeriod + (faction === 1 ? 0.5 : 0)) % 1) + 1) % 1;
-  return phase > 0.12 && phase < 0.62;
+  return phase > ATTACK_START && phase < ATTACK_END;
+}
+
+/**
+ * Which attack a faction is on or building up to. It ticks over when an
+ * attack ends, so the build-up and the attack that follows share a number.
+ */
+export function attackNumber(time: number, faction: number, t: TideSettings = DEFAULT_TIDE): number {
+  return Math.floor(time / t.tidePeriod + (faction === 1 ? 0.5 : 0) - ATTACK_END);
 }

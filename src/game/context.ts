@@ -5,6 +5,7 @@ import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield } from '../world/battlefield';
 import { NavGrid } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
+import { Lanes } from './lanes';
 import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
 import { ProjectileKind, UnitDef, UnitId } from './units';
@@ -48,6 +49,10 @@ export interface SimContext {
   buildings: Record<BuildingId, BuildingDef>;
   /** Which side's tide surges first: 0 west, 1 east. Pass `faction ^ tideOrder` to the tide functions. */
   tideOrder: number;
+  /** Attack routes across the map. */
+  lanes: Lanes;
+  /** Counter for squad ids (see spawn.newSquad). */
+  squads: number;
   /** Set once a conquest battle is decided. */
   outcome: Outcome | null;
 }

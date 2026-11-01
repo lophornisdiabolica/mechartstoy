@@ -1,5 +1,6 @@
 import { defineComponent, Entity } from '../core/ecs';
 import { BuildingDef, ProductionEntry } from './buildings';
+import { LaneId } from './lanes';
 import { ProjectileKind, UnitDef, WeaponDef } from './units';
 
 /**
@@ -169,12 +170,14 @@ export interface Ai {
   /** Where to push when attacking (inside the enemy base). */
   objectiveX: number;
   objectiveZ: number;
-  /** Where to mass when not attacking (in front of our own base). */
-  rallyX: number;
-  rallyZ: number;
-  /** This unit's spot relative to a player-set rally point, so groups spread out. */
+  /** This unit's spot relative to its rally point, so groups spread out. */
   rallyOffsetX: number;
   rallyOffsetZ: number;
+  /** Units spawned together form a squad and take the same lane. */
+  squad: number;
+  /** Lane for the current attack (see lanes.ts), and which attack it was picked for. */
+  lane: LaneId;
+  laneAttack: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
 
