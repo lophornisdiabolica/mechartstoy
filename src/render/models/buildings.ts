@@ -84,7 +84,8 @@ registerModel('bld:mechbay', (faction) => {
   for (const x of [-1.8, 1.8]) {
     for (const z of [-1.8, 1.8]) g.add(box(0.3, 4.2, 0.3, secondary, x, 2.4, z));
   }
-  for (const z of [-1.8, 1.8]) g.add(box(3.9, 0.3, 0.3, primary, 0, 4.4, z));
+  // Beams are a touch longer and thicker than the frame so their faces don't sit flush with the posts.
+  for (const z of [-1.8, 1.8]) g.add(box(4.0, 0.3, 0.36, primary, 0, 4.4, z));
   g.add(box(0.4, 0.3, 3.9, primary, -0.4, 4.6, 0));
   g.add(box(0.3, 1.2, 0.3, METAL, -0.4, 3.85, 0));
   g.add(box(1.4, 0.8, 1.2, METAL, -0.4, 1.0, 0)); // half-built chassis

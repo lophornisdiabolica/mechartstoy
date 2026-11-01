@@ -54,10 +54,18 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
     const r = ctx.rng.range(0, base.radius * 0.6);
     const gx = cx + Math.cos(a) * r;
     const gz = cz + Math.sin(a) * r;
+    const def = ctx.units[entry.unit];
     for (let n = 0; n < entry.count; n++) {
-      const x = gx + ctx.rng.range(-1.5, 1.5);
-      const z = gz + ctx.rng.range(-1.5, 1.5);
-      if (!ctx.field.isWater(x, z)) spawnUnit(world, ctx, ctx.units[entry.unit], faction, x, z);
+      // Find a spot with room for the unit (not in water, not wedged between buildings).
+      for (let tries = 0; tries < 6; tries++) {
+        const spread = 1.5 + tries;
+        const x = gx + ctx.rng.range(-spread, spread);
+        const z = gz + ctx.rng.range(-spread, spread);
+        if (ctx.field.contains(x, z, 1) && ctx.nav.fitsAt(x, z, def.radius)) {
+          spawnUnit(world, ctx, def, faction, x, z);
+          break;
+        }
+      }
     }
   }
 }

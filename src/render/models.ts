@@ -46,6 +46,11 @@ export function registerModel(key: string, factory: ModelFactory): void {
   factories.set(key, factory);
 }
 
+/** Every registered model key (for tests and tools). */
+export function modelKeys(): string[] {
+  return [...factories.keys()];
+}
+
 export function createModel(key: string, faction: number): THREE.Object3D {
   const factory = factories.get(key);
   if (!factory) throw new Error(`No model registered for "${key}"`);

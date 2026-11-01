@@ -2,6 +2,9 @@ import { Rng } from '../core/rng';
 import { BUILDING_DEFS, BuildingId, DECORATIVE_BUILDINGS } from '../game/buildings';
 import { Battlefield, BaseSite, TownSite } from './battlefield';
 
+/** Radius of the clear ground kept in front of a production building's door. */
+const APRON_RADIUS = 3.5;
+
 /** Where a building goes. Pure data: the game turns these into entities. */
 export interface BuildingPlacement {
   building: BuildingId;
@@ -14,8 +17,27 @@ export interface BuildingPlacement {
 
 class Layout {
   readonly placements: BuildingPlacement[] = [];
+  /** Areas kept clear, such as the ground in front of factory doors. */
+  private readonly reserved: { x: number; z: number; r: number }[] = [];
 
   constructor(private readonly field: Battlefield) {}
+
+  /** Keep a circle free of later placements. */
+  reserve(x: number, z: number, r: number): void {
+    this.reserved.push({ x, z, r });
+  }
+
+  /**
+   * Place a production building and keep an apron clear in front of its door,
+   * so what it builds (Titans especially) has room to roll out.
+   */
+  tryPlaceProducer(p: BuildingPlacement): boolean {
+    if (!this.tryPlace(p)) return false;
+    const r = BUILDING_DEFS[p.building].radius;
+    const ahead = r + APRON_RADIUS;
+    this.reserve(p.x + Math.cos(p.heading) * ahead, p.z - Math.sin(p.heading) * ahead, APRON_RADIUS);
+    return true;
+  }
 
   /** Place if it doesn't overlap anything already placed or sit in water. Returns success. */
   tryPlace(p: BuildingPlacement, gap = 1): boolean {
@@ -27,6 +49,9 @@ class Layout {
     for (const o of this.placements) {
       const or = BUILDING_DEFS[o.building].radius;
       if (Math.hypot(o.x - p.x, o.z - p.z) < r + or + gap) return false;
+    }
+    for (const o of this.reserved) {
+      if (Math.hypot(o.x - p.x, o.z - p.z) < r + o.r) return false;
     }
     this.placements.push(p);
     return true;
@@ -48,10 +73,10 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng): Buildi
     z: site.z - Math.sin(forward + angle) * dist,
   });
 
-  layout.tryPlace({ building: 'hq', faction: f, ...at(Math.PI, 5), heading: forward });
-  layout.tryPlace({ building: 'barracks', faction: f, ...at(0.75, 8), heading: forward });
-  layout.tryPlace({ building: 'factory', faction: f, ...at(-0.75, 8.5), heading: forward });
-  layout.tryPlace({ building: 'mechbay', faction: f, ...at(Math.PI - 0.9, 10), heading: forward });
+  layout.tryPlaceProducer({ building: 'hq', faction: f, ...at(Math.PI, 5), heading: forward });
+  layout.tryPlaceProducer({ building: 'barracks', faction: f, ...at(0.75, 8), heading: forward });
+  layout.tryPlaceProducer({ building: 'factory', faction: f, ...at(-0.75, 8.5), heading: forward });
+  layout.tryPlaceProducer({ building: 'mechbay', faction: f, ...at(Math.PI - 0.9, 10), heading: forward });
   for (const a of [-0.55, 0, 0.55]) {
     layout.tryPlace({ building: 'tower', faction: f, ...at(a, site.radius - 1), heading: forward });
   }

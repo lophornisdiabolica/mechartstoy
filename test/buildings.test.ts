@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
-import { BUILDING_DEFS } from '../src/game/buildings';
+import { BUILDING_DEFS, BuildingDef } from '../src/game/buildings';
 import { Armed, Building, Construction, Faction, Health, NEUTRAL, Rubble, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { spawnBuilding, spawnUnit } from '../src/game/spawn';
@@ -19,6 +19,24 @@ function buildings(game: Game, faction?: number): number[] {
 }
 
 describe('settlement layouts', () => {
+  it('keeps the ground in front of production doors clear', () => {
+    for (let seed = 0; seed < 15; seed++) {
+      const field = generateBattlefield(new Rng(seed));
+      const rng = new Rng(seed + 100);
+      for (const site of field.baseSites) {
+        const placements = layoutBase(field, site, rng);
+        for (const p of placements.filter((p) => (BUILDING_DEFS[p.building] as BuildingDef).production)) {
+          const r = BUILDING_DEFS[p.building].radius;
+          const door = { x: p.x + Math.cos(p.heading) * (r + 2), z: p.z - Math.sin(p.heading) * (r + 2) };
+          for (const o of placements) {
+            if (o === p) continue;
+            expect(Math.hypot(o.x - door.x, o.z - door.z), `${o.building} in front of ${p.building}`).toBeGreaterThan(BUILDING_DEFS[o.building].radius + 1.5);
+          }
+        }
+      }
+    }
+  });
+
   it('places non-overlapping buildings on dry land for many seeds', () => {
     for (let seed = 0; seed < 15; seed++) {
       const field = generateBattlefield(new Rng(seed));

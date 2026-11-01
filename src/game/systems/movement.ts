@@ -28,12 +28,14 @@ const STUCK_CHECK = 0.75;
 const STUCK_LIMIT = 2;
 /** Seconds between re-checking whether the goal is in a clear straight line. */
 const DIRECT_CHECK = 0.4;
+/** Heading error (radians) above which a unit counts as turning rather than stuck. */
+const TURNING = 0.6;
 
 /**
  * Pick the point to steer at this tick: a sidestep detour, the goal itself
  * if the straight line is clear, or the next waypoint of a planned route.
  */
-function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, budget: { plans: number }): { x: number; z: number } {
+function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, radius: number, budget: { plans: number }): { x: number; z: number } {
   const nav = m.nav;
   const goal = { x: m.targetX!, z: m.targetZ! };
   if (world.time < nav.detourUntil) return { x: nav.detourX, z: nav.detourZ };
@@ -41,7 +43,7 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, bud
   const here = { x: t.x, z: t.z };
   if (world.time >= nav.directCheckAt) {
     nav.directCheckAt = world.time + DIRECT_CHECK;
-    nav.direct = m.canCrossWater || ctx.nav.lineClear(here, goal);
+    nav.direct = m.canCrossWater || ctx.nav.lineClear(here, goal, radius);
   }
   if (nav.direct) {
     nav.path = null;
@@ -52,7 +54,7 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, bud
   const stale = nav.path === null || nav.pathVersion !== ctx.nav.version || (drifted && world.time >= nav.replanAt);
   if (stale && budget.plans > 0) {
     budget.plans--;
-    nav.path = ctx.nav.findPath(here, goal);
+    nav.path = ctx.nav.findPath(here, goal, radius);
     nav.pathIndex = 0;
     nav.pathGoalX = goal.x;
     nav.pathGoalZ = goal.z;
@@ -66,7 +68,7 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, bud
     nav.pathIndex++;
   }
   // Skip ahead when a later waypoint is already in clear view (e.g. after being pushed aside).
-  if (nav.pathIndex < path.length - 1 && ctx.nav.lineClear(here, path[nav.pathIndex + 1])) nav.pathIndex++;
+  if (nav.pathIndex < path.length - 1 && ctx.nav.lineClear(here, path[nav.pathIndex + 1], radius)) nav.pathIndex++;
   return path[Math.min(nav.pathIndex, path.length - 1)];
 }
 
@@ -107,28 +109,42 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
   return { x: ax, z: az };
 }
 
-/** Every so often check we've actually moved; if not, sidestep for a moment. */
-function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, nav: NavState, dirX: number, dirZ: number): void {
+/**
+ * Every so often check we've actually moved; if not, sidestep for a moment.
+ * Turning on the spot doesn't count: big units take seconds to turn around,
+ * and calling that "stuck" sends them off on a detour before they've finished.
+ */
+function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, nav: NavState, dirX: number, dirZ: number, turning: boolean): void {
   if (world.time < nav.checkAt) return;
   nav.checkAt = world.time + STUCK_CHECK;
   const moved = Math.hypot(t.x - nav.checkX, t.z - nav.checkZ);
   nav.checkX = t.x;
   nav.checkZ = t.z;
-  nav.stuckFor = moved < 0.35 ? nav.stuckFor + 1 : 0;
+  nav.stuckFor = moved < 0.35 && !turning ? nav.stuckFor + 1 : 0;
   if (nav.stuckFor < STUCK_LIMIT) return;
   nav.stuckFor = 0;
-  // Try a point off to one side (alternating by entity), then the other.
-  const r = (world.get(e, Collider)?.radius ?? 0.5) + 2.5;
+  // Try a point off to one side (alternating by entity), then the other, then back the way we came.
+  // Prefer spots the unit actually fits in; a wide unit wedged between buildings has to back out.
+  const radius = world.get(e, Collider)?.radius ?? 0.5;
+  const r = radius + 2.5;
   const first = e % 2 === 0 ? 1 : -1;
-  for (const side of [first, -first]) {
-    const x = t.x + (-dirZ * side + dirX * 0.3) * r;
-    const z = t.z + (dirX * side + dirZ * 0.3) * r;
-    if (!ctx.nav.blockedAt(x, z) && ctx.field.contains(x, z, 1)) {
-      nav.detourX = x;
-      nav.detourZ = z;
-      nav.detourUntil = world.time + 1.2;
-      nav.path = null;
-      return;
+  const tries = [
+    [first, 0.3],
+    [-first, 0.3],
+    [first * 0.5, -1],
+    [-first * 0.5, -1],
+  ];
+  for (const fit of [radius, 0]) {
+    for (const [side, fwd] of tries) {
+      const x = t.x + (-dirZ * side + dirX * fwd) * r;
+      const z = t.z + (dirX * side + dirZ * fwd) * r;
+      if (ctx.nav.fitsAt(x, z, fit) && ctx.field.contains(x, z, 1)) {
+        nav.detourX = x;
+        nav.detourZ = z;
+        nav.detourUntil = world.time + 1.2;
+        nav.path = null;
+        return;
+      }
     }
   }
 }
@@ -161,7 +177,7 @@ export function movementSystem(ctx: SimContext): System {
           continue;
         }
 
-        const wp = nextWaypoint(ctx, world, t, m, budget);
+        const wp = nextWaypoint(ctx, world, t, m, world.get(e, Collider)?.radius ?? 0, budget);
         const dx = wp.x - t.x;
         const dz = wp.z - t.z;
         const dist = Math.hypot(dx, dz);
@@ -176,10 +192,10 @@ export function movementSystem(ctx: SimContext): System {
           dirX = sx / sl;
           dirZ = sz / sl;
         }
-        checkStuck(ctx, world, e, t, m.nav, dirX, dirZ);
-
         const desired = Math.atan2(-dirZ, dirX);
         const diff = wrapAngle(desired - t.heading);
+        checkStuck(ctx, world, e, t, m.nav, dirX, dirZ, Math.abs(diff) > TURNING);
+
         t.heading = turnToward(t.heading, desired, m.turnRate * dt);
         // Slow down while facing away so units arc rather than strafe.
         const throttle = Math.max(0, Math.cos(diff));
