@@ -21,6 +21,11 @@ is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
+- **Attacks:** *When ready* (default) has each side mass until its army can
+  break the enemy base, attack, and fall back to regroup once the attack is
+  spent; *On the tide* attacks on the tide's clock instead. The HUD shows
+  what each side is doing (massing and how ready, attacking whom,
+  regrouping, defending).
 - **Tide ramp** and **siege ramp** (both modes, their own values for each):
   how fast a battle escalates. On by default in Conquest so long battles
   build to a finish, off by default in Eternal (both off gives the steadier,
@@ -82,7 +87,8 @@ src/
     units.ts         unit and weapon definitions (stats are data)
     buildings.ts     building definitions: production, defences, civic
     spawn.ts         assembles unit and building entities from definitions
-    tide.ts          alternating offensives that keep the front moving
+    tide.ts          production tide, the tide's attack clock, and the ramps
+    offensive.ts     when each team attacks: readiness, or the tide's clock
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: garrisons, capturing, bonuses
     orders.ts        per-faction player orders (stance, rally point)
@@ -168,11 +174,25 @@ src/
 
 - Each base has an HQ, barracks, vehicle factory and mech bay that produce
   units on timers, plus guard towers. A civilian town sits in no-man's land.
-- The **tide** (`game/tide.ts`) alternates the sides between massing at a
-  rally point and attacking in force, with production surging for whoever
-  is attacking. Teams are spread evenly round the cycle and allies share a
-  phase. Which team surges first is rolled per map, and the swing fades in
-  over the first cycle so going first isn't decisive.
+- **When to attack** (`game/offensive.ts`). With the default *readiness*
+  timing, each team masses at home until it fields at least 70% of its unit
+  cap and its army outweighs the defence at the enemy base (units and
+  towers there, by `fightingStrength`: the square root of toughness times
+  damage per second) by a margin. The margin starts at 1.6× and falls to
+  0.8× over 150 seconds of waiting, so evenly matched sides don't stall.
+  A team whose bases are all under attack stays home to fight first. An
+  attack is spent once the units that set out are down to 45% (units built
+  meanwhile still join in), when its target is knocked out, or after two
+  minutes; the army falls back and regroups for 45 seconds before the next.
+  Without the regroup pause and staying home under attack, both armies set
+  out for each other's empty bases and battles were a third shorter. The
+  timings stretch on bigger maps. With *tide* timing, attacks follow the
+  tide's clock instead.
+- The **tide** (`game/tide.ts`) swings each side's production up and down,
+  surging for one team while the others ebb. Teams are spread evenly round
+  the cycle and allies share a phase. Which team surges first is rolled per
+  map, and the swing fades in over the first cycle so going first isn't
+  decisive. With tide timing, a side attacks while it surges.
 - Each attack, a team picks one enemy side to go after (`Sides.target`),
   nearer enemies more often. New units form up in front of their own base,
   toward the enemy they'll attack next.
@@ -248,6 +268,6 @@ src/
    end-of-battle summary.~~
 8. ~~More than two factions: free-for-all and teams (2v2, 1v3, ...).~~
 9. ~~Capturable outposts, with lanes through outposts and towns.~~
-10. Readiness: attack when the army is ready rather than on the tide's clock.
+10. ~~Readiness: attack when the army is ready rather than on the tide's clock.~~
 11. Asymmetric faction rosters, outpost unit unlocks, squad morale; maybe
     damage types and armour classes.

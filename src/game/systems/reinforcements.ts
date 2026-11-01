@@ -2,7 +2,6 @@ import { System, World } from '../../core/ecs';
 import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
-import { attackNumber } from '../tide';
 import { UnitId } from '../units';
 import { countUnits, outnumbered } from './production';
 
@@ -51,7 +50,7 @@ function pickEntry(ctx: SimContext): WaveEntry {
  */
 export function musterPoint(ctx: SimContext, faction: number, time: number, forward: number): { x: number; z: number } {
   const base = ctx.field.baseSites[faction];
-  const target = ctx.sides.target(faction, attackNumber(time, ctx.sides.phase[faction], ctx.tide));
+  const target = ctx.sides.target(faction, ctx.offensive.attack(faction, time));
   const rally = target !== null ? ctx.lanes.rally(faction, target, 0) : { x: 0, z: 0 };
   // Never further out than the edge of the base pad (an attack on a far enemy rallies further out).
   const d = Math.hypot(rally.x - base.x, rally.z - base.z);

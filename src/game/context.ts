@@ -7,6 +7,7 @@ import { NavGrid } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Hit } from './components';
 import { Lanes } from './lanes';
+import { Offensive } from './offensive';
 import { Outpost } from './outposts';
 import { Sides } from './sides';
 import { FactionOrders } from './orders';
@@ -63,6 +64,8 @@ export interface SimContext {
   tide: TideSettings;
   /** Who fights whom, which enemy each team attacks, and each side's tide phase. */
   sides: Sides;
+  /** When each team attacks (see offensive.ts). */
+  offensive: Offensive;
   /** Attack routes across the map. */
   lanes: Lanes;
   /** Capturable outposts, one per Battlefield.outpostSites entry. */

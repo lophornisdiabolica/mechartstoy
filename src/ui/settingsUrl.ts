@@ -48,6 +48,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   const p = new URLSearchParams();
   if (s.seed) p.set('seed', s.seed);
   if (s.mode !== d.mode) p.set('mode', s.mode);
+  if (s.armies.attackTiming !== d.armies.attackTiming) p.set('attacks', s.armies.attackTiming);
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.town !== d.map.town) p.set('town', s.map.town ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
@@ -73,6 +74,8 @@ export function settingsFromParams(p: URLSearchParams): BattleSettings {
   s.seed = (p.get('seed') ?? '').slice(0, 40);
   const mode = p.get('mode');
   if (mode === 'eternal' || mode === 'conquest') s.mode = mode;
+  const attacks = p.get('attacks');
+  if (attacks === 'readiness' || attacks === 'tide') s.armies.attackTiming = attacks;
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   const town = p.get('town');

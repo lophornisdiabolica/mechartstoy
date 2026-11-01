@@ -11,6 +11,8 @@ import { UNIT_DEFS, UnitDef, UnitId } from './units';
  */
 export type BattleMode = 'eternal' | 'conquest';
 export type MapSize = 'small' | 'medium' | 'large';
+/** When armies attack: once they're strong enough (see offensive.ts), or on the tide's clock (see tide.ts). */
+export type AttackTiming = 'readiness' | 'tide';
 
 export interface UnitTuning {
   hp: number;
@@ -59,6 +61,8 @@ export interface BattleSettings {
     production: number;
     /** Groups each side starts with. */
     startingArmy: number;
+    /** When armies attack. */
+    attackTiming: AttackTiming;
     /** How hard the tide swings production, 0 (steady) to 1. */
     tideStrength: number;
     /** Seconds for a full tide cycle (both sides attack once). */
@@ -123,6 +127,7 @@ export function defaultSettings(): BattleSettings {
       unitCap: 60,
       production: 1,
       startingArmy: 4,
+      attackTiming: 'readiness',
       tideStrength: 0.6,
       tidePeriod: 150,
       buildingHp: 1,

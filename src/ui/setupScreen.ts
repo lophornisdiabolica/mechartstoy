@@ -1,4 +1,4 @@
-import { BattleMode, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BattleMode, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { dropdown, el, hex, segmented } from './dom';
@@ -6,6 +6,11 @@ import { dropdown, el, hex, segmented } from './dom';
 const MODE_HINTS: Record<BattleMode, string> = {
   eternal: 'Ruined buildings are rebuilt and the war goes on forever.',
   conquest: 'No rebuilding. A side loses when its HQ and every production building are destroyed, then a fresh map is generated.',
+};
+
+const TIMING_HINTS: Record<AttackTiming, string> = {
+  readiness: 'Each side masses at home until its army is strong enough to break the enemy base, attacks, and falls back to regroup once the attack is spent. The longer a side waits, the less sure of winning it needs to be.',
+  tide: 'Sides attack on the tide’s clock, taking turns: each attacks while its production surges, whatever shape its army is in.',
 };
 
 const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damage', speed: 'Speed', range: 'Range' };
@@ -267,9 +272,26 @@ export class SetupScreen {
     slider(armies, 'Production', 'production', 0.05, (s) => s.armies.production, (s, v) => (s.armies.production = v), times);
     slider(armies, 'Starting army', 'startingArmy', 1, (s) => s.armies.startingArmy, (s, v) => (s.armies.startingArmy = v), (v) => (v === 0 ? 'None' : `${v} groups`));
     slider(armies, 'Building HP', 'buildingHp', 0.05, (s) => s.armies.buildingHp, (s, v) => (s.armies.buildingHp = v), times);
+    const timing = segmented<AttackTiming>(
+      [
+        { label: 'When ready', value: 'readiness' },
+        { label: 'On the tide', value: 'tide' },
+      ],
+      (v) => {
+        this.settings.armies.attackTiming = v;
+        this.changed();
+      },
+    );
+    row(armies, 'Attacks', timing.row);
+    const timingHint = el('p', { class: 'hint' });
+    armies.append(timingHint);
+    this.sync.push(() => {
+      timing.set(this.settings.armies.attackTiming);
+      timingHint.textContent = TIMING_HINTS[this.settings.armies.attackTiming];
+    });
     slider(armies, 'Tide swing', 'tideStrength', 0.05, (s) => s.armies.tideStrength, (s, v) => (s.armies.tideStrength = v), (v) => (v === 0 ? 'Steady' : percent(v)));
     slider(armies, 'Tide length', 'tidePeriod', 10, (s) => s.armies.tidePeriod, (s, v) => (s.armies.tidePeriod = v), (v) => `${v}s`);
-    armies.append(el('p', { class: 'hint' }, 'The tide makes the sides take turns attacking. Swing is how strongly production surges; length is one full cycle.'));
+    armies.append(el('p', { class: 'hint' }, 'The tide swings each side’s production up and down in turn. Swing is how far; length is one full cycle.'));
     slider(armies, 'Flanking', 'flanking', 0.05, (s) => s.armies.flanking, (s, v) => (s.armies.flanking = v), (v) => (v === 0 ? 'None' : percent(v)));
     armies.append(el('p', { class: 'hint' }, 'Share of squads sent down the other lanes instead of straight down the middle: through outposts and towns, or swinging wide where there are none.'));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.

@@ -10,6 +10,7 @@ import { GameEvents, Outcome, SimContext } from './context';
 import { Lanes } from './lanes';
 import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
+import { Offensive, offensiveSystem } from './offensive';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -68,6 +69,15 @@ export class Game {
     this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
     const nav = new NavGrid(this.field);
+    const tide = tideForMap(settings.armies, this.field.config.cols);
+    // Whoever surges first has an edge, so the order of the teams' tides is rolled per map (on its own stream, so nothing else shifts).
+    const sides = new Sides(
+      settings.factions.map((f) => f.team),
+      this.field,
+      seed,
+      Math.floor(root.fork(6).next() * new Set(settings.factions.map((f) => f.team)).size),
+      settings.armies.evenTeams,
+    );
     this.ctx = {
       field: this.field,
       events: this.events,
@@ -78,17 +88,11 @@ export class Game {
       settings,
       units: tunedUnits(settings),
       buildings: tunedBuildings(settings),
-      tide: tideForMap(settings.armies, this.field.config.cols),
+      tide,
       lanes: new Lanes(this.field, nav, seed),
       outposts: createOutposts(this.field.outpostSites, seed),
-      // Whoever surges first has an edge, so the order of the teams' tides is rolled per map (on its own stream, so nothing else shifts).
-      sides: new Sides(
-        settings.factions.map((f) => f.team),
-        this.field,
-        seed,
-        Math.floor(root.fork(6).next() * new Set(settings.factions.map((f) => f.team)).size),
-        settings.armies.evenTeams,
-      ),
+      sides,
+      offensive: new Offensive(sides, tide, () => settings.armies.attackTiming, this.field.config.cols),
       squads: 0,
       escalation: { tide: 0, siege: 0 },
       outcome: null,
@@ -102,6 +106,7 @@ export class Game {
       escalationSystem(ctx),
       spatialIndexSystem(ctx),
       defenceSystem(ctx),
+      offensiveSystem(ctx),
       navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx)] : []),
       targetingSystem(ctx),

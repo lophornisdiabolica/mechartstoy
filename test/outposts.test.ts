@@ -6,7 +6,6 @@ import { Rng } from '../src/core/rng';
 import { BattleSettings, defaultFaction, defaultSettings, outpostCount } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { holdsOutposts } from '../src/game/systems/ai';
-import { attackNumber } from '../src/game/tide';
 import { UNIT_DEFS } from '../src/game/units';
 import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 
@@ -183,7 +182,7 @@ describe('outposts', () => {
     const game = new Game(4, { settings: s, populate: false, autoSpawn: false });
     const { ctx } = game;
     game.setStance(0, 'hold');
-    const attack = attackNumber(0, ctx.sides.phase[0], ctx.tide);
+    const attack = ctx.offensive.attack(0, 0);
     const target = ctx.sides.target(0, attack)!;
     const routes = ctx.lanes.routes(0, target);
     // Find a squad the lane plan sends through an outpost.
