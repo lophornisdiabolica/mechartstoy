@@ -2,6 +2,7 @@ import { System, World } from '../../core/ecs';
 import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
+import { attackNumber } from '../tide';
 import { UnitId } from '../units';
 import { countUnits, outnumbered } from './production';
 
@@ -42,11 +43,25 @@ function pickEntry(ctx: SimContext): WaveEntry {
   return WAVE_TABLE[0];
 }
 
-/** `advance` (0..1) moves the muster point from the base toward the map centre. */
-export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, advance = 0): void {
+/**
+ * Where a side's new units form up: `forward` (0..1) of the way from its
+ * base to the point where its army masses before the next attack (in front
+ * of the base, toward the enemy it's about to attack), and no further out
+ * than the edge of the base.
+ */
+export function musterPoint(ctx: SimContext, faction: number, time: number, forward: number): { x: number; z: number } {
   const base = ctx.field.baseSites[faction];
-  const cx = base.x * (1 - advance);
-  const cz = base.z * (1 - advance);
+  const target = ctx.sides.target(faction, attackNumber(time, ctx.sides.phase[faction], ctx.tide));
+  const rally = target !== null ? ctx.lanes.rally(faction, target, 0) : { x: 0, z: 0 };
+  // Never further out than the edge of the base pad (an attack on a far enemy rallies further out).
+  const d = Math.hypot(rally.x - base.x, rally.z - base.z);
+  const k = d > 0 ? Math.min(d * forward, base.radius) / d : 0;
+  return { x: base.x + (rally.x - base.x) * k, z: base.z + (rally.z - base.z) * k };
+}
+
+export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, forward = 0): void {
+  const base = ctx.field.baseSites[faction];
+  const { x: cx, z: cz } = musterPoint(ctx, faction, world.time, forward);
   for (let i = 0; i < picks; i++) {
     const entry = pickEntry(ctx);
     // Each pick forms up as a group at a random spot on the base pad.
@@ -95,7 +110,7 @@ export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEM
         nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
         if (producing[faction] || alive[faction] >= ctx.sides.unitCap(faction, ctx.settings.armies.unitCap)) continue;
         const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
-        spawnWave(world, ctx, faction, Math.max(1, picks), 0.12);
+        spawnWave(world, ctx, faction, Math.max(1, picks), 0.5);
       }
     },
   };

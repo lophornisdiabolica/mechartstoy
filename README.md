@@ -161,8 +161,14 @@ src/
   phase. Which team surges first is rolled per map, and the swing fades in
   over the first cycle so going first isn't decisive.
 - Each attack, a team picks one enemy side to go after (`Sides.target`),
-  nearer enemies more often. Holding units go and help an ally whose base
-  is under attack. In Eternal
+  nearer enemies more often. New units form up in front of their own base,
+  toward the enemy they'll attack next.
+- **Defence** (`defenceSystem` in `game/sides.ts`) counts the enemy units
+  at each base once a second. Holding units go to meet a raid on whichever
+  side of the base it comes from, or help an ally whose base is under
+  attack. If raiders outnumber the defenders, the side calls off its attack
+  and the army comes home until clearly enough defenders are back (the
+  player's attack order overrides this). In Eternal
   mode a mild rubber band helps a badly outnumbered side; Conquest lets an
   advantage snowball so battles end. The tide's cycle stretches on maps
   longer than medium, so attacks have time to cross the map.
@@ -173,7 +179,8 @@ src/
   production deliberately doesn't grow: more units for both sides favours
   the defender, whose reinforcements roll straight out of the door (measured:
   it made Conquest battles longer). With the default ramps, Conquest runs
-  about 4 to 12 minutes on a medium map and 8 to 14 on a large one.
+  about 5 to 13 minutes on a medium map (now and then 15) and 8 to 14 on a
+  large one.
 - **Battle stats** (`game/stats.ts`) keep score from events only. Every hit
   records who landed it (`Health.lastHit`), and the death events carry that
   as `killer`, so kills are credited to the unit or building type that

@@ -1,7 +1,7 @@
 import { System } from '../core/ecs';
 import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
-import { Faction, Unit } from './components';
+import { Faction, Transform, Unit } from './components';
 import { SimContext } from './context';
 
 /**
@@ -13,8 +13,11 @@ import { SimContext } from './context';
  * It also decides which enemy a team goes after in each attack, and when
  * each team's tide surges.
  */
-/** Enemy units at an ally's base before its teammates come to help. */
+/** Enemy units at a base before its holding units (and its allies') go to meet them. */
 const DEFEND_THRESHOLD = 4;
+
+/** Enemy units at a base, outnumbering its defenders, before a side calls off its attack and comes home. */
+const RECALL_THRESHOLD = 6;
 
 export class Sides {
   /** Number of sides. */
@@ -35,6 +38,15 @@ export class Sides {
   readonly strength: number[];
   /** Enemy units at each side's base right now (see defenceSystem). */
   readonly threat: number[];
+  /** Where those enemy units are (their average position), per side; meaningless while threat is 0. */
+  readonly threatAt: { x: number; z: number }[];
+  /** Units of the side and its allies at its base right now. */
+  readonly guard: number[];
+  /**
+   * Sides whose base is under an attack its defenders can't hold: their
+   * attack is called off and the army comes home until the base is safe.
+   */
+  readonly recalling: boolean[];
   private readonly targets = new Map<string, number | null>();
 
   constructor(
@@ -57,6 +69,36 @@ export class Sides {
     const largest = Math.max(...this.teamList.map(size));
     this.strength = teams.map((team) => (evenTeams ? largest / size(team) : 1));
     this.threat = teams.map(() => 0);
+    this.threatAt = teams.map(() => ({ x: 0, z: 0 }));
+    this.guard = teams.map(() => 0);
+    this.recalling = teams.map(() => false);
+  }
+
+  /**
+   * Where a side's holding units should go to defend, or null if nothing
+   * needs defending: its own base if enemies are there, else the ally
+   * that needs help most. The point is between the attackers and the base,
+   * so defenders meet the attack on whichever side it comes from.
+   */
+  defencePoint(faction: number): { x: number; z: number; face: { x: number; z: number } } | null {
+    const f = this.threat[faction] >= DEFEND_THRESHOLD ? faction : this.allyInNeed(faction);
+    if (f === null) return null;
+    const base = this.field.baseSites[f];
+    const at = this.threatAt[f];
+    return { x: base.x + (at.x - base.x) * 0.8, z: base.z + (at.z - base.z) * 0.8, face: at };
+  }
+
+  /** Update a side's threat count and recall state (see defenceSystem). */
+  assess(faction: number, threat: number, x: number, z: number, guard: number): void {
+    this.threat[faction] = threat;
+    this.threatAt[faction] = { x, z };
+    this.guard[faction] = guard;
+    // Call the army home when the defenders are outnumbered; stand down once the
+    // attack is beaten off or enough defenders are back (with slack, so units don't
+    // turn round and round as the numbers wobble).
+    this.recalling[faction] = this.recalling[faction]
+      ? threat >= DEFEND_THRESHOLD && guard < threat * 1.5
+      : threat >= RECALL_THRESHOLD && guard < threat;
   }
 
   /** A side's unit cap after its strength is applied. */
@@ -148,7 +190,11 @@ const THREAT_RANGE = 30;
 /** Seconds between threat counts; sending help doesn't need to be instant. */
 const THREAT_INTERVAL = 1;
 
-/** Counts the enemy units at each side's base, for allies coming to help (Sides.allyInNeed). */
+/**
+ * Counts the enemy units at each side's base and the defenders there, so
+ * holding units go to meet an attack (Sides.defencePoint) and an army out
+ * attacking comes home when its base can't hold (Sides.recalling).
+ */
 export function defenceSystem(ctx: SimContext): System {
   let next = 0;
   return {
@@ -158,12 +204,28 @@ export function defenceSystem(ctx: SimContext): System {
       next = world.time + THREAT_INTERVAL;
       const { sides, field } = ctx;
       for (let f = 0; f < sides.count; f++) {
+        if (sides.eliminated[f]) {
+          sides.assess(f, 0, 0, 0, 0);
+          continue;
+        }
         const base = field.baseSites[f];
         let n = 0;
+        let guard = 0;
+        let x = 0;
+        let z = 0;
         ctx.grid.forEachNear(base.x, base.z, THREAT_RANGE, (other) => {
-          if (world.has(other, Unit) && sides.hostile(f, world.req(other, Faction).id)) n++;
+          if (!world.has(other, Unit)) return;
+          const id = world.req(other, Faction).id;
+          if (sides.allied(f, id)) {
+            guard++;
+          } else if (sides.hostile(f, id)) {
+            const t = world.req(other, Transform);
+            x += t.x;
+            z += t.z;
+            n++;
+          }
         });
-        sides.threat[f] = n;
+        sides.assess(f, n, n > 0 ? x / n : base.x, n > 0 ? z / n : base.z, guard);
       }
     },
   };

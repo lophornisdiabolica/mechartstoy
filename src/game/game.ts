@@ -160,12 +160,12 @@ export class Game {
     for (const p of placements) {
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
-    // Opening armies muster partway forward so the first clash comes quickly.
   }
 
+  /** Opening armies form up where they'll mass for the first attack, so the first clash comes quickly. */
   private spawnOpeningArmies(): void {
     const picks = this.settings.armies.startingArmy;
     if (picks <= 0) return;
-    for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, Math.round(picks * this.ctx.sides.strength[site.faction]), 0.4);
+    for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, Math.round(picks * this.ctx.sides.strength[site.faction]), 1);
   }
 }

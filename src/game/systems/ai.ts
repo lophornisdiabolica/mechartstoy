@@ -55,13 +55,15 @@ export function aiSystem(ctx: SimContext): System {
           }
         }
 
-        const attacking = target >= 0 && (orders.stance === 'attack' || (orders.stance === 'auto' && isAttacking(world.time, phase, ctx.tide)));
+        // On auto, an attack is called off while the side's own base can't hold (Sides.recalling).
+        const auto = orders.stance === 'auto' && !ctx.sides.recalling[faction] && isAttacking(world.time, phase, ctx.tide);
+        const attacking = target >= 0 && (orders.stance === 'attack' || auto);
         if (!attacking) {
-          // Form up at the player's flag; else help an ally whose base is under attack; else
-          // in front of the base, leaning toward this squad's lane.
+          // Form up at the player's flag; else meet an attack on the base (or an ally's);
+          // else in front of the base, leaning toward this squad's lane.
           const home = ctx.field.baseSites[faction];
-          const ally = orders.rally ? null : ctx.sides.allyInNeed(faction);
-          const rally = orders.rally ?? (ally !== null ? ctx.field.baseSites[ally] : target >= 0 ? ctx.lanes.rally(faction, target, ai.lane) : home);
+          const defend = orders.rally ? null : ctx.sides.defencePoint(faction);
+          const rally = orders.rally ?? defend ?? (target >= 0 ? ctx.lanes.rally(faction, target, ai.lane) : home);
           let rx = rally.x + ai.rallyOffsetX;
           let rz = rally.z + ai.rallyOffsetZ;
           if (ctx.field.isWater(rx, rz)) {
@@ -69,7 +71,7 @@ export function aiSystem(ctx: SimContext): System {
             rz = rally.z;
           }
           // Hold near the rally point facing the next enemy; small tolerance so units settle rather than jostle.
-          const facing = ally !== null ? ctx.field.baseSites[ally] : target >= 0 ? ctx.field.baseSites[target] : { x: 0, z: 0 };
+          const facing = defend?.face ?? (target >= 0 ? ctx.field.baseSites[target] : { x: 0, z: 0 });
           mover.faceX = facing.x;
           mover.faceZ = facing.z;
           const near = Math.hypot(rx - t.x, rz - t.z) < 2.5;
