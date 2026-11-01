@@ -86,6 +86,7 @@ body {
   display: none;
 }
 
+#panel select,
 #panel button {
   font: inherit;
   color: inherit;
@@ -344,6 +345,7 @@ body {
 }
 
 #setup button,
+#setup select,
 #setup input[type='text'],
 #setup input[type='number'] {
   font: inherit;
@@ -570,5 +572,107 @@ body {
     max-width: calc(100vw - 36px);
     font-size: 10px;
     white-space: pre-wrap;
+  }
+}
+
+/* Drop-down lists (setup and panel). */
+#setup select,
+#panel select {
+  width: 100%;
+  min-width: 0;
+}
+
+#setup select option,
+#panel select option {
+  background: #1b222c;
+  color: #e6edf3;
+}
+
+/* Collapsible setup sections. */
+#setup details.section {
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#setup details.section > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+#setup details.section > summary::-webkit-details-marker {
+  display: none;
+}
+
+#setup details.section > summary h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+#setup details.section > summary h2::before {
+  content: '▸';
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+#setup details.section[open] > summary h2::before {
+  transform: rotate(90deg);
+}
+
+#setup details.section[open] > summary {
+  margin-bottom: 8px;
+}
+
+#setup details.section > summary:hover h2 {
+  color: #c9d3de;
+}
+
+/* Side list. */
+#setup .sides {
+  display: grid;
+  gap: 6px;
+}
+
+#setup .side {
+  display: grid;
+  grid-template-columns: 32px 1fr 96px 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+#setup .side input[type='text'] {
+  min-width: 0;
+}
+
+#setup .side .remove {
+  padding: 4px 0;
+}
+
+#setup .side .remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#setup .presets {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+#setup .hint.warn {
+  color: #e8a87a;
+}
+
+#setup button.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 600px) {
+  #setup .side {
+    grid-template-columns: 30px 1fr 78px 28px;
+    gap: 4px;
   }
 }

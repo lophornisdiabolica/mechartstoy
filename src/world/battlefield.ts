@@ -19,6 +19,12 @@ export interface BattlefieldConfig {
   baseRadius: number;
   /** Put a civilian town in no-man's land. */
   town: boolean;
+  /**
+   * Which faction sits at each base seat, going round the map from the west
+   * (see seatPoint). Its length is the number of bases. Teammates are given
+   * neighbouring seats.
+   */
+  seats: number[];
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -29,7 +35,39 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   seaLevel: 1.4,
   baseRadius: 16,
   town: true,
+  seats: [0, 1],
 };
+
+/** Clear ground between neighbouring base pads, on top of their radii. */
+const BASE_GAP = 12;
+
+/**
+ * Nominal centre of base seat `k` of `n`. Seats are spread evenly round a
+ * rounded rectangle inset from the map edge, starting on the west side: two
+ * seats sit at the west and east ends, four at the corners, and so on.
+ * `jitter` (-1..1) nudges a seat along the edge so maps vary.
+ */
+export function seatPoint(k: number, n: number, width: number, depth: number, baseRadius: number, jitter = 0): { x: number; z: number } {
+  const rx = width / 2 - baseRadius - 6;
+  const rz = depth / 2 - baseRadius - 6;
+  const angle = Math.PI / 2 + Math.PI / n + (2 * Math.PI * k) / n + jitter * (Math.PI / n) * 0.2;
+  // A squircle rather than an ellipse, so corner seats sit out in the corners.
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return { x: rx * Math.sign(c) * Math.sqrt(Math.abs(c)), z: rz * Math.sign(s) * Math.sqrt(Math.abs(s)) };
+}
+
+/** Whether `n` bases fit on a map this size with room between neighbours (jitter included). */
+export function seatsFit(n: number, width: number, depth: number, baseRadius: number): boolean {
+  for (let k = 0; k < n; k++) {
+    for (const [ja, jb] of [[1, -1], [0, 0]]) {
+      const a = seatPoint(k, n, width, depth, baseRadius, ja);
+      const b = seatPoint((k + 1) % n, n, width, depth, baseRadius, jb);
+      if (n > 1 && Math.hypot(a.x - b.x, a.z - b.z) < baseRadius * 2 + BASE_GAP) return false;
+    }
+  }
+  return true;
+}
 
 export interface BaseSite {
   faction: number;
@@ -150,37 +188,49 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 /**
- * With lots of water a base can end up on an island. If the bases aren't
- * joined by dry land, raise a causeway straight between them.
+ * With lots of water a base can end up on an island. Flood-fill dry land
+ * from the first base; any base it doesn't reach gets a causeway to the
+ * nearest base it does, until every base is joined up.
  */
-function ensureLandBridge(field: Battlefield, heights: Float32Array): void {
+function ensureLandBridges(field: Battlefield, heights: Float32Array): void {
   const { cols, rows, cellSize } = field.config;
-  const [a, b] = field.baseSites;
   const index = (x: number, z: number) => {
     const i = Math.round((x - field.bounds.minX) / cellSize);
     const j = Math.round((z - field.bounds.minZ) / cellSize);
     return j * (cols + 1) + i;
   };
   const dry = (k: number) => heights[k] >= field.seaLevel;
-  const start = index(a.x, a.z);
-  const goal = index(b.x, b.z);
-  const seen = new Uint8Array(heights.length);
-  const stack = [start];
-  seen[start] = 1;
-  while (stack.length > 0) {
-    const k = stack.pop()!;
-    if (k === goal) return;
-    const i = k % (cols + 1);
-    const j = (k - i) / (cols + 1);
-    for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
-      if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
-      const nk = nj * (cols + 1) + ni;
-      if (!seen[nk] && dry(nk)) {
-        seen[nk] = 1;
-        stack.push(nk);
+  const sites = field.baseSites;
+  for (let round = 0; round < sites.length; round++) {
+    const seen = new Uint8Array(heights.length);
+    const start = index(sites[0].x, sites[0].z);
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length > 0) {
+      const k = stack.pop()!;
+      const i = k % (cols + 1);
+      const j = (k - i) / (cols + 1);
+      for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+        if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+        const nk = nj * (cols + 1) + ni;
+        if (!seen[nk] && dry(nk)) {
+          seen[nk] = 1;
+          stack.push(nk);
+        }
       }
     }
+    const reached = sites.filter((s) => seen[index(s.x, s.z)]);
+    const cut = sites.find((s) => !seen[index(s.x, s.z)]);
+    if (!cut) return;
+    let to = reached[0];
+    for (const s of reached) if (Math.hypot(s.x - cut.x, s.z - cut.z) < Math.hypot(to.x - cut.x, to.z - cut.z)) to = s;
+    causeway(field, heights, cut, to);
   }
+}
+
+/** Raise a strip of dry land straight from a to b. */
+function causeway(field: Battlefield, heights: Float32Array, a: { x: number; z: number }, b: { x: number; z: number }): void {
+  const { cols, rows } = field.config;
   const length = Math.hypot(b.x - a.x, b.z - a.z);
   const deck = field.seaLevel + 0.5;
   for (let j = 0; j <= rows; j++) {
@@ -218,14 +268,16 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     return sum / norm;
   };
 
-  // Base pads sit near each short end, at a random offset across the map.
-  const baseSites: BaseSite[] = [0, 1].map((faction) => ({
+  // Base pads sit round the edge of the map, each nudged a little along it.
+  const seats = config.seats;
+  const baseSites: BaseSite[] = seats.map((faction, k) => ({
     faction,
-    x: (faction === 0 ? -1 : 1) * (width / 2 - baseRadius - 6),
-    z: rng.range(-depth * 0.2, depth * 0.2),
+    ...seatPoint(k, seats.length, width, depth, baseRadius, rng.range(-1, 1)),
     radius: baseRadius,
     height: 0,
   }));
+  // Indexed by faction, so baseSites[f] is faction f's base.
+  baseSites.sort((a, b) => a.faction - b.faction);
 
   const heights = new Float32Array((cols + 1) * (rows + 1));
   for (let j = 0; j <= rows; j++) {
@@ -263,7 +315,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     flatten(site.x, site.z, site.radius, site.height);
   }
 
-  ensureLandBridge(field, heights);
+  ensureLandBridges(field, heights);
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = 11;
@@ -277,6 +329,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       const pz = z + Math.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
       score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
     }
+    // With bases along the long edges too, keep the town off their pads.
+    for (const site of baseSites) if (Math.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
     if (!best || score < best.score) best = { x, z, score };
   }
   // Candidates are always rolled so the rest of the map doesn't change with the town toggle.

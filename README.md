@@ -1,8 +1,8 @@
 # Mech Battle Toy
 
-A browser toy where two factions of little low-poly mechs fight a
-procedurally generated battle on a tilt-shifted isometric diorama, either
-forever or until one side is wiped out.
+A browser toy where factions of little low-poly mechs fight a procedurally
+generated battle on a tilt-shifted isometric diorama, either forever or until
+one side (or team) is wiped out.
 
 ## Running
 
@@ -15,7 +15,8 @@ npm run build    # typecheck + production build into dist/
 
 The page opens on a **setup screen** over a battle that's already running.
 Pick a mode, map size, water and hills, army pacing, per-unit stat
-multipliers and faction names and colours, then start. Everything you change
+multipliers and the sides (two to eight, each with a name, colour and team),
+then start. Setup sections fold away; the page remembers which are open. Everything you change
 is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
@@ -27,8 +28,16 @@ battle, its exact map via `seed`).
   controls panel.
 - **Unit stats** take multipliers in steps of 0.05, and show what each stat
   works out to (HP, damage per second, speed, range) under its box.
-- **Conquest:** no rebuilding. A side loses when its HQ and every production
-  building are destroyed; after a victory banner with a summary of the
+- **Sides and teams:** every side picks a team. All on different teams is a
+  free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
+  each other, attack the same enemy together, start next to each other and
+  come to help when a teammate's base is attacked. "Even out uneven teams"
+  (on by default) gives sides on smaller teams more production and a bigger
+  unit cap, so one side against three gets three times as much. More sides
+  make a bigger map.
+- **Conquest:** no rebuilding. A side is knocked out when its HQ and every
+  production building are destroyed, and the battle ends when only one team
+  is left standing; after a victory banner with a summary of the
   battle (units fielded and lost, kills, buildings razed, each side's top
   unit) a fresh map starts with the same settings. "Set up after this battle" goes to the setup
   screen instead, and "End battle and set up" goes there right away.
@@ -99,8 +108,10 @@ src/
 - **Determinism.** The sim runs at a fixed 30 Hz and only uses `Rng`
   streams forked from the map seed. Don't use `Math.random()` in `game/` or
   `world/`.
-- **Coordinates.** x is the long axis (faction 0 on -x, faction 1 on +x), z
-  across, y up. Heading 0 faces +x; models are built facing +x.
+- **Coordinates.** x is the long axis, z across, y up. Heading 0 faces +x;
+  models are built facing +x. Bases sit round the edge of the map in
+  "seats" (`seatPoint` in `world/battlefield.ts`), starting on the west side;
+  with two sides, faction 0 is on -x and faction 1 on +x.
 - **Adding a unit.** Add an entry to `UNIT_DEFS` in `game/units.ts`, register
   a model under its `model` key (see `render/models/units.ts`), and add it to
   the wave table in `game/systems/reinforcements.ts`.
@@ -122,8 +133,12 @@ src/
   setting: add it to the type and `defaultSettings()`, give it a range in
   `LIMITS`, a URL key in `ui/settingsUrl.ts` and a control in
   `ui/setupScreen.ts`.
-- **Factions.** `NEUTRAL` (-1) is the civilian town: nobody targets it, but
-  splash damage hurts it.
+- **Sides.** Any number of factions, each on a team. Never compare faction
+  ids to decide who fights: ask `ctx.sides` (`game/sides.ts`), which owns
+  `hostile` / `allied`, which enemy a team attacks, tide phases and who has
+  been knocked out. Per-side arrays are sized by `ctx.sides.count`, and
+  `field.baseSites[f]` is side f's base. `NEUTRAL` (-1) is the civilian
+  town: nobody targets it, but splash damage hurts it.
 - **Adding a model.** Call `registerModel('key', faction => object3d)` and
   give entities `Renderable { model: 'key' }`. Use `setRig` to expose a
   `turret` (aimed automatically from the `Armed` component) or an `animate`
@@ -142,7 +157,18 @@ src/
   units on timers, plus guard towers. A civilian town sits in no-man's land.
 - The **tide** (`game/tide.ts`) alternates the sides between massing at a
   rally point and attacking in force, with production surging for whoever
-  is attacking. Which side surges first is a coin flip per map. In Eternal
+  is attacking. Teams are spread evenly round the cycle and allies share a
+  phase. Which team surges first is rolled per map, and the swing fades in
+  over the first cycle so going first isn't decisive.
+- Each attack, a team picks one enemy side to go after (`Sides.target`),
+  nearer enemies more often. New units form up in front of their own base,
+  toward the enemy they'll attack next.
+- **Defence** (`defenceSystem` in `game/sides.ts`) counts the enemy units
+  at each base once a second. Holding units go to meet a raid on whichever
+  side of the base it comes from, or help an ally whose base is under
+  attack. If raiders outnumber the defenders, the side calls off its attack
+  and the army comes home until clearly enough defenders are back (the
+  player's attack order overrides this). In Eternal
   mode a mild rubber band helps a badly outnumbered side; Conquest lets an
   advantage snowball so battles end. The tide's cycle stretches on maps
   longer than medium, so attacks have time to cross the map.
@@ -153,13 +179,15 @@ src/
   production deliberately doesn't grow: more units for both sides favours
   the defender, whose reinforcements roll straight out of the door (measured:
   it made Conquest battles longer). With the default ramps, Conquest runs
-  about 4 to 12 minutes on a medium map and 8 to 14 on a large one.
+  about 5 to 13 minutes on a medium map (now and then 15) and 8 to 14 on a
+  large one.
 - **Battle stats** (`game/stats.ts`) keep score from events only. Every hit
   records who landed it (`Health.lastHit`), and the death events carry that
   as `killer`, so kills are credited to the unit or building type that
   landed the last blow.
-- Attacks follow **lanes** (`game/lanes.ts`): one down the middle and one
-  swinging wide along each side. Units built together form a squad and
+- Attacks follow **lanes** (`game/lanes.ts`): one straight from base to base
+  and one swinging wide to each side, worked out for each pair of bases
+  that actually fight. Units built together form a squad and
   share a lane. Each attack a side favours one flank, and the Flanking
   setting decides how many squads go wide, so fights break out all over
   the map rather than along one front line.
@@ -185,7 +213,7 @@ src/
 6. ~~Smarter tactics: flanking lanes, so armies use the whole map.~~
 7. ~~Pacing and readability: ramp, finer unit stats with resulting values,
    end-of-battle summary.~~
-8. More than two factions: free-for-all and teams (2v2, 1v3, ...).
+8. ~~More than two factions: free-for-all and teams (2v2, 1v3, ...).~~
 9. Damage types and armour classes (rock-paper-scissors or richer), and
    asymmetric faction rosters.
 10. Capturable outposts on the flank lanes and squad morale.

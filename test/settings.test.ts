@@ -92,9 +92,9 @@ describe('settings in the URL', () => {
     s.seed = 'hello world';
     s.mode = 'conquest';
     s.map = { size: 'small', water: 0.2, hills: 1.35, town: false };
-    s.armies = { unitCap: 90, production: 1.5, startingArmy: 0, tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } } };
+    s.armies = { unitCap: 90, production: 1.5, startingArmy: 0, tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: false, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } } };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
-    s.factions[1] = { name: 'Moss Pact', color: 0x33aa55 };
+    s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1 };
     const back = settingsFromParams(new URLSearchParams(settingsToParams(s).toString()));
     expect(back).toEqual(s);
   });
@@ -136,7 +136,7 @@ describe('conquest mode', () => {
     spawnBuilding(game.world, game.ctx, game.ctx.buildings.tower, 0, west.x + 8, west.z, 0);
     spawnBuilding(game.world, game.ctx, game.ctx.buildings.factory, 1, east.x, east.z, Math.PI);
     const results: (number | null)[] = [];
-    game.events.on('battleOver', (o) => results.push(o.winner));
+    game.events.on('battleOver', (o) => results.push(o.team));
 
     game.world.req(hq, Health).hp = 0;
     run(game, 1);
@@ -144,7 +144,7 @@ describe('conquest mode', () => {
     // A tower left standing doesn't keep a side in the fight.
     game.world.req(barracks, Health).hp = 0;
     run(game, 1);
-    expect(game.outcome?.winner).toBe(1);
+    expect(game.outcome?.winners).toEqual([1]);
     expect(results).toEqual([1]);
     run(game, 2);
     expect(results).toEqual([1]);
@@ -165,7 +165,7 @@ describe('conquest mode', () => {
     const game = new Game(7919, { settings: s });
     while (!game.outcome && game.world.time < 900) game.step(DT);
     expect(game.outcome).not.toBeNull();
-    const loser = 1 - (game.outcome!.winner ?? 0);
+    const loser = 1 - (game.outcome!.team ?? 0);
     const producers = [...game.world.query(Producer, Faction)].filter((e) => game.world.req(e, Faction).id === loser);
     expect(producers).toEqual([]);
     // No fallback waves for the beaten side.

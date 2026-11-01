@@ -4,7 +4,7 @@ import { Building, Faction, Producer, Unit } from './game/components';
 import { BuildingId } from './game/buildings';
 import { FactionDef } from './game/factions';
 import { Game, SIM_HZ } from './game/game';
-import { BattleSettings, factionDefs } from './game/settings';
+import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
 import { Stage } from './render/stage';
 import { Controls, MatchControls } from './ui/controls';
@@ -28,6 +28,11 @@ function clock(seconds: number): string {
 function escalation(game: Game): string {
   const { tide, siege } = game.ctx.escalation;
   return (tide > 0.005 ? ` · tide ${(1 + tide).toFixed(1)}×` : '') + (siege > 0.005 ? ` · siege ${(1 + siege).toFixed(1)}×` : '');
+}
+
+/** "A", "A and B", "A, B and C". */
+function listNames(names: string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 function randomSeed(): string {
@@ -168,52 +173,61 @@ export class App implements MatchControls {
   private showBanner(): void {
     const { game, factions } = this.battle;
     const outcome = game.outcome!;
-    const winner = outcome.winner;
+    const winners = outcome.winners.map((f) => factions[f]);
     this.bannerShownFor = game;
     this.bannerTime = 0;
     this.banner.replaceChildren(
-      el('div', { class: 'title' }, winner === null ? 'Mutual destruction' : `${factions[winner].name} wins`),
+      el('div', { class: 'title' }, winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`),
       el('div', { class: 'sub' }, `after ${clock(outcome.time)}`),
       this.summary(),
       el('div', { class: 'next' }),
     );
-    this.banner.style.setProperty('--accent', winner === null ? '#e8d27a' : hex(factions[winner].primary));
+    this.banner.style.setProperty('--accent', winners.length === 0 ? '#e8d27a' : hex(winners[0].primary));
     this.banner.hidden = false;
   }
 
-  /** The end-of-battle numbers, one column per side. */
+  /** The end-of-battle numbers, one row per side. */
   private summary(): HTMLElement {
     const { game, factions } = this.battle;
     const { stats, ctx } = game;
+    const outcome = game.outcome!;
     const table = el('table', { class: 'summary' });
-    const head = el('tr');
-    head.append(el('th'));
-    // Phones only have room for the first word of each name.
-    const narrow = window.matchMedia('(max-width: 600px)').matches;
-    for (const f of factions) {
-      const th = el('th', { title: f.name }, narrow ? f.name.split(' ')[0] : f.name);
-      th.style.color = hex(f.primary);
-      head.append(th);
-    }
-    table.append(head);
     const typeName = (id: string) => ctx.units[id as UnitId]?.name ?? ctx.buildings[id as BuildingId]?.name ?? id;
-    const rows: [string, (f: number) => string][] = [
-      ['Units fielded', (f) => String(stats.sides[f].fielded)],
-      ['Units lost', (f) => String(stats.sides[f].lost)],
-      ['Kills', (f) => String(stats.sides[f].kills)],
-      ['Buildings razed', (f) => String(stats.sides[f].razed)],
+    const columns: [string, string, (f: number) => string][] = [
+      ['Fielded', 'Units fielded', (f) => String(stats.sides[f].fielded)],
+      ['Lost', 'Units lost', (f) => String(stats.sides[f].lost)],
+      ['Kills', 'Enemy units destroyed', (f) => String(stats.sides[f].kills)],
+      ['Razed', 'Buildings destroyed', (f) => String(stats.sides[f].razed)],
       [
         'Top unit',
+        'The unit type with the most kills',
         (f) => {
           const best = stats.best(f);
           return best ? `${typeName(best.source)} (${best.kills})` : '—';
         },
       ],
+      [
+        'Result',
+        'Won, or when the side lost its last production building',
+        (f) => {
+          const out = ctx.sides.eliminatedAt[f];
+          if (outcome.winners.includes(f)) return out === null ? 'Won' : `Won (out ${clock(out)})`;
+          return out === null ? '—' : `Out ${clock(out)}`;
+        },
+      ],
     ];
-    for (const [label, value] of rows) {
+    const head = el('tr');
+    head.append(el('th'));
+    for (const [label, title] of columns) head.append(el('th', { title }, label));
+    table.append(head);
+    // Phones only have room for the first word of each name.
+    const narrow = window.matchMedia('(max-width: 600px)').matches;
+    for (const f of factions) {
       const tr = el('tr');
-      tr.append(el('th', {}, label));
-      for (const f of factions) tr.append(el('td', {}, value(f.id)));
+      const name = el('th', { title: f.name }, narrow ? f.name.split(' ')[0] : f.name);
+      name.style.color = hex(f.primary);
+      tr.append(name);
+      for (const [, , value] of columns) tr.append(el('td', {}, value(f.id)));
       table.append(tr);
     }
     const wrap = el('div', { class: 'stats' });
@@ -237,10 +251,14 @@ export class App implements MatchControls {
       if (w.has(e, Producer)) producers[f]++;
     }
     const conquest = game.settings.mode === 'conquest';
-    const lines = factions.map(
-      (f) =>
-        `${f.name}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}, ${losses[f.id]} lost`,
-    );
+    const labels = teamLabels(game.settings);
+    const lines = factions.map((f) => {
+      const strength = game.ctx.sides.strength[f.id];
+      const notes = [labels[f.id], strength !== 1 ? `${Math.round(strength * 100) / 100}× army` : ''].filter(Boolean).join(', ');
+      const team = notes ? ` (${notes})` : '';
+      const out = game.ctx.sides.eliminated[f.id] ? ' · out' : '';
+      return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}, ${losses[f.id]} lost${out}`;
+    });
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)} · seed ${seed} · ${Math.round(this.fps)} fps\n` +

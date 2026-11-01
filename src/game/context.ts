@@ -7,6 +7,7 @@ import { NavGrid } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Hit } from './components';
 import { Lanes } from './lanes';
+import { Sides } from './sides';
 import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
 import { TideSettings } from './tide';
@@ -24,12 +25,17 @@ export type GameEvents = {
   buildingDestroyed: { entity: Entity; x: number; y: number; z: number; def: BuildingDef; faction: number; killer: Hit | null };
   constructionStarted: { entity: Entity; x: number; y: number; z: number; def: BuildingDef };
   /** Conquest only: a side has lost its last production building. */
+  sideEliminated: { faction: number; time: number };
+  /** Conquest only: one team is left standing (or nobody is). */
   battleOver: Outcome;
 };
 
-/** How a conquest battle ended. `winner` is null for a draw. */
+/** How a conquest battle ended. */
 export interface Outcome {
-  winner: number | null;
+  /** The winning team, or null if the last sides fell together. */
+  team: number | null;
+  /** The sides on the winning team (including any knocked out along the way). Empty for a draw. */
+  winners: number[];
   /** Sim time when it was decided. */
   time: number;
 }
@@ -52,8 +58,8 @@ export interface SimContext {
   buildings: Record<BuildingId, BuildingDef>;
   /** The settings' tide stretched for this map's size (see tide.tideForMap). Read the tide from here, not from settings. */
   tide: TideSettings;
-  /** Which side's tide surges first: 0 west, 1 east. Pass `faction ^ tideOrder` to the tide functions. */
-  tideOrder: number;
+  /** Who fights whom, which enemy each team attacks, and each side's tide phase. */
+  sides: Sides;
   /** Attack routes across the map. */
   lanes: Lanes;
   /** Counter for squad ids (see spawn.newSquad). */

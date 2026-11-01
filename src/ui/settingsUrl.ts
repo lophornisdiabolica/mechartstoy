@@ -1,4 +1,4 @@
-import { BattleSettings, defaultSettings, LIMITS, MAP_SIZES, MapSize, UNIT_IDS } from '../game/settings';
+import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, UNIT_IDS } from '../game/settings';
 
 /**
  * Settings <-> URL query string. Only values that differ from the defaults are
@@ -53,9 +53,14 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     const t = s.units[id];
     if (UNIT_STATS.some((k) => t[k] !== 1)) p.set(id, UNIT_STATS.map((k) => fmt(t[k])).join(','));
   }
+  if (s.armies.evenTeams !== d.armies.evenTeams) p.set('even', s.armies.evenTeams ? '1' : '0');
+  // Sides: how many (if not two), then each one's changes from its slot's defaults. Teams are written 1-based.
+  if (s.factions.length !== d.factions.length) p.set('sides', String(s.factions.length));
   s.factions.forEach((f, i) => {
-    if (f.name !== d.factions[i].name) p.set(`name${i + 1}`, f.name);
-    if (f.color !== d.factions[i].color) p.set(`color${i + 1}`, hexColor(f.color));
+    const def = defaultFaction(i);
+    if (f.name !== def.name) p.set(`name${i + 1}`, f.name);
+    if (f.color !== def.color) p.set(`color${i + 1}`, hexColor(f.color));
+    if (f.team !== def.team) p.set(`team${i + 1}`, String(f.team + 1));
   });
   return p;
 }
@@ -80,7 +85,13 @@ export function settingsFromParams(p: URLSearchParams): BattleSettings {
       if (Number.isFinite(parts[i]) && parts[i] > 0) s.units[id][k] = clamp(parts[i], 'unitStat');
     });
   }
+  const even = p.get('even');
+  if (even === '0' || even === '1') s.armies.evenTeams = even === '1';
+  const sides = Math.round(Number(p.get('sides')));
+  if (Number.isFinite(sides) && sides >= 2) s.factions = Array.from({ length: Math.min(MAX_FACTIONS, sides) }, (_, i) => defaultFaction(i));
   s.factions.forEach((f, i) => {
+    const team = Math.round(Number(p.get(`team${i + 1}`)));
+    if (Number.isFinite(team) && team >= 1 && team <= s.factions.length) f.team = team - 1;
     const name = p.get(`name${i + 1}`);
     if (name !== null && name.trim()) f.name = name.trim().slice(0, 32);
     const color = p.get(`color${i + 1}`);

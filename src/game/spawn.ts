@@ -53,9 +53,9 @@ export function newSquad(ctx: SimContext): number {
   return ctx.squads++;
 }
 
-/** Pick a point inside the enemy base for a unit to push toward. */
-export function enemyObjective(ctx: SimContext, faction: number): { x: number; z: number } {
-  const base = ctx.field.baseSites.find((s) => s.faction !== faction)!;
+/** Pick a point inside a side's base for a unit to push toward. */
+export function objectiveIn(ctx: SimContext, faction: number): { x: number; z: number } {
+  const base = ctx.field.baseSites[faction];
   return {
     x: base.x + ctx.rng.range(-0.6, 0.6) * base.radius,
     z: base.z + ctx.rng.range(-0.6, 0.6) * base.radius,
@@ -67,8 +67,8 @@ export function enemyObjective(ctx: SimContext, faction: number): { x: number; z
  * Units spawned with the same `squad` (see newSquad) stick together on the same lane.
  */
 export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: number, x: number, z: number, squad = newSquad(ctx)): Entity {
-  const objective = enemyObjective(ctx, faction);
-  const heading = Math.atan2(-(objective.z - z), objective.x - x);
+  // Face the middle of the map; the AI picks a real objective on its first think.
+  const heading = Math.atan2(z, -x);
   const e = world.create();
   world.add(e, Transform, makeTransform(x, ctx.field.surfaceAt(x, z), z, heading));
   world.add(e, Faction, { id: faction });
@@ -96,13 +96,14 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   const spreadA = ctx.rng.range(0, Math.PI * 2);
   const spreadR = Math.sqrt(ctx.rng.next()) * 6;
   world.add(e, Ai, {
-    objectiveX: objective.x,
-    objectiveZ: objective.z,
+    objectiveX: x,
+    objectiveZ: z,
     rallyOffsetX: Math.cos(spreadA) * spreadR,
     rallyOffsetZ: Math.sin(spreadA) * spreadR,
     squad,
     lane: 0,
     laneAttack: -1,
+    target: -1,
   });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;

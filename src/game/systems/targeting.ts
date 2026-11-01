@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Armed, Collider, Construction, Faction, NEUTRAL, Targetable, Transform } from '../components';
+import { Armed, Collider, Construction, Faction, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
 
 const RETARGET_INTERVAL = 0.5;
@@ -13,8 +13,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Ent
   let bestScore = Infinity;
   ctx.grid.forEachNear(t.x, t.z, armed.sight, (other, d2) => {
     const otherFaction = world.req(other, Faction).id;
-    // Nobody aims at the civilian town; it only suffers stray fire.
-    if (otherFaction === faction || otherFaction === NEUTRAL) return;
+    // Only enemies; nobody aims at the civilian town (it only suffers stray fire).
+    if (!ctx.sides.hostile(faction, otherFaction)) return;
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;
     const isBuilding = world.req(other, Targetable).kind === 'building';

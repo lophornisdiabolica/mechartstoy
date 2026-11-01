@@ -5,9 +5,11 @@ import { MAP_SIZES, rampFor } from './settings';
 /**
  * The tide of battle. Each side alternates between building up (defending,
  * massing troops at its rally point) and surging (out-producing the enemy and
- * attacking in force). The two sides are in opposite phase, so the front
- * swings: one army pushes into the enemy base, gets thrown back, and then
- * the other side has its turn.
+ * attacking in force). Teams are spread evenly round the cycle (two teams sit
+ * in opposite phase), so the front swings: one army pushes into an enemy
+ * base, gets thrown back, and then another side has its turn. Allies share a
+ * phase, so they attack together. The `phase` arguments below are a side's
+ * offset into the cycle, 0..1 (see Sides.phase).
  */
 export interface TideSettings {
   /** How hard production swings, 0 (steady) to 1. */
@@ -59,30 +61,39 @@ export function escalate(level: number, ramp: number, dt: number): number {
   return Math.min(RAMP_MAX, level + (ramp * dt) / RAMP_INTERVAL);
 }
 
+/**
+ * Cycles over which the swing fades in at the start of a battle. Without it,
+ * whichever team surges first meets an enemy at the bottom of its tide and
+ * wins the opening clash, and in Conquest that decided the battle (11 times
+ * in 12). Fading in makes the opening fair: the first surger now wins about
+ * half the time.
+ */
+const TIDE_FADE_IN = 1;
+
 /** The lowest the tide can push production, once the ramp swings it past 1. */
 const TIDE_FLOOR = 0.1;
 
-/** Production multiplier for a faction at a given time, around 1. `level` is the ramp level. */
-export function tide(time: number, faction: number, t: TideSettings = DEFAULT_TIDE, level = 0): number {
-  const strength = t.tideStrength * (1 + level);
-  return Math.max(TIDE_FLOOR, 1 + strength * Math.sin((time / t.tidePeriod) * Math.PI * 2 + faction * Math.PI));
+/** Production multiplier for a side at a given time, around 1. `level` is the tide ramp's level. */
+export function tide(time: number, phase: number, t: TideSettings = DEFAULT_TIDE, level = 0): number {
+  const strength = t.tideStrength * (1 + level) * Math.min(1, time / (t.tidePeriod * TIDE_FADE_IN));
+  return Math.max(TIDE_FLOOR, 1 + strength * Math.sin((time / t.tidePeriod + phase) * Math.PI * 2));
 }
 
 /**
  * Whether a faction is on the offensive. Attacks start a little after the
  * production surge begins, so there's an army to attack with.
  */
-export function isAttacking(time: number, faction: number, t: TideSettings = DEFAULT_TIDE): boolean {
-  const phase = (((time / t.tidePeriod + (faction === 1 ? 0.5 : 0)) % 1) + 1) % 1;
-  return phase > ATTACK_START && phase < ATTACK_END;
+export function isAttacking(time: number, phase: number, t: TideSettings = DEFAULT_TIDE): boolean {
+  const at = (((time / t.tidePeriod + phase) % 1) + 1) % 1;
+  return at > ATTACK_START && at < ATTACK_END;
 }
 
 /**
  * Which attack a faction is on or building up to. It ticks over when an
  * attack ends, so the build-up and the attack that follows share a number.
  */
-export function attackNumber(time: number, faction: number, t: TideSettings = DEFAULT_TIDE): number {
-  return Math.floor(time / t.tidePeriod + (faction === 1 ? 0.5 : 0) - ATTACK_END);
+export function attackNumber(time: number, phase: number, t: TideSettings = DEFAULT_TIDE): number {
+  return Math.floor(time / t.tidePeriod + phase - ATTACK_END);
 }
 
 /** Advances the battle's escalation levels. */

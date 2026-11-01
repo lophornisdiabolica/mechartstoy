@@ -8,6 +8,7 @@ import { Prop, scatterProps } from '../world/props';
 import { layoutBase, layoutTown } from '../world/settlements';
 import { GameEvents, Outcome, SimContext } from './context';
 import { Lanes } from './lanes';
+import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -61,7 +62,7 @@ export class Game {
     const { populate = true, autoSpawn = true, settings = defaultSettings() } = options;
     this.settings = settings;
     // Subscribe before anything spawns, so the opening armies count.
-    this.stats = new BattleStats(this.events, 2);
+    this.stats = new BattleStats(this.events, settings.factions.length);
     const root = new Rng(seed);
     this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
@@ -72,14 +73,20 @@ export class Game {
       grid: new SpatialGrid(6),
       rng: root.fork(3),
       nav,
-      orders: defaultOrders(),
+      orders: defaultOrders(settings.factions.length),
       settings,
       units: tunedUnits(settings),
       buildings: tunedBuildings(settings),
-      // Whoever surges first has an edge, so it's a coin flip (on its own stream, so nothing else shifts).
       tide: tideForMap(settings.armies, this.field.config.cols),
-      tideOrder: root.fork(6).chance(0.5) ? 1 : 0,
       lanes: new Lanes(this.field, nav, seed),
+      // Whoever surges first has an edge, so the order of the teams' tides is rolled per map (on its own stream, so nothing else shifts).
+      sides: new Sides(
+        settings.factions.map((f) => f.team),
+        this.field,
+        seed,
+        Math.floor(root.fork(6).next() * new Set(settings.factions.map((f) => f.team)).size),
+        settings.armies.evenTeams,
+      ),
       squads: 0,
       escalation: { tide: 0, siege: 0 },
       outcome: null,
@@ -92,6 +99,7 @@ export class Game {
       snapshotSystem,
       escalationSystem(ctx),
       spatialIndexSystem(ctx),
+      defenceSystem(ctx),
       navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx)] : []),
       targetingSystem(ctx),
@@ -130,7 +138,7 @@ export class Game {
   /** Drop a unit at a point. Returns false if the spot is unusable or the side is at its cap. */
   spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
     if (!this.field.contains(x, z, 1) || this.field.isWater(x, z)) return false;
-    if (countUnits(this.world)[faction] >= this.settings.armies.unitCap) return false;
+    if (countUnits(this.world, this.ctx.sides.count)[faction] >= this.ctx.sides.unitCap(faction, this.settings.armies.unitCap)) return false;
     spawnUnit(this.world, this.ctx, this.ctx.units[unit], faction, x, z);
     return true;
   }
@@ -152,11 +160,12 @@ export class Game {
     for (const p of placements) {
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
-    // Opening armies muster partway forward so the first clash comes quickly.
   }
 
+  /** Opening armies form up where they'll mass for the first attack, so the first clash comes quickly. */
   private spawnOpeningArmies(): void {
     const picks = this.settings.armies.startingArmy;
-    if (picks > 0) for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, picks, 0.4);
+    if (picks <= 0) return;
+    for (const site of this.field.baseSites) spawnWave(this.world, this.ctx, site.faction, Math.round(picks * this.ctx.sides.strength[site.faction]), 1);
   }
 }
