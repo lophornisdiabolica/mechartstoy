@@ -32,7 +32,7 @@ export class Markers {
     private readonly entities: EntityView,
   ) {
     this.root.name = 'markers';
-    this.flags = [0, 1].map((f) => {
+    this.flags = game.ctx.orders.map((_, f) => {
       const fl = flag(f);
       fl.visible = false;
       this.root.add(fl);

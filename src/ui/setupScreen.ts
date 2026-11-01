@@ -1,4 +1,4 @@
-import { BattleMode, BattleSettings, cloneSettings, defaultSettings, LIMITS, MAP_SIZES, MapSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { BattleMode, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { el, hex, segmented } from './dom';
@@ -56,6 +56,9 @@ export class SetupScreen {
   private settings: BattleSettings;
   private readonly root = el('div', { id: 'setup', role: 'dialog', 'aria-label': 'Battle setup' });
   private readonly sync: (() => void)[] = [];
+  /** The per-side rows, rebuilt when sides are added or removed. */
+  private sideList!: HTMLElement;
+  private sideSync: (() => void)[] = [];
 
   constructor(
     initial: BattleSettings,
@@ -87,7 +90,51 @@ export class SetupScreen {
   }
 
   private refresh(): void {
+    if (this.sideList && this.sideSync.length !== this.settings.factions.length) this.rebuildSides();
     for (const s of this.sync) s();
+    for (const s of this.sideSync) s();
+  }
+
+  /** One row per side: colour, name, team, remove. */
+  private rebuildSides(): void {
+    this.sideList.replaceChildren();
+    this.sideSync = this.settings.factions.map((_, i) => {
+      const row = el('div', { class: 'side' });
+      const color = el('input', { type: 'color', 'aria-label': `Side ${i + 1} colour` });
+      const name = el('input', { type: 'text', maxlength: '32', 'aria-label': `Side ${i + 1} name` });
+      const team = el('select', { 'aria-label': `Side ${i + 1} team` });
+      const remove = el('button', { type: 'button', class: 'remove', title: 'Remove this side', 'aria-label': `Remove side ${i + 1}` }, '×');
+      color.addEventListener('input', () => {
+        this.settings.factions[i].color = parseInt(color.value.slice(1), 16);
+        this.callbacks.change(cloneSettings(this.settings));
+      });
+      name.addEventListener('input', () => {
+        this.settings.factions[i].name = name.value;
+        this.callbacks.change(cloneSettings(this.settings));
+      });
+      team.addEventListener('change', () => {
+        this.settings.factions[i].team = Number(team.value);
+        this.changed();
+      });
+      remove.addEventListener('click', () => {
+        if (this.settings.factions.length <= 2) return;
+        this.settings.factions.splice(i, 1);
+        compactTeams(this.settings);
+        this.rebuildSides();
+        this.changed();
+      });
+      row.append(color, name, team, remove);
+      this.sideList.append(row);
+      return () => {
+        const n = this.settings.factions.length;
+        const f = this.settings.factions[i];
+        color.value = hex(f.color);
+        if (document.activeElement !== name) name.value = f.name;
+        if (team.options.length !== n) team.replaceChildren(...Array.from({ length: n }, (_, t) => el('option', { value: String(t) }, `Team ${t + 1}`)));
+        team.value = String(f.team);
+        remove.disabled = n <= 2;
+      };
+    });
   }
 
   private build(): void {
@@ -98,9 +145,27 @@ export class SetupScreen {
     card.append(head, body);
     this.root.append(card);
 
-    const section = (title: string) => {
-      const s = el('section');
-      s.append(el('h2', {}, title));
+    // Each section folds away; which ones are open is remembered on this device.
+    const section = (title: string, open: boolean) => {
+      const s = el('details', { class: 'section' });
+      const key = `mbt.setup.open.${title}`;
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved !== null) open = saved === '1';
+      } catch {
+        // Storage can be unavailable (private windows, blocked site data); the default is fine.
+      }
+      s.open = open;
+      s.addEventListener('toggle', () => {
+        try {
+          localStorage.setItem(key, s.open ? '1' : '0');
+        } catch {
+          // As above.
+        }
+      });
+      const summary = el('summary');
+      summary.append(el('h2', {}, title));
+      s.append(summary);
       body.append(s);
       return s;
     };
@@ -136,7 +201,7 @@ export class SetupScreen {
     const percent = (v: number) => `${Math.round(v * 100)}%`;
 
     // Battle
-    const battle = section('Battle');
+    const battle = section('Battle', true);
     const mode = segmented<BattleMode>(
       [
         { label: 'Eternal', value: 'eternal' },
@@ -174,7 +239,7 @@ export class SetupScreen {
     });
 
     // Map
-    const map = section('Map');
+    const map = section('Map', false);
     const size = segmented<MapSize>(
       (Object.keys(MAP_SIZES) as MapSize[]).map((k) => ({ label: MAP_SIZES[k].label, value: k })),
       (v) => {
@@ -197,7 +262,7 @@ export class SetupScreen {
     this.sync.push(() => (town.checked = this.settings.map.town));
 
     // Armies
-    const armies = section('Armies');
+    const armies = section('Armies', false);
     slider(armies, 'Unit cap', 'unitCap', 5, (s) => s.armies.unitCap, (s, v) => (s.armies.unitCap = v), (v) => `${v} each`);
     slider(armies, 'Production', 'production', 0.05, (s) => s.armies.production, (s, v) => (s.armies.production = v), times);
     slider(armies, 'Starting army', 'startingArmy', 1, (s) => s.armies.startingArmy, (s, v) => (s.armies.startingArmy = v), (v) => (v === 0 ? 'None' : `${v} groups`));
@@ -216,29 +281,57 @@ export class SetupScreen {
     this.sync.push(() => (rampHint.textContent = RAMP_HINTS[this.settings.mode]));
 
     // Factions
-    const factions = section('Factions');
-    this.settings.factions.forEach((_, i) => {
-      const wrap = el('div', { class: 'inline' });
-      const color = el('input', { type: 'color', 'aria-label': `Side ${i + 1} colour` });
-      const name = el('input', { type: 'text', maxlength: '32', 'aria-label': `Side ${i + 1} name` });
-      color.addEventListener('input', () => {
-        this.settings.factions[i].color = parseInt(color.value.slice(1), 16);
-        this.callbacks.change(cloneSettings(this.settings));
-      });
-      name.addEventListener('input', () => {
-        this.settings.factions[i].name = name.value;
-        this.callbacks.change(cloneSettings(this.settings));
-      });
-      wrap.append(color, name);
-      row(factions, i === 0 ? 'West' : 'East', wrap);
-      this.sync.push(() => {
-        color.value = hex(this.settings.factions[i].color);
-        if (document.activeElement !== name) name.value = this.settings.factions[i].name;
-      });
+    // The start button lives in the footer (built below); it's disabled while nobody has an enemy.
+    let start: HTMLButtonElement;
+    const factions = section('Sides', true);
+    const list = el('div', { class: 'sides' });
+    const presets = el('div', { class: 'inline presets' });
+    const add = el('button', { type: 'button', title: `Up to ${MAX_FACTIONS} sides` }, '+ Add side');
+    add.addEventListener('click', () => {
+      const n = this.settings.factions.length;
+      if (n >= MAX_FACTIONS) return;
+      this.settings.factions.push(defaultFaction(n));
+      this.rebuildSides();
+      this.changed();
+    });
+    const ffa = el('button', { type: 'button', title: 'Every side for itself' }, 'Free-for-all');
+    ffa.addEventListener('click', () => {
+      this.settings.factions.forEach((f, i) => (f.team = i));
+      this.changed();
+    });
+    const halves = el('button', { type: 'button', title: 'First half of the list against the second half' }, 'Two teams');
+    halves.addEventListener('click', () => {
+      const n = this.settings.factions.length;
+      this.settings.factions.forEach((f, i) => (f.team = i < Math.ceil(n / 2) ? 0 : 1));
+      this.changed();
+    });
+    presets.append(add, ffa, halves);
+    const sidesHint = el('p', { class: 'hint' });
+    const even = el('input', { type: 'checkbox' });
+    even.addEventListener('change', () => {
+      this.settings.armies.evenTeams = even.checked;
+      this.changed();
+    });
+    const evenLabel = el('label', { class: 'check', title: 'A side on a smaller team gets more production and a bigger unit cap: alone against three, it gets three times as much' });
+    evenLabel.append(even, document.createTextNode(' Even out uneven teams'));
+    factions.append(list, presets, sidesHint, evenLabel);
+    this.sideList = list;
+    this.rebuildSides();
+    this.sync.push(() => {
+      const n = this.settings.factions.length;
+      add.disabled = n >= MAX_FACTIONS;
+      const teams = new Set(this.settings.factions.map((f) => f.team)).size;
+      sidesHint.classList.toggle('warn', teams < 2);
+      sidesHint.textContent =
+        teams < 2
+          ? 'Everyone is on the same team, so there is nobody to fight. Put at least one side on another team.'
+          : 'Sides on the same team are allies and start next to each other. More sides make a bigger map.';
+      start.disabled = teams < 2;
+      even.checked = this.settings.armies.evenTeams;
     });
 
     // Unit stats
-    const units = section('Unit stats');
+    const units = section('Unit stats', false);
     const table = el('table', { class: 'stats' });
     const headRow = el('tr');
     headRow.append(el('th'));
@@ -286,7 +379,7 @@ export class SetupScreen {
       this.settings = defaultSettings();
       this.changed();
     });
-    const start = el('button', { type: 'button', class: 'primary' }, 'Start battle');
+    start = el('button', { type: 'button', class: 'primary' }, 'Start battle');
     start.addEventListener('click', () => this.callbacks.start(cloneSettings(this.settings)));
     foot.append(resetAll, start);
     card.append(foot);

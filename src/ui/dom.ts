@@ -24,6 +24,20 @@ export function segmented<T>(options: { label: string; value: T; title?: string 
   };
 }
 
+/** A drop-down list with the same shape as `segmented`, for when there are too many options for buttons. */
+export function dropdown<T>(options: { label: string; value: T }[], onPick: (v: T) => void, ariaLabel: string) {
+  const row = el('select', { 'aria-label': ariaLabel });
+  options.forEach((o, i) => row.append(el('option', { value: String(i) }, o.label)));
+  row.addEventListener('change', () => onPick(options[Number(row.value)].value));
+  return {
+    row,
+    set(value: T) {
+      const i = options.findIndex((o) => o.value === value);
+      if (i >= 0) row.value = String(i);
+    },
+  };
+}
+
 /** 0xRRGGBB to a CSS colour. */
 export function hex(c: number): string {
   return `#${c.toString(16).padStart(6, '0')}`;

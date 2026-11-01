@@ -33,10 +33,13 @@ describe('ramp', () => {
 
   it('the tide swings harder as the battle escalates, but never stops production', () => {
     const t = { tideStrength: 0.6, tidePeriod: 100 };
-    const peak = 25; // a quarter cycle: side 0 at the top of its surge
+    const peak = 125; // a quarter into the second cycle (the swing fades in over the first): side 0 at the top of its surge
     expect(tide(peak, 0, t, 0)).toBeCloseTo(1.6);
     expect(tide(peak, 0, t, 1)).toBeCloseTo(2.2);
-    expect(tide(peak, 1, t, 1)).toBeGreaterThan(0);
+    expect(tide(peak, 0.5, t, 1)).toBeGreaterThan(0);
+    // At the very start both sides produce at the same rate.
+    expect(tide(0, 0, t, 0)).toBe(1);
+    expect(tide(0, 0.5, t, 0)).toBe(1);
   });
 
   it('the tide stretches on maps longer than medium', () => {

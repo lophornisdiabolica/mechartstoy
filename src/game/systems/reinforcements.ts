@@ -3,7 +3,7 @@ import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { UnitId } from '../units';
-import { countUnits } from './production';
+import { countUnits, outnumbered } from './production';
 
 /** One pick from the wave table: what to spawn and how many at once. */
 interface WaveEntry {
@@ -44,7 +44,7 @@ function pickEntry(ctx: SimContext): WaveEntry {
 
 /** `advance` (0..1) moves the muster point from the base toward the map centre. */
 export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, advance = 0): void {
-  const base = ctx.field.baseSites.find((s) => s.faction === faction)!;
+  const base = ctx.field.baseSites[faction];
   const cx = base.x * (1 - advance);
   const cz = base.z * (1 - advance);
   for (let i = 0; i < picks; i++) {
@@ -78,22 +78,22 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
  * only runs in Eternal mode.
  */
 export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEMENTS): System {
-  const nextWaveAt = [0, 0].map(() => ctx.rng.range(config.interval * 0.5, config.interval));
+  const nextWaveAt = ctx.field.baseSites.map(() => ctx.rng.range(config.interval * 0.5, config.interval));
   return {
     name: 'reinforcements',
     update(world) {
       if (ctx.settings.mode !== 'eternal') return;
-      const producing = [false, false];
+      const producing = nextWaveAt.map(() => false);
       for (const e of world.query(Producer, Faction)) {
         if (!world.has(e, Construction)) producing[world.req(e, Faction).id] = true;
       }
-      const alive = countUnits(world);
+      const alive = countUnits(world, ctx.sides.count);
       for (let faction = 0; faction < nextWaveAt.length; faction++) {
         if (world.time < nextWaveAt[faction]) continue;
         // Ratio > 1 means this side is outnumbered.
-        const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
+        const ratio = outnumbered(ctx, alive, faction);
         nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
-        if (producing[faction] || alive[faction] >= ctx.settings.armies.unitCap) continue;
+        if (producing[faction] || alive[faction] >= ctx.sides.unitCap(faction, ctx.settings.armies.unitCap)) continue;
         const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
         spawnWave(world, ctx, faction, Math.max(1, picks), 0.12);
       }

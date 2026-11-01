@@ -186,6 +186,8 @@ export interface Ai {
   /** Lane for the current attack (see lanes.ts), and which attack it was picked for. */
   lane: LaneId;
   laneAttack: number;
+  /** The enemy side this unit's current attack goes after, or -1 for none. */
+  target: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
 

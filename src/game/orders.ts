@@ -11,6 +11,6 @@ export interface FactionOrders {
   rally: { x: number; z: number } | null;
 }
 
-export function defaultOrders(): FactionOrders[] {
-  return [0, 1].map(() => ({ stance: 'auto', rally: null }));
+export function defaultOrders(sides: number): FactionOrders[] {
+  return Array.from({ length: sides }, () => ({ stance: 'auto', rally: null }));
 }

@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { Bounds } from '../world/battlefield';
 
+/** Furthest zoom-out on a medium map; bigger maps scale it down. */
+const MIN_ZOOM = 0.6;
+/** Width of the medium map, in world units. */
+const MEDIUM_SPAN = 126;
+
 /**
  * Isometric orthographic camera that orbits a ground target.
  *
@@ -17,7 +22,7 @@ export class CameraRig {
   elevation = Math.atan(1 / Math.SQRT2);
   azimuth = Math.PI / 4;
   zoom = 1;
-  minZoom = 0.6;
+  minZoom = MIN_ZOOM;
   maxZoom = 4;
   /** World units visible vertically at zoom 1. */
   viewHeight = 70;
@@ -41,6 +46,10 @@ export class CameraRig {
   setBounds(bounds: Bounds): void {
     this.bounds = bounds;
     this.target.set(0, 2, 0);
+    // Bigger maps (large, or grown for many sides) can zoom out further, so the whole field fits.
+    const span = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ);
+    this.minZoom = MIN_ZOOM * Math.min(1, MEDIUM_SPAN / span);
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.targetZoom));
   }
 
   setSize(width: number, height: number): void {

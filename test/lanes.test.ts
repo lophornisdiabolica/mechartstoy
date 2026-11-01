@@ -14,7 +14,7 @@ describe('lanes', () => {
         s.map.water = water;
         const game = new Game(seed * 7 + 1, { settings: s, populate: false, autoSpawn: false });
         const { lanes, nav, field } = game.ctx;
-        for (const points of lanes.points) {
+        for (const points of lanes.lanes(0, 1)) {
           for (const p of points) {
             expect(field.isWater(p.x, p.z)).toBe(false);
             for (const base of field.baseSites) expect(nav.connected(p, base)).toBe(true);
@@ -26,7 +26,7 @@ describe('lanes', () => {
 
   it('flank lanes swing wide of the centre lane', () => {
     const game = new Game(3, { populate: false, autoSpawn: false });
-    const [centre, north, south] = game.ctx.lanes.points;
+    const [centre, north, south] = game.ctx.lanes.lanes(0, 1);
     expect(north[1].z).toBeGreaterThan(centre[1].z + game.field.depth * 0.15);
     expect(south[1].z).toBeLessThan(centre[1].z - game.field.depth * 0.15);
   });
@@ -37,10 +37,12 @@ describe('lanes', () => {
     for (const faction of [0, 1]) {
       const home = field.baseSites[faction];
       let x = home.x;
+      let z = home.z;
       const seen: number[] = [];
-      for (let p = lanes.nextWaypoint(faction, 1, x); p; p = lanes.nextWaypoint(faction, 1, x)) {
+      for (let p = lanes.nextWaypoint(faction, 1 - faction, 1, x, z); p; p = lanes.nextWaypoint(faction, 1 - faction, 1, x, z)) {
         seen.push(p.x);
         x = p.x;
+        z = p.z;
       }
       expect(seen.length).toBe(3);
       // Heading toward the enemy base the whole way.

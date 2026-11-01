@@ -23,14 +23,24 @@ export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number)
   return !ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1) ? { x, z } : null;
 }
 
-/** Units alive per faction (index 0 and 1). */
-export function countUnits(world: World): number[] {
-  const alive = [0, 0];
+/** Units alive per side. */
+export function countUnits(world: World, sides: number): number[] {
+  const alive = new Array<number>(sides).fill(0);
   for (const e of world.query(Unit, Faction)) {
     const f = world.req(e, Faction).id;
     if (f >= 0) alive[f]++;
   }
   return alive;
+}
+
+/**
+ * How outnumbered a side is: its enemies' average army over its own (with a
+ * little padding so small numbers don't swing it). Above 1 means outnumbered.
+ */
+export function outnumbered(ctx: SimContext, alive: number[], faction: number): number {
+  const enemies = ctx.sides.enemiesOf(faction);
+  const theirs = enemies.length > 0 ? enemies.reduce((s, f) => s + alive[f], 0) / enemies.length : alive[faction];
+  return (theirs + 6) / (alive[faction] + 6);
 }
 
 /**
@@ -43,20 +53,20 @@ export function productionSystem(ctx: SimContext): System {
   return {
     name: 'production',
     update(world, dt) {
-      const alive = countUnits(world);
+      const alive = countUnits(world, ctx.sides.count);
       const { armies } = ctx.settings;
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
         const faction = world.req(e, Faction).id;
         const producer = world.req(e, Producer);
         // Ratio > 1 means this side is outnumbered.
-        const ratio = (alive[1 - faction] + 6) / (alive[faction] + 6);
+        const ratio = outnumbered(ctx, alive, faction);
         // Conquest needs a winner, so it skips the rubber band and lets an advantage snowball.
         const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
-        producer.timer -= dt * armies.production * band * tide(world.time, faction ^ ctx.tideOrder, ctx.tide, ctx.escalation.tide);
+        producer.timer -= dt * armies.production * ctx.sides.strength[faction] * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
-        if (alive[faction] >= armies.unitCap) continue;
+        if (alive[faction] >= ctx.sides.unitCap(faction, armies.unitCap)) continue;
 
         const total = producer.table.reduce((s, p) => s + p.weight, 0);
         let roll = ctx.rng.range(0, total);

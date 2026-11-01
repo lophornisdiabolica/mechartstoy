@@ -46,11 +46,11 @@ export function projectileSystem(ctx: SimContext): System {
             hit.add(p.target);
           }
         }
-        // Splash hurts anything not on the shooter's side, including the civilian town.
+        // Splash hurts anything not on the shooter's team, including the civilian town.
         if (w.splash > 0) {
           ctx.grid.forEachNear(p.ex, p.ez, w.splash + 3, (other, d2) => {
             if (hit.has(other) || !world.has(other, Targetable)) return;
-            if (world.req(other, Faction).id === p.faction) return;
+            if (ctx.sides.allied(world.req(other, Faction).id, p.faction)) return;
             const edge = Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius);
             if (edge > w.splash) return;
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);

@@ -8,7 +8,7 @@ import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
 import { UnitId } from '../game/units';
 import { Stage } from '../render/stage';
-import { el, hex, segmented } from './dom';
+import { dropdown, el, hex, segmented } from './dom';
 
 type Tool = { kind: 'spawn'; unit: UnitId } | { kind: 'rally' } | null;
 
@@ -167,14 +167,21 @@ export class Controls {
     this.sync.push(() => speed.set(this.loop.timeScale));
 
     // Side
-    const side = segmented<number | null>(
-      [
-        { label: 'Watch', value: null, title: 'Just watch' },
-        // Short names fit the buttons; the full name is in the tooltip.
-        ...this.factions.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
-      ],
-      (v) => this.setSide(v),
-    );
+    // Buttons for a few sides (short names fit; the full name is in the tooltip), a list for more.
+    const side =
+      this.factions.length <= 3
+        ? segmented<number | null>(
+            [
+              { label: 'Watch', value: null, title: 'Just watch' },
+              ...this.factions.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
+            ],
+            (v) => this.setSide(v),
+          )
+        : dropdown<number | null>(
+            [{ label: 'Just watch', value: null }, ...this.factions.map((f) => ({ label: f.name, value: f.id as number | null }))],
+            (v) => this.setSide(v),
+            'Your side',
+          );
     section('Your side').append(side.row);
     this.sync.push(() => side.set(this.playerFaction));
 

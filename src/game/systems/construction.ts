@@ -26,7 +26,7 @@ export function constructionSystem(ctx: SimContext): System {
           if (!world.has(other, Unit)) return;
           const f = world.req(other, Faction).id;
           // Civilians won't rebuild under anyone's guns; factions only mind enemies.
-          if (rubble.faction === NEUTRAL || f !== rubble.faction) blocked = true;
+          if (rubble.faction === NEUTRAL || ctx.sides.hostile(f, rubble.faction)) blocked = true;
         });
         if (blocked) {
           rubble.rebuildAt = world.time + BLOCKED_RETRY;

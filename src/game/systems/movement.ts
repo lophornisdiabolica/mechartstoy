@@ -87,7 +87,7 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
     const ot = world.req(other, Transform);
     const or = world.get(other, Collider)?.radius ?? 0.5;
     const isBuilding = world.has(other, Building);
-    if (!isBuilding && world.get(other, Faction)?.id === myFaction) {
+    if (!isBuilding && myFaction !== undefined && ctx.sides.allied(world.get(other, Faction)?.id ?? -1, myFaction)) {
       // Friendlies on the move sort themselves out via separation; only steer around parked ones.
       const om = world.get(other, Mover);
       if (om && om.targetX !== null) return;
@@ -251,7 +251,7 @@ export function separationSystem(ctx: SimContext): System {
           if (d >= minDist) return;
           // Buildings don't budge, so the unit takes the whole overlap. Between units each
           // moves part of it; enemies push a little harder so lines hold.
-          const share = world.has(other, Building) ? 1 : world.req(other, Faction).id === myFaction ? 0.25 : 0.35;
+          const share = world.has(other, Building) ? 1 : ctx.sides.allied(world.req(other, Faction).id, myFaction) ? 0.25 : 0.35;
           const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
