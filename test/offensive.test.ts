@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Health } from '../src/game/components';
 import { Game } from '../src/game/game';
-import { defaultSettings } from '../src/game/settings';
+import { defaultFaction, defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { isAttacking } from '../src/game/tide';
 import { UNIT_DEFS } from '../src/game/units';
@@ -88,6 +88,19 @@ describe('readiness', () => {
       expect(offensive.attacking(0, t)).toBe(isAttacking(t, sides.phase[0], tide));
       expect(offensive.attacking(1, t)).toBe(isAttacking(t, sides.phase[1], tide));
     }
+  });
+
+  it('the team boost evens out uneven teams to the power set', () => {
+    const strength = (boost: number) => {
+      const s = defaultSettings();
+      s.armies.evenTeams = boost;
+      s.factions = s.factions.concat([defaultFaction(2), defaultFaction(3)]).map((f, i) => ({ ...f, team: i === 0 ? 0 : 1 }));
+      return new Game(1, { settings: s, populate: false, autoSpawn: false }).ctx.sides.strength;
+    };
+    expect(strength(1)).toEqual([3, 1, 1, 1]);
+    expect(strength(0)).toEqual([1, 1, 1, 1]);
+    expect(strength(0.85)[0]).toBeCloseTo(3 ** 0.85);
+    expect(strength(0.85)[1]).toBe(1);
   });
 
   it('attack timing round-trips through the link', () => {

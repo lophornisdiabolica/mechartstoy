@@ -23,6 +23,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
   { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
   { key: 'ohold', limit: 'outpostHold', get: (s) => s.armies.outpostHold, set: (s, v) => (s.armies.outpostHold = v) },
+  { key: 'even', limit: 'evenTeams', get: (s) => s.armies.evenTeams, set: (s, v) => (s.armies.evenTeams = v) },
   { key: 'obonus', limit: 'outpostBonus', get: (s) => s.armies.outpostBonus, set: (s, v) => (s.armies.outpostBonus = v) },
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
@@ -57,7 +58,6 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     const t = s.units[id];
     if (UNIT_STATS.some((k) => t[k] !== 1)) p.set(id, UNIT_STATS.map((k) => fmt(t[k])).join(','));
   }
-  if (s.armies.evenTeams !== d.armies.evenTeams) p.set('even', s.armies.evenTeams ? '1' : '0');
   // Sides: how many (if not two), then each one's changes from its slot's defaults. Teams are written 1-based.
   if (s.factions.length !== d.factions.length) p.set('sides', String(s.factions.length));
   s.factions.forEach((f, i) => {
@@ -95,8 +95,6 @@ export function settingsFromParams(p: URLSearchParams): BattleSettings {
       if (Number.isFinite(parts[i]) && parts[i] > 0) s.units[id][k] = clamp(parts[i], 'unitStat');
     });
   }
-  const even = p.get('even');
-  if (even === '0' || even === '1') s.armies.evenTeams = even === '1';
   const sides = Math.round(Number(p.get('sides')));
   if (Number.isFinite(sides) && sides >= 2) s.factions = Array.from({ length: Math.min(MAX_FACTIONS, sides) }, (_, i) => defaultFaction(i));
   s.factions.forEach((f, i) => {

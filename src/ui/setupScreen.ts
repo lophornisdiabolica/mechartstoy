@@ -356,14 +356,17 @@ export class SetupScreen {
     });
     presets.append(add, ffa, halves);
     const sidesHint = el('p', { class: 'hint' });
-    const even = el('input', { type: 'checkbox' });
-    even.addEventListener('change', () => {
-      this.settings.armies.evenTeams = even.checked;
-      this.changed();
-    });
-    const evenLabel = el('label', { class: 'check', title: 'A side on a smaller team gets more production and a bigger unit cap: alone against three, it gets three times as much' });
-    evenLabel.append(even, document.createTextNode(' Even out uneven teams'));
-    factions.append(list, presets, sidesHint, evenLabel);
+    factions.append(list, presets, sidesHint);
+    slider(factions, 'Team boost', 'evenTeams', 0.05, (s) => s.armies.evenTeams, (s, v) => (s.armies.evenTeams = v), (v) =>
+      v === 0 ? 'Off' : `1 vs 3: ${Math.round(3 ** v * 10) / 10}×`,
+    );
+    factions.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Evens out uneven teams: a side on a smaller team gets more production and a bigger unit cap. The value shows how much a side alone against three gets. Uneven battles are never quite fair, so tune this if one side keeps winning.',
+      ),
+    );
     this.sideList = list;
     this.rebuildSides();
     this.sync.push(() => {
@@ -376,7 +379,6 @@ export class SetupScreen {
           ? 'Everyone is on the same team, so there is nobody to fight. Put at least one side on another team.'
           : 'Sides on the same team are allies and start next to each other. More sides make a bigger map.';
       start.disabled = teams < 2;
-      even.checked = this.settings.armies.evenTeams;
     });
 
     // Unit stats

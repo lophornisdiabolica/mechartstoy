@@ -32,8 +32,9 @@ export class Sides {
   readonly eliminatedAt: (number | null)[];
   /**
    * Production and unit cap multiplier per side. With uneven teams evened
-   * out, a side on a smaller team gets more (alone against three, 3×), so
-   * every team fields about the same army.
+   * out, a side on a smaller team gets more, so every team fields about the
+   * same army: (largest team / its team)^evenness, so alone against three
+   * gets 3× at evenness 1.
    */
   readonly strength: number[];
   /** Enemy units at each side's base right now (see defenceSystem). */
@@ -56,8 +57,8 @@ export class Sides {
     private readonly seed: number,
     /** Rotates which team surges first (a coin flip per map, so nobody always goes first). */
     rotation: number,
-    /** Give smaller teams bigger armies (see `strength`). */
-    evenTeams = true,
+    /** How much bigger smaller teams' armies get, 0 (not at all) to 1 (in full proportion); see `strength`. */
+    evenness = 1,
   ) {
     this.count = teams.length;
     this.teamList = [...new Set(teams)];
@@ -67,7 +68,7 @@ export class Sides {
     this.eliminatedAt = teams.map(() => null);
     const size = (team: number) => teams.filter((t) => t === team).length;
     const largest = Math.max(...this.teamList.map(size));
-    this.strength = teams.map((team) => (evenTeams ? largest / size(team) : 1));
+    this.strength = teams.map((team) => (largest / size(team)) ** evenness);
     this.threat = teams.map(() => 0);
     this.threatAt = teams.map(() => ({ x: 0, z: 0 }));
     this.guard = teams.map(() => 0);

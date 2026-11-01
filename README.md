@@ -36,9 +36,12 @@ battle, its exact map via `seed`).
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other and
-  come to help when a teammate's base is attacked. "Even out uneven teams"
-  (on by default) gives sides on smaller teams more production and a bigger
-  unit cap, so one side against three gets three times as much. More sides
+  come to help when a teammate's base is attacked. "Team boost" evens out
+  uneven teams: sides on smaller teams get more production and a bigger
+  unit cap, (largest team ÷ their team) to the power of the setting. The
+  default, 0.85, gives one side against three about 2.5 times as much,
+  which came out roughly even in 1v3; uneven battles are never quite fair,
+  so it's a slider. More sides
   make a bigger map.
 - **Outposts:** small capturable forts in no-man's land (see below). Pick
   how many (Auto is one per side), how strong their bonuses are, and how many

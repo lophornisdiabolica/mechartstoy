@@ -71,8 +71,14 @@ export interface BattleSettings {
     buildingHp: number;
     /** Share of squads sent down the flanks instead of the centre, 0 to 1. */
     flanking: number;
-    /** Sides on smaller teams get bigger production and unit caps, so uneven teams (1v3) are a fair fight. */
-    evenTeams: boolean;
+    /**
+     * How much bigger armies sides on smaller teams get: production and unit cap are
+     * multiplied by (largest team ÷ their team) to this power. 0 is off; 1 is in full
+     * proportion (alone against three, 3×). The default, 0.85 (about 2.5×), was
+     * roughly even in 1v3 Conquest with attacks on readiness, where a lone side
+     * keeps its army together and picks the others off one at a time.
+     */
+    evenTeams: number;
     /** How fast the battle escalates, per mode (see RampSettings). */
     ramp: Record<BattleMode, RampSettings>;
     /** Multiplier on what holding an outpost gives (see outposts.ts); 0 makes them worth nothing but ground. */
@@ -107,6 +113,7 @@ export const LIMITS = {
   tidePeriod: { min: 60, max: 400 },
   buildingHp: { min: 0.25, max: 4 },
   flanking: { min: 0, max: 1 },
+  evenTeams: { min: 0, max: 1.5 },
   ramp: { min: 0, max: 1 },
   outposts: { min: 0, max: 12 },
   outpostBonus: { min: 0, max: 3 },
@@ -132,7 +139,7 @@ export function defaultSettings(): BattleSettings {
       tidePeriod: 150,
       buildingHp: 1,
       flanking: 0.5,
-      evenTeams: true,
+      evenTeams: 0.85,
       ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } },
       outpostBonus: 1,
       outpostHold: 0,
