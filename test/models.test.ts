@@ -6,7 +6,7 @@ import '../src/render/models/projectiles';
 import '../src/render/models/units';
 
 /** Sprite models need a canvas, which tests don't have. */
-const SKIP = new Set(['trooper', 'atTrooper']);
+const SKIP = new Set(['trooper', 'atTrooper', 'mortar']);
 const EPS = 1e-4;
 
 interface Part {

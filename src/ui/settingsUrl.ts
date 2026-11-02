@@ -1,3 +1,4 @@
+import { isDoctrine } from '../game/doctrines';
 import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, UNIT_IDS } from '../game/settings';
 
 /**
@@ -69,6 +70,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     if (f.name !== def.name) p.set(`name${i + 1}`, f.name);
     if (f.color !== def.color) p.set(`color${i + 1}`, hexColor(f.color));
     if (f.team !== def.team) p.set(`team${i + 1}`, String(f.team + 1));
+    if (f.doctrine !== def.doctrine) p.set(`doc${i + 1}`, f.doctrine);
   });
   return p;
 }
@@ -119,5 +121,7 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     if (name !== null && name.trim()) f.name = name.trim().slice(0, 32);
     const color = p.get(`color${i + 1}`);
     if (color && /^[0-9a-f]{6}$/i.test(color)) f.color = parseInt(color, 16);
+    const doctrine = p.get(`doc${i + 1}`);
+    if (isDoctrine(doctrine)) f.doctrine = doctrine;
   });
 }

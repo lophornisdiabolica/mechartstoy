@@ -219,6 +219,15 @@ export interface Ai {
 }
 export const Ai = defineComponent<Ai>('Ai');
 
+/** Carries an infantry squad and drops it off near the fight (see systems/carriers.ts and UnitDef.carries). */
+export interface Carrier {
+  /** Whether a squad is aboard. */
+  loaded: boolean;
+  /** Sim time a fresh squad is ready (for carriers that keep turning them out). */
+  reloadAt: number;
+}
+export const Carrier = defineComponent<Carrier>('Carrier');
+
 /** Turns out units on a timer. */
 export interface Producer {
   table: ProductionEntry[];

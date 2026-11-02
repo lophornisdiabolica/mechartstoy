@@ -646,12 +646,13 @@ body {
 
 #setup .side {
   display: grid;
-  grid-template-columns: 32px 1fr 96px 30px;
+  grid-template-columns: 32px 1fr 92px 86px 30px;
   align-items: center;
   gap: 6px;
 }
 
-#setup .side input[type='text'] {
+#setup .side input[type='text'],
+#setup .side select {
   min-width: 0;
 }
 
@@ -680,7 +681,7 @@ body {
 
 @media (max-width: 600px) {
   #setup .side {
-    grid-template-columns: 30px 1fr 78px 28px;
+    grid-template-columns: 28px 1fr 76px 70px 26px;
     gap: 4px;
   }
 }

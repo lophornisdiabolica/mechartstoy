@@ -2,6 +2,7 @@ import { BattlefieldConfig, DEFAULT_BATTLEFIELD, seatsFit } from '../world/battl
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
+import { defaultDoctrine, DoctrineId } from './doctrines';
 
 /**
  * Everything a player can tune before a battle, in one plain object. The setup
@@ -46,6 +47,8 @@ export interface FactionSettings {
   color: number;
   /** Sides with the same team are allies. Any number: every side on its own team is a free-for-all. */
   team: number;
+  /** What kind of army it fields (see doctrines.ts). */
+  doctrine: DoctrineId;
 }
 
 export interface BattleSettings {
@@ -170,9 +173,9 @@ export function defaultSettings(): BattleSettings {
   };
 }
 
-/** The default name and colour for the side in slot `i`, on its own team. */
+/** The default name, colour and doctrine for the side in slot `i`, on its own team. */
 export function defaultFaction(i: number): FactionSettings {
-  return { name: FACTIONS[i].name, color: FACTIONS[i].primary, team: i };
+  return { name: FACTIONS[i].name, color: FACTIONS[i].primary, team: i, doctrine: defaultDoctrine(i) };
 }
 
 export { MAX_FACTIONS };

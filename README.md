@@ -26,7 +26,10 @@ outposts taken and attacks launched. `--quick` runs about a third as many,
 the counts, and `--list` shows the scenarios. `--set "sgrow=none&scap=2"`
 changes settings for every battle (written as in the page URL), so running
 the same scenarios with each option of a setting compares them on the same
-battles. Every battle is saved to
+battles. `--doctrines` gives each battle's sides doctrines from an
+orthogonal array (every pair of doctrines meets equally often in each
+pair of slots, without playing every combination; see `orthogonalArray`)
+and adds a table of win rates per doctrine and head to head. Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
 each battle's seed is named after its scenario and number (`1v1-7`), so the
 same battle plays out the same way on any machine. The scenarios live in
@@ -36,7 +39,7 @@ to run.
 The page opens on a **setup screen** over a battle that's already running.
 Pick a mode, map size, water and hills, army pacing, per-unit stat
 multipliers and the sides (two to eight, each with a name, colour and team),
-then start. Setup sections fold away; the page remembers which are open. Everything you change
+then start. Each side also picks a **doctrine** (see below). Setup sections fold away; the page remembers which are open. Everything you change
 is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
@@ -63,8 +66,30 @@ battle, its exact map via `seed`).
   which came out roughly even in 1v3; uneven battles are never quite fair,
   so it's a slider. More sides
   make a bigger map.
+- **Doctrines:** what kind of army a side fields, picked freely per side
+  (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
+  Legion, the rest cycling through those until their own doctrines exist).
+  - *Armour:* tanks, striders and howitzers from the factory, the Lancer
+    heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
+    vehicles (1.2×). Super unit: the Titan.
+  - *Raiders:* machine-gun trucks and scout buggies in numbers from the
+    factory and a **motor pool**, rocket trucks (light artillery that also
+    shells buildings) for the heavy work; 1.8× vehicle cap, 0.8× infantry.
+    Super unit: the Land-train, an armoured rocket battery on tracks.
+  - *Legion:* big squads with two AT troopers each and mortar teams from
+    the barracks and a **barracks block**, light tanks and squad carriers
+    from the factory; 1.8× infantry cap, 0.8× vehicles. Super unit: the
+    Siege Crawler, slow heavy mortars that drops off a squad every 40
+    seconds.
+  **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
+  off when an enemy they're after is close or they reach their objective;
+  the squad then fights (and is refilled in territory) like any other, and
+  the carrier loads up again a minute later. Each doctrine's
+  units, caps, buildings and Eternal fallback waves are data in
+  `game/doctrines.ts`.
 - **Unit caps:** each side has a cap per category: infantry, vehicles and
-  super units (the Titan). A full category stops its own production but not
+  super units (the Titan and the other doctrines' super units), leaned by
+  the side's doctrine. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
   mech bay. The super cap can grow during a battle, with the tide ramp (up
   to 3× when the ramp tops out; the default) or by one for each outpost
@@ -255,7 +280,8 @@ src/
 ## How the battle keeps going
 
 - Each base has an HQ, barracks, vehicle factory and mech bay that produce
-  units on timers, plus guard towers. Infantry come in squads of riflemen
+  units on timers, plus its doctrine's signature building and guard
+  towers. What each building turns out depends on the doctrine. Infantry come in squads of riflemen
   with an AT trooper. A civilian town sits in no-man's land.
 - **When to attack** (`game/offensive.ts`). With the default *readiness*
   timing, each team masses at home until it fields at least 70% of its unit
@@ -327,7 +353,8 @@ src/
   Conquest battles about a minute shorter. Outposts aren't
   production, so they never keep a side alive in Conquest, and a knocked-out
   side's outposts go back to their garrisons. They're rebuilt in both modes.
-- Siege units (Titans, Howitzers) prefer shelling buildings.
+- Siege units (Titans, Howitzers, rocket trucks, Land-trains, Siege
+  Crawlers) prefer shelling buildings.
 - In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
   enemies are nearby, and a faction with no production left gets fallback
   waves. In Conquest, ruins stay ruins.
@@ -358,4 +385,6 @@ src/
     super units behind outposts once the Commander AI exists.
 14. ~~Flat armour, healing in your own territory (replacing the repair
     outpost), AT soldiers in the infantry.~~
-15. Next, per the design notes: faction doctrines.
+15. ~~Faction doctrines, the first three: Armour, Raiders, Legion.~~
+16. Next: aircraft and anti-air (the Skyline doctrine), then the remaining
+    doctrines (Bastion, Talon, Tidewater, Firestorm).

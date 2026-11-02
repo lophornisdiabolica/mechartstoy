@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Faction, Transform, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
+import { defaultSettings } from '../src/game/settings';
 import { UNIT_DEFS } from '../src/game/units';
 
 const DT = 1 / 30;
@@ -62,7 +63,10 @@ describe('player orders', () => {
   });
 
   it('every unit type can be dropped', () => {
-    const game = new Game(4, { populate: false, autoSpawn: false });
+    const s = defaultSettings();
+    // Room for every super unit.
+    s.armies.caps.super = 6;
+    const game = new Game(4, { settings: s, populate: false, autoSpawn: false });
     const site = game.field.baseSites[1];
     for (const id of Object.keys(UNIT_DEFS) as (keyof typeof UNIT_DEFS)[]) {
       expect(game.spawnUnitAt(id, 1, site.x, site.z)).toBe(true);

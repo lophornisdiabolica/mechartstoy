@@ -23,6 +23,8 @@ import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem
 import { productionSystem } from './systems/production';
 import { capFor, countByCategory } from './caps';
 import { territorySystem } from './territory';
+import { carrierSystem } from './systems/carriers';
+import { doctrineOf } from './doctrines';
 import { projectileSystem } from './systems/projectiles';
 import { reinforcementSystem, spawnWave } from './systems/reinforcements';
 import { snapshotSystem } from './systems/snapshot';
@@ -113,7 +115,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       movementSystem(ctx),
@@ -169,7 +171,7 @@ export class Game {
 
   private populate(rng: Rng): void {
     const placements = [
-      ...this.field.baseSites.flatMap((site) => layoutBase(this.field, site, rng)),
+      ...this.field.baseSites.flatMap((site) => layoutBase(this.field, site, rng, doctrineOf(this.ctx, site.faction).signature)),
       ...this.field.townSites.flatMap((site) => layoutTown(this.field, site, rng)),
     ];
     for (const p of placements) {
