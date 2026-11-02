@@ -255,6 +255,9 @@ function aircraft(world: World): Set<Entity> {
   return air;
 }
 
+/** Extra gap infantry keep between each other (on top of their radii). */
+const INFANTRY_SPACING = 0.9;
+
 /**
  * Pushes overlapping units apart, and out of buildings, so they don't stack
  * up. Aircraft only bump into other aircraft.
@@ -271,11 +274,14 @@ export function separationSystem(ctx: SimContext): System {
         const move = world.get(e, Mover)?.move ?? 'tracked';
         const flying = air.has(e);
         const terrain = ctx.navs.for(move);
+        const foot = move === 'foot';
         ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2) => {
           if (other === e || d2 < 1e-6) return;
           if (air.size > 0 && air.has(other) !== flying) return;
           const ot = world.req(other, Transform);
-          const minDist = r + world.req(other, Collider).radius;
+          // Infantry keep a little apart from each other, so one shell doesn't catch a whole squad.
+          const spacing = foot && world.get(other, Mover)?.move === 'foot' ? INFANTRY_SPACING : 0;
+          const minDist = r + world.req(other, Collider).radius + spacing;
           const d = Math.sqrt(d2);
           if (d >= minDist) return;
           // Buildings don't budge, so the unit takes the whole overlap. Between units each

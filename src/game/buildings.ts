@@ -19,6 +19,8 @@ export interface BuildingDef {
   armor: number;
   /** Footprint radius, used for collisions, targeting and rubble size. */
   radius: number;
+  /** Height of the main body: shots below this that cross the footprint hit the building. */
+  height: number;
   /** Units this building turns out on a timer. */
   production?: {
     table: ProductionEntry[];
@@ -60,6 +62,7 @@ export const BUILDING_DEFS = {
     hp: 1800,
     armor: 0.5,
     radius: 3.2,
+    height: 4.5,
     production: { table: [{ unit: 'trooper', weight: 1, count: 4 }], interval: 30 },
     rebuildDelay: 45,
     buildTime: 12,
@@ -71,6 +74,7 @@ export const BUILDING_DEFS = {
     hp: 650,
     armor: 0.3,
     radius: 2.4,
+    height: 2.4,
     production: { table: [{ unit: 'trooper', weight: 1, count: 5 }], interval: 15 },
     rebuildDelay: 35,
     buildTime: 8,
@@ -82,6 +86,7 @@ export const BUILDING_DEFS = {
     hp: 950,
     armor: 0.35,
     radius: 3,
+    height: 4,
     production: {
       table: [
         { unit: 'strider', weight: 3, count: 2 },
@@ -100,6 +105,7 @@ export const BUILDING_DEFS = {
     hp: 900,
     armor: 0.35,
     radius: 2.6,
+    height: 4,
     production: { table: [{ unit: 'titan', weight: 1, count: 1 }], interval: 35 },
     rebuildDelay: 50,
     buildTime: 12,
@@ -111,6 +117,7 @@ export const BUILDING_DEFS = {
     hp: 400,
     armor: 0.4,
     radius: 0.9,
+    height: 2.2,
     weapon: towerCannon,
     sight: 16,
     turretTurnRate: 2.5,
@@ -125,6 +132,7 @@ export const BUILDING_DEFS = {
     hp: 1,
     armor: 0,
     radius: 1.4,
+    height: 1.5,
     rebuildDelay: 0,
     buildTime: 1,
   },
@@ -135,6 +143,7 @@ export const BUILDING_DEFS = {
     hp: 600,
     armor: 0.4,
     radius: 1.8,
+    height: 1.1,
     rebuildDelay: 40,
     buildTime: 8,
   },
@@ -145,6 +154,7 @@ export const BUILDING_DEFS = {
     hp: 160,
     armor: 0.1,
     radius: 1.2,
+    height: 1.5,
     rebuildDelay: 70,
     buildTime: 6,
   },
@@ -155,6 +165,7 @@ export const BUILDING_DEFS = {
     hp: 320,
     armor: 0.2,
     radius: 1.6,
+    height: 2.8,
     rebuildDelay: 80,
     buildTime: 8,
   },
@@ -165,6 +176,7 @@ export const BUILDING_DEFS = {
     hp: 220,
     armor: 0.2,
     radius: 1,
+    height: 5,
     rebuildDelay: 80,
     buildTime: 8,
   },
@@ -175,6 +187,7 @@ export const BUILDING_DEFS = {
     hp: 200,
     armor: 0.15,
     radius: 1.1,
+    height: 3,
     rebuildDelay: 70,
     buildTime: 6,
   },

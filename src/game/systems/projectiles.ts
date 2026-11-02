@@ -1,6 +1,7 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
+import { UNIT_HIT_SLACK } from '../lineOfFire';
 
 export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null): void {
   const h = world.get(e, Health);
@@ -37,11 +38,14 @@ export function projectileSystem(ctx: SimContext): System {
         const hit = new Set<Entity>();
         const w = p.weapon;
         const by: Hit = { source: p.source, faction: p.faction };
-        // Direct hit on the intended target if it's still where the shot landed.
+        // Direct hit on what the shot was heading for, if it's still where the shot landed. Shots that
+        // end on an allied building (direct fire it was in the way of) just spark off it.
         if (p.target !== null && world.has(p.target, Targetable)) {
           const tt = world.req(p.target, Transform);
-          const r = world.req(p.target, Collider).radius + 0.4;
-          if ((tt.x - p.ex) ** 2 + (tt.z - p.ez) ** 2 <= r * r) {
+          // Direct fire stops at the edge of what it hits, so it gets a little more room.
+          const r = world.req(p.target, Collider).radius + (w.arc ? 0.4 : UNIT_HIT_SLACK + 0.5);
+          const friendly = ctx.sides.allied(world.req(p.target, Faction).id, p.faction);
+          if (!friendly && (tt.x - p.ex) ** 2 + (tt.z - p.ez) ** 2 <= r * r) {
             applyDamage(world, ctx, p.target, w.damage, by);
             hit.add(p.target);
           }

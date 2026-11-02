@@ -182,6 +182,18 @@ src/
   costs show up as routes. Aircraft fly straight at `altitude`, only bump
   into other aircraft, and can only be shot by weapons whose `targets` is
   `air` or `both`. There are no hover, boat or air units yet.
+- **Line of fire** (`game/lineOfFire.ts`). Direct-fire shots (bullets and
+  shells, `arc: false`) are traced when fired and stop at the first
+  building, rise in the ground or enemy unit in their way; a miss carries on
+  past the target until it hits something or comes down. Allied units are
+  see-through; allied buildings stop shots but take no damage. Targeting
+  prefers enemies it has a clear shot at, a weapon holds fire while a
+  building or the ground is in the way (`Armed.blocked`), and the AI moves
+  the unit to a nearby spot with a clear shot (`Armed.spotX/Z`, from
+  `firingSpot` in `systems/targeting.ts`). Lobbed weapons fly over
+  everything. Buildings have a `height` for this, units use
+  `unitHeight`. Infantry keep a little extra space between each other so
+  splash catches fewer of them.
 - **Roles** (`Role` in `game/units.ts`). *Frontline* units lead and close
   in. *Artillery* fires from near its longest range and backs away
   from enemies inside its minimum range. *Support* (no units yet) follows a little behind the
@@ -312,6 +324,6 @@ src/
 9. ~~Capturable outposts, with lanes through outposts and towns.~~
 10. ~~Readiness: attack when the army is ready rather than on the tide's clock.~~
 11. ~~Movement classes and unit roles (walkers, hovers, boats, aircraft; frontline, artillery, support).~~
-12. Next, per the design notes: line of fire (shots hit buildings and
-    terrain), unit caps per category with rare super units, healing in your
-    own territory, then faction doctrines.
+12. ~~Line of fire: shots stop at buildings, terrain and units in the way.~~
+13. Next, per the design notes: flat armour, unit caps per category with
+    rare super units, healing in your own territory, then faction doctrines.
