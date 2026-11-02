@@ -12,10 +12,8 @@ const GUARD_LEASH = CAPTURE_RADIUS + 12;
 const PATROL_SPEED = 0.06;
 /** Distance from the post that squads holding an outpost patrol at. */
 const PATROL_RADIUS = CAPTURE_RADIUS - 2;
-/** How far around itself artillery and support units look for the frontline allies they keep behind. */
+/** How far around itself a support unit looks for a frontline ally to follow. */
 const ESCORT_RANGE = 24;
-/** How far behind the frontline artillery holds on the march. */
-const ARTILLERY_HANG_BACK = 10;
 /** How far behind a frontline ally a support unit follows. */
 const SUPPORT_TRAIL = 4;
 /** Seconds between an artillery or support unit's looks around (see Ai.roleCheckAt). */
@@ -172,21 +170,6 @@ export function aiSystem(ctx: SimContext): System {
           continue;
         }
 
-        // Artillery keeps behind the frontline pushing the same attack, rather than leading it.
-        if (role === 'artillery') {
-          if (lookAround) ai.lead = frontlineProgress(world, ctx, e, faction, target);
-          const lead = ai.lead;
-          const here = ctx.lanes.progress(faction, target, t.x, t.z);
-          const a = ctx.field.baseSites[faction];
-          const b = ctx.field.baseSites[target];
-          if (lead !== null && here > lead - ARTILLERY_HANG_BACK / Math.max(1, Math.hypot(b.x - a.x, b.z - a.z))) {
-            mover.targetX = mover.targetZ = null;
-            mover.faceX = b.x;
-            mover.faceZ = b.z;
-            continue;
-          }
-        }
-
         // March down the lane, then into the enemy base.
         const waypoint = ctx.lanes.nextWaypoint(faction, target, ai.lane, t.x, t.z);
         if (waypoint) {
@@ -244,24 +227,6 @@ function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: num
     bestD2 = d2;
   });
   return best;
-}
-
-/**
- * How far along the way to `target` (see Lanes.progress) the furthest allied
- * frontline unit nearby has got on the same attack, or null if there's none
- * within ESCORT_RANGE (artillery on its own just carries on).
- */
-function frontlineProgress(world: World, ctx: SimContext, e: Entity, faction: number, target: number): number | null {
-  const t = world.req(e, Transform);
-  let lead: number | null = null;
-  ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE, (other) => {
-    if (other === e || !isFrontline(world, other)) return;
-    if (!ctx.sides.allied(faction, world.req(other, Faction).id) || world.get(other, Ai)?.target !== target) return;
-    const ot = world.req(other, Transform);
-    const p = ctx.lanes.progress(faction, target, ot.x, ot.z);
-    if (lead === null || p > lead) lead = p;
-  });
-  return lead;
 }
 
 /** Whether an entity is within `range` of an outpost's post. */

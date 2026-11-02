@@ -204,8 +204,6 @@ export interface Ai {
   threat: Entity | null;
   /** The frontline ally a support unit follows. */
   escort: Entity | null;
-  /** How far the frontline ahead of an artillery unit has got (Lanes.progress), or null if there's none nearby. */
-  lead: number | null;
 }
 export const Ai = defineComponent<Ai>('Ai');
 

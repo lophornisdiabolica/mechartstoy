@@ -108,7 +108,6 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     roleCheckAt: 0,
     threat: null,
     escort: null,
-    lead: null,
   });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;

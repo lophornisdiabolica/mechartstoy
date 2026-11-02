@@ -47,7 +47,7 @@ const MOVE_LABELS: Record<MoveClass, string> = {
 };
 const ROLE_LABELS: Record<Role, string> = {
   frontline: 'frontline',
-  artillery: 'artillery (stays behind the front)',
+  artillery: 'artillery (fires from long range)',
   support: 'support',
 };
 

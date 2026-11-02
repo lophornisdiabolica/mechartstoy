@@ -183,9 +183,8 @@ src/
   into other aircraft, and can only be shot by weapons whose `targets` is
   `air` or `both`. There are no hover, boat or air units yet.
 - **Roles** (`Role` in `game/units.ts`). *Frontline* units lead and close
-  in. *Artillery* holds back behind the frontline pushing the same attack,
-  fires from near its longest range, and backs away from enemies inside its
-  minimum range. *Support* (no units yet) follows a little behind the
+  in. *Artillery* fires from near its longest range and backs away
+  from enemies inside its minimum range. *Support* (no units yet) follows a little behind the
   nearest frontline ally and doesn't chase. Weapons reach up to 15%
   further from high ground (`effectiveRange` in `systems/targeting.ts`).
 - **Settings.** Tuning the player can change lives in `BattleSettings`

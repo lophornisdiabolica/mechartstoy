@@ -9,8 +9,8 @@ export type UnitClass = 'infantry' | 'vehicle' | 'mech';
 /**
  * What a unit does in a fight, which sets a few simple habits (see the AI system):
  * - frontline: leads the push and closes with the enemy.
- * - artillery: stays behind its own frontline on the march, fires from near
- *   its longest range, and backs off from enemies that get too close.
+ * - artillery: fires from near its longest range, and backs off from
+ *   enemies inside its minimum range.
  * - support: keeps a little behind the nearest frontline ally rather than
  *   charging, and only shoots what comes into range.
  */
