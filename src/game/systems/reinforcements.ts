@@ -4,6 +4,7 @@ import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { UnitId } from '../units';
 import { countUnits, outnumbered } from './production';
+import { armyCap, canBuild, CategoryCounts, countByCategory } from '../caps';
 
 /** One pick from the wave table: what to spawn and how many at once. */
 interface WaveEntry {
@@ -58,17 +59,19 @@ export function musterPoint(ctx: SimContext, faction: number, time: number, forw
   return { x: base.x + (rally.x - base.x) * k, z: base.z + (rally.z - base.z) * k };
 }
 
-export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, forward = 0): void {
+/** Spawn `picks` groups from the wave table. Picks whose category is full (see caps.ts) are skipped. */
+export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, forward = 0, counts: CategoryCounts[] = countByCategory(world, ctx.sides.count)): void {
   const base = ctx.field.baseSites[faction];
   const { x: cx, z: cz } = musterPoint(ctx, faction, world.time, forward);
   for (let i = 0; i < picks; i++) {
     const entry = pickEntry(ctx);
+    const def = ctx.units[entry.unit];
+    if (!canBuild(ctx, counts, faction, def)) continue;
     // Each pick forms up as a group at a random spot on the base pad.
     const a = ctx.rng.range(0, Math.PI * 2);
     const r = ctx.rng.range(0, base.radius * 0.6);
     const gx = cx + Math.cos(a) * r;
     const gz = cz + Math.sin(a) * r;
-    const def = ctx.units[entry.unit];
     const squad = newSquad(ctx);
     for (let n = 0; n < entry.count; n++) {
       // Find a spot with room for the unit (not in water, not wedged between buildings).
@@ -78,6 +81,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
         const z = gz + ctx.rng.range(-spread, spread);
         if (ctx.field.contains(x, z, 1) && ctx.nav.fitsAt(x, z, def.radius)) {
           spawnUnit(world, ctx, def, faction, x, z, squad);
+          counts[faction][def.category]++;
           break;
         }
       }
@@ -102,14 +106,15 @@ export function reinforcementSystem(ctx: SimContext, config = DEFAULT_REINFORCEM
         if (!world.has(e, Construction)) producing[world.req(e, Faction).id] = true;
       }
       const alive = countUnits(world, ctx.sides.count);
+      const counts = countByCategory(world, ctx.sides.count);
       for (let faction = 0; faction < nextWaveAt.length; faction++) {
         if (world.time < nextWaveAt[faction]) continue;
         // Ratio > 1 means this side is outnumbered.
         const ratio = outnumbered(ctx, alive, faction);
         nextWaveAt[faction] = world.time + (config.interval * ctx.rng.range(0.8, 1.2)) / Math.min(2, Math.max(0.6, ratio));
-        if (producing[faction] || alive[faction] >= ctx.sides.unitCap(faction, ctx.settings.armies.unitCap)) continue;
+        if (producing[faction] || alive[faction] >= armyCap(ctx, faction)) continue;
         const picks = Math.round(config.picksPerWave * Math.min(3, Math.max(0.5, ratio)));
-        spawnWave(world, ctx, faction, Math.max(1, picks), 0.5);
+        spawnWave(world, ctx, faction, Math.max(1, picks), 0.5, counts);
       }
     },
   };

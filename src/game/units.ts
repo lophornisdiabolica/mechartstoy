@@ -7,6 +7,13 @@ import { MoveClass } from '../world/moveClasses';
 export type UnitClass = 'infantry' | 'vehicle' | 'mech';
 
 /**
+ * Which unit cap a unit counts against (see caps.ts). Each side has a cap per
+ * category, so a side can't fill its whole army with one kind of unit.
+ * Super units (the Titan) are the rare, war-winning kind: a small cap of their own.
+ */
+export type UnitCategory = 'infantry' | 'vehicle' | 'super';
+
+/**
  * What a unit does in a fight, which sets a few simple habits (see the AI system):
  * - frontline: leads the push and closes with the enemy.
  * - artillery: fires from near its longest range, and backs off from
@@ -51,6 +58,8 @@ export interface UnitDef {
   id: string;
   name: string;
   class: UnitClass;
+  /** Which unit cap it counts against. */
+  category: UnitCategory;
   /** How it gets around (see moveClasses.ts). */
   move: MoveClass;
   role: Role;
@@ -94,6 +103,7 @@ export const UNIT_DEFS = {
     id: 'trooper',
     name: 'Trooper',
     class: 'infantry',
+    category: 'infantry',
     move: 'foot',
     role: 'frontline',
     model: 'trooper',
@@ -113,6 +123,7 @@ export const UNIT_DEFS = {
     id: 'strider',
     name: 'Strider',
     class: 'mech',
+    category: 'vehicle',
     move: 'walker',
     role: 'frontline',
     model: 'strider',
@@ -147,6 +158,7 @@ export const UNIT_DEFS = {
     id: 'tank',
     name: 'Battle Tank',
     class: 'vehicle',
+    category: 'vehicle',
     move: 'tracked',
     role: 'frontline',
     model: 'tank',
@@ -181,6 +193,7 @@ export const UNIT_DEFS = {
     id: 'titan',
     name: 'Titan',
     class: 'mech',
+    category: 'super',
     move: 'walker',
     role: 'frontline',
     model: 'titan',
@@ -215,6 +228,7 @@ export const UNIT_DEFS = {
     id: 'howitzer',
     name: 'Howitzer',
     class: 'vehicle',
+    category: 'vehicle',
     move: 'tracked',
     role: 'artillery',
     model: 'howitzer',

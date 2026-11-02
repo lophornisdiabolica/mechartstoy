@@ -1,7 +1,7 @@
 import { hashSeed } from '../core/rng';
 import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
-import { settingsToParams } from '../ui/settingsUrl';
+import { applyParams, settingsToParams } from '../ui/settingsUrl';
 
 /**
  * Headless battles for balance checks (`npm run sims`, see scripts/sims.mjs).
@@ -97,17 +97,22 @@ export interface BattleResult {
   link: string;
 }
 
-/** The settings a scenario's battle runs with. */
-export function scenarioSettings(scenario: Scenario, battle: number): BattleSettings {
+/**
+ * The settings a scenario's battle runs with. `overrides` is a query string
+ * in the URL's format (e.g. `sgrow=none&scap=2`), applied on top of the
+ * scenario's setup, for comparing a setting's options across the same battles.
+ */
+export function scenarioSettings(scenario: Scenario, battle: number, overrides = ''): BattleSettings {
   const s = defaultSettings();
   scenario.setup(s);
+  applyParams(s, new URLSearchParams(overrides));
   s.seed = `${scenario.id}-${battle}`;
   return s;
 }
 
 /** Play one battle of a scenario to the end (or its time limit). */
-export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now()): BattleResult {
-  const settings = scenarioSettings(scenario, battle);
+export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now(), overrides = ''): BattleResult {
+  const settings = scenarioSettings(scenario, battle, overrides);
   const game = new Game(hashSeed(settings.seed), { settings });
   const { sides } = game.ctx;
   const teamOrder = [...new Set(settings.factions.map((f) => f.team))];

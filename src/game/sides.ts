@@ -107,11 +107,6 @@ export class Sides {
       : threat >= RECALL_THRESHOLD && guard < threat;
   }
 
-  /** A side's unit cap after its strength is applied. */
-  unitCap(faction: number, cap: number): number {
-    return Math.round(cap * this.strength[faction]);
-  }
-
   /**
    * The ally (not `faction` itself) whose base is under the heaviest attack,
    * if it's a real attack and worse than anything at home. Holding units go

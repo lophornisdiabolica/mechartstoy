@@ -20,7 +20,8 @@ import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
-import { countUnits, productionSystem } from './systems/production';
+import { productionSystem } from './systems/production';
+import { capFor, countByCategory } from './caps';
 import { projectileSystem } from './systems/projectiles';
 import { reinforcementSystem, spawnWave } from './systems/reinforcements';
 import { snapshotSystem } from './systems/snapshot';
@@ -148,8 +149,10 @@ export class Game {
   /** Drop a unit at a point. Returns false if the spot is unusable or the side is at its cap. */
   spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
     if (!this.field.contains(x, z, 1) || this.field.isWater(x, z)) return false;
-    if (countUnits(this.world, this.ctx.sides.count)[faction] >= this.ctx.sides.unitCap(faction, this.settings.armies.unitCap)) return false;
-    spawnUnit(this.world, this.ctx, this.ctx.units[unit], faction, x, z);
+    const def = this.ctx.units[unit];
+    // Dropped units obey the caps, but not the super unit's outpost rule: placing them is the player's call.
+    if (countByCategory(this.world, this.ctx.sides.count)[faction][def.category] >= capFor(this.ctx, faction, def.category)) return false;
+    spawnUnit(this.world, this.ctx, def, faction, x, z);
     return true;
   }
 
