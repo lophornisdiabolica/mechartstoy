@@ -81,7 +81,12 @@ export function aiSystem(ctx: SimContext): System {
             // Square up to whatever we're fighting. Artillery stops near its longest range.
             mover.faceX = tt.x;
             mover.faceZ = tt.z;
-            if (outOfRange) {
+            if (armed.blocked) {
+              // Something's in the way: go round to a spot with a clear shot, or failing that, close in.
+              const spotted = armed.spotX !== null && armed.spotZ !== null;
+              mover.targetX = spotted ? armed.spotX : tt.x;
+              mover.targetZ = spotted ? armed.spotZ : tt.z;
+            } else if (outOfRange) {
               mover.targetX = tt.x;
               mover.targetZ = tt.z;
             } else {

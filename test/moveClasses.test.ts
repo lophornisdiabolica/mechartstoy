@@ -114,6 +114,8 @@ describe('movement classes', () => {
     const base = game.field.baseSites[0];
     const gunship = spawnUnit(game.world, game.ctx, GUNSHIP, 0, base.x, base.z);
     game.world.remove(gunship, Ai);
+    // A harmless gunship, so the test is only about who can shoot at it.
+    game.world.req(gunship, Armed).weapon = { ...GUNSHIP.weapon, range: 0 };
     const trooper = spawnUnit(game.world, game.ctx, UNIT_DEFS.trooper, 1, base.x + 5, base.z);
     const strider = spawnUnit(game.world, game.ctx, UNIT_DEFS.strider, 1, base.x - 5, base.z);
     game.world.remove(trooper, Ai);
@@ -127,7 +129,6 @@ describe('movement classes', () => {
     // Head for the far base in a straight line, whatever's in between.
     const goal = game.field.baseSites[1];
     const m = game.world.req(gunship, Mover);
-    game.world.req(gunship, Armed).weapon = { ...GUNSHIP.weapon, range: 0 };
     m.targetX = goal.x;
     m.targetZ = goal.z;
     run(game, 3);

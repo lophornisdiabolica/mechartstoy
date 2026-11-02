@@ -170,6 +170,14 @@ export interface Armed {
   siege: boolean;
   target: Entity | null;
   nextTargetAt: number;
+  /**
+   * Direct fire only: the target is out of sight behind a building or the
+   * ground (see lineOfFire.ts), so the weapon holds fire and the unit heads
+   * for `spotX/Z`, a nearby spot with a clear shot (null if none was found).
+   */
+  blocked: boolean;
+  spotX: number | null;
+  spotZ: number | null;
   /** World-space heading the weapon/turret currently points. */
   aim: number;
   /** Seconds until the next trigger pull. */
@@ -242,7 +250,11 @@ export interface Projectile {
   faction: number;
   /** The firing unit's or building's definition id, for kill credit. */
   source: string;
-  /** The entity aimed at, which takes the hit if still near the impact point. */
+  /**
+   * The entity the shot will hit: for direct fire, whatever was first in its
+   * path when it was fired (the target, a bystander or a building); for
+   * lobbed shots, the target. It takes the hit if still near the impact point.
+   */
   target: Entity | null;
   sx: number;
   sy: number;
