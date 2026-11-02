@@ -23,7 +23,10 @@ several at once, and prints a table per scenario: battle length (median,
 mean, range), wins per team, and per-battle kills, buildings razed,
 outposts taken and attacks launched. `--quick` runs about a third as many,
 `--only 1v1,2v2` picks scenarios, `--battles N` and `--workers N` override
-the counts, and `--list` shows the scenarios. Every battle is saved to
+the counts, and `--list` shows the scenarios. `--set "sgrow=none&scap=2"`
+changes settings for every battle (written as in the page URL), so running
+the same scenarios with each option of a setting compares them on the same
+battles. Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
 each battle's seed is named after its scenario and number (`1v1-7`), so the
 same battle plays out the same way on any machine. The scenarios live in
@@ -60,6 +63,13 @@ battle, its exact map via `seed`).
   which came out roughly even in 1v3; uneven battles are never quite fair,
   so it's a slider. More sides
   make a bigger map.
+- **Unit caps:** each side has a cap per category: infantry, vehicles and
+  super units (the Titan). A full category stops its own production but not
+  the others. Super units are rare: a small cap (1 by default), a slow mech
+  bay, and on maps with outposts a side only builds them while it holds
+  one. The super cap can grow during a battle, with the tide ramp (up to 3×
+  when the ramp tops out; the default) or by one for each outpost held past
+  the first, or stay fixed.
 - **Outposts:** small capturable forts in no-man's land (see below). Pick
   how many (Auto is one per side), how strong their bonuses are, and how many
   squads hold them between attacks (off by default).
@@ -112,6 +122,7 @@ src/
     offensive.ts     when each team attacks: readiness, or the tide's clock
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: garrisons, capturing, bonuses
+    caps.ts          unit caps per category, and when super units can be built
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
@@ -199,6 +210,10 @@ src/
   from enemies inside its minimum range. *Support* (no units yet) follows a little behind the
   nearest frontline ally and doesn't chase. Weapons reach up to 15%
   further from high ground (`effectiveRange` in `systems/targeting.ts`).
+- **Unit caps** (`game/caps.ts`). Every unit has a `category` (infantry,
+  vehicle, super) and counts against that cap; ask `canBuild` before
+  producing one, which also checks the super unit's outpost rule. Caps are
+  scaled by side strength like production. Outpost guards don't count.
 - **Settings.** Tuning the player can change lives in `BattleSettings`
   (`game/settings.ts`). Systems read it from `ctx.settings` every tick, and
   use `ctx.units` / `ctx.buildings` (the definitions with multipliers
@@ -325,5 +340,7 @@ src/
 10. ~~Readiness: attack when the army is ready rather than on the tide's clock.~~
 11. ~~Movement classes and unit roles (walkers, hovers, boats, aircraft; frontline, artillery, support).~~
 12. ~~Line of fire: shots stop at buildings, terrain and units in the way.~~
-13. Next, per the design notes: flat armour, unit caps per category with
-    rare super units, healing in your own territory, then faction doctrines.
+13. ~~Unit caps per category, with rare super units gated behind outposts.~~
+14. Next, per the design notes: flat armour, healing in your own territory
+    (replacing the repair outpost), AT soldiers in the infantry, then
+    faction doctrines.
