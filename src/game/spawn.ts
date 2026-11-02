@@ -1,8 +1,10 @@
 import { Entity, World } from '../core/ecs';
 import { BuildingDef } from './buildings';
+import { productionFor } from './doctrines';
 import {
   Ai,
   Armed,
+  Carrier,
   Building,
   Collider,
   Construction,
@@ -113,6 +115,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     threat: null,
     escort: null,
   });
+  if (def.carries) world.add(e, Carrier, { loaded: true, reloadAt: 0 });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;
 }
@@ -143,12 +146,13 @@ export function spawnBuilding(
   if (def.weapon && faction !== NEUTRAL) {
     world.add(e, Armed, armed(ctx, def.weapon, def.sight ?? def.weapon.range, true, def.turretTurnRate ?? 2, 0.4, heading));
   }
-  if (def.production && faction !== NEUTRAL) {
+  const production = faction !== NEUTRAL ? productionFor(ctx, def, faction) : undefined;
+  if (production) {
     world.add(e, Producer, {
-      table: def.production.table,
-      interval: def.production.interval,
+      table: production.table,
+      interval: production.interval,
       // Stagger first batches so buildings don't all fire on the same tick.
-      timer: ctx.rng.range(0.3, 1) * def.production.interval,
+      timer: ctx.rng.range(0.3, 1) * production.interval,
     });
   }
   if (construct) {

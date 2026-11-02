@@ -2,26 +2,11 @@ import { System, World } from '../../core/ecs';
 import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
-import { UnitId } from '../units';
+import { ProductionEntry } from '../buildings';
+import { doctrineOf } from '../doctrines';
 import { countUnits, outnumbered, squadLineUp } from './production';
 import { recordSquad } from '../territory';
 import { armyCap, canBuild, CategoryCounts, countByCategory } from '../caps';
-
-/** One pick from the wave table: what to spawn and how many at once. */
-interface WaveEntry {
-  unit: UnitId;
-  weight: number;
-  count: number;
-  with?: { unit: UnitId; count: number };
-}
-
-const WAVE_TABLE: WaveEntry[] = [
-  { unit: 'trooper', weight: 5, count: 4, with: { unit: 'atTrooper', count: 1 } },
-  { unit: 'strider', weight: 3, count: 2 },
-  { unit: 'tank', weight: 2.5, count: 1 },
-  { unit: 'howitzer', weight: 1, count: 1 },
-  { unit: 'titan', weight: 0.6, count: 1 },
-];
 
 export interface ReinforcementConfig {
   /** Seconds between waves, per faction. */
@@ -35,14 +20,16 @@ export const DEFAULT_REINFORCEMENTS: ReinforcementConfig = {
   picksPerWave: 2,
 };
 
-function pickEntry(ctx: SimContext): WaveEntry {
-  const total = WAVE_TABLE.reduce((s, w) => s + w.weight, 0);
+/** One pick from a side's wave table (its doctrine's, see DoctrineDef.waves): what to spawn and how many at once. */
+function pickEntry(ctx: SimContext, faction: number): ProductionEntry {
+  const table = doctrineOf(ctx, faction).waves;
+  const total = table.reduce((s, w) => s + w.weight, 0);
   let roll = ctx.rng.range(0, total);
-  for (const entry of WAVE_TABLE) {
+  for (const entry of table) {
     roll -= entry.weight;
     if (roll <= 0) return entry;
   }
-  return WAVE_TABLE[0];
+  return table[0];
 }
 
 /**
@@ -66,7 +53,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
   const base = ctx.field.baseSites[faction];
   const { x: cx, z: cz } = musterPoint(ctx, faction, world.time, forward);
   for (let i = 0; i < picks; i++) {
-    const entry = pickEntry(ctx);
+    const entry = pickEntry(ctx, faction);
     if (!canBuild(ctx, counts, faction, ctx.units[entry.unit])) continue;
     // Each pick forms up as a group at a random spot on the base pad.
     const a = ctx.rng.range(0, Math.PI * 2);

@@ -1,6 +1,7 @@
 import { AttackTiming, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
+import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
 import { dropdown, el, hex, segmented } from './dom';
 
 const MODE_HINTS: Record<BattleMode, string> = {
@@ -114,6 +115,8 @@ export class SetupScreen {
       const color = el('input', { type: 'color', 'aria-label': `Side ${i + 1} colour` });
       const name = el('input', { type: 'text', maxlength: '32', 'aria-label': `Side ${i + 1} name` });
       const team = el('select', { 'aria-label': `Side ${i + 1} team` });
+      const doctrine = el('select', { 'aria-label': `Side ${i + 1} doctrine` });
+      doctrine.append(...DOCTRINE_IDS.map((d) => el('option', { value: d, title: DOCTRINES[d].blurb }, DOCTRINES[d].name)));
       const remove = el('button', { type: 'button', class: 'remove', title: 'Remove this side', 'aria-label': `Remove side ${i + 1}` }, '×');
       color.addEventListener('input', () => {
         this.settings.factions[i].color = parseInt(color.value.slice(1), 16);
@@ -127,6 +130,10 @@ export class SetupScreen {
         this.settings.factions[i].team = Number(team.value);
         this.changed();
       });
+      doctrine.addEventListener('change', () => {
+        if (isDoctrine(doctrine.value)) this.settings.factions[i].doctrine = doctrine.value;
+        this.changed();
+      });
       remove.addEventListener('click', () => {
         if (this.settings.factions.length <= 2) return;
         this.settings.factions.splice(i, 1);
@@ -134,7 +141,7 @@ export class SetupScreen {
         this.rebuildSides();
         this.changed();
       });
-      row.append(color, name, team, remove);
+      row.append(color, name, doctrine, team, remove);
       this.sideList.append(row);
       return () => {
         const n = this.settings.factions.length;
@@ -143,6 +150,8 @@ export class SetupScreen {
         if (document.activeElement !== name) name.value = f.name;
         if (team.options.length !== n) team.replaceChildren(...Array.from({ length: n }, (_, t) => el('option', { value: String(t) }, `Team ${t + 1}`)));
         team.value = String(f.team);
+        doctrine.value = f.doctrine;
+        doctrine.title = DOCTRINES[f.doctrine].blurb;
         remove.disabled = n <= 2;
       };
     });
@@ -413,7 +422,7 @@ export class SetupScreen {
       sidesHint.textContent =
         teams < 2
           ? 'Everyone is on the same team, so there is nobody to fight. Put at least one side on another team.'
-          : 'Sides on the same team are allies and start next to each other. More sides make a bigger map.';
+          : 'Sides on the same team are allies and start next to each other. More sides make a bigger map. Each side picks a doctrine, the kind of army it fields (hover over one for what it brings).';
       start.disabled = teams < 2;
     });
 

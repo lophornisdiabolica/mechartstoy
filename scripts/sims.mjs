@@ -20,6 +20,10 @@ Plays battles headlessly at full speed and prints stats per scenario.
   --only a,b         just these scenarios (see --list)
   --battles N        N battles per scenario, overriding the defaults
   --workers N        battles run side by side (default: CPU cores - 1)
+  --doctrines        give sides doctrines from an orthogonal array, so every
+                     pairing of doctrines between any two sides comes up
+                     equally often, and print win rates per doctrine (the
+                     battle count is rounded to whole passes over the array)
   --set QUERY        change settings for every battle, written as in the
                      battle's URL, e.g. --set "sgrow=none&scap=2"; the
                      same seeds are played, so runs compare like for like
@@ -30,7 +34,7 @@ Results for every battle, with a link to replay it in the browser, are
 saved to sims-results/<date-time>.json and .csv.`;
 
 function parseArgs(argv) {
-  const opts = { quick: false, only: null, battles: null, workers: Math.max(1, availableParallelism() - 1), list: false, help: false, set: '' };
+  const opts = { quick: false, only: null, battles: null, workers: Math.max(1, availableParallelism() - 1), list: false, help: false, set: '', doctrines: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--quick') opts.quick = true;
@@ -40,6 +44,7 @@ function parseArgs(argv) {
     else if (a === '--battles') opts.battles = Math.max(1, Number(argv[++i]));
     else if (a === '--workers') opts.workers = Math.max(1, Number(argv[++i]));
     else if (a === '--set') opts.set = argv[++i];
+    else if (a === '--doctrines') opts.doctrines = true;
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -57,7 +62,11 @@ async function main() {
   if (opts.only && scenarios.length !== opts.only.length) throw new Error(`Unknown scenario in --only (try --list)`);
   const jobs = scenarios.flatMap((s) => {
     const n = opts.battles ?? (opts.quick ? s.quick : s.battles);
-    return Array.from({ length: n }, (_, i) => ({ scenario: s.id, battle: i + 1, set: opts.set }));
+    if (!opts.doctrines) return Array.from({ length: n }, (_, i) => ({ scenario: s.id, battle: i + 1, set: opts.set }));
+    // Each pass over the orthogonal array plays every row once, on fresh maps.
+    const plans = sim.doctrinePlans(sim.scenarioSettings(s, 1, opts.set).factions.length);
+    const passes = Math.max(1, Math.round(n / plans.length));
+    return Array.from({ length: passes * plans.length }, (_, i) => ({ scenario: s.id, battle: i + 1, set: [opts.set, plans[i % plans.length]].filter(Boolean).join('&') }));
   });
   // Big battles first, so the run doesn't end waiting on one of them.
   const size = { small: 0.6, medium: 1, large: 2 };
@@ -99,6 +108,10 @@ async function main() {
   console.log('');
   console.log(sim.formatTable(summaries, eternal));
   console.log('');
+  if (opts.doctrines) {
+    console.log(sim.formatDoctrines(results));
+    console.log('');
+  }
   console.log('Lengths in minutes. Wins by team: T1 is the first side\'s team (the lone side in 1v3).');
   console.log('Kills, razed, outposts and attacks are per battle, all sides together.');
   if (opts.set) console.log(`Settings changed for every battle: ${opts.set}`);

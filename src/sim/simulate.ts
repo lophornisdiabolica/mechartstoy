@@ -1,6 +1,7 @@
 import { hashSeed } from '../core/rng';
 import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
+import { DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
 import { applyParams, settingsToParams } from '../ui/settingsUrl';
 
 /**
@@ -70,6 +71,7 @@ export const TIME_LIMIT = 60;
 
 export interface SideResult {
   name: string;
+  doctrine: DoctrineId;
   /** Team number as the setup screen shows it (1, 2, ...). */
   team: number;
   /** Minutes in when it was knocked out, or null. */
@@ -143,6 +145,7 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     winner: outcome && outcome.team !== null ? teamOrder.indexOf(outcome.team) + 1 : null,
     sides: settings.factions.map((f, i) => ({
       name: names[i],
+      doctrine: f.doctrine,
       team: teamOrder.indexOf(f.team) + 1,
       out: sides.eliminatedAt[i] === null ? null : sides.eliminatedAt[i]! / 60,
       kills: game.stats.sides[i].kills,
@@ -247,4 +250,90 @@ export function formatTable(summaries: ScenarioSummary[], eternal: Set<string>):
   const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
   const line = (cells: string[]) => cells.map((c, i) => pad(c, widths[i])).join('  ').trimEnd();
   return [line(head), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line)].join('\n');
+}
+
+/**
+ * An orthogonal array of strength 2: rows of `factors` values, each from 0 to
+ * `levels` - 1 (`levels` must be prime), where every pair of columns shows
+ * every pair of values equally often. Used to give sides doctrines so every
+ * pairing of doctrines between any two sides comes up equally, in far fewer
+ * battles than every combination: 9 rows for up to 4 sides with 3 doctrines,
+ * 27 for up to 13.
+ *
+ * Built the textbook way: the rows are all vectors of length k over Z_levels,
+ * the columns are distinct directions (vectors whose last non-zero entry is
+ * 1), and an entry is their dot product mod `levels`.
+ */
+export function orthogonalArray(levels: number, factors: number): number[][] {
+  const p = levels;
+  if (p < 2) throw new Error('orthogonalArray needs at least 2 levels');
+  for (let d = 2; d * d <= p; d++) if (p % d === 0) throw new Error(`orthogonalArray needs a prime number of levels, not ${p}`);
+  let k = 2;
+  while ((p ** k - 1) / (p - 1) < factors) k++;
+  const vec = (n: number) => Array.from({ length: k }, (_, i) => Math.floor(n / p ** i) % p);
+  const columns: number[][] = [];
+  for (let n = 1; n < p ** k && columns.length < factors; n++) {
+    const v = vec(n);
+    let lead = 0;
+    for (const x of v) if (x !== 0) lead = x;
+    if (lead === 1) columns.push(v);
+  }
+  return Array.from({ length: p ** k }, (_, r) => {
+    const row = vec(r);
+    return columns.map((c) => c.reduce((s, x, i) => s + x * row[i], 0) % p);
+  });
+}
+
+/** Query strings (see scenarioSettings' overrides) giving each side a doctrine, one per row of an orthogonal array. */
+export function doctrinePlans(sides: number): string[] {
+  return orthogonalArray(DOCTRINE_IDS.length, sides).map((row) => row.map((d, i) => `doc${i + 1}=${DOCTRINE_IDS[d]}`).join('&'));
+}
+
+export interface DoctrineSummary {
+  doctrine: DoctrineId;
+  /** Sides it played in decided battles, how many of those were on the winning team, and the rate. */
+  played: number;
+  won: number;
+  rate: number;
+}
+
+/** Wins per doctrine across decided battles (a doctrine on several sides of one battle counts once per side). */
+export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
+  return DOCTRINE_IDS.map((doctrine) => {
+    let played = 0;
+    let won = 0;
+    for (const r of results) {
+      if (!r.decided) continue;
+      for (const s of r.sides) {
+        if (s.doctrine !== doctrine) continue;
+        played++;
+        if (s.team === r.winner) won++;
+      }
+    }
+    return { doctrine, played, won, rate: played ? won / played : 0 };
+  });
+}
+
+/** For two-sided battles: wins of each doctrine (row) against each other doctrine (column). */
+export function headToHead(results: BattleResult[]): Record<DoctrineId, Record<DoctrineId, number>> {
+  const grid = Object.fromEntries(DOCTRINE_IDS.map((a) => [a, Object.fromEntries(DOCTRINE_IDS.map((b) => [b, 0]))])) as Record<DoctrineId, Record<DoctrineId, number>>;
+  for (const r of results) {
+    if (r.sides.length !== 2 || r.winner === null) continue;
+    const w = r.sides.find((s) => s.team === r.winner)!;
+    const l = r.sides.find((s) => s.team !== r.winner)!;
+    grid[w.doctrine][l.doctrine]++;
+  }
+  return grid;
+}
+
+/** Plain-text tables of doctrine results. */
+export function formatDoctrines(results: BattleResult[]): string {
+  const lines = ['Doctrine    Played  Won   Win rate', '----------  ------  ----  --------'];
+  for (const d of summarizeDoctrines(results)) lines.push(`${pad(d.doctrine, 10)}  ${pad(String(d.played), 6)}  ${pad(String(d.won), 4)}  ${Math.round(d.rate * 100)}%`);
+  if (results.some((r) => r.sides.length === 2)) {
+    const grid = headToHead(results);
+    lines.push('', 'Two-sided battles, wins of each row against each column:', pad('', 10) + DOCTRINE_IDS.map((d) => pad(d, 9)).join(''));
+    for (const a of DOCTRINE_IDS) lines.push(pad(a, 10) + DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 9)).join(''));
+  }
+  return lines.join('\n');
 }

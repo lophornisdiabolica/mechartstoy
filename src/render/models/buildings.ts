@@ -93,6 +93,43 @@ registerModel('bld:mechbay', (faction) => {
   return g;
 });
 
+// Doctrine signature buildings.
+registerModel('bld:tankDepot', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.4, 0.25, 5.0, CONCRETE, 0, 0.12, 0));
+  g.add(box(4.6, 2.4, 4.0, METAL, -0.2, 1.45, 0)); // hangar
+  g.add(box(4.8, 0.3, 4.2, primary, -0.2, 2.8, 0));
+  g.add(box(0.06, 1.9, 3.0, DARK, 2.11, 1.2, 0)); // vehicle door
+  g.add(box(0.12, 0.25, 3.2, secondary, 2.13, 2.3, 0));
+  return g;
+});
+
+registerModel('bld:motorPool', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.2, 4.6, CONCRETE, 0, 0.1, 0));
+  // An open shed on posts, a truck parked under it and a fuel tank out back.
+  for (const x of [-1.8, 1.8]) for (const z of [-1.7, 1.7]) g.add(box(0.25, 2.0, 0.25, secondary, x, 1.2, z));
+  g.add(box(4.2, 0.2, 3.9, primary, 0, 2.3, 0));
+  g.add(box(1.4, 0.6, 0.8, METAL, 0.2, 0.6, 0.6));
+  g.add(cylinder(0.5, 0.5, 1.6, 8, METAL, -2.0, 1.0, -1.9));
+  return g;
+});
+
+registerModel('bld:barracksBlock', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.2, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(4.4, 2.8, 3.8, WALLS[2], 0, 1.65, 0));
+  g.add(box(4.5, 0.3, 3.9, primary, 0, 3.2, 0));
+  g.add(box(0.06, 1.1, 1.0, DARK, 2.21, 0.8, 0));
+  for (const x of [-1.4, 0, 1.4]) {
+    for (const y of [1.3, 2.4]) for (const z of [-1.91, 1.91]) g.add(box(0.6, 0.35, 0.04, WINDOW, x, y, z));
+  }
+  return g;
+});
+
 registerModel('bld:tower', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const g = new THREE.Group();

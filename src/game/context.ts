@@ -29,6 +29,8 @@ export type GameEvents = {
   constructionStarted: { entity: Entity; x: number; y: number; z: number; def: BuildingDef };
   /** A side took an outpost (from its garrison or another side); `faction` is GARRISON when a knocked-out side's outpost reverts. */
   outpostCaptured: { outpost: number; faction: number; previous: number; x: number; z: number };
+  /** A carrier dropped off its squad. */
+  squadDropped: { carrier: Entity; x: number; y: number; z: number; count: number };
   /** Conquest only: a side has lost its last production building. */
   sideEliminated: { faction: number; time: number };
   /** Conquest only: one team is left standing (or nobody is). */

@@ -59,11 +59,12 @@ class Layout {
 }
 
 /**
- * A faction base: HQ in the middle, production buildings toward the front,
+ * A faction base: HQ in the middle, production buildings toward the front
+ * (plus the doctrine's `signature` building toward the back),
  * guard towers on the perimeter facing the enemy, and houses filling gaps.
  * A lane through the middle is kept clear so units can drive out.
  */
-export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng): BuildingPlacement[] {
+export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, signature?: BuildingId): BuildingPlacement[] {
   const layout = new Layout(field);
   const forward = site.faction === 0 ? 0 : Math.PI; // heading toward the enemy
   const f = site.faction;
@@ -77,6 +78,12 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng): Buildi
   layout.tryPlaceProducer({ building: 'barracks', faction: f, ...at(0.75, 8), heading: forward });
   layout.tryPlaceProducer({ building: 'factory', faction: f, ...at(-0.75, 8.5), heading: forward });
   layout.tryPlaceProducer({ building: 'mechbay', faction: f, ...at(Math.PI - 0.9, 10), heading: forward });
+  // The doctrine's signature building, in the first free spot round the back.
+  if (signature) {
+    for (const [angle, dist] of [[Math.PI + 0.9, 10], [Math.PI + 1.6, 9], [Math.PI - 1.6, 9], [Math.PI, 12], [1.6, 10], [-1.6, 10]]) {
+      if (layout.tryPlaceProducer({ building: signature, faction: f, ...at(angle, dist), heading: forward })) break;
+    }
+  }
   for (const a of [-0.55, 0, 0.55]) {
     layout.tryPlace({ building: 'tower', faction: f, ...at(a, site.radius - 1), heading: forward });
   }

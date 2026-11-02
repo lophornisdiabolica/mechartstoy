@@ -3,6 +3,7 @@ import { Faction, Guard, Unit } from './components';
 import { SimContext } from './context';
 import { outpostsHeldBy } from './outposts';
 import { UnitCategory, UnitDef } from './units';
+import { doctrineOf } from './doctrines';
 
 /**
  * Unit caps. Each side has a cap per category (infantry, vehicles, super
@@ -48,9 +49,9 @@ function superCap(ctx: SimContext, faction: number, base: number): number {
   }
 }
 
-/** A side's cap for one category, after its strength (smaller teams get bigger armies; see Sides.strength). */
+/** A side's cap for one category, after its doctrine's lean and its strength (smaller teams get bigger armies; see Sides.strength). */
 export function capFor(ctx: SimContext, faction: number, category: UnitCategory): number {
-  const base = ctx.settings.armies.caps[category];
+  const base = ctx.settings.armies.caps[category] * (doctrineOf(ctx, faction).caps[category] ?? 1);
   const cap = category === 'super' ? superCap(ctx, faction, base) : base;
   return Math.round(cap * ctx.sides.strength[faction]);
 }
