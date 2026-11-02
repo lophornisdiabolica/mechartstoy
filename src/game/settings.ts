@@ -1,7 +1,7 @@
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, seatsFit } from '../world/battlefield';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
-import { UNIT_DEFS, UnitDef, UnitId } from './units';
+import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
 
 /**
  * Everything a player can tune before a battle, in one plain object. The setup
@@ -20,6 +20,14 @@ export interface UnitTuning {
   speed: number;
   range: number;
 }
+
+/**
+ * What makes a side's super-unit cap grow past its base (see caps.ts):
+ * - none: it stays at the base all battle;
+ * - tide: it grows with the tide ramp, up to 3× the base when the ramp tops out;
+ * - outposts: each outpost held past the first adds one.
+ */
+export type SuperGrowth = 'none' | 'tide' | 'outposts';
 
 /**
  * Escalation rates: each grows by this fraction every RAMP_INTERVAL seconds
@@ -56,7 +64,10 @@ export interface BattleSettings {
     outposts: number | 'auto';
   };
   armies: {
-    unitCap: number;
+    /** Units each side can have alive per category (see caps.ts). Super is the base, before it grows. */
+    caps: Record<UnitCategory, number>;
+    /** What makes the super-unit cap grow during a battle. */
+    superGrowth: SuperGrowth;
     /** Production speed multiplier. */
     production: number;
     /** Groups each side starts with. */
@@ -106,7 +117,9 @@ export const UNIT_IDS = Object.keys(UNIT_DEFS) as UnitId[];
 export const LIMITS = {
   water: { min: 0, max: 1 },
   hills: { min: 0, max: 2 },
-  unitCap: { min: 10, max: 150 },
+  infantryCap: { min: 5, max: 120 },
+  vehicleCap: { min: 0, max: 60 },
+  superCap: { min: 0, max: 6 },
   production: { min: 0.25, max: 3 },
   startingArmy: { min: 0, max: 12 },
   tideStrength: { min: 0, max: 1 },
@@ -131,7 +144,8 @@ export function defaultSettings(): BattleSettings {
     mode: 'eternal',
     map: { size: 'medium', water: 0.5, hills: 1, town: true, outposts: 'auto' },
     armies: {
-      unitCap: 60,
+      caps: { infantry: 45, vehicle: 15, super: 1 },
+      superGrowth: 'tide',
       production: 1,
       startingArmy: 4,
       attackTiming: 'readiness',

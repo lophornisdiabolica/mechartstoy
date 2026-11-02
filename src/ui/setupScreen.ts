@@ -1,4 +1,4 @@
-import { AttackTiming, BattleMode, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { dropdown, el, hex, segmented } from './dom';
@@ -11,6 +11,12 @@ const MODE_HINTS: Record<BattleMode, string> = {
 const TIMING_HINTS: Record<AttackTiming, string> = {
   readiness: 'Each side masses at home until its army is strong enough to break the enemy base, attacks, and falls back to regroup once the attack is spent. The longer a side waits, the less sure of winning it needs to be.',
   tide: 'Sides attack on the tide’s clock, taking turns: each attacks while its production surges, whatever shape its army is in.',
+};
+
+const GROWTH_HINTS: Record<SuperGrowth, string> = {
+  none: 'Super units (Titans) are rare: each side can have this many, and its Mech Bay is slow. With outposts on the map, a side can only build them while it holds an outpost.',
+  tide: 'Super units (Titans) are rare: each side starts with room for this many, and the tide ramp raises it as the battle goes on, up to 3× when the ramp tops out. With outposts on the map, a side can only build them while it holds an outpost.',
+  outposts: 'Super units (Titans) are rare: each side has room for this many, plus one more for every outpost it holds past the first. With outposts on the map, a side can only build them while it holds an outpost.',
 };
 
 const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damage', speed: 'Speed', range: 'Range' };
@@ -268,7 +274,27 @@ export class SetupScreen {
 
     // Armies
     const armies = section('Armies', false);
-    slider(armies, 'Unit cap', 'unitCap', 5, (s) => s.armies.unitCap, (s, v) => (s.armies.unitCap = v), (v) => `${v} each`);
+    slider(armies, 'Infantry cap', 'infantryCap', 5, (s) => s.armies.caps.infantry, (s, v) => (s.armies.caps.infantry = v), (v) => `${v} each`);
+    slider(armies, 'Vehicle cap', 'vehicleCap', 1, (s) => s.armies.caps.vehicle, (s, v) => (s.armies.caps.vehicle = v), (v) => (v === 0 ? 'None' : `${v} each`));
+    slider(armies, 'Super units', 'superCap', 1, (s) => s.armies.caps.super, (s, v) => (s.armies.caps.super = v), (v) => (v === 0 ? 'None' : `${v} each`));
+    const growth = segmented<SuperGrowth>(
+      [
+        { label: 'Fixed', value: 'none' },
+        { label: 'Tide ramp', value: 'tide' },
+        { label: 'Outposts', value: 'outposts' },
+      ],
+      (v) => {
+        this.settings.armies.superGrowth = v;
+        this.changed();
+      },
+    );
+    row(armies, 'Super cap grows', growth.row);
+    const growthHint = el('p', { class: 'hint' });
+    armies.append(growthHint);
+    this.sync.push(() => {
+      growth.set(this.settings.armies.superGrowth);
+      growthHint.textContent = GROWTH_HINTS[this.settings.armies.superGrowth];
+    });
     slider(armies, 'Production', 'production', 0.05, (s) => s.armies.production, (s, v) => (s.armies.production = v), times);
     slider(armies, 'Starting army', 'startingArmy', 1, (s) => s.armies.startingArmy, (s, v) => (s.armies.startingArmy = v), (v) => (v === 0 ? 'None' : `${v} groups`));
     slider(armies, 'Building HP', 'buildingHp', 0.05, (s) => s.armies.buildingHp, (s, v) => (s.armies.buildingHp = v), times);

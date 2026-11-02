@@ -4,6 +4,7 @@ import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
+import { canBuild, countByCategory } from '../caps';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius, searching a
@@ -48,14 +49,16 @@ export function outnumbered(ctx: SimContext, alive: number[], faction: number): 
  * Production buildings turn out units on their own timers. Two things scale
  * the rate: the tide, which the ramp makes swing harder (see tide.ts), outposts held
  * (see outposts.ts), and (in Eternal mode) a mild
- * rubber band that helps a badly outnumbered side recover. The settings' production multiplier and unit cap
- * apply on top.
+ * rubber band that helps a badly outnumbered side recover. The settings' production multiplier
+ * applies on top. A unit whose category is at its cap (see caps.ts) isn't built,
+ * and the building waits for its next turn.
  */
 export function productionSystem(ctx: SimContext): System {
   return {
     name: 'production',
     update(world, dt) {
       const alive = countUnits(world, ctx.sides.count);
+      const counts = countByCategory(world, ctx.sides.count);
       const { armies } = ctx.settings;
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
@@ -70,11 +73,11 @@ export function productionSystem(ctx: SimContext): System {
         producer.timer -= dt * armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
-        if (alive[faction] >= ctx.sides.unitCap(faction, armies.unitCap)) continue;
 
         const total = producer.table.reduce((s, p) => s + p.weight, 0);
         let roll = ctx.rng.range(0, total);
         const entry = producer.table.find((p) => (roll -= p.weight) <= 0) ?? producer.table[0];
+        if (!canBuild(ctx, counts, faction, ctx.units[entry.unit])) continue;
 
         // Units roll out of the front door.
         const t = world.req(e, Transform);
@@ -89,6 +92,7 @@ export function productionSystem(ctx: SimContext): System {
           if (spot) {
             spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
             alive[faction]++;
+            counts[faction][def.category]++;
           }
         }
       }

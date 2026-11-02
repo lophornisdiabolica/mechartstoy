@@ -139,6 +139,8 @@ describe('unit movement', () => {
   it('new units roll out where they fit, not wedged between buildings', () => {
     const game = new Game(4, { populate: false });
     const s = game.field.baseSites[0];
+    // Super units need an outpost held.
+    if (game.ctx.outposts.length > 0) game.ctx.outposts[0].owner = 0;
     // A mech bay with houses crowding its door.
     spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, s.x, s.z, 0);
     for (const dz of [-2.4, 2.4]) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.house, 0, s.x + 4.4, s.z + dz, 0);

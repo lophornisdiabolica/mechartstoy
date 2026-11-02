@@ -11,7 +11,9 @@ import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, Map
 const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSettings) => number; set: (s: BattleSettings, v: number) => void }[] = [
   { key: 'water', limit: 'water', get: (s) => s.map.water, set: (s, v) => (s.map.water = v) },
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
-  { key: 'cap', limit: 'unitCap', get: (s) => s.armies.unitCap, set: (s, v) => (s.armies.unitCap = Math.round(v)) },
+  { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
+  { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },
+  { key: 'scap', limit: 'superCap', get: (s) => s.armies.caps.super, set: (s, v) => (s.armies.caps.super = Math.round(v)) },
   { key: 'prod', limit: 'production', get: (s) => s.armies.production, set: (s, v) => (s.armies.production = v) },
   { key: 'army', limit: 'startingArmy', get: (s) => s.armies.startingArmy, set: (s, v) => (s.armies.startingArmy = Math.round(v)) },
   { key: 'tide', limit: 'tideStrength', get: (s) => s.armies.tideStrength, set: (s, v) => (s.armies.tideStrength = v) },
@@ -50,6 +52,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.seed) p.set('seed', s.seed);
   if (s.mode !== d.mode) p.set('mode', s.mode);
   if (s.armies.attackTiming !== d.armies.attackTiming) p.set('attacks', s.armies.attackTiming);
+  if (s.armies.superGrowth !== d.armies.superGrowth) p.set('sgrow', s.armies.superGrowth);
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.town !== d.map.town) p.set('town', s.map.town ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
@@ -71,11 +74,20 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
 
 export function settingsFromParams(p: URLSearchParams): BattleSettings {
   const s = defaultSettings();
-  s.seed = (p.get('seed') ?? '').slice(0, 40);
+  applyParams(s, p);
+  return s;
+}
+
+/** Apply the settings a query string carries on top of `s`, leaving everything it doesn't mention alone. */
+export function applyParams(s: BattleSettings, p: URLSearchParams): void {
+  const seed = p.get('seed');
+  if (seed !== null) s.seed = seed.slice(0, 40);
   const mode = p.get('mode');
   if (mode === 'eternal' || mode === 'conquest') s.mode = mode;
   const attacks = p.get('attacks');
   if (attacks === 'readiness' || attacks === 'tide') s.armies.attackTiming = attacks;
+  const grow = p.get('sgrow');
+  if (grow === 'none' || grow === 'tide' || grow === 'outposts') s.armies.superGrowth = grow;
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   const town = p.get('town');
@@ -105,5 +117,4 @@ export function settingsFromParams(p: URLSearchParams): BattleSettings {
     const color = p.get(`color${i + 1}`);
     if (color && /^[0-9a-f]{6}$/i.test(color)) f.color = parseInt(color, 16);
   });
-  return s;
 }
