@@ -1,12 +1,20 @@
 import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Armed, Collider, Construction, Faction, Mover, Targetable, Transform } from '../components';
+import { Armed, Collider, Construction, Faction, Health, Mover, Targetable, Transform } from '../components';
+import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
 
 const RETARGET_INTERVAL = 0.5;
 /** Buildings count as this much further away, so units shoot units first. Siege units invert it. */
 const BUILDING_PENALTY = 8;
+/**
+ * Targets a weapon is wasted on count as up to this much further away, so
+ * each weapon goes for what it's good against: rifles shoot infantry rather
+ * than sparking off tanks, and AT rockets go for vehicles rather than
+ * spending a whole rocket on one soldier. See hitWorth.
+ */
+const WASTE_PENALTY = 10;
 /** Extra range per world unit of height above the target, as a fraction of the weapon's range, and the most it can add. */
 const HEIGHT_RANGE_PER_UNIT = 0.03;
 const HEIGHT_RANGE_MAX = 0.15;
@@ -28,6 +36,18 @@ export function effectiveRange(world: World, e: Entity, armed: Armed, target: En
   return armed.weapon.range * (1 + Math.max(0, Math.min(HEIGHT_RANGE_MAX, dh * HEIGHT_RANGE_PER_UNIT)));
 }
 
+/**
+ * How much of a weapon's hit counts against a target, 0 to 1: what gets
+ * through its armour, and no more than the target can take (a rocket that
+ * kills a soldier with half its damage wasted half of it).
+ */
+export function hitWorth(world: World, armed: Armed, target: Entity): number {
+  const h = world.get(target, Health);
+  const damage = armed.weapon.damage;
+  if (!h || damage <= 0) return 1;
+  return Math.min(damageThrough(damage, h.armor), h.max) / damage;
+}
+
 /** How many of the best-scoring targets to check for a clear shot before settling for one behind cover. */
 const SIGHT_CHECKS = 3;
 
@@ -40,7 +60,7 @@ function muzzleToward(world: World, e: Entity, armed: Armed, target: Entity): Po
 
 /**
  * The best enemy in sight: closest first, buildings after units (before,
- * for siege units). Direct-fire weapons prefer one they have a clear shot
+ * for siege units), and ones the weapon is wasted on later (see hitWorth). Direct-fire weapons prefer one they have a clear shot
  * at; if none of the best few is in the open, they take the best anyway
  * and are marked blocked (see Armed.blocked).
  */
@@ -56,7 +76,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Ent
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;
     const isBuilding = world.req(other, Targetable).kind === 'building';
-    candidates.push({ e: other, score: d + (isBuilding ? (armed.siege ? -BUILDING_PENALTY * 3 : BUILDING_PENALTY) : 0) });
+    const waste = WASTE_PENALTY * (1 - hitWorth(world, armed, other));
+    candidates.push({ e: other, score: d + waste + (isBuilding ? (armed.siege ? -BUILDING_PENALTY * 3 : BUILDING_PENALTY) : 0) });
   });
   armed.blocked = false;
   if (candidates.length === 0) return null;

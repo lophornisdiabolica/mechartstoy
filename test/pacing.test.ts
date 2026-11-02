@@ -72,6 +72,9 @@ describe('ramp', () => {
     const site = game.field.baseSites[1];
     const b = spawnBuilding(game.world, game.ctx, game.ctx.buildings.factory, 1, site.x, site.z, Math.PI);
     const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, site.x + 12, site.z);
+    // No armour, so only the ramp's multiplier shows.
+    game.world.req(b, Health).armor = 0;
+    game.world.req(tank, Health).armor = 0;
     const damageTaken = (e: number) => {
       const h = game.world.req(e, Health);
       const before = h.hp;

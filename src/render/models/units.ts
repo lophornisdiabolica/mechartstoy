@@ -155,7 +155,8 @@ const TROOPER_W = 8;
 const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
-function trooperSheet(faction: number): THREE.CanvasTexture {
+/** Two walk frames of an infantry sprite; AT troopers carry a launcher on the shoulder instead of a rifle. */
+function trooperSheet(faction: number, launcher: boolean): THREE.CanvasTexture {
   const { primary, secondary } = factionColors(faction);
   const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
   const canvas = document.createElement('canvas');
@@ -171,7 +172,12 @@ function trooperSheet(faction: number): THREE.CanvasTexture {
     px(2, 0, 4, 3, hex(secondary)); // helmet
     px(3, 2, 2, 1, '#e0b48a'); // face
     px(2, 3, 4, 4, hex(primary)); // torso
-    px(5, 4, 3, 1, '#222'); // rifle
+    if (launcher) {
+      px(0, 2, 8, 1, '#56603f'); // launcher tube over the shoulder
+      px(0, 2, 1, 1, '#222');
+    } else {
+      px(5, 4, 3, 1, '#222'); // rifle
+    }
     px(1, 3, 1, 3, hex(primary)); // arm
     // Legs alternate between frames.
     if (frame === 0) {
@@ -197,12 +203,12 @@ const trooperSheets = new Map<string, THREE.CanvasTexture>();
 const blobShadowGeometry = markShared(new THREE.CircleGeometry(0.22, 8).rotateX(-Math.PI / 2));
 const blobShadowMaterial = markShared(new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
 
-registerModel('trooper', (faction) => {
+function infantry(faction: number, launcher: boolean): THREE.Object3D {
   const { primary, secondary } = factionColors(faction);
-  const key = `${primary}|${secondary}`;
+  const key = `${primary}|${secondary}|${launcher}`;
   let sheet = trooperSheets.get(key);
   if (!sheet) {
-    sheet = markShared(trooperSheet(faction));
+    sheet = markShared(trooperSheet(faction, launcher));
     trooperSheets.set(key, sheet);
   }
   // Each sprite gets its own texture view (sharing the image) so frames animate independently.
@@ -225,7 +231,10 @@ registerModel('trooper', (faction) => {
       tex.offset.x = Math.floor(phase) % 2 === 0 ? 0 : 0.5;
     },
   });
-});
+}
+
+registerModel('trooper', (faction) => infantry(faction, false));
+registerModel('atTrooper', (faction) => infantry(faction, true));
 
 // Shared dark material for burnt-out hulks.
 export const CHARRED = flatMaterial(0x2a2623);

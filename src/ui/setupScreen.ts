@@ -39,7 +39,7 @@ function dps(def: UnitDef): number {
 
 /** What a stat works out to after its multiplier, for the stats table. */
 const STAT_RESULTS: Record<keyof UnitTuning, (def: UnitDef) => { text: string; title: string }> = {
-  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points` }),
+  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points${d.armor > 0 ? `, armour ${d.armor} (taken off every hit)` : ''}` }),
   damage: (d) => ({
     text: `${short(dps(d))}/s`,
     title: `${short(dps(d))} damage per second: ${short(d.weapon.damage)} per shot${d.weapon.burst > 1 ? ` × ${d.weapon.burst}` : ''}, every ${d.weapon.cooldown}s`,
@@ -361,7 +361,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it. Most speed up the holder’s production (+10% each at 1×); some repair nearby units. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it. Each speeds up the holder’s production (+10% each at 1×) and counts as its territory, where resting units heal and squads refill. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
       ),
     );
 

@@ -124,6 +124,7 @@ src/
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: garrisons, capturing, bonuses
     caps.ts          unit caps per category, and when super units can be built
+    territory.ts     territory (bases and held outposts), healing and squad refills there
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
@@ -211,6 +212,17 @@ src/
   from enemies inside its minimum range. *Support* (no units yet) follows a little behind the
   nearest frontline ally and doesn't chase. Weapons reach up to 15%
   further from high ground (`effectiveRange` in `systems/targeting.ts`).
+- **Armour** is a flat amount taken off every hit, down to a tenth of
+  the hit (`damageThrough` in `systems/projectiles.ts`). Rifles barely
+  scratch tanks and buildings; AT rockets get through a tank's armour but
+  not much of a Titan's. Targeting counts a target the weapon is wasted on
+  as further away (`hitWorth` in `systems/targeting.ts`), so rifles shoot
+  infantry and rockets go for vehicles.
+- **Territory** (`game/territory.ts`): a side's base and the ground round
+  each outpost it or an ally holds. A unit that hasn't fired or been hit
+  for 10 seconds heals there, and infantry squads (recorded by
+  `recordSquad` when raised) get missing soldiers back one at a time,
+  appearing beside the squad.
 - **Unit caps** (`game/caps.ts`). Every unit has a `category` (infantry,
   vehicle, super) and counts against that cap; ask `canBuild` before
   producing one, which also checks the super unit's outpost gate (if on). Caps are
@@ -243,7 +255,8 @@ src/
 ## How the battle keeps going
 
 - Each base has an HQ, barracks, vehicle factory and mech bay that produce
-  units on timers, plus guard towers. A civilian town sits in no-man's land.
+  units on timers, plus guard towers. Infantry come in squads of riflemen
+  with an AT trooper. A civilian town sits in no-man's land.
 - **When to attack** (`game/offensive.ts`). With the default *readiness*
   timing, each team masses at home until it fields at least 70% of its unit
   cap and its army outweighs the defence at the enemy base (units and
@@ -303,9 +316,9 @@ src/
   wears the colours of a faction not in the battle. A side takes one by
   having units inside the ring with no defenders there; more units take it
   faster, and two attacking teams at once stall each other. The towers and
-  bunker then switch sides. Holding one gives a bonus (`OutpostBonus`):
-  most speed up production, some repair the holder's units nearby; the
-  Outposts bonus setting scales them. A production bonus adds the same to
+  bunker then switch sides. Holding one gives a bonus (`OutpostBonus`,
+  for now always faster production; the Outposts bonus setting scales it)
+  and makes the ground round it the holder's territory (see below). A production bonus adds the same to
   every side (+10% of a normal side's rate), so a side boosted for uneven
   teams doesn't get three times as much from it. Attacking squads take any
   outpost on their lane on the way. The Holding setting keeps a share of
@@ -343,6 +356,6 @@ src/
 12. ~~Line of fire: shots stop at buildings, terrain and units in the way.~~
 13. ~~Unit caps per category, with rare super units.~~ Revisit gating
     super units behind outposts once the Commander AI exists.
-14. Next, per the design notes: flat armour, healing in your own territory
-    (replacing the repair outpost), AT soldiers in the infantry, then
-    faction doctrines.
+14. ~~Flat armour, healing in your own territory (replacing the repair
+    outpost), AT soldiers in the infantry.~~
+15. Next, per the design notes: faction doctrines.

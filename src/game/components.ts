@@ -135,10 +135,12 @@ export interface Hit {
 export interface Health {
   hp: number;
   max: number;
-  /** Fraction of incoming damage ignored, 0..1. */
+  /** Taken off every hit (see applyDamage). */
   armor: number;
   /** The last thing that hurt this, which gets the credit if it dies. */
   lastHit: Hit | null;
+  /** Sim time it was last hurt (-Infinity if never), for healing out of combat (see territory.ts). */
+  hurtAt: number;
 }
 export const Health = defineComponent<Health>('Health');
 
@@ -185,6 +187,8 @@ export interface Armed {
   /** Shots left in the current burst and time until the next one. */
   burstLeft: number;
   burstTimer: number;
+  /** Sim time of the last trigger pull (-Infinity if never), for healing out of combat. */
+  firedAt: number;
 }
 export const Armed = defineComponent<Armed>('Armed');
 

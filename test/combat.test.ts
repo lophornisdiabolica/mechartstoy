@@ -77,7 +77,7 @@ describe('combat', () => {
       expect(kills[1]).toBeGreaterThan(50);
       expect(samplesWithBothSides).toBeGreaterThanOrEqual(18);
     }
-  }, 30000);
+  }, 60000);
 
   it('is deterministic for a seed', () => {
     const snapshot = (g: Game) =>

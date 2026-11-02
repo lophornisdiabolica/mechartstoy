@@ -3,7 +3,8 @@ import { Construction, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { UnitId } from '../units';
-import { countUnits, outnumbered } from './production';
+import { countUnits, outnumbered, squadLineUp } from './production';
+import { recordSquad } from '../territory';
 import { armyCap, canBuild, CategoryCounts, countByCategory } from '../caps';
 
 /** One pick from the wave table: what to spawn and how many at once. */
@@ -11,10 +12,11 @@ interface WaveEntry {
   unit: UnitId;
   weight: number;
   count: number;
+  with?: { unit: UnitId; count: number };
 }
 
 const WAVE_TABLE: WaveEntry[] = [
-  { unit: 'trooper', weight: 5, count: 5 },
+  { unit: 'trooper', weight: 5, count: 4, with: { unit: 'atTrooper', count: 1 } },
   { unit: 'strider', weight: 3, count: 2 },
   { unit: 'tank', weight: 2.5, count: 1 },
   { unit: 'howitzer', weight: 1, count: 1 },
@@ -65,15 +67,17 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
   const { x: cx, z: cz } = musterPoint(ctx, faction, world.time, forward);
   for (let i = 0; i < picks; i++) {
     const entry = pickEntry(ctx);
-    const def = ctx.units[entry.unit];
-    if (!canBuild(ctx, counts, faction, def)) continue;
+    if (!canBuild(ctx, counts, faction, ctx.units[entry.unit])) continue;
     // Each pick forms up as a group at a random spot on the base pad.
     const a = ctx.rng.range(0, Math.PI * 2);
     const r = ctx.rng.range(0, base.radius * 0.6);
     const gx = cx + Math.cos(a) * r;
     const gz = cz + Math.sin(a) * r;
     const squad = newSquad(ctx);
-    for (let n = 0; n < entry.count; n++) {
+    const lineUp = squadLineUp(entry);
+    recordSquad(ctx, squad, faction, lineUp);
+    for (const id of lineUp) {
+      const def = ctx.units[id];
       // Find a spot with room for the unit (not in water, not wedged between buildings).
       for (let tries = 0; tries < 6; tries++) {
         const spread = 1.5 + tries;
