@@ -24,6 +24,10 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      pairing of doctrines between any two sides comes up
                      equally often, and print win rates per doctrine (the
                      battle count is rounded to whole passes over the array)
+  --units            also print a unit report per doctrine: how many of each
+                     unit type were built and lost, their kills, and what
+                     they killed and died to most (always on with
+                     --doctrines; saved as a -units.csv either way)
   --set QUERY        change settings for every battle, written as in the
                      battle's URL, e.g. --set "sgrow=none&scap=2"; the
                      same seeds are played, so runs compare like for like
@@ -34,7 +38,7 @@ Results for every battle, with a link to replay it in the browser, are
 saved to sims-results/<date-time>.json and .csv.`;
 
 function parseArgs(argv) {
-  const opts = { quick: false, only: null, battles: null, workers: Math.max(1, availableParallelism() - 1), list: false, help: false, set: '', doctrines: false };
+  const opts = { quick: false, only: null, battles: null, workers: Math.max(1, availableParallelism() - 1), list: false, help: false, set: '', doctrines: false, units: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--quick') opts.quick = true;
@@ -45,6 +49,7 @@ function parseArgs(argv) {
     else if (a === '--workers') opts.workers = Math.max(1, Number(argv[++i]));
     else if (a === '--set') opts.set = argv[++i];
     else if (a === '--doctrines') opts.doctrines = true;
+    else if (a === '--units') opts.units = true;
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -112,6 +117,11 @@ async function main() {
     console.log(sim.formatDoctrines(results));
     console.log('');
   }
+  if (opts.doctrines || opts.units) {
+    console.log('Units, all battles together:');
+    console.log(sim.formatUnits(results));
+    console.log('');
+  }
   console.log('Lengths in minutes. Wins by team: T1 is the first side\'s team (the lone side in 1v3).');
   console.log('Kills, razed, outposts and attacks are per battle, all sides together.');
   if (opts.set) console.log(`Settings changed for every battle: ${opts.set}`);
@@ -129,7 +139,8 @@ async function main() {
     }),
   ].join('\n');
   writeFileSync(join(dir, `${stamp}.csv`), csv + '\n');
-  console.log(`Saved sims-results/${stamp}.json and .csv.`);
+  writeFileSync(join(dir, `${stamp}-units.csv`), sim.unitsCsv(results));
+  console.log(`Saved sims-results/${stamp}.json, .csv and -units.csv.`);
   const longest = summaries.filter((s) => !eternal.has(s.scenario)).sort((a, b) => b.longest - a.longest)[0];
   const replay = longest && results.find((r) => r.seed === longest.longestSeed);
   if (replay) console.log(`To watch one, run \`npm run dev\` and open its link, e.g. the longest (${replay.seed}): http://localhost:5173/?${replay.link}`);

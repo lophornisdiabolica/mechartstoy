@@ -30,7 +30,12 @@ battles. `--doctrines` gives each battle's sides doctrines from an
 orthogonal array (every pair of doctrines meets equally often in each
 pair of slots, without playing every combination; see `orthogonalArray`)
 and adds a table of win rates per doctrine and head to head. The array
-needs a prime power number of doctrines (2, 3, 4, 5, 7, 8, 9...). Every battle is saved to
+needs a prime power number of doctrines (2, 3, 4, 5, 7, 8, 9...). With
+`--doctrines` (or `--units` on its own) it also prints a unit report per
+doctrine: how many of each unit type were built and lost, their kills and
+buildings razed, and which enemy types they killed most and died to most
+(outpost garrisons show as e.g. "outpost tower"). It's saved as
+`-units.csv` next to the other results. Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
 each battle's seed is named after its scenario and number (`1v1-7`), so the
 same battle plays out the same way on any machine. The scenarios live in

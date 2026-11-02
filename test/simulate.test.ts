@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BattleResult, doctrinePlans, formatTable, headToHead, orthogonalArray, runBattle, Scenario, SCENARIOS, scenarioSettings, summarize, summarizeDoctrines } from '../src/sim/simulate';
+import { BattleResult, doctrinePlans, formatTable, formatUnits, headToHead, orthogonalArray, runBattle, Scenario, SCENARIOS, scenarioSettings, summarize, summarizeDoctrines, unitReport, unitsCsv } from '../src/sim/simulate';
 import { settingsFromParams } from '../src/ui/settingsUrl';
 
 const short: Scenario = { id: 'test', label: 'Test', battles: 1, quick: 1, setup: (s) => (s.map.size = 'small'), minutes: 0.5 };
 
 function result(minutes: number, winner: number | null, seed: string): BattleResult {
-  const side = { name: 'A', doctrine: 'armour' as const, team: 1, out: null, kills: 10, lost: 5, razed: 2, captured: 1, attacks: 3 };
+  const side = { name: 'A', doctrine: 'armour' as const, team: 1, out: null, kills: 10, lost: 5, razed: 2, captured: 1, attacks: 3, units: {} };
   return { scenario: 'x', seed, minutes, decided: winner !== null, winner, sides: [side, { ...side, team: 2 }], msPerTick: 0.5, link: '' };
 }
 
@@ -81,5 +81,20 @@ describe('balance runs', () => {
     expect(summary.find((d) => d.doctrine === 'legion')).toMatchObject({ played: 2, won: 1 });
     expect(headToHead([a, b]).armour.legion).toBe(1);
     expect(headToHead([a, b]).legion.armour).toBe(1);
+  });
+  it('the unit report adds up each doctrine’s unit types across battles, and ties back to the side totals', () => {
+    const r = runBattle({ ...short, minutes: 3, setup: (s) => ((s.map.size = 'small'), (s.factions[1].doctrine = 'legion')) }, 2);
+    for (const side of r.sides) {
+      const types = Object.values(side.units);
+      expect(types.reduce((a, t) => a + t.lost, 0)).toBe(side.lost);
+      expect(types.reduce((a, t) => a + t.kills, 0)).toBe(side.kills);
+      for (const t of types) expect(Object.values(t.victims).reduce((a, n) => a + n, 0)).toBe(t.kills);
+    }
+    const twice = unitReport([r, r]);
+    const once = unitReport([r]);
+    expect(twice.map((row) => row.kills)).toEqual(once.map((row) => row.kills * 2));
+    expect(new Set(once.map((row) => row.doctrine))).toEqual(new Set(['armour', 'legion']));
+    expect(formatUnits([r])).toContain('legion:');
+    expect(unitsCsv([r]).split('\n')[0]).toBe('doctrine,unit,built,lost,kills,razed,killed_most,killed_most_by');
   });
 });

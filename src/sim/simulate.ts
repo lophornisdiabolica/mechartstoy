@@ -2,6 +2,7 @@ import { hashSeed } from '../core/rng';
 import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
 import { DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
+import { TypeStats } from '../game/stats';
 import { applyParams, settingsToParams } from '../ui/settingsUrl';
 
 /**
@@ -81,6 +82,8 @@ export interface SideResult {
   razed: number;
   captured: number;
   attacks: number;
+  /** Per unit or building type: built, lost, kills, and who it killed and was killed by. */
+  units: Record<string, TypeStats>;
 }
 
 export interface BattleResult {
@@ -153,6 +156,7 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
       razed: game.stats.sides[i].razed,
       captured: game.stats.sides[i].captured,
       attacks: attacks[i],
+      units: game.stats.sides[i].types,
     })),
     msPerTick: (now() - start) / Math.max(1, ticks),
     link: settingsToParams(settings).toString(),
@@ -247,6 +251,11 @@ export function formatTable(summaries: ScenarioSummary[], eternal: Set<string>):
       s.msPerTick.toFixed(2),
     ];
   });
+  return formatGrid(head, rows);
+}
+
+/** A plain-text table: a header row, a rule, then the rows, columns padded to fit. */
+function formatGrid(head: string[], rows: string[][]): string {
   const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
   const line = (cells: string[]) => cells.map((c, i) => pad(c, widths[i])).join('  ').trimEnd();
   return [line(head), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line)].join('\n');
@@ -393,4 +402,88 @@ export function formatDoctrines(results: BattleResult[]): string {
     for (const a of DOCTRINE_IDS) lines.push(pad(a, 10) + DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 9)).join(''));
   }
   return lines.join('\n');
+}
+
+export interface UnitReportRow {
+  doctrine: DoctrineId;
+  /** Unit (or building, e.g. tower) type. */
+  unit: string;
+  built: number;
+  lost: number;
+  kills: number;
+  razed: number;
+  /** Enemy types it killed and was killed by, most first, with counts. */
+  victims: [string, number][];
+  killers: [string, number][];
+}
+
+/**
+ * Every side's unit tallies added up per doctrine and unit type, across all
+ * the battles (decided or not): what each doctrine's units did, and what
+ * they died to. Rows run by doctrine, then most kills first.
+ */
+export function unitReport(results: BattleResult[]): UnitReportRow[] {
+  const rows = new Map<string, UnitReportRow & { v: Record<string, number>; k: Record<string, number> }>();
+  for (const r of results) {
+    for (const side of r.sides) {
+      for (const [unit, t] of Object.entries(side.units ?? {})) {
+        const key = `${side.doctrine}:${unit}`;
+        let row = rows.get(key);
+        if (!row) rows.set(key, (row = { doctrine: side.doctrine, unit, built: 0, lost: 0, kills: 0, razed: 0, victims: [], killers: [], v: {}, k: {} }));
+        row.built += t.built;
+        row.lost += t.lost;
+        row.kills += t.kills;
+        row.razed += t.razed;
+        for (const [id, n] of Object.entries(t.victims)) row.v[id] = (row.v[id] ?? 0) + n;
+        for (const [id, n] of Object.entries(t.killers)) row.k[id] = (row.k[id] ?? 0) + n;
+      }
+    }
+  }
+  const ranked = (counts: Record<string, number>) => Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return [...rows.values()]
+    .map(({ v, k, ...row }) => ({ ...row, victims: ranked(v), killers: ranked(k) }))
+    .sort((a, b) => DOCTRINE_IDS.indexOf(a.doctrine) - DOCTRINE_IDS.indexOf(b.doctrine) || b.kills - a.kills || a.unit.localeCompare(b.unit));
+}
+
+/** The top few of a ranked count list, as "trooper 150, tank 40". */
+function top(list: [string, number][], n = 3): string {
+  return list.slice(0, n).map(([id, c]) => `${id} ${c}`).join(', ');
+}
+
+/** Plain-text unit report: one table per doctrine (see unitReport). */
+export function formatUnits(results: BattleResult[]): string {
+  const rows = unitReport(results);
+  const out: string[] = [];
+  for (const doctrine of DOCTRINE_IDS) {
+    const mine = rows.filter((r) => r.doctrine === doctrine);
+    if (mine.length === 0) continue;
+    out.push(
+      `${doctrine}:`,
+      formatGrid(
+        ['Unit', 'Built', 'Lost', 'Kills', 'Razed', 'Kills/built', 'Killed most', 'Killed most by'],
+        mine.map((r) => [
+          r.unit,
+          r.built ? String(r.built) : '-',
+          String(r.lost),
+          String(r.kills),
+          String(r.razed),
+          r.built ? (r.kills / r.built).toFixed(2) : '-',
+          top(r.victims),
+          top(r.killers),
+        ]),
+      ),
+      '',
+    );
+  }
+  return out.join('\n').trimEnd();
+}
+
+/** Unit report rows as CSV, for a spreadsheet. */
+export function unitsCsv(results: BattleResult[]): string {
+  const quote = (v: string) => (/[,"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const lines = ['doctrine,unit,built,lost,kills,razed,killed_most,killed_most_by'];
+  for (const r of unitReport(results)) {
+    lines.push([r.doctrine, r.unit, r.built, r.lost, r.kills, r.razed, quote(top(r.victims, 5)), quote(top(r.killers, 5))].join(','));
+  }
+  return lines.join('\n') + '\n';
 }
