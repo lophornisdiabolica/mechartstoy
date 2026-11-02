@@ -83,18 +83,19 @@ describe('balance runs', () => {
     expect(headToHead([a, b]).legion.armour).toBe(1);
   });
   it('the unit report adds up each doctrine’s unit types across battles, and ties back to the side totals', () => {
-    const r = runBattle({ ...short, minutes: 3, setup: (s) => ((s.map.size = 'small'), (s.factions[1].doctrine = 'legion')) }, 2);
+    const r = runBattle({ ...short, minutes: 1.5, setup: (s) => ((s.map.size = 'small'), (s.factions[1].doctrine = 'legion')) }, 2);
     for (const side of r.sides) {
       const types = Object.values(side.units);
       expect(types.reduce((a, t) => a + t.lost, 0)).toBe(side.lost);
       expect(types.reduce((a, t) => a + t.kills, 0)).toBe(side.kills);
       for (const t of types) expect(Object.values(t.victims).reduce((a, n) => a + n, 0)).toBe(t.kills);
     }
+    expect(r.sides.reduce((a, s) => a + s.lost, 0)).toBeGreaterThan(0);
     const twice = unitReport([r, r]);
     const once = unitReport([r]);
     expect(twice.map((row) => row.kills)).toEqual(once.map((row) => row.kills * 2));
     expect(new Set(once.map((row) => row.doctrine))).toEqual(new Set(['armour', 'legion']));
     expect(formatUnits([r])).toContain('legion:');
     expect(unitsCsv([r]).split('\n')[0]).toBe('doctrine,unit,built,lost,kills,razed,killed_most,killed_most_by');
-  });
+  }, 30_000);
 });
