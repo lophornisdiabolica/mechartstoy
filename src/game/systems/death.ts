@@ -21,6 +21,8 @@ import { SimContext } from '../context';
 
 /** Seconds a wreck spends sinking into the ground before it's removed. */
 const SINK_TIME = 3;
+/** How fast a shot-down aircraft falls, world units per second. */
+const FALL_SPEED = 7;
 
 /**
  * Handles anything at 0 hp. Units become wrecks (or vanish); buildings are
@@ -72,10 +74,12 @@ export function wreckSystem(): System {
     update(world, dt) {
       for (const e of world.query(Wreck)) {
         const wreck = world.req(e, Wreck);
+        const g = world.get(e, GroundFollow);
+        // Shot-down aircraft fall out of the sky first.
+        if (g && g.offset > 0 && world.time < wreck.removeAt - SINK_TIME) g.offset = Math.max(0, g.offset - dt * FALL_SPEED);
         if (world.time >= wreck.removeAt) {
           world.destroy(e);
         } else if (world.time >= wreck.removeAt - SINK_TIME) {
-          const g = world.get(e, GroundFollow);
           if (g) g.offset -= dt * 0.7;
         }
       }

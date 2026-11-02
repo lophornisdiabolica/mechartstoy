@@ -75,12 +75,12 @@ describe('battle settings', () => {
   it('the infantry cap from settings, leaned by the doctrine, limits dropped units', () => {
     const s = defaultSettings();
     s.armies.caps.infantry = 10;
-    s.factions[0].doctrine = 'legion'; // 1.8× infantry
+    s.factions[0].doctrine = 'legion'; // 1.6× infantry
     const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
     const base = game.field.baseSites[0];
     let placed = 0;
     for (let i = 0; i < 25; i++) if (game.spawnUnitAt('trooper', 0, base.x + (i % 5), base.z + Math.floor(i / 5))) placed++;
-    expect(placed).toBe(18);
+    expect(placed).toBe(16);
   });
 });
 
@@ -94,7 +94,7 @@ describe('settings in the URL', () => {
     s.seed = 'hello world';
     s.mode = 'conquest';
     s.map = { size: 'small', water: 0.2, hills: 1.35, town: false, outposts: 3 };
-    s.armies = { caps: { infantry: 70, vehicle: 25, super: 3 }, superGrowth: 'outposts', superGate: true, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
+    s.armies = { caps: { infantry: 70, vehicle: 25, air: 7, super: 3 }, superGrowth: 'outposts', superGate: true, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1, doctrine: 'legion' };
     const back = settingsFromParams(new URLSearchParams(settingsToParams(s).toString()));

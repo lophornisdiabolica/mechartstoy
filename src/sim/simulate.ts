@@ -253,21 +253,78 @@ export function formatTable(summaries: ScenarioSummary[], eternal: Set<string>):
 }
 
 /**
+ * Arithmetic in the finite field with q = p^m elements (p prime): elements
+ * are 0..q-1, read as polynomials over Z_p by their base-p digits, and
+ * multiplied modulo an irreducible polynomial of degree m. For a prime q
+ * that's just arithmetic mod q.
+ */
+interface Field {
+  q: number;
+  add(a: number, b: number): number;
+  mul(a: number, b: number): number;
+}
+
+/** The finite field with `q` elements, or null if `q` isn't a prime power. */
+export function finiteField(q: number): Field | null {
+  if (q < 2) return null;
+  // The smallest factor of q, which is prime; q has to be a power of it.
+  let p = 2;
+  while (q % p !== 0) p++;
+  let m = 0;
+  for (let n = q; n > 1; n /= p) {
+    if (n % p !== 0) return null;
+    m++;
+  }
+  const digits = (n: number) => Array.from({ length: m }, (_, i) => Math.floor(n / p ** i) % p);
+  const number = (d: number[]) => d.reduce((s, x, i) => s + x * p ** i, 0);
+  const add = (a: number, b: number) => number(digits(a).map((x, i) => (x + digits(b)[i]) % p));
+  // Multiply as polynomials, then reduce with the monic irreducible x^m = -(lower terms).
+  const mulBy = (low: number[]) => (a: number, b: number) => {
+    const prod = new Array<number>(2 * m - 1).fill(0);
+    const da = digits(a);
+    const db = digits(b);
+    for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) prod[i + j] = (prod[i + j] + da[i] * db[j]) % p;
+    for (let k = prod.length - 1; k >= m; k--) {
+      const c = prod[k];
+      if (c === 0) continue;
+      prod[k] = 0;
+      for (let i = 0; i < m; i++) prod[k - m + i] = (((prod[k - m + i] - c * low[i]) % p) + p) % p;
+    }
+    return number(prod.slice(0, m));
+  };
+  if (m === 1) return { q, add: (a, b) => (a + b) % p, mul: (a, b) => (a * b) % p };
+  // The first monic polynomial of degree m (lower terms `low`) under which every non-zero element has an inverse.
+  for (let n = 0; n < q; n++) {
+    const low = digits(n);
+    const mul = mulBy(low);
+    let field = true;
+    for (let a = 1; a < q && field; a++) {
+      let inverse = false;
+      for (let b = 1; b < q; b++) if (mul(a, b) === 1) inverse = true;
+      field = inverse;
+    }
+    if (field) return { q, add, mul };
+  }
+  return null;
+}
+
+/**
  * An orthogonal array of strength 2: rows of `factors` values, each from 0 to
- * `levels` - 1 (`levels` must be prime), where every pair of columns shows
- * every pair of values equally often. Used to give sides doctrines so every
- * pairing of doctrines between any two sides comes up equally, in far fewer
- * battles than every combination: 9 rows for up to 4 sides with 3 doctrines,
- * 27 for up to 13.
+ * `levels` - 1 (`levels` must be a prime power: 2, 3, 4, 5, 7, 8, 9...), where
+ * every pair of columns shows every pair of values equally often. Used to
+ * give sides doctrines so every pairing of doctrines between any two sides
+ * comes up equally, in far fewer battles than every combination: 16 rows for
+ * up to 5 sides with 4 doctrines, 64 for up to 21.
  *
- * Built the textbook way: the rows are all vectors of length k over Z_levels,
- * the columns are distinct directions (vectors whose last non-zero entry is
- * 1), and an entry is their dot product mod `levels`.
+ * Built the textbook way: the rows are all vectors of length k over the
+ * field with `levels` elements, the columns are distinct directions (vectors
+ * whose last non-zero entry is 1), and an entry is their dot product.
  */
 export function orthogonalArray(levels: number, factors: number): number[][] {
   const p = levels;
   if (p < 2) throw new Error('orthogonalArray needs at least 2 levels');
-  for (let d = 2; d * d <= p; d++) if (p % d === 0) throw new Error(`orthogonalArray needs a prime number of levels, not ${p}`);
+  const field = finiteField(p);
+  if (!field) throw new Error(`orthogonalArray needs a prime power number of levels, not ${p}`);
   let k = 2;
   while ((p ** k - 1) / (p - 1) < factors) k++;
   const vec = (n: number) => Array.from({ length: k }, (_, i) => Math.floor(n / p ** i) % p);
@@ -280,7 +337,7 @@ export function orthogonalArray(levels: number, factors: number): number[][] {
   }
   return Array.from({ length: p ** k }, (_, r) => {
     const row = vec(r);
-    return columns.map((c) => c.reduce((s, x, i) => s + x * row[i], 0) % p);
+    return columns.map((c) => c.reduce((s, x, i) => field.add(s, field.mul(x, row[i])), 0));
   });
 }
 

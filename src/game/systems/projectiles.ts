@@ -1,7 +1,7 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
-import { UNIT_HIT_SLACK } from '../lineOfFire';
+import { entityHeight, UNIT_HIT_SLACK } from '../lineOfFire';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -59,12 +59,17 @@ export function projectileSystem(ctx: SimContext): System {
             hit.add(p.target);
           }
         }
-        // Splash hurts anything not on the shooter's team, including the civilian town.
+        // Splash hurts anything not on the shooter's team, including the civilian town. It reaches
+        // as far up and down as it does sideways, so a shell bursting on the ground doesn't touch
+        // aircraft overhead, and flak bursting round an aircraft doesn't touch the ground below.
         if (w.splash > 0) {
           ctx.grid.forEachNear(p.ex, p.ez, w.splash + 3, (other, d2) => {
             if (hit.has(other) || !world.has(other, Targetable)) return;
             if (ctx.sides.allied(world.req(other, Faction).id, p.faction)) return;
-            const edge = Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius);
+            const ot = world.req(other, Transform);
+            const top = ot.y + entityHeight(world, other);
+            const dy = p.ey < ot.y ? ot.y - p.ey : p.ey > top ? p.ey - top : 0;
+            const edge = Math.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), dy);
             if (edge > w.splash) return;
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);
           });

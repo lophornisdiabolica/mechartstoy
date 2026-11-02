@@ -44,6 +44,9 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     struck = trace.hit;
   }
   const flight = Math.hypot(ex - sx, ez - sz);
+  // Bombs dropped from aircraft just fall; everything else lobbed goes up and over.
+  const shooterMover = world.get(e, Mover);
+  const dropped = shooterMover !== undefined && MOVE_RULES[shooterMover.move].flies;
 
   const p = world.create();
   world.add(p, Transform, makeTransform(sx, sy, sz, armed.aim));
@@ -60,7 +63,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     ex,
     ey,
     ez,
-    arcHeight: w.arc ? Math.max(2, dist * 0.35) : 0,
+    arcHeight: w.arc && !dropped ? Math.max(2, dist * 0.35) : 0,
     elapsed: 0,
     duration: Math.max(0.05, flight / w.speed),
   });

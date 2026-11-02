@@ -5,6 +5,7 @@ import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
 import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
+import { MOVE_RULES } from '../../world/moveClasses';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -16,6 +17,8 @@ const PATROL_RADIUS = CAPTURE_RADIUS - 2;
 const ESCORT_RANGE = 24;
 /** How far behind a frontline ally a support unit follows. */
 const SUPPORT_TRAIL = 4;
+/** How far ahead round its circle an aircraft fighting something aims, radians. */
+const ORBIT_STEP = 0.7;
 /** Seconds between an artillery or support unit's looks around (see Ai.roleCheckAt). */
 const ROLE_CHECK = 0.5;
 /**
@@ -89,6 +92,12 @@ export function aiSystem(ctx: SimContext): System {
             } else if (outOfRange) {
               mover.targetX = tt.x;
               mover.targetZ = tt.z;
+            } else if (MOVE_RULES[mover.move].flies) {
+              // Aircraft don't park over a fight: they circle it, guns on the target.
+              const a = Math.atan2(t.z - tt.z, t.x - tt.x) + ORBIT_STEP;
+              const r = Math.max(2, reach * 0.6);
+              mover.targetX = tt.x + Math.cos(a) * r;
+              mover.targetZ = tt.z + Math.sin(a) * r;
             } else {
               mover.targetX = mover.targetZ = null;
             }

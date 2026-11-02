@@ -6,6 +6,7 @@ import { newSquad, spawnUnit } from '../spawn';
 import { recordSquad } from '../territory';
 import { UnitId } from '../units';
 import { spawnSpot } from './production';
+import { MOVE_RULES } from '../../world/moveClasses';
 
 /** A loaded carrier drops its squad once an enemy it's after is this close. */
 export const DROP_RANGE = 16;
@@ -64,7 +65,8 @@ export function carrierSystem(ctx: SimContext): System {
           const r = world.req(e, Unit).def.radius + 0.8;
           const x = t.x + Math.cos(back) * r - Math.sin(back) * side;
           const z = t.z - Math.sin(back) * r - Math.cos(back) * side;
-          const spot = spawnSpot(ctx, x, z, def.radius);
+          // Aircraft (drones off an airship) take off from where they are; soldiers need ground with room.
+          const spot = MOVE_RULES[def.move].flies ? (ctx.field.contains(x, z, 1) ? { x, z } : null) : spawnSpot(ctx, x, z, def.radius);
           if (!spot) continue;
           spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
           counts[faction][def.category]++;

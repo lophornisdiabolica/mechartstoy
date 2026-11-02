@@ -285,6 +285,7 @@ export class SetupScreen {
     const armies = section('Armies', false);
     slider(armies, 'Infantry cap', 'infantryCap', 5, (s) => s.armies.caps.infantry, (s, v) => (s.armies.caps.infantry = v), (v) => `${v} each`);
     slider(armies, 'Vehicle cap', 'vehicleCap', 1, (s) => s.armies.caps.vehicle, (s, v) => (s.armies.caps.vehicle = v), (v) => (v === 0 ? 'None' : `${v} each`));
+    slider(armies, 'Aircraft cap', 'airCap', 1, (s) => s.armies.caps.air, (s, v) => (s.armies.caps.air = v), (v) => (v === 0 ? 'None' : `${v} each`));
     slider(armies, 'Super units', 'superCap', 1, (s) => s.armies.caps.super, (s, v) => (s.armies.caps.super = v), (v) => (v === 0 ? 'None' : `${v} each`));
     const growth = segmented<SuperGrowth>(
       [

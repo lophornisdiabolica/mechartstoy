@@ -14,6 +14,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
   { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
   { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },
+  { key: 'acap', limit: 'airCap', get: (s) => s.armies.caps.air, set: (s, v) => (s.armies.caps.air = Math.round(v)) },
   { key: 'scap', limit: 'superCap', get: (s) => s.armies.caps.super, set: (s, v) => (s.armies.caps.super = Math.round(v)) },
   { key: 'prod', limit: 'production', get: (s) => s.armies.production, set: (s, v) => (s.armies.production = v) },
   { key: 'army', limit: 'startingArmy', get: (s) => s.armies.startingArmy, set: (s, v) => (s.armies.startingArmy = Math.round(v)) },

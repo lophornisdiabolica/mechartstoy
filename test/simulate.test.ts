@@ -47,7 +47,7 @@ describe('balance runs', () => {
   });
 
   it('the orthogonal array pairs every two columns with every pair of values equally often', () => {
-    for (const [levels, factors] of [[3, 2], [3, 4], [3, 6], [3, 8], [5, 3]]) {
+    for (const [levels, factors] of [[3, 2], [3, 4], [3, 6], [3, 8], [5, 3], [4, 2], [4, 5], [4, 8], [8, 3], [9, 4]]) {
       const rows = orthogonalArray(levels, factors);
       expect(rows[0].length).toBe(factors);
       for (let a = 0; a < factors; a++) {
@@ -61,13 +61,14 @@ describe('balance runs', () => {
     }
     expect(orthogonalArray(3, 4).length).toBe(9);
     expect(orthogonalArray(3, 6).length).toBe(27);
-    expect(() => orthogonalArray(4, 2)).toThrow();
+    expect(orthogonalArray(4, 2).length).toBe(16);
+    expect(() => orthogonalArray(6, 2)).toThrow();
   });
 
   it('doctrine plans give every side a doctrine, and doctrine results add up', () => {
     const plans = doctrinePlans(2);
-    expect(plans.length).toBe(9);
-    expect(new Set(plans).size).toBe(9);
+    expect(plans.length).toBe(16);
+    expect(new Set(plans).size).toBe(16);
     const s = scenarioSettings(SCENARIOS[0], 1, plans[5]);
     expect(s.factions.map((f) => f.doctrine)).toEqual(plans[5].split('&').map((p) => p.split('=')[1]));
 

@@ -1,7 +1,7 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Building, Collider, Faction, GroundFollow, Mover, Transform, Unit } from '../components';
+import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 
 export function wrapAngle(a: number): number {
@@ -255,18 +255,46 @@ function aircraft(world: World): Set<Entity> {
   return air;
 }
 
-/** Extra gap infantry keep between each other (on top of their radii). */
-const INFANTRY_SPACING = 0.9;
+/** Extra gap infantry keep between each other (on top of their radii) in a fight, and on the march. */
+export const INFANTRY_SPACING = 0.9;
+export const MARCH_SPACING = 0.1;
+/** Seconds after its last shot or hit a unit stays braced for a fight. */
+const ALERT_TIME = 6;
+
+/**
+ * Whether a unit expects a fight: it has something to shoot at, or has fired
+ * or been hit lately. Infantry bunch up while it doesn't, and spread out when it does.
+ */
+export function alert(world: World, e: Entity): boolean {
+  const armed = world.get(e, Armed);
+  if (armed?.target != null) return true;
+  const last = Math.max(world.get(e, Health)?.hurtAt ?? -Infinity, armed?.firedAt ?? -Infinity);
+  return world.time - last < ALERT_TIME;
+}
 
 /**
  * Pushes overlapping units apart, and out of buildings, so they don't stack
- * up. Aircraft only bump into other aircraft.
+ * up. Aircraft only bump into other aircraft. Infantry squads march close
+ * together, so a horde fits through gaps and onto the rally ground, and open
+ * out once either soldier of a pair expects a fight, so one shell doesn't
+ * catch the whole squad.
  */
 export function separationSystem(ctx: SimContext): System {
   return {
     name: 'separation',
     update(world) {
       const air = aircraft(world);
+      // A squad opens out as soon as any soldier in it expects a fight.
+      const bracedSquads = new Set<number>();
+      for (const e of world.query(Unit, Mover, Ai)) {
+        if (world.req(e, Mover).move === 'foot' && alert(world, e)) bracedSquads.add(world.req(e, Ai).squad);
+      }
+      const braced = new Set<Entity>();
+      for (const e of world.query(Unit, Mover)) {
+        if (world.req(e, Mover).move !== 'foot') continue;
+        const squad = world.get(e, Ai)?.squad;
+        if (squad !== undefined ? bracedSquads.has(squad) : alert(world, e)) braced.add(e);
+      }
       for (const e of world.query(Unit, Transform, Collider)) {
         const t = world.req(e, Transform);
         const r = world.req(e, Collider).radius;
@@ -279,8 +307,8 @@ export function separationSystem(ctx: SimContext): System {
           if (other === e || d2 < 1e-6) return;
           if (air.size > 0 && air.has(other) !== flying) return;
           const ot = world.req(other, Transform);
-          // Infantry keep a little apart from each other, so one shell doesn't catch a whole squad.
-          const spacing = foot && world.get(other, Mover)?.move === 'foot' ? INFANTRY_SPACING : 0;
+          // Infantry keep a little apart from each other, more so in a fight.
+          const spacing = foot && world.get(other, Mover)?.move === 'foot' ? (braced.has(e) || braced.has(other) ? INFANTRY_SPACING : MARCH_SPACING) : 0;
           const minDist = r + world.req(other, Collider).radius + spacing;
           const d = Math.sqrt(d2);
           if (d >= minDist) return;
