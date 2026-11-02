@@ -72,9 +72,9 @@ describe('battle settings', () => {
     }
   });
 
-  it('the unit cap from settings limits dropped units', () => {
+  it('the infantry cap from settings limits dropped units', () => {
     const s = defaultSettings();
-    s.armies.unitCap = 10;
+    s.armies.caps.infantry = 10;
     const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
     const base = game.field.baseSites[0];
     let placed = 0;
@@ -93,7 +93,7 @@ describe('settings in the URL', () => {
     s.seed = 'hello world';
     s.mode = 'conquest';
     s.map = { size: 'small', water: 0.2, hills: 1.35, town: false, outposts: 3 };
-    s.armies = { unitCap: 90, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
+    s.armies = { caps: { infantry: 70, vehicle: 25, super: 3 }, superGrowth: 'outposts', production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1 };
     const back = settingsFromParams(new URLSearchParams(settingsToParams(s).toString()));
@@ -101,11 +101,11 @@ describe('settings in the URL', () => {
   });
 
   it('ignores junk and clamps out-of-range values', () => {
-    const s = settingsFromParams(new URLSearchParams('mode=chaos&size=huge&cap=9999&water=abc&tank=5,x,0,-1&color1=zzz&name2=%20%20'));
+    const s = settingsFromParams(new URLSearchParams('mode=chaos&size=huge&icap=9999&water=abc&tank=5,x,0,-1&color1=zzz&name2=%20%20'));
     const d = defaultSettings();
     expect(s.mode).toBe(d.mode);
     expect(s.map.size).toBe(d.map.size);
-    expect(s.armies.unitCap).toBe(150);
+    expect(s.armies.caps.infantry).toBe(120);
     expect(s.map.water).toBe(d.map.water);
     expect(s.units.tank).toEqual({ hp: 3, damage: 1, speed: 1, range: 1 });
     expect(s.factions).toEqual(d.factions);

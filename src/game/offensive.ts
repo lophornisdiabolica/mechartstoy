@@ -3,6 +3,7 @@ import { Armed, Faction, Guard, Health, Transform, Unit } from './components';
 import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
+import { armyCap } from './caps';
 import { attackNumber, isAttacking, TideSettings } from './tide';
 
 /*
@@ -162,7 +163,7 @@ export class Offensive {
       plan.state = 'massing';
       plan.need = this.defence(world, ctx, target) * this.margin(time - plan.since);
       const units = members.reduce((s, f) => s + count[f], 0);
-      const cap = members.reduce((s, f) => s + sides.unitCap(f, ctx.settings.armies.unitCap), 0);
+      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0);
       plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));
       if (units >= cap * MIN_ARMY && plan.army >= plan.need) {
         plan.state = 'attacking';

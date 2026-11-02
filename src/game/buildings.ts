@@ -106,7 +106,8 @@ export const BUILDING_DEFS = {
     armor: 0.35,
     radius: 2.6,
     height: 4,
-    production: { table: [{ unit: 'titan', weight: 1, count: 1 }], interval: 35 },
+    // Slow on purpose: super units are rare (see caps.ts).
+    production: { table: [{ unit: 'titan', weight: 1, count: 1 }], interval: 60 },
     rebuildDelay: 50,
     buildTime: 12,
   },
