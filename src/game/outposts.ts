@@ -17,23 +17,17 @@ import { spawnBuilding, spawnUnit } from './spawn';
  */
 
 /**
- * What holding an outpost gives. New kinds go here, with their effect where
- * it matters (production for 'production', outpostSystem for 'repair'). A
- * future 'unlock' kind could let a side's factories build a unit it otherwise
- * can't, read by the production tables.
+ * What holding an outpost gives, besides territory (see territory.ts). New
+ * kinds go here, with their effect where it matters (production for
+ * 'production'). A future 'unlock' kind could let a side's factories build a
+ * unit it otherwise can't, read by the production tables.
  */
 export type OutpostBonus =
   /** Holder's production goes up by this fraction of a normal side's (0.1 = +10%), whatever its team size. */
-  | { kind: 'production'; amount: number }
-  /** Holder's and allies' units near the outpost regain this fraction of their health per second. */
-  | { kind: 'repair'; amount: number };
+  { kind: 'production'; amount: number };
 
-/** Bonus kinds in the order outposts are given them, so every map has a mix, mostly production. */
-const BONUS_CYCLE: OutpostBonus[] = [
-  { kind: 'production', amount: 0.1 },
-  { kind: 'production', amount: 0.1 },
-  { kind: 'repair', amount: 0.03 },
-];
+/** Bonus kinds in the order outposts are given them. Healing used to be one; it's now territory, which every outpost gives. */
+const BONUS_CYCLE: OutpostBonus[] = [{ kind: 'production', amount: 0.1 }];
 
 /** Player-facing description of a bonus at a given strength (the settings' outpost bonus multiplier). */
 export function describeBonus(bonus: OutpostBonus, strength: number): string {
@@ -41,8 +35,6 @@ export function describeBonus(bonus: OutpostBonus, strength: number): string {
   switch (bonus.kind) {
     case 'production':
       return `+${pct(bonus.amount)} production`;
-    case 'repair':
-      return `repairs nearby units ${pct(bonus.amount)}/s`;
   }
 }
 
@@ -68,8 +60,6 @@ const CAPTURE_TIME = 25;
 const GUARDS = 4;
 /** Seconds between guards while the bunker is under strength. */
 const GUARD_INTERVAL = 12;
-/** How far from the post the repair bonus reaches. */
-const REPAIR_RADIUS = 22;
 /** Seconds between capture checks. */
 const TICK = 0.25;
 
@@ -173,7 +163,6 @@ export function outpostSystem(ctx: SimContext): System {
         o.progress += step * captureRate(count);
         if (o.progress >= 1) capture(world, ctx, o, lead);
       }
-      repair(world, ctx, step);
     },
   };
 }
@@ -203,19 +192,6 @@ function besieged(world: World, ctx: SimContext, o: Outpost, owner: number): boo
     if (!found && world.has(other, Unit) && ctx.sides.hostile(world.req(other, Faction).id, owner)) found = true;
   });
   return found;
-}
-
-function repair(world: World, ctx: SimContext, step: number): void {
-  for (const o of ctx.outposts) {
-    if (o.owner < 0 || o.bonus.kind !== 'repair') continue;
-    const rate = o.bonus.amount * ctx.settings.armies.outpostBonus * step;
-    if (rate <= 0) continue;
-    ctx.grid.forEachNear(o.x, o.z, REPAIR_RADIUS, (other) => {
-      if (!world.has(other, Unit) || !ctx.sides.allied(world.req(other, Faction).id, o.owner)) return;
-      const h = world.req(other, Health);
-      h.hp = Math.min(h.max, h.hp + h.max * rate);
-    });
-  }
 }
 
 /**

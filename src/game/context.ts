@@ -10,6 +10,7 @@ import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
 import { Sides } from './sides';
+import { SquadRoster } from './territory';
 import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
 import { TideSettings } from './tide';
@@ -74,6 +75,8 @@ export interface SimContext {
   outposts: Outpost[];
   /** Counter for squad ids (see spawn.newSquad). */
   squads: number;
+  /** Infantry squads' line-ups by squad id, for refilling them (see territory.ts). */
+  rosters: Map<number, SquadRoster>;
   /** How far the battle has escalated, per effect (see tide.escalate); 0 at the start. */
   escalation: { tide: number; siege: number };
   /** Set once a conquest battle is decided. */

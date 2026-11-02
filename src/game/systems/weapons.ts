@@ -118,6 +118,7 @@ export function weaponSystem(ctx: SimContext): System {
             if (armed.blocked) continue;
           }
           fire(world, ctx, e, armed, target);
+          armed.firedAt = world.time;
           armed.burstLeft = armed.weapon.burst - 1;
           armed.burstTimer = armed.weapon.burstGap;
           armed.cooldown = armed.weapon.cooldown;

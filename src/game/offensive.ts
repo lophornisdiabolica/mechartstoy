@@ -69,13 +69,18 @@ export interface TeamPlan {
  * much punishment it can take times how fast it deals damage, so a group's
  * strength is roughly the sum of its members' (Lanchester's square law).
  */
+/** A typical hit's damage, for judging how much armour is worth (see fightingStrength). */
+const ARMOUR_REF = 30;
+
 export function fightingStrength(world: World, e: number): number {
   const h = world.get(e, Health);
   const a = world.get(e, Armed);
   if (!h || !a) return 0;
   const w = a.weapon;
   const dps = (w.damage * w.burst) / Math.max(0.1, w.cooldown);
-  return Math.sqrt((h.hp / Math.max(0.05, 1 - h.armor)) * dps);
+  // Armour is taken off each hit; against a typical hit (ARMOUR_REF damage) that's this share of it.
+  const absorbed = h.armor / (h.armor + ARMOUR_REF);
+  return Math.sqrt((h.hp / (1 - absorbed)) * dps);
 }
 
 export class Offensive {

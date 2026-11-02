@@ -128,7 +128,7 @@ describe('outposts', () => {
     squadAt(game, 0, o.x, o.z, 3);
     squadAt(game, 1, o.x + 1, o.z - 1, 3);
     // Keep both squads alive so it stays contested.
-    for (const e of game.world.query(Unit, Health)) game.world.req(e, Health).armor = 1;
+    for (const e of game.world.query(Unit, Health)) game.world.req(e, Health).hp = 1e9;
     run(game, 30);
     expect(o.owner).toBe(GARRISON);
     expect(o.progress).toBe(0);
@@ -140,7 +140,7 @@ describe('outposts', () => {
     run(held, 1);
     squadAt(held, 1, p.x, p.z, 1); // one defender is enough
     squadAt(held, 0, p.x + 1, p.z - 1, 5);
-    for (const e of held.world.query(Unit, Health)) held.world.req(e, Health).armor = 1;
+    for (const e of held.world.query(Unit, Health)) held.world.req(e, Health).hp = 1e9;
     run(held, 30);
     expect(p.owner).toBe(1);
   });
@@ -162,18 +162,6 @@ describe('outposts', () => {
     ctx.sides.eliminate(0, 1);
     run(game, 0.5);
     for (const o of ctx.outposts) expect(o.owner).toBe(GARRISON);
-  });
-
-  it('a repair outpost heals its holder’s units nearby', () => {
-    const game = bareGame(2);
-    const o = game.ctx.outposts[0];
-    o.bonus = { kind: 'repair', amount: 0.05 };
-    capture(game.world, game.ctx, o, 0);
-    const [tank] = squadAt(game, 0, o.x, o.z, 1);
-    const h = game.world.req(tank, Health);
-    h.hp = h.max * 0.5;
-    run(game, 2);
-    expect(h.hp).toBeGreaterThan(h.max * 0.55);
   });
 
   it('squads picked to hold an outpost on their lane go there between attacks', () => {

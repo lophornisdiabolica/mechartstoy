@@ -49,6 +49,7 @@ function armed(
     cooldown: ctx.rng.range(0, weapon.cooldown),
     burstLeft: 0,
     burstTimer: 0,
+    firedAt: -Infinity,
   };
 }
 
@@ -90,7 +91,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     move: def.move,
     nav: makeNavState(),
   });
-  world.add(e, Health, { hp: def.hp, max: def.hp, armor: def.armor, lastHit: null });
+  world.add(e, Health, { hp: def.hp, max: def.hp, armor: def.armor, lastHit: null, hurtAt: -Infinity });
   world.add(e, Collider, { radius: def.radius });
   world.add(
     e,
@@ -137,7 +138,7 @@ export function spawnBuilding(
   world.add(e, Building, { def });
   world.add(e, Targetable, { kind: 'building' });
   world.add(e, Renderable, { model: def.model, scale: 1 });
-  world.add(e, Health, { hp: construct ? def.hp * 0.3 : def.hp, max: def.hp, armor: def.armor, lastHit: null });
+  world.add(e, Health, { hp: construct ? def.hp * 0.3 : def.hp, max: def.hp, armor: def.armor, lastHit: null, hurtAt: -Infinity });
   world.add(e, Collider, { radius: def.radius });
   if (def.weapon && faction !== NEUTRAL) {
     world.add(e, Armed, armed(ctx, def.weapon, def.sight ?? def.weapon.range, true, def.turretTurnRate ?? 2, 0.4, heading));

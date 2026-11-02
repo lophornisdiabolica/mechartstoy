@@ -8,6 +8,8 @@ export interface ProductionEntry {
   unit: UnitId;
   weight: number;
   count: number;
+  /** Other units in the same squad, e.g. an AT soldier with the riflemen. */
+  with?: { unit: UnitId; count: number };
 }
 
 export interface BuildingDef {
@@ -15,7 +17,7 @@ export interface BuildingDef {
   name: string;
   model: string;
   hp: number;
-  /** Fraction of incoming damage ignored, 0..1. */
+  /** Taken off every hit, like a unit's (see UnitDef.armor): rifles barely scratch a building. */
   armor: number;
   /** Footprint radius, used for collisions, targeting and rubble size. */
   radius: number;
@@ -60,10 +62,10 @@ export const BUILDING_DEFS = {
     name: 'Command Centre',
     model: 'bld:hq',
     hp: 1800,
-    armor: 0.5,
+    armor: 10,
     radius: 3.2,
     height: 4.5,
-    production: { table: [{ unit: 'trooper', weight: 1, count: 4 }], interval: 30 },
+    production: { table: [{ unit: 'trooper', weight: 1, count: 3, with: { unit: 'atTrooper', count: 1 } }], interval: 30 },
     rebuildDelay: 45,
     buildTime: 12,
   },
@@ -72,10 +74,10 @@ export const BUILDING_DEFS = {
     name: 'Barracks',
     model: 'bld:barracks',
     hp: 650,
-    armor: 0.3,
+    armor: 6,
     radius: 2.4,
     height: 2.4,
-    production: { table: [{ unit: 'trooper', weight: 1, count: 5 }], interval: 15 },
+    production: { table: [{ unit: 'trooper', weight: 1, count: 4, with: { unit: 'atTrooper', count: 1 } }], interval: 15 },
     rebuildDelay: 35,
     buildTime: 8,
   },
@@ -84,7 +86,7 @@ export const BUILDING_DEFS = {
     name: 'Vehicle Factory',
     model: 'bld:factory',
     hp: 950,
-    armor: 0.35,
+    armor: 8,
     radius: 3,
     height: 4,
     production: {
@@ -103,7 +105,7 @@ export const BUILDING_DEFS = {
     name: 'Mech Bay',
     model: 'bld:mechbay',
     hp: 900,
-    armor: 0.35,
+    armor: 8,
     radius: 2.6,
     height: 4,
     // Slow on purpose: super units are rare (see caps.ts).
@@ -116,7 +118,7 @@ export const BUILDING_DEFS = {
     name: 'Guard Tower',
     model: 'bld:tower',
     hp: 400,
-    armor: 0.4,
+    armor: 8,
     radius: 0.9,
     height: 2.2,
     weapon: towerCannon,
@@ -142,7 +144,7 @@ export const BUILDING_DEFS = {
     name: 'Garrison Bunker',
     model: 'bld:bunker',
     hp: 600,
-    armor: 0.4,
+    armor: 8,
     radius: 1.8,
     height: 1.1,
     rebuildDelay: 40,
@@ -153,7 +155,7 @@ export const BUILDING_DEFS = {
     name: 'House',
     model: 'bld:house',
     hp: 160,
-    armor: 0.1,
+    armor: 2,
     radius: 1.2,
     height: 1.5,
     rebuildDelay: 70,
@@ -164,7 +166,7 @@ export const BUILDING_DEFS = {
     name: 'Habitat Block',
     model: 'bld:block',
     hp: 320,
-    armor: 0.2,
+    armor: 4,
     radius: 1.6,
     height: 2.8,
     rebuildDelay: 80,
@@ -175,7 +177,7 @@ export const BUILDING_DEFS = {
     name: 'Comms Spire',
     model: 'bld:spire',
     hp: 220,
-    armor: 0.2,
+    armor: 4,
     radius: 1,
     height: 5,
     rebuildDelay: 80,
@@ -186,7 +188,7 @@ export const BUILDING_DEFS = {
     name: 'Silo',
     model: 'bld:silo',
     hp: 200,
-    armor: 0.15,
+    armor: 3,
     radius: 1.1,
     height: 3,
     rebuildDelay: 70,

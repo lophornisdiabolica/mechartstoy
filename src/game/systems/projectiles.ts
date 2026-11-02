@@ -3,6 +3,14 @@ import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Trans
 import { SimContext } from '../context';
 import { UNIT_HIT_SLACK } from '../lineOfFire';
 
+/** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
+export const MIN_DAMAGE_SHARE = 0.1;
+
+/** Damage a hit of `amount` does through `armor`: the armour is taken off, down to MIN_DAMAGE_SHARE of the hit. */
+export function damageThrough(amount: number, armor: number): number {
+  return Math.max(amount * MIN_DAMAGE_SHARE, amount - armor);
+}
+
 export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null): void {
   const h = world.get(e, Health);
   if (!h) return;
@@ -10,7 +18,8 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
   const building = world.get(e, Building);
   // As a battle escalates, sieges bite harder so a won field turns into a won battle.
   if (building) amount *= 1 + ctx.escalation.siege;
-  h.hp -= amount * (1 - h.armor);
+  h.hp -= damageThrough(amount, h.armor);
+  h.hurtAt = world.time;
   // Only the blow that lands while it's still standing counts.
   if (by && before > 0) h.lastHit = by;
   if (building && before > h.max / 2 && h.hp <= h.max / 2 && h.hp > 0) {

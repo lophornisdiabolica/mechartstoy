@@ -5,6 +5,8 @@ import { newSquad, spawnUnit } from '../spawn';
 import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
 import { canBuild, countByCategory } from '../caps';
+import { recordSquad } from '../territory';
+import { UnitId } from '../units';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius, searching a
@@ -23,6 +25,13 @@ export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number)
   }
   // Nowhere roomy: anywhere dry will do.
   return !ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1) ? { x, z } : null;
+}
+
+/** Every unit in a production or wave entry's squad, in order: its main unit, then any it comes `with`. */
+export function squadLineUp(entry: { unit: UnitId; count: number; with?: { unit: UnitId; count: number } }): UnitId[] {
+  const out: UnitId[] = new Array(entry.count).fill(entry.unit);
+  if (entry.with) for (let i = 0; i < entry.with.count; i++) out.push(entry.with.unit);
+  return out;
 }
 
 /** Units alive per side. */
@@ -84,10 +93,12 @@ export function productionSystem(ctx: SimContext): System {
         const r = world.req(e, Building).def.radius + 1.2;
         const doorX = t.x + Math.cos(t.heading) * r;
         const doorZ = t.z - Math.sin(t.heading) * r;
-        const def = ctx.units[entry.unit];
         // A batch is a squad: it takes the same lane.
         const squad = newSquad(ctx);
-        for (let n = 0; n < entry.count; n++) {
+        const lineUp = squadLineUp(entry);
+        recordSquad(ctx, squad, faction, lineUp);
+        for (const id of lineUp) {
+          const def = ctx.units[id];
           const spot = spawnSpot(ctx, doorX + ctx.rng.range(-1.2, 1.2), doorZ + ctx.rng.range(-1.2, 1.2), def.radius);
           if (spot) {
             spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);

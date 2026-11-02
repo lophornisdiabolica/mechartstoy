@@ -65,7 +65,11 @@ export interface UnitDef {
   role: Role;
   model: string;
   hp: number;
-  /** Fraction of incoming damage ignored, 0..1. */
+  /**
+   * Taken off every hit (see applyDamage): small arms barely scratch heavy
+   * armour, while big shells and rockets punch through. A hit always does
+   * at least a tenth of its damage.
+   */
   armor: number;
   speed: number;
   turnRate: number;
@@ -119,6 +123,42 @@ export const UNIT_DEFS = {
     wreckTime: 0,
     siege: false,
   },
+  atTrooper: {
+    id: 'atTrooper',
+    name: 'AT Trooper',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
+    role: 'frontline',
+    model: 'atTrooper',
+    hp: 20,
+    armor: 0,
+    speed: 1.6,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 14,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: {
+      // Slow, heavy rockets: they get through a tank's armour, but not much of a Titan's.
+      name: 'Rocket launcher',
+      range: 11,
+      minRange: 0,
+      damage: 40,
+      cooldown: 4.5,
+      burst: 1,
+      burstGap: 0,
+      projectile: 'missile',
+      speed: 24,
+      splash: 0.5,
+      spread: 0.06,
+      arc: false,
+      muzzleHeight: 0.45,
+      targets: 'ground',
+    },
+    wreckTime: 0,
+    siege: false,
+  },
   strider: {
     id: 'strider',
     name: 'Strider',
@@ -128,7 +168,7 @@ export const UNIT_DEFS = {
     role: 'frontline',
     model: 'strider',
     hp: 90,
-    armor: 0.1,
+    armor: 2,
     speed: 3.6,
     turnRate: 3,
     radius: 0.8,
@@ -139,9 +179,9 @@ export const UNIT_DEFS = {
       name: 'Autocannon',
       range: 12,
       minRange: 0,
-      damage: 7,
+      damage: 10,
       cooldown: 1.1,
-      burst: 4,
+      burst: 3,
       burstGap: 0.1,
       projectile: 'bullet',
       speed: 55,
@@ -163,7 +203,7 @@ export const UNIT_DEFS = {
     role: 'frontline',
     model: 'tank',
     hp: 220,
-    armor: 0.35,
+    armor: 6,
     speed: 2.6,
     turnRate: 1.6,
     radius: 1.1,
@@ -198,7 +238,7 @@ export const UNIT_DEFS = {
     role: 'frontline',
     model: 'titan',
     hp: 520,
-    armor: 0.45,
+    armor: 25,
     speed: 1.6,
     turnRate: 1,
     radius: 1.6,
@@ -233,7 +273,7 @@ export const UNIT_DEFS = {
     role: 'artillery',
     model: 'howitzer',
     hp: 120,
-    armor: 0.2,
+    armor: 3,
     speed: 1.8,
     turnRate: 1.2,
     radius: 1.1,

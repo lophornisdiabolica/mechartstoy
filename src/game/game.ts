@@ -22,6 +22,7 @@ import { deathSystem, wreckSystem } from './systems/death';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
 import { capFor, countByCategory } from './caps';
+import { territorySystem } from './territory';
 import { projectileSystem } from './systems/projectiles';
 import { reinforcementSystem, spawnWave } from './systems/reinforcements';
 import { snapshotSystem } from './systems/snapshot';
@@ -97,6 +98,7 @@ export class Game {
       sides,
       offensive: new Offensive(sides, tide, () => settings.armies.attackTiming, this.field.config.cols),
       squads: 0,
+      rosters: new Map(),
       escalation: { tide: 0, siege: 0 },
       outcome: null,
     };
@@ -111,7 +113,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       movementSystem(ctx),
