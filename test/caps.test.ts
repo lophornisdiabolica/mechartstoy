@@ -45,8 +45,17 @@ describe('unit caps per category', () => {
 });
 
 describe('super units', () => {
-  it('are only built while the side holds an outpost (on maps with outposts)', () => {
+  it('are built without holding an outpost by default', () => {
     const game = emptyGame();
+    expect(game.ctx.outposts.length).toBeGreaterThan(0);
+    const site = game.field.baseSites[0];
+    spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, site.x, site.z, 0);
+    run(game, BUILDING_DEFS.mechbay.production.interval * 1.5);
+    expect(countByCategory(game.world, game.ctx.sides.count)[0].super).toBe(1);
+  });
+
+  it('with the outpost gate on, are only built while the side holds an outpost', () => {
+    const game = emptyGame((s) => (s.armies.superGate = true));
     expect(game.ctx.outposts.length).toBeGreaterThan(0);
     const site = game.field.baseSites[0];
     spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, site.x, site.z, 0);
@@ -61,8 +70,9 @@ describe('super units', () => {
     expect(titans).toBe(1);
   });
 
-  it('are built without an outpost on maps that have none, up to the cap', () => {
+  it('with the gate on, are built without an outpost on maps that have none, up to the cap', () => {
     const game = emptyGame((s) => {
+      s.armies.superGate = true;
       s.map.outposts = 0;
       s.armies.caps.super = 1;
       s.armies.superGrowth = 'none';

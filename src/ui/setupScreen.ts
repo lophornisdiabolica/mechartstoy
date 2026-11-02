@@ -14,9 +14,9 @@ const TIMING_HINTS: Record<AttackTiming, string> = {
 };
 
 const GROWTH_HINTS: Record<SuperGrowth, string> = {
-  none: 'Super units (Titans) are rare: each side can have this many, and its Mech Bay is slow. With outposts on the map, a side can only build them while it holds an outpost.',
-  tide: 'Super units (Titans) are rare: each side starts with room for this many, and the tide ramp raises it as the battle goes on, up to 3× when the ramp tops out. With outposts on the map, a side can only build them while it holds an outpost.',
-  outposts: 'Super units (Titans) are rare: each side has room for this many, plus one more for every outpost it holds past the first. With outposts on the map, a side can only build them while it holds an outpost.',
+  none: 'Super units (Titans) are rare: each side can have this many, and its Mech Bay is slow.',
+  tide: 'Super units (Titans) are rare: each side starts with room for this many, and the tide ramp raises it as the battle goes on, up to 3× when the ramp tops out.',
+  outposts: 'Super units (Titans) are rare: each side has room for this many, plus one more for every outpost it holds past the first.',
 };
 
 const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damage', speed: 'Speed', range: 'Range' };
@@ -295,6 +295,16 @@ export class SetupScreen {
       growth.set(this.settings.armies.superGrowth);
       growthHint.textContent = GROWTH_HINTS[this.settings.armies.superGrowth];
     });
+    const gate = el('input', { type: 'checkbox', 'aria-label': 'Super units need an outpost' });
+    gate.addEventListener('change', () => {
+      this.settings.armies.superGate = gate.checked;
+      this.changed();
+    });
+    const gateLabel = el('label', { class: 'check' });
+    gateLabel.append(gate, document.createTextNode(' Only while holding an outpost'));
+    row(armies, 'Super units', gateLabel);
+    armies.append(el('p', { class: 'hint' }, 'With outposts on the map, a side can only build super units while it holds one. Off by default: the first side to attack tends to take the outposts, and with them every Titan.'));
+    this.sync.push(() => (gate.checked = this.settings.armies.superGate));
     slider(armies, 'Production', 'production', 0.05, (s) => s.armies.production, (s, v) => (s.armies.production = v), times);
     slider(armies, 'Starting army', 'startingArmy', 1, (s) => s.armies.startingArmy, (s, v) => (s.armies.startingArmy = v), (v) => (v === 0 ? 'None' : `${v} groups`));
     slider(armies, 'Building HP', 'buildingHp', 0.05, (s) => s.armies.buildingHp, (s, v) => (s.armies.buildingHp = v), times);

@@ -68,6 +68,12 @@ export interface BattleSettings {
     caps: Record<UnitCategory, number>;
     /** What makes the super-unit cap grow during a battle. */
     superGrowth: SuperGrowth;
+    /**
+     * On maps with outposts, super units are only built while the side holds one. Off by
+     * default: whoever reached readiness first took the outposts, and with them every Titan
+     * (1v1 large went 7–1 to the first side). Worth revisiting with squad-level Commander AI.
+     */
+    superGate: boolean;
     /** Production speed multiplier. */
     production: number;
     /** Groups each side starts with. */
@@ -146,6 +152,7 @@ export function defaultSettings(): BattleSettings {
     armies: {
       caps: { infantry: 45, vehicle: 15, super: 1 },
       superGrowth: 'tide',
+      superGate: false,
       production: 1,
       startingArmy: 4,
       attackTiming: 'readiness',

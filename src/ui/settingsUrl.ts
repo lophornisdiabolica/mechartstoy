@@ -53,6 +53,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.mode !== d.mode) p.set('mode', s.mode);
   if (s.armies.attackTiming !== d.armies.attackTiming) p.set('attacks', s.armies.attackTiming);
   if (s.armies.superGrowth !== d.armies.superGrowth) p.set('sgrow', s.armies.superGrowth);
+  if (s.armies.superGate !== d.armies.superGate) p.set('sgate', s.armies.superGate ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.town !== d.map.town) p.set('town', s.map.town ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
@@ -88,6 +89,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (attacks === 'readiness' || attacks === 'tide') s.armies.attackTiming = attacks;
   const grow = p.get('sgrow');
   if (grow === 'none' || grow === 'tide' || grow === 'outposts') s.armies.superGrowth = grow;
+  const gate = p.get('sgate');
+  if (gate === '0' || gate === '1') s.armies.superGate = gate === '1';
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   const town = p.get('town');

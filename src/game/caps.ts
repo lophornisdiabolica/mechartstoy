@@ -8,9 +8,10 @@ import { UnitCategory, UnitDef } from './units';
  * Unit caps. Each side has a cap per category (infantry, vehicles, super
  * units) rather than one for its whole army, so production that's full in
  * one category keeps building the others. Super units are rare on purpose:
- * a small cap of their own, a slow mech bay, and, on maps with outposts, a
- * side can only build them while it holds at least one. Losing every outpost
- * doesn't take existing super units away; it just stops new ones.
+ * a small cap of their own and a slow mech bay. With the outpost gate on
+ * (off by default, see BattleSettings.armies.superGate), a side on a map with
+ * outposts can only build them while it holds at least one. Losing every
+ * outpost doesn't take existing super units away; it just stops new ones.
  *
  * The super cap can grow during a battle (see SuperGrowth), so a long battle
  * or a big map ends with more than one on the field.
@@ -59,9 +60,9 @@ export function armyCap(ctx: SimContext, faction: number): number {
   return CATEGORIES.reduce((s, c) => s + capFor(ctx, faction, c), 0);
 }
 
-/** Whether a side may build super units right now: on maps with outposts, only while it holds one. */
+/** Whether a side may build super units right now: with the gate on and outposts on the map, only while it holds one. */
 export function superPermitted(ctx: SimContext, faction: number): boolean {
-  return ctx.outposts.length === 0 || outpostsHeldBy(ctx, faction) > 0;
+  return !ctx.settings.armies.superGate || ctx.outposts.length === 0 || outpostsHeldBy(ctx, faction) > 0;
 }
 
 /** Whether a side has room for one more of this unit (and, for a super unit, the outpost it needs). */

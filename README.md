@@ -65,11 +65,12 @@ battle, its exact map via `seed`).
   make a bigger map.
 - **Unit caps:** each side has a cap per category: infantry, vehicles and
   super units (the Titan). A full category stops its own production but not
-  the others. Super units are rare: a small cap (1 by default), a slow mech
-  bay, and on maps with outposts a side only builds them while it holds
-  one. The super cap can grow during a battle, with the tide ramp (up to 3×
-  when the ramp tops out; the default) or by one for each outpost held past
-  the first, or stay fixed.
+  the others. Super units are rare: a small cap (1 by default) and a slow
+  mech bay. The super cap can grow during a battle, with the tide ramp (up
+  to 3× when the ramp tops out; the default) or by one for each outpost
+  held past the first, or stay fixed. An option (off by default) only lets
+  a side build them while it holds an outpost; it's off because the first
+  side to attack tends to take the outposts and with them every Titan.
 - **Outposts:** small capturable forts in no-man's land (see below). Pick
   how many (Auto is one per side), how strong their bonuses are, and how many
   squads hold them between attacks (off by default).
@@ -212,7 +213,7 @@ src/
   further from high ground (`effectiveRange` in `systems/targeting.ts`).
 - **Unit caps** (`game/caps.ts`). Every unit has a `category` (infantry,
   vehicle, super) and counts against that cap; ask `canBuild` before
-  producing one, which also checks the super unit's outpost rule. Caps are
+  producing one, which also checks the super unit's outpost gate (if on). Caps are
   scaled by side strength like production. Outpost guards don't count.
 - **Settings.** Tuning the player can change lives in `BattleSettings`
   (`game/settings.ts`). Systems read it from `ctx.settings` every tick, and
@@ -340,7 +341,8 @@ src/
 10. ~~Readiness: attack when the army is ready rather than on the tide's clock.~~
 11. ~~Movement classes and unit roles (walkers, hovers, boats, aircraft; frontline, artillery, support).~~
 12. ~~Line of fire: shots stop at buildings, terrain and units in the way.~~
-13. ~~Unit caps per category, with rare super units gated behind outposts.~~
+13. ~~Unit caps per category, with rare super units.~~ Revisit gating
+    super units behind outposts once the Commander AI exists.
 14. Next, per the design notes: flat armour, healing in your own territory
     (replacing the repair outpost), AT soldiers in the infantry, then
     faction doctrines.
