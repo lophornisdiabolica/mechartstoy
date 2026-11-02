@@ -39,7 +39,7 @@ function dps(def: UnitDef): number {
 
 /** What a stat works out to after its multiplier, for the stats table. */
 const STAT_RESULTS: Record<keyof UnitTuning, (def: UnitDef) => { text: string; title: string }> = {
-  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points` }),
+  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points${d.armor > 0 ? `, armour ${d.armor} (taken off every hit)` : ''}` }),
   damage: (d) => ({
     text: `${short(dps(d))}/s`,
     title: `${short(dps(d))} damage per second: ${short(d.weapon.damage)} per shot${d.weapon.burst > 1 ? ` × ${d.weapon.burst}` : ''}, every ${d.weapon.cooldown}s`,

@@ -402,7 +402,8 @@ export class Controls {
       fill.style.width = `${frac * 100}%`;
       fill.style.background = frac > 0.5 ? '#6cc070' : frac > 0.25 ? '#e0b040' : '#e05a40';
       bar.append(fill);
-      this.inspect.append(bar, el('div', { class: 'sub' }, `${Math.ceil(Math.max(0, h.hp))} / ${h.max} HP`));
+      const armour = h.armor > 0 ? `, armour ${h.armor}` : '';
+      this.inspect.append(bar, el('div', { class: 'sub' }, `${Math.ceil(Math.max(0, h.hp))} / ${h.max} HP${armour}`));
     }
     const lines: string[] = [];
     const armed = w.get(e, Armed);
