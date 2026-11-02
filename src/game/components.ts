@@ -1,4 +1,5 @@
 import { defineComponent, Entity } from '../core/ecs';
+import { MoveClass } from '../world/moveClasses';
 import { BuildingDef, ProductionEntry } from './buildings';
 import { LaneId } from './lanes';
 import { ProjectileKind, UnitDef, WeaponDef } from './units';
@@ -63,8 +64,8 @@ export interface Mover {
   /** Where to face while standing idle (e.g. toward the enemy), if anywhere. */
   faceX: number | null;
   faceZ: number | null;
-  /** Hover units may cross water; everything else steers around it. */
-  canCrossWater: boolean;
+  /** How it gets around: which nav grid it plans on, and what terrain it can cross (see moveClasses.ts). */
+  move: MoveClass;
   /** Route-following and unsticking state, owned by the movement system. */
   nav: NavState;
 }
@@ -194,6 +195,15 @@ export interface Ai {
   laneAttack: number;
   /** The enemy side this unit's current attack goes after, or -1 for none. */
   target: number;
+  /**
+   * Artillery and support units look around for nearby threats and frontline
+   * allies (see Role) twice a second, not every tick; the answers are kept here.
+   */
+  roleCheckAt: number;
+  /** Enemy unit inside an artillery unit's minimum range. */
+  threat: Entity | null;
+  /** The frontline ally a support unit follows. */
+  escort: Entity | null;
 }
 export const Ai = defineComponent<Ai>('Ai');
 

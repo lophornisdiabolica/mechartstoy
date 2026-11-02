@@ -3,6 +3,7 @@ import { Armed, Faction, Health, Transform, Unit, Wreck } from '../src/game/comp
 import { Game } from '../src/game/game';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
+import { MOVE_RULES } from '../src/world/moveClasses';
 
 const DT = 1 / 30;
 
@@ -91,12 +92,13 @@ describe('combat', () => {
     expect(snapshot(a)).toEqual(snapshot(b));
   });
 
-  it('never leaves ground units standing in water', () => {
+  it('never leaves units in water deeper than their movement class allows', () => {
     const game = new Game(3);
     run(game, 120);
     for (const e of game.world.query(Unit, Transform)) {
       const t = game.world.req(e, Transform);
-      expect(game.field.heightAt(t.x, t.z)).toBeGreaterThan(game.field.seaLevel - 0.3);
+      const depth = game.field.seaLevel - game.field.heightAt(t.x, t.z);
+      expect(depth).toBeLessThan(MOVE_RULES[game.world.req(e, Unit).def.move].maxDepth + 0.3);
     }
   });
 });

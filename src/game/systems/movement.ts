@@ -1,6 +1,7 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { Building, Collider, Faction, GroundFollow, Mover, NavState, Transform, Unit } from '../components';
+import { MOVE_RULES } from '../../world/moveClasses';
+import { Building, Collider, Faction, GroundFollow, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 
 export function wrapAngle(a: number): number {
@@ -28,6 +29,8 @@ const STUCK_CHECK = 0.75;
 const STUCK_LIMIT = 2;
 /** Seconds between re-checking whether the goal is in a clear straight line. */
 const DIRECT_CHECK = 0.4;
+/** Route cost of plain open ground: a straight line to the goal over anything costlier gets a planned route instead. */
+const PLAIN_GROUND = 1;
 /** Heading error (radians) above which a unit counts as turning rather than stuck. */
 const TURNING = 0.6;
 
@@ -37,13 +40,15 @@ const TURNING = 0.6;
  */
 function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, radius: number, budget: { plans: number }): { x: number; z: number } {
   const nav = m.nav;
+  const grid = ctx.navs.for(m.move);
   const goal = { x: m.targetX!, z: m.targetZ! };
   if (world.time < nav.detourUntil) return { x: nav.detourX, z: nav.detourZ };
 
   const here = { x: t.x, z: t.z };
   if (world.time >= nav.directCheckAt) {
     nav.directCheckAt = world.time + DIRECT_CHECK;
-    nav.direct = m.canCrossWater || ctx.nav.lineClear(here, goal, radius);
+    // Straight there only if nothing's in the way and the line keeps to plain ground (see NavGrid.lineClear).
+    nav.direct = grid.rules.flies || grid.lineClear(here, goal, radius, PLAIN_GROUND);
   }
   if (nav.direct) {
     nav.path = null;
@@ -51,14 +56,14 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
   }
 
   const drifted = Math.hypot(goal.x - nav.pathGoalX, goal.z - nav.pathGoalZ) > GOAL_DRIFT;
-  const stale = nav.path === null || nav.pathVersion !== ctx.nav.version || (drifted && world.time >= nav.replanAt);
+  const stale = nav.path === null || nav.pathVersion !== grid.version || (drifted && world.time >= nav.replanAt);
   if (stale && budget.plans > 0) {
     budget.plans--;
-    nav.path = ctx.nav.findPath(here, goal, radius);
+    nav.path = grid.findPath(here, goal, radius);
     nav.pathIndex = 0;
     nav.pathGoalX = goal.x;
     nav.pathGoalZ = goal.z;
-    nav.pathVersion = ctx.nav.version;
+    nav.pathVersion = grid.version;
     nav.replanAt = world.time + REPLAN_INTERVAL;
   }
   const path = nav.path;
@@ -68,7 +73,8 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
     nav.pathIndex++;
   }
   // Skip ahead when a later waypoint is already in clear view (e.g. after being pushed aside).
-  if (nav.pathIndex < path.length - 1 && ctx.nav.lineClear(here, path[nav.pathIndex + 1], radius)) nav.pathIndex++;
+  const next = path[nav.pathIndex + 1];
+  if (next && grid.lineClear(here, next, radius, Math.max(PLAIN_GROUND, grid.costAt(path[nav.pathIndex].x, path[nav.pathIndex].z), grid.costAt(next.x, next.z)))) nav.pathIndex++;
   return path[Math.min(nav.pathIndex, path.length - 1)];
 }
 
@@ -76,14 +82,17 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
  * Lateral nudge away from things sitting in our way: buildings, enemies, and
  * friendlies that have stopped. Returns a sideways vector to add to the heading.
  */
-function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX: number, dirZ: number): { x: number; z: number } {
+function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX: number, dirZ: number, air: Set<Entity>): { x: number; z: number } {
   const r = world.get(e, Collider)?.radius ?? 0.5;
   const lookahead = r + 2.5;
   const myFaction = world.get(e, Faction)?.id;
+  const flying = air.has(e);
   let ax = 0;
   let az = 0;
   ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other) => {
     if (other === e) return;
+    // Aircraft only steer round other aircraft, and ground units don't dodge what's flying over them.
+    if (air.size > 0 && air.has(other) !== flying) return;
     const ot = world.req(other, Transform);
     const or = world.get(other, Collider)?.radius ?? 0.5;
     const isBuilding = world.has(other, Building);
@@ -114,7 +123,8 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
  * Turning on the spot doesn't count: big units take seconds to turn around,
  * and calling that "stuck" sends them off on a detour before they've finished.
  */
-function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, nav: NavState, dirX: number, dirZ: number, turning: boolean): void {
+function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: Mover, dirX: number, dirZ: number, turning: boolean): void {
+  const nav = m.nav;
   if (world.time < nav.checkAt) return;
   nav.checkAt = world.time + STUCK_CHECK;
   const moved = Math.hypot(t.x - nav.checkX, t.z - nav.checkZ);
@@ -138,7 +148,7 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, nav:
     for (const [side, fwd] of tries) {
       const x = t.x + (-dirZ * side + dirX * fwd) * r;
       const z = t.z + (dirX * side + dirZ * fwd) * r;
-      if (ctx.nav.fitsAt(x, z, fit) && ctx.field.contains(x, z, 1)) {
+      if (ctx.navs.for(m.move).fitsAt(x, z, fit) && ctx.field.contains(x, z, 1)) {
         nav.detourX = x;
         nav.detourZ = z;
         nav.detourUntil = world.time + 1.2;
@@ -160,6 +170,7 @@ export function movementSystem(ctx: SimContext): System {
     name: 'movement',
     update(world, dt) {
       const budget = { plans: PLANS_PER_TICK };
+      const air = aircraft(world);
       for (const e of world.query(Transform, Mover)) {
         const t = world.req(e, Transform);
         const m = world.req(e, Mover);
@@ -184,7 +195,7 @@ export function movementSystem(ctx: SimContext): System {
         if (dist < 1e-4) continue;
         let dirX = dx / dist;
         let dirZ = dz / dist;
-        const avoid = avoidance(ctx, world, e, t, dirX, dirZ);
+        const avoid = avoidance(ctx, world, e, t, dirX, dirZ, air);
         const sx = dirX + avoid.x;
         const sz = dirZ + avoid.z;
         const sl = Math.hypot(sx, sz);
@@ -194,15 +205,18 @@ export function movementSystem(ctx: SimContext): System {
         }
         const desired = Math.atan2(-dirZ, dirX);
         const diff = wrapAngle(desired - t.heading);
-        checkStuck(ctx, world, e, t, m.nav, dirX, dirZ, Math.abs(diff) > TURNING);
+        checkStuck(ctx, world, e, t, m, dirX, dirZ, Math.abs(diff) > TURNING);
 
         t.heading = turnToward(t.heading, desired, m.turnRate * dt);
         // Slow down while facing away so units arc rather than strafe.
         const throttle = Math.max(0, Math.cos(diff));
-        const stepLen = Math.min(dist, m.speed * throttle * dt);
+        const rules = MOVE_RULES[m.move];
+        // Wading and swimming are slower (or, for hovers, a little faster) than driving.
+        const speed = !rules.flies && ctx.field.isWater(t.x, t.z) ? m.speed * rules.waterSpeed : m.speed;
+        const stepLen = Math.min(dist, speed * throttle * dt);
         const nx = t.x + Math.cos(t.heading) * stepLen;
         const nz = t.z - Math.sin(t.heading) * stepLen;
-        if (m.canCrossWater || !ctx.field.isWater(nx, nz)) {
+        if (rules.flies || ctx.navs.for(m.move).terrainAllowsAt(nx, nz)) {
           t.x = nx;
           t.z = nz;
         }
@@ -234,17 +248,32 @@ export function navObstacleSystem(ctx: SimContext): System {
     },
   };
 }
-/** Pushes overlapping units apart, and out of buildings, so they don't stack up. */
+/** The aircraft in the world this tick (usually none, which lets the checks below skip the work). */
+function aircraft(world: World): Set<Entity> {
+  const air = new Set<Entity>();
+  for (const e of world.query(Mover)) if (MOVE_RULES[world.req(e, Mover).move].flies) air.add(e);
+  return air;
+}
+
+/**
+ * Pushes overlapping units apart, and out of buildings, so they don't stack
+ * up. Aircraft only bump into other aircraft.
+ */
 export function separationSystem(ctx: SimContext): System {
   return {
     name: 'separation',
     update(world) {
+      const air = aircraft(world);
       for (const e of world.query(Unit, Transform, Collider)) {
         const t = world.req(e, Transform);
         const r = world.req(e, Collider).radius;
         const myFaction = world.req(e, Faction).id;
+        const move = world.get(e, Mover)?.move ?? 'tracked';
+        const flying = air.has(e);
+        const terrain = ctx.navs.for(move);
         ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2) => {
           if (other === e || d2 < 1e-6) return;
+          if (air.size > 0 && air.has(other) !== flying) return;
           const ot = world.req(other, Transform);
           const minDist = r + world.req(other, Collider).radius;
           const d = Math.sqrt(d2);
@@ -255,7 +284,7 @@ export function separationSystem(ctx: SimContext): System {
           const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
-          if (!ctx.field.isWater(nx, nz)) {
+          if (flying || terrain.terrainAllowsAt(nx, nz)) {
             t.x = nx;
             t.z = nz;
           }

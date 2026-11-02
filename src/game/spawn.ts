@@ -20,6 +20,7 @@ import {
   Unit,
 } from './components';
 import { SimContext } from './context';
+import { MOVE_RULES } from '../world/moveClasses';
 import { UnitDef, WeaponDef } from './units';
 
 function armed(
@@ -75,7 +76,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   world.add(e, Unit, { def });
   world.add(e, Targetable, { kind: 'unit' });
   world.add(e, Renderable, { model: def.model, scale: 1 });
-  world.add(e, GroundFollow, { offset: 0 });
+  world.add(e, GroundFollow, { offset: MOVE_RULES[def.move].altitude });
   world.add(e, Mover, {
     speed: def.speed,
     turnRate: def.turnRate,
@@ -83,7 +84,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     targetZ: null,
     faceX: null,
     faceZ: null,
-    canCrossWater: false,
+    move: def.move,
     nav: makeNavState(),
   });
   world.add(e, Health, { hp: def.hp, max: def.hp, armor: def.armor, lastHit: null });
@@ -104,6 +105,9 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     lane: 0,
     laneAttack: -1,
     target: -1,
+    roleCheckAt: 0,
+    threat: null,
+    escort: null,
   });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;

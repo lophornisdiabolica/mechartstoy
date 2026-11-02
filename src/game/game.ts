@@ -3,7 +3,7 @@ import { World } from '../core/ecs';
 import { Rng } from '../core/rng';
 import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield, generateBattlefield } from '../world/battlefield';
-import { NavGrid } from '../world/navGrid';
+import { NavGrids } from '../world/navGrid';
 import { Prop, scatterProps } from '../world/props';
 import { layoutBase, layoutTown } from '../world/settlements';
 import { GameEvents, Outcome, SimContext } from './context';
@@ -68,7 +68,8 @@ export class Game {
     const root = new Rng(seed);
     this.field = generateBattlefield(root.fork(1), battlefieldConfig(settings));
     this.props = scatterProps(this.field, root.fork(2));
-    const nav = new NavGrid(this.field);
+    const navs = new NavGrids(this.field);
+    const nav = navs.land;
     const tide = tideForMap(settings.armies, this.field.config.cols);
     // Whoever surges first has an edge, so the order of the teams' tides is rolled per map (on its own stream, so nothing else shifts).
     const sides = new Sides(
@@ -84,6 +85,7 @@ export class Game {
       grid: new SpatialGrid(6),
       rng: root.fork(3),
       nav,
+      navs,
       orders: defaultOrders(settings.factions.length),
       settings,
       units: tunedUnits(settings),

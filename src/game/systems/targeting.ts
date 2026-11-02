@@ -1,10 +1,31 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Armed, Collider, Construction, Faction, Targetable, Transform } from '../components';
+import { MOVE_RULES } from '../../world/moveClasses';
+import { Armed, Collider, Construction, Faction, Mover, Targetable, Transform } from '../components';
 import { SimContext } from '../context';
 
 const RETARGET_INTERVAL = 0.5;
 /** Buildings count as this much further away, so units shoot units first. Siege units invert it. */
 const BUILDING_PENALTY = 8;
+/** Extra range per world unit of height above the target, as a fraction of the weapon's range, and the most it can add. */
+const HEIGHT_RANGE_PER_UNIT = 0.03;
+const HEIGHT_RANGE_MAX = 0.15;
+
+/** Whether a weapon that hits `targets` can shoot at this entity (aircraft need an anti-air weapon). */
+export function canHit(world: World, armed: Armed, target: Entity): boolean {
+  const m = world.get(target, Mover);
+  const air = m !== undefined && MOVE_RULES[m.move].flies;
+  return armed.weapon.targets === 'both' || (armed.weapon.targets === 'air') === air;
+}
+
+/**
+ * A weapon's reach against a target: its range, plus up to 15% from higher
+ * ground (3% per unit of height above the target). Shooting uphill costs
+ * nothing extra; the low side just can't reach as far as the high side.
+ */
+export function effectiveRange(world: World, e: Entity, armed: Armed, target: Entity): number {
+  const dh = world.req(e, Transform).y - world.req(target, Transform).y;
+  return armed.weapon.range * (1 + Math.max(0, Math.min(HEIGHT_RANGE_MAX, dh * HEIGHT_RANGE_PER_UNIT)));
+}
 
 function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Entity | null {
   const t = world.req(e, Transform);
@@ -15,6 +36,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Ent
     const otherFaction = world.req(other, Faction).id;
     // Only enemies; nobody aims at the civilian town (it only suffers stray fire).
     if (!ctx.sides.hostile(faction, otherFaction)) return;
+    if (!canHit(world, armed, other)) return;
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;
     const isBuilding = world.req(other, Targetable).kind === 'building';

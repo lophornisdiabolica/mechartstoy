@@ -49,6 +49,7 @@ const towerCannon: WeaponDef = {
   spread: 0.06,
   arc: false,
   muzzleHeight: 2.1,
+  targets: 'both',
 };
 
 export const BUILDING_DEFS = {

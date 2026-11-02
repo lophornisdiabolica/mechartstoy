@@ -7,7 +7,8 @@ import { Game } from '../game/game';
 import { Stance } from '../game/orders';
 import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
-import { UnitId } from '../game/units';
+import { Role, UnitId } from '../game/units';
+import { MoveClass } from '../world/moveClasses';
 import { factionColors } from '../render/models';
 import { ShadowQuality, Stage } from '../render/stage';
 import { dropdown, el, hex, segmented } from './dom';
@@ -35,6 +36,21 @@ export interface MatchControls {
  * Game's command methods, and to the view through Stage. One per battle;
  * dispose() removes it.
  */
+const MOVE_LABELS: Record<MoveClass, string> = {
+  foot: 'On foot',
+  tracked: 'Tracked',
+  walker: 'Walker (climbs slopes, wades shallows)',
+  hover: 'Hover (crosses water)',
+  amphibious: 'Amphibious',
+  naval: 'Naval',
+  air: 'Aircraft',
+};
+const ROLE_LABELS: Record<Role, string> = {
+  frontline: 'frontline',
+  artillery: 'artillery (fires from long range)',
+  support: 'support',
+};
+
 export class Controls {
   private playerFaction: number | null = null;
   private tool: Tool = null;
@@ -391,7 +407,10 @@ export class Controls {
     const lines: string[] = [];
     const armed = w.get(e, Armed);
     if (armed) lines.push(`${armed.weapon.name}: ${armed.target !== null ? 'engaging' : 'no target'}`);
-    if (unit) lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);
+    if (unit) {
+      lines.push(`${MOVE_LABELS[unit.def.move]}, ${ROLE_LABELS[unit.def.role]}`);
+      lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);
+    }
     const guard = w.get(e, Guard);
     if (guard) lines.push('Guarding its outpost');
     const part = w.get(e, OutpostPart);
