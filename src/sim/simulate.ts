@@ -47,6 +47,16 @@ export const SCENARIOS: Scenario[] = [
   { id: '1v1-large', label: '1v1, large map', battles: 8, quick: 3, setup: conquest(sides([0, 1]), (s) => (s.map.size = 'large')) },
   { id: '1v1-no-outposts', label: '1v1, no outposts', battles: 12, quick: 4, setup: conquest(sides([0, 1]), (s) => (s.map.outposts = 0)) },
   { id: '1v1-tide', label: '1v1, attacks on the tide', battles: 12, quick: 4, setup: conquest(sides([0, 1]), (s) => (s.armies.attackTiming = 'tide')) },
+  {
+    id: '1v1-rugged',
+    label: '1v1, wet and hilly (movement classes)',
+    battles: 12,
+    quick: 4,
+    setup: conquest(sides([0, 1]), (s) => {
+      s.map.water = 1;
+      s.map.hills = 1.6;
+    }),
+  },
   { id: '2v2', label: '2v2', battles: 12, quick: 4, setup: conquest(sides([0, 0, 1, 1])) },
   { id: '1v3', label: '1v3', battles: 12, quick: 4, setup: conquest(sides([0, 1, 1, 1])) },
   { id: 'ffa3', label: 'Free-for-all, 3 sides', battles: 12, quick: 4, setup: conquest(sides([0, 1, 2])) },

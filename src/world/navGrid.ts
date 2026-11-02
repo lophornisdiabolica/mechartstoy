@@ -1,13 +1,11 @@
 import { Battlefield } from './battlefield';
+import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
 
 export interface Point {
   x: number;
   z: number;
 }
 
-/** Slope above which ground costs extra to cross (units prefer valleys and roads). */
-const STEEP = 0.7;
-const STEEP_COST = 3;
 /** Cap on A* node expansions per search, so a hopeless search can't stall a tick. */
 const MAX_EXPANSIONS = 8000;
 /**
@@ -77,9 +75,30 @@ class Heap {
 }
 
 /**
- * Coarse grid for route planning. Water is impassable, steep ground costs
- * more, and buildings are added/removed as obstacles while the game runs
- * (`version` bumps on every change so cached routes know to re-plan).
+ * Buildings marked on the map as obstacles, shared by every movement class's
+ * grid so one building going up or down updates them all.
+ */
+export class NavObstacles {
+  /** Changes whenever obstacles change. */
+  version = 0;
+  /** Number of obstacles covering each cell. */
+  readonly occupied: Uint16Array;
+
+  constructor(
+    readonly cols: number,
+    readonly rows: number,
+  ) {
+    this.occupied = new Uint16Array(cols * rows);
+  }
+}
+
+/**
+ * Coarse grid for route planning, for one movement class (see
+ * moveClasses.ts). Terrain the class can't cross (water too deep, dry land
+ * for boats, cliffs for hovers) is impassable, steep ground, water and towns
+ * cost what the class says, and buildings are added/removed as obstacles
+ * while the game runs (`version` bumps on every change so cached routes know
+ * to re-plan).
  *
  * Big units only fit through wide gaps, so every query takes the unit's
  * radius. A clearance map (distance from each cell to the nearest blocked
@@ -88,17 +107,17 @@ class Heap {
 export class NavGrid {
   readonly cols: number;
   readonly rows: number;
-  /** Changes whenever obstacles change. */
-  version = 0;
+  readonly rules: MoveRules;
+  readonly obstacles: NavObstacles;
 
-  private readonly water: Uint8Array;
+  /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
+  private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
-  /** Number of obstacles covering each cell. */
   private readonly occupied: Uint16Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   private clearanceVersion = -1;
-  /** Which patch of dry land each cell is on (-1 for water); cells with different ids can't reach each other. */
+  /** Which connected patch of passable terrain each cell is on (-1 for impassable); cells with different ids can't reach each other. */
   private readonly region: Int32Array;
 
   // Scratch buffers reused across searches.
@@ -110,23 +129,40 @@ export class NavGrid {
   private search = 0;
   private readonly open: Heap;
 
+  /**
+   * `move` picks the movement class (tracked, the baseline land vehicle, by
+   * default). Grids for different classes on the same map should share one
+   * NavObstacles.
+   */
   constructor(
     private readonly field: Battlefield,
+    move: MoveClass = 'tracked',
+    obstacles?: NavObstacles,
     readonly cellSize = 1.5,
   ) {
     this.cols = Math.ceil(field.width / cellSize);
     this.rows = Math.ceil(field.depth / cellSize);
+    this.rules = MOVE_RULES[move];
+    this.obstacles = obstacles ?? new NavObstacles(this.cols, this.rows);
     const n = this.cols * this.rows;
-    this.water = new Uint8Array(n);
+    this.terrain = new Uint8Array(n);
     this.cost = new Float32Array(n);
-    this.occupied = new Uint16Array(n);
+    this.occupied = this.obstacles.occupied;
     this.clearance = new Float32Array(n);
+    const rules = this.rules;
+    const towns = [...field.townSites, ...field.outpostSites];
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
         const { x, z } = this.center(i, j);
         const k = j * this.cols + i;
-        this.water[k] = field.isWater(x, z) ? 1 : 0;
-        this.cost[k] = field.slopeAt(x, z) > STEEP ? STEEP_COST : 1;
+        const depth = field.seaLevel - field.heightAt(x, z);
+        const slope = field.slopeAt(x, z);
+        this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
+        let cost = 1;
+        if (depth > 0) cost *= rules.waterCost;
+        else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
+        if (rules.town !== 1 && towns.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
+        this.cost[k] = cost;
       }
     }
     this.region = this.labelRegions();
@@ -138,14 +174,14 @@ export class NavGrid {
     this.open = new Heap(this.f);
   }
 
-  /** Flood-fill the dry land into connected regions. Buildings come and go, so only water counts. */
+  /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
   private labelRegions(): Int32Array {
     const { cols, rows } = this;
     const region = new Int32Array(cols * rows).fill(-1);
     let next = 0;
     const stack: number[] = [];
     for (let start = 0; start < region.length; start++) {
-      if (this.water[start] || region[start] >= 0) continue;
+      if (this.terrain[start] || region[start] >= 0) continue;
       region[start] = next;
       stack.push(start);
       while (stack.length > 0) {
@@ -155,7 +191,7 @@ export class NavGrid {
         for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
           if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
           const nk = nj * cols + ni;
-          if (this.water[nk] || region[nk] >= 0) continue;
+          if (this.terrain[nk] || region[nk] >= 0) continue;
           region[nk] = next;
           stack.push(nk);
         }
@@ -165,7 +201,12 @@ export class NavGrid {
     return region;
   }
 
-  /** True if dry land connects the two points (ignoring buildings). */
+  /** Changes whenever obstacles change. */
+  get version(): number {
+    return this.obstacles.version;
+  }
+
+  /** True if passable terrain connects the two points (ignoring buildings). */
   connected(a: Point, b: Point): boolean {
     const [ai, aj] = this.cellOf(a.x, a.z);
     const [bi, bj] = this.cellOf(b.x, b.z);
@@ -189,7 +230,15 @@ export class NavGrid {
   blocked(i: number, j: number): boolean {
     if (i < 0 || j < 0 || i >= this.cols || j >= this.rows) return true;
     const k = j * this.cols + i;
-    return this.water[k] === 1 || this.occupied[k] > 0;
+    return this.terrain[k] === 1 || this.occupied[k] > 0;
+  }
+
+  /** Whether this class can be at a point as far as the terrain goes (buildings aside). Off the map counts as no. */
+  terrainAllowsAt(x: number, z: number): boolean {
+    if (!this.field.contains(x, z)) return false;
+    // Sampled at the point itself rather than the cell, so units walk right up to the shore.
+    const f = this.field;
+    return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
   }
 
   blockedAt(x: number, z: number): boolean {
@@ -271,16 +320,29 @@ export class NavGrid {
         this.occupied[k] = Math.max(0, this.occupied[k] + delta);
       }
     }
-    this.version++;
+    this.obstacles.version++;
   }
 
-  /** True if a unit of this radius can walk straight between two points. */
-  lineClear(a: Point, b: Point, radius = 0): boolean {
+  /** Route cost of the cell under a point (1 is plain open ground; see MoveRules). */
+  costAt(x: number, z: number): number {
+    const [i, j] = this.cellOf(x, z);
+    return this.cost[j * this.cols + i];
+  }
+
+  /**
+   * True if a unit of this radius can walk straight between two points. With
+   * `maxCost`, the line also mustn't cross ground that costs more than that
+   * to this class (steep slopes for tanks, towns for big units...), so a
+   * clear line doesn't shortcut ground the unit would rather go round.
+   */
+  lineClear(a: Point, b: Point, radius = 0, maxCost = Infinity): boolean {
     const dist = Math.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.ceil(dist / (this.cellSize * 0.5));
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
-      if (!this.fitsAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, radius)) return false;
+      const [i, j] = this.cellOf(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
+      if (!this.fits(i, j, radius)) return false;
+      if (this.cost[j * this.cols + i] > maxCost + 1e-6) return false;
     }
     return true;
   }
@@ -401,18 +463,74 @@ export class NavGrid {
     return { points: this.smooth(from, points, radius), found };
   }
 
-  /** String-pulling: drop waypoints that can be skipped with a clear straight line. */
+  /**
+   * Cost of walking straight from a to b (distance times the cost of the
+   * ground crossed), or Infinity if a unit of this radius can't.
+   */
+  private lineCost(a: Point, b: Point, radius: number): number {
+    const dist = Math.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.max(1, Math.ceil(dist / (this.cellSize * 0.5)));
+    let cost = 0;
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      if (!this.fitsAt(x, z, radius)) return Infinity;
+      cost += (dist / steps) * this.costAt(x, z);
+    }
+    return cost;
+  }
+
+  /**
+   * String-pulling: drop waypoints that can be skipped with a clear straight
+   * line, as long as the shortcut costs no more than the stretch of route it
+   * replaces (so it doesn't cut across a town or a slope the route went round).
+   */
   private smooth(from: Point, points: Point[], radius: number): Point[] {
     const out: Point[] = [];
+    // cum[k + 1]: route cost from `from` to points[k] along the planned cells.
+    const cum = [0];
+    let prev = from;
+    for (const p of points) {
+      cum.push(cum[cum.length - 1] + Math.hypot(p.x - prev.x, p.z - prev.z) * this.costAt(p.x, p.z));
+      prev = p;
+    }
     let anchor = from;
+    let anchorCum = 0;
     let i = 0;
     while (i < points.length) {
       let j = points.length - 1;
-      while (j > i && !this.lineClear(anchor, points[j], radius)) j--;
+      while (j > i && !(this.lineCost(anchor, points[j], radius) <= (cum[j + 1] - anchorCum) * 1.02 + 0.5)) j--;
       out.push(points[j]);
       anchor = points[j];
+      anchorCum = cum[j + 1];
       i = j + 1;
     }
     return out;
+  }
+}
+
+/**
+ * One nav grid per movement class, made when first asked for, all sharing
+ * the same building obstacles. Marking an obstacle on any of them marks it
+ * on all.
+ */
+export class NavGrids {
+  private readonly grids = new Map<MoveClass, NavGrid>();
+  /** The baseline land grid (tracked vehicles), used for lanes, spawn spots and anything not tied to one unit. */
+  readonly land: NavGrid;
+
+  constructor(private readonly field: Battlefield) {
+    this.land = new NavGrid(field, 'tracked');
+    this.grids.set('tracked', this.land);
+  }
+
+  for(move: MoveClass): NavGrid {
+    let grid = this.grids.get(move);
+    if (!grid) {
+      grid = new NavGrid(this.field, move, this.land.obstacles, this.land.cellSize);
+      this.grids.set(move, grid);
+    }
+    return grid;
   }
 }

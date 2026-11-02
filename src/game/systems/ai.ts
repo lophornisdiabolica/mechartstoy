@@ -1,9 +1,10 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Ai, Armed, Faction, Guard, Mover, Transform } from '../components';
+import { Ai, Armed, Faction, Guard, Mover, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
-import { distanceToTarget } from './targeting';
+import { Role } from '../units';
+import { distanceToTarget, effectiveRange } from './targeting';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -11,6 +12,14 @@ const GUARD_LEASH = CAPTURE_RADIUS + 12;
 const PATROL_SPEED = 0.06;
 /** Distance from the post that squads holding an outpost patrol at. */
 const PATROL_RADIUS = CAPTURE_RADIUS - 2;
+/** How far around itself artillery and support units look for the frontline allies they keep behind. */
+const ESCORT_RANGE = 24;
+/** How far behind the frontline artillery holds on the march. */
+const ARTILLERY_HANG_BACK = 10;
+/** How far behind a frontline ally a support unit follows. */
+const SUPPORT_TRAIL = 4;
+/** Seconds between an artillery or support unit's looks around (see Ai.roleCheckAt). */
+const ROLE_CHECK = 0.5;
 /**
  * Whether a squad is one of the `share` of squads that hold outposts (see
  * the outpostHold setting): fixed per squad, spread evenly by the golden ratio.
@@ -43,19 +52,58 @@ export function aiSystem(ctx: SimContext): System {
         const faction = world.req(e, Faction).id;
         const guard = world.get(e, Guard);
         const post = guard ? ctx.outposts[guard.outpost] : null;
+        const role: Role = world.get(e, Unit)?.def.role ?? 'frontline';
+        const lookAround = role !== 'frontline' && world.time >= ai.roleCheckAt;
+        if (lookAround) ai.roleCheckAt = world.time + ROLE_CHECK;
+
+        // Artillery backs away from enemy units inside its minimum range, to where it can shoot them.
+        if (role === 'artillery' && armed.weapon.minRange > 0) {
+          if (lookAround) ai.threat = nearestEnemyUnit(world, ctx, e, faction, armed.weapon.minRange);
+          const threat = ai.threat !== null && world.isAlive(ai.threat) ? ai.threat : null;
+          if (threat) {
+            const tt = world.req(threat, Transform);
+            const d = Math.max(0.1, Math.hypot(t.x - tt.x, t.z - tt.z));
+            const away = { x: t.x + ((t.x - tt.x) / d) * 6, z: t.z + ((t.z - tt.z) / d) * 6 };
+            if (ctx.navs.for(mover.move).terrainAllowsAt(away.x, away.z)) {
+              mover.targetX = away.x;
+              mover.targetZ = away.z;
+              mover.faceX = tt.x;
+              mover.faceZ = tt.z;
+              continue;
+            }
+          }
+        }
 
         if (armed.target !== null && world.isAlive(armed.target) && (!post || near(world, armed.target, post, GUARD_LEASH))) {
           const tt = world.req(armed.target, Transform);
-          // Square up to whatever we're fighting.
-          mover.faceX = tt.x;
-          mover.faceZ = tt.z;
-          if (distanceToTarget(world, e, armed.target) > armed.weapon.range * 0.85) {
-            mover.targetX = tt.x;
-            mover.targetZ = tt.z;
-          } else {
-            mover.targetX = mover.targetZ = null;
+          const reach = effectiveRange(world, e, armed, armed.target);
+          const outOfRange = distanceToTarget(world, e, armed.target) > reach * (role === 'artillery' ? 0.95 : 0.85);
+          // Support units don't chase: out of range, they carry on keeping up with the frontline.
+          if (!(role === 'support' && outOfRange && !post)) {
+            // Square up to whatever we're fighting. Artillery stops near its longest range.
+            mover.faceX = tt.x;
+            mover.faceZ = tt.z;
+            if (outOfRange) {
+              mover.targetX = tt.x;
+              mover.targetZ = tt.z;
+            } else {
+              mover.targetX = mover.targetZ = null;
+            }
+            continue;
           }
-          continue;
+        }
+
+        // Support units tag along a little behind the nearest frontline ally.
+        if (role === 'support' && !post) {
+          if (lookAround) ai.escort = nearestFrontline(world, ctx, e, faction);
+          const lead = ai.escort !== null && world.isAlive(ai.escort) ? ai.escort : null;
+          if (lead !== null) {
+            const lt = world.req(lead, Transform);
+            const bx = lt.x - Math.cos(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetX * 0.3;
+            const bz = lt.z + Math.sin(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetZ * 0.3;
+            moveTo(mover, t, bx, bz, lt.x + Math.cos(lt.heading) * 10, lt.z - Math.sin(lt.heading) * 10);
+            continue;
+          }
         }
 
         if (post) {
@@ -103,7 +151,7 @@ export function aiSystem(ctx: SimContext): System {
           const rally = orders.rally ?? defend ?? (target >= 0 ? ctx.lanes.rally(faction, target, ai.lane) : home);
           let rx = rally.x + ai.rallyOffsetX;
           let rz = rally.z + ai.rallyOffsetZ;
-          if (ctx.field.isWater(rx, rz)) {
+          if (!ctx.navs.for(mover.move).terrainAllowsAt(rx, rz)) {
             rx = rally.x;
             rz = rally.z;
           }
@@ -122,6 +170,21 @@ export function aiSystem(ctx: SimContext): System {
           mover.faceX = outpost.x;
           mover.faceZ = outpost.z;
           continue;
+        }
+
+        // Artillery keeps behind the frontline pushing the same attack, rather than leading it.
+        if (role === 'artillery') {
+          if (lookAround) ai.lead = frontlineProgress(world, ctx, e, faction, target);
+          const lead = ai.lead;
+          const here = ctx.lanes.progress(faction, target, t.x, t.z);
+          const a = ctx.field.baseSites[faction];
+          const b = ctx.field.baseSites[target];
+          if (lead !== null && here > lead - ARTILLERY_HANG_BACK / Math.max(1, Math.hypot(b.x - a.x, b.z - a.z))) {
+            mover.targetX = mover.targetZ = null;
+            mover.faceX = b.x;
+            mover.faceZ = b.z;
+            continue;
+          }
         }
 
         // March down the lane, then into the enemy base.
@@ -147,6 +210,58 @@ export function aiSystem(ctx: SimContext): System {
       }
     },
   };
+}
+
+/** The closest enemy unit (not building) within `range`, if any. */
+function nearestEnemyUnit(world: World, ctx: SimContext, e: Entity, faction: number, range: number): Entity | null {
+  if (range <= 0) return null;
+  const t = world.req(e, Transform);
+  let best: Entity | null = null;
+  let bestD2 = range * range;
+  ctx.grid.forEachNear(t.x, t.z, range, (other, d2) => {
+    if (d2 >= bestD2 || world.get(other, Targetable)?.kind !== 'unit') return;
+    if (!ctx.sides.hostile(faction, world.req(other, Faction).id)) return;
+    best = other;
+    bestD2 = d2;
+  });
+  return best;
+}
+
+/** Whether a unit leads the fighting (frontline role, and not an outpost's guard). */
+function isFrontline(world: World, e: Entity): boolean {
+  return world.get(e, Unit)?.def.role === 'frontline' && !world.has(e, Guard);
+}
+
+/** The closest allied frontline unit within ESCORT_RANGE, if any. */
+function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: number): Entity | null {
+  const t = world.req(e, Transform);
+  let best: Entity | null = null;
+  let bestD2 = ESCORT_RANGE * ESCORT_RANGE;
+  ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE, (other, d2) => {
+    if (other === e || d2 >= bestD2 || !isFrontline(world, other)) return;
+    if (!ctx.sides.allied(faction, world.req(other, Faction).id)) return;
+    best = other;
+    bestD2 = d2;
+  });
+  return best;
+}
+
+/**
+ * How far along the way to `target` (see Lanes.progress) the furthest allied
+ * frontline unit nearby has got on the same attack, or null if there's none
+ * within ESCORT_RANGE (artillery on its own just carries on).
+ */
+function frontlineProgress(world: World, ctx: SimContext, e: Entity, faction: number, target: number): number | null {
+  const t = world.req(e, Transform);
+  let lead: number | null = null;
+  ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE, (other) => {
+    if (other === e || !isFrontline(world, other)) return;
+    if (!ctx.sides.allied(faction, world.req(other, Faction).id) || world.get(other, Ai)?.target !== target) return;
+    const ot = world.req(other, Transform);
+    const p = ctx.lanes.progress(faction, target, ot.x, ot.z);
+    if (lead === null || p > lead) lead = p;
+  });
+  return lead;
 }
 
 /** Whether an entity is within `range` of an outpost's post. */

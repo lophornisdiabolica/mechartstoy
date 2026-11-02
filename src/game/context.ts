@@ -3,7 +3,7 @@ import { EventBus } from '../core/events';
 import { Rng } from '../core/rng';
 import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield } from '../world/battlefield';
-import { NavGrid } from '../world/navGrid';
+import { NavGrid, NavGrids } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Hit } from './components';
 import { Lanes } from './lanes';
@@ -51,8 +51,10 @@ export interface SimContext {
   /** Targetable entities indexed by position, rebuilt at the start of every tick. */
   grid: SpatialGrid;
   rng: Rng;
-  /** Route planning grid; buildings are kept marked on it as obstacles. */
+  /** The land route planning grid (tracked vehicles); buildings are kept marked on it as obstacles. Same as navs.land. */
   nav: NavGrid;
+  /** Route planning grids per movement class, sharing the same obstacles. A unit plans on navs.for(mover.move). */
+  navs: NavGrids;
   /** Player-set orders per faction. */
   orders: FactionOrders[];
   /** The battle's settings. Systems read tuning from here every tick, so live changes take effect. */

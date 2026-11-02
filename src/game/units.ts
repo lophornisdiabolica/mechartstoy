@@ -1,8 +1,23 @@
+import { MoveClass } from '../world/moveClasses';
+
 /**
  * Unit and weapon definitions. Adding a unit type is a new entry here plus a
  * model registered under its `model` key; no system code changes needed.
  */
 export type UnitClass = 'infantry' | 'vehicle' | 'mech';
+
+/**
+ * What a unit does in a fight, which sets a few simple habits (see the AI system):
+ * - frontline: leads the push and closes with the enemy.
+ * - artillery: stays behind its own frontline on the march, fires from near
+ *   its longest range, and backs off from enemies that get too close.
+ * - support: keeps a little behind the nearest frontline ally rather than
+ *   charging, and only shoots what comes into range.
+ */
+export type Role = 'frontline' | 'artillery' | 'support';
+
+/** Which targets a weapon can hit: things on the ground (and water), aircraft, or both. */
+export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
 export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery';
@@ -29,12 +44,16 @@ export interface WeaponDef {
   arc: boolean;
   /** Height of the muzzle above the unit's origin. */
   muzzleHeight: number;
+  targets: WeaponTargets;
 }
 
 export interface UnitDef {
   id: string;
   name: string;
   class: UnitClass;
+  /** How it gets around (see moveClasses.ts). */
+  move: MoveClass;
+  role: Role;
   model: string;
   hp: number;
   /** Fraction of incoming damage ignored, 0..1. */
@@ -67,6 +86,7 @@ const rifle: WeaponDef = {
   spread: 0.08,
   arc: false,
   muzzleHeight: 0.4,
+  targets: 'ground',
 };
 
 export const UNIT_DEFS = {
@@ -74,6 +94,8 @@ export const UNIT_DEFS = {
     id: 'trooper',
     name: 'Trooper',
     class: 'infantry',
+    move: 'foot',
+    role: 'frontline',
     model: 'trooper',
     hp: 20,
     armor: 0,
@@ -91,6 +113,8 @@ export const UNIT_DEFS = {
     id: 'strider',
     name: 'Strider',
     class: 'mech',
+    move: 'walker',
+    role: 'frontline',
     model: 'strider',
     hp: 90,
     armor: 0.1,
@@ -114,6 +138,7 @@ export const UNIT_DEFS = {
       spread: 0.07,
       arc: false,
       muzzleHeight: 1.6,
+      targets: 'both',
     },
     wreckTime: 18,
     siege: false,
@@ -122,6 +147,8 @@ export const UNIT_DEFS = {
     id: 'tank',
     name: 'Battle Tank',
     class: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
     model: 'tank',
     hp: 220,
     armor: 0.35,
@@ -145,6 +172,7 @@ export const UNIT_DEFS = {
       spread: 0.05,
       arc: false,
       muzzleHeight: 1.0,
+      targets: 'ground',
     },
     wreckTime: 25,
     siege: false,
@@ -153,6 +181,8 @@ export const UNIT_DEFS = {
     id: 'titan',
     name: 'Titan',
     class: 'mech',
+    move: 'walker',
+    role: 'frontline',
     model: 'titan',
     hp: 520,
     armor: 0.45,
@@ -176,6 +206,7 @@ export const UNIT_DEFS = {
       spread: 0.12,
       arc: true,
       muzzleHeight: 3.6,
+      targets: 'both',
     },
     wreckTime: 35,
     siege: true,
@@ -184,6 +215,8 @@ export const UNIT_DEFS = {
     id: 'howitzer',
     name: 'Howitzer',
     class: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
     model: 'howitzer',
     hp: 120,
     armor: 0.2,
@@ -207,6 +240,7 @@ export const UNIT_DEFS = {
       spread: 0.1,
       arc: true,
       muzzleHeight: 1.2,
+      targets: 'ground',
     },
     wreckTime: 25,
     siege: true,

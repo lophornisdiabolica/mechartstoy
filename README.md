@@ -101,7 +101,8 @@ src/
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites
     props.ts         scenery placement (trees, rocks)
     settlements.ts   base and town layouts (building placements as data)
-    navGrid.ts       route-planning grid (water, steep ground, buildings) and A*
+    moveClasses.ts   movement classes (foot, tracked, walker, hover, amphibious, naval, air) and their terrain rules
+    navGrid.ts       route-planning grid per movement class (terrain, slopes, towns, buildings) and A*
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
     units.ts         unit and weapon definitions (stats are data)
@@ -153,7 +154,8 @@ src/
   models are built facing +x. Bases sit round the edge of the map in
   "seats" (`seatPoint` in `world/battlefield.ts`), starting on the west side;
   with two sides, faction 0 is on -x and faction 1 on +x.
-- **Adding a unit.** Add an entry to `UNIT_DEFS` in `game/units.ts`, register
+- **Adding a unit.** Add an entry to `UNIT_DEFS` in `game/units.ts` (with a
+  movement class and a role, below), register
   a model under its `model` key (see `render/models/units.ts`), and add it to
   the wave table in `game/systems/reinforcements.ts`.
 - **Adding a building.** Add an entry to `BUILDING_DEFS` in
@@ -167,6 +169,25 @@ src/
   through gaps it fits. Spawning (`spawnSpot` in `systems/production.ts`)
   also checks there's room, and base layouts keep an apron clear in front of
   production doors.
+- **Movement classes** (`world/moveClasses.ts`). Every unit has one, and
+  plans on that class's nav grid (`ctx.navs.for(move)`; all grids share the
+  building obstacles, and `ctx.nav` is the tracked-vehicle grid used for
+  lanes and spawn spots). A class says how deep water it can enter
+  (walkers wade shallows, hovers and amphibious units cross any water,
+  boats stay in it), whether it can climb steep ground, and what slopes,
+  water and towns cost it. Infantry find towns and outposts cheap, tanks
+  and mechs find them dear, and walkers take slopes easily. A straight line
+  to the goal is only taken if it keeps to plain ground, and route
+  smoothing never shortcuts across ground the route went round, so the
+  costs show up as routes. Aircraft fly straight at `altitude`, only bump
+  into other aircraft, and can only be shot by weapons whose `targets` is
+  `air` or `both`. There are no hover, boat or air units yet.
+- **Roles** (`Role` in `game/units.ts`). *Frontline* units lead and close
+  in. *Artillery* holds back behind the frontline pushing the same attack,
+  fires from near its longest range, and backs away from enemies inside its
+  minimum range. *Support* (no units yet) follows a little behind the
+  nearest frontline ally and doesn't chase. Weapons reach up to 15%
+  further from high ground (`effectiveRange` in `systems/targeting.ts`).
 - **Settings.** Tuning the player can change lives in `BattleSettings`
   (`game/settings.ts`). Systems read it from `ctx.settings` every tick, and
   use `ctx.units` / `ctx.buildings` (the definitions with multipliers
@@ -291,5 +312,7 @@ src/
 8. ~~More than two factions: free-for-all and teams (2v2, 1v3, ...).~~
 9. ~~Capturable outposts, with lanes through outposts and towns.~~
 10. ~~Readiness: attack when the army is ready rather than on the tide's clock.~~
-11. Asymmetric faction rosters, outpost unit unlocks, squad morale; maybe
-    damage types and armour classes.
+11. ~~Movement classes and unit roles (walkers, hovers, boats, aircraft; frontline, artillery, support).~~
+12. Next, per the design notes: line of fire (shots hit buildings and
+    terrain), unit caps per category with rare super units, healing in your
+    own territory, then faction doctrines.

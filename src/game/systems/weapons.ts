@@ -2,7 +2,8 @@ import { Entity, System, World } from '../../core/ecs';
 import { Armed, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
-import { distanceToTarget } from './targeting';
+import { distanceToTarget, effectiveRange } from './targeting';
+import { MOVE_RULES } from '../../world/moveClasses';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -23,7 +24,9 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   const missA = ctx.rng.range(0, Math.PI * 2);
   const ex = tt.x + Math.cos(missA) * missR;
   const ez = tt.z + Math.sin(missA) * missR;
-  const ey = ctx.field.surfaceAt(ex, ez) + Math.min(1.5, targetRadius * 0.6);
+  // Shots at aircraft go to the aircraft's height; everything else lands on the ground at the impact point.
+  const tm = world.get(target, Mover);
+  const ey = (tm && MOVE_RULES[tm.move].flies ? tt.y : ctx.field.surfaceAt(ex, ez)) + Math.min(1.5, targetRadius * 0.6);
 
   const p = world.create();
   world.add(p, Transform, makeTransform(sx, sy, sz, armed.aim));
@@ -88,7 +91,7 @@ export function weaponSystem(ctx: SimContext): System {
         }
 
         const d = distanceToTarget(world, e, target);
-        const inRange = d <= armed.weapon.range && d >= armed.weapon.minRange;
+        const inRange = d <= effectiveRange(world, e, armed, target) && d >= armed.weapon.minRange;
         const aligned = Math.abs(wrapAngle(desired - armed.aim)) < AIM_TOLERANCE;
         if (armed.cooldown <= 0 && inRange && aligned) {
           fire(world, ctx, e, armed, target);
