@@ -111,6 +111,8 @@ export class NavGrid {
   readonly rules: MoveRules;
   readonly obstacles: NavObstacles;
 
+  /** Towns and outposts, whose ground costs what MoveRules.town says. */
+  private readonly settled: { x: number; z: number; radius: number }[];
   /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
   private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
@@ -150,6 +152,7 @@ export class NavGrid {
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.occupied;
     this.clearance = new Float32Array(n);
+    this.settled = [...field.townSites, ...field.outpostSites];
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
     this.g = new Float32Array(n);
@@ -178,7 +181,7 @@ export class NavGrid {
     let cost = 1;
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
-    if (rules.town !== 1 && [...field.townSites, ...field.outpostSites].some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
+    if (rules.town !== 1 && this.settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
     if (!rules.flies && depth <= 0) cost *= field.groundAt(x, z).cost[this.move] ?? 1;
     this.cost[k] = cost;
   }
