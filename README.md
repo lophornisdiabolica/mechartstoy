@@ -31,12 +31,48 @@ matches. `--doctrines` gives each battle's sides doctrines from an
 orthogonal array (every pair of doctrines meets equally often in each
 pair of slots, without playing every combination; see `orthogonalArray`)
 and adds a table of win rates per doctrine and head to head. The array
-needs a prime power number of doctrines (2, 3, 4, 5, 7, 8, 9...). With
-`--doctrines` (or `--units` on its own) it also prints a unit report per
-doctrine: how many of each unit type were built and lost, their kills and
-buildings razed, and which enemy types they killed most and died to most
-(outpost garrisons show as e.g. "outpost tower"). It's saved as
-`-units.csv` next to the other results. Every battle is saved to
+needs a prime power number of doctrines (2, 3, 4, 5, 7, 8, 9...). Win
+rates come with a 95% margin of error (`56% ±12`): two doctrines inside
+each other's margins may well be even. "vs par" scores wins against a fair
+share (one over the number of teams), so 1.00x is even in any team setup.
+
+With `--doctrines` (or `--units` on its own) it also prints a unit report
+per doctrine: for each unit type, how many were built and lost, kills and
+buildings razed, damage done and taken per unit (after armour, overkill not
+counted), damage and kills per minute of cap slot spent on it, how much of
+its time on the field it spent firing, where its damage went (infantry,
+vehicles, air, super units, buildings), and which enemy types it killed
+most and died to most (outpost garrisons show as e.g. "outpost tower").
+Kills alone overrate weapons that mow down infantry; damage and the per
+cap-slot numbers show what a unit is worth for the room it takes up, and a
+low firing share points at units that idle. It's saved as `-units.csv`
+next to the other results.
+
+`--maps wet,dry,hilly` plays on several map types (`medium`, `wet`, `dry`,
+`hilly`, `rugged`, `small`, `large`, `notown`, or your own as
+`name:settings`, e.g. `flat:hills=0`) and splits the win rates by map type.
+With `--doctrines` the map type is one more column of the orthogonal array,
+so every doctrine meets every map type equally often in the same 64
+battles; `--every-map` plays every battle on every map type instead, for
+tighter numbers per map at that many times the cost.
+
+`--compare a.json b.json` compares two saved runs without playing anything:
+battle lengths, doctrine win rates (flagging changes bigger than the
+noise), how many of the same battles changed winner, and the units whose
+damage per cap slot moved most. Run the same command before and after a
+change and compare the two.
+
+`--duel "tank*4 vs trooper*12"` skips battles and sets two groups on each
+other on open ground, with no bases or reinforcements, over `--rounds`
+(default 20) different maps, and prints who won, how fast and with how
+much health left. Line-ups mix with `+` (`lancer+trooper*6`), several duels
+go in one run separated by `;`, `--gap` sets the starting distance and
+`--set` changes settings as usual (e.g. `tank=1.2,1,1,1` for tanks with
+1.2× health). Duels take seconds and have no tide, AI timing or map
+luck in them, so they answer "does this unit beat that one" much more
+cheaply than battles. The code is in `src/sim/duel.ts`.
+
+Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
 each battle's seed is named after its scenario and number (`1v1-7`), so the
 same battle plays out the same way on any machine. The scenarios live in
@@ -228,6 +264,7 @@ src/
     dom.ts           small DOM helpers
   sim/
     simulate.ts      headless balance scenarios and stats (npm run sims; scripts/sims.mjs runs them)
+    duel.ts          unit-against-unit duels on open ground (npm run sims -- --duel)
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
 
@@ -445,5 +482,8 @@ src/
     Skyline doctrine.~~
 17. ~~The remaining doctrines: Bastion (with the howitzer as its
     signature unit), Talon, Tidewater, Firestorm.~~
-18. Next: maps. Biomes (snow, desert, forest) with a whole-town
+18. ~~Balancing tools: damage and time on the field per unit type,
+    per-cap-slot numbers, map types in the doctrine array, margins of
+    error, comparing runs, and duels.~~
+19. Next: maps. Biomes (snow, desert, forest) with a whole-town
     architecture style each, more or larger towns, and new outpost types.

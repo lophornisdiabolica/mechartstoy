@@ -1,5 +1,6 @@
 import { EventBus } from '../core/events';
-import { NEUTRAL } from './components';
+import { World } from '../core/ecs';
+import { Armed, Faction, Guard, NEUTRAL, Unit } from './components';
 import { GameEvents } from './context';
 
 /** One unit (or building) type's tally on one side. */
@@ -13,6 +14,23 @@ export interface TypeStats {
   /** Enemy unit types it killed, and the enemy unit or building types that killed it, with counts. */
   victims: Record<string, number>;
   killers: Record<string, number>;
+  /**
+   * Damage it did to enemies, and took from them (what came off health, after
+   * armour, overkill not counted). `dealtTo` splits what it did by the
+   * victims' category: infantry, vehicle, air, super or building.
+   */
+  dealt: number;
+  taken: number;
+  dealtTo: Record<string, number>;
+  /**
+   * Seconds its units spent on the field (all of them added up, so a cap slot
+   * held for a minute is 60), seconds with a target picked, and seconds
+   * within a couple of seconds of firing. Only filled in when something
+   * calls BattleStats.sample, as balance runs do.
+   */
+  alive: number;
+  engaged: number;
+  firing: number;
 }
 
 /** One side's tally for the end-of-battle summary. */
@@ -65,6 +83,17 @@ export class BattleStats {
         bump(t.victims, e.def.id);
       }
     });
+    events.on('damaged', (e) => {
+      const k = e.by;
+      // Only damage between enemies: stray fire on the town and blasts on your own side don't count.
+      if (!k || k.faction === e.faction || e.faction === NEUTRAL) return;
+      if (this.side(e.faction)) this.type(e.faction, e.victim).taken += e.amount;
+      if (this.side(k.faction)) {
+        const t = this.type(k.faction, k.source);
+        t.dealt += e.amount;
+        t.dealtTo[e.category] = (t.dealtTo[e.category] ?? 0) + e.amount;
+      }
+    });
     events.on('outpostCaptured', (e) => this.side(e.faction) && this.sides[e.faction].captured++);
     events.on('buildingDestroyed', (e) => {
       if (e.faction === NEUTRAL) this.townRazed++;
@@ -75,6 +104,24 @@ export class BattleStats {
         this.type(k.faction, k.source).razed++;
       }
     });
+  }
+
+  /**
+   * Adds `seconds` of field time to every unit on a side (outpost guards
+   * aren't part of an army), and to its engaged and firing time if it's
+   * fighting. Balance runs call this once a sim second; the game doesn't.
+   */
+  sample(world: World, seconds: number): void {
+    for (const e of world.query(Unit, Faction)) {
+      const f = world.req(e, Faction).id;
+      if (!this.side(f) || world.has(e, Guard)) continue;
+      const t = this.type(f, world.req(e, Unit).def.id);
+      t.alive += seconds;
+      const armed = world.get(e, Armed);
+      if (!armed) continue;
+      if (armed.target !== null) t.engaged += seconds;
+      if (world.time - armed.firedAt <= armed.weapon.cooldown + FIRING_SLACK) t.firing += seconds;
+    }
   }
 
   /** The type with the most kills on a side, or null before anyone has scored. */
@@ -96,9 +143,12 @@ export class BattleStats {
 
   private type(faction: number, id: string): TypeStats {
     const types = this.sides[faction].types;
-    return (types[id] ??= { built: 0, lost: 0, kills: 0, razed: 0, victims: {}, killers: {} });
+    return (types[id] ??= { built: 0, lost: 0, kills: 0, razed: 0, victims: {}, killers: {}, dealt: 0, taken: 0, dealtTo: {}, alive: 0, engaged: 0, firing: 0 });
   }
 }
+
+/** A unit counts as firing until this long after its weapon is ready again: one missed beat isn't a pause. */
+const FIRING_SLACK = 1;
 
 function bump(counts: Record<string, number>, key: string): void {
   counts[key] = (counts[key] ?? 0) + 1;
