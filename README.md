@@ -29,7 +29,13 @@ the same scenarios with each option of a setting compares them on the same
 battles. `--doctrines` gives each battle's sides doctrines from an
 orthogonal array (every pair of doctrines meets equally often in each
 pair of slots, without playing every combination; see `orthogonalArray`)
-and adds a table of win rates per doctrine and head to head. Every battle is saved to
+and adds a table of win rates per doctrine and head to head. The array
+needs a prime power number of doctrines (2, 3, 4, 5, 7, 8, 9...). With
+`--doctrines` (or `--units` on its own) it also prints a unit report per
+doctrine: how many of each unit type were built and lost, their kills and
+buildings razed, and which enemy types they killed most and died to most
+(outpost garrisons show as e.g. "outpost tower"). It's saved as
+`-units.csv` next to the other results. Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
 each battle's seed is named after its scenario and number (`1v1-7`), so the
 same battle plays out the same way on any machine. The scenarios live in
@@ -68,27 +74,42 @@ battle, its exact map via `seed`).
   make a bigger map.
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
-  Legion, the rest cycling through those until their own doctrines exist).
-  - *Armour:* tanks, striders and howitzers from the factory, the Lancer
+  Legion, Ivory Skyline, the rest borrowing one until their own doctrines
+  exist). Every doctrine fields rifle squads with AT troopers, the Scout
+  Copter and a heavy unit.
+  - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
-    vehicles (1.2×). Super unit: the Titan.
+    vehicles (1.4×). The flak tank's scattered bursts catch a soldier or
+    two rather than a whole squad, and bring down aircraft. Super unit:
+    the Titan.
   - *Raiders:* machine-gun trucks and scout buggies in numbers from the
     factory and a **motor pool**, rocket trucks (light artillery that also
     shells buildings) for the heavy work; 1.8× vehicle cap, 0.8× infantry.
     Super unit: the Land-train, an armoured rocket battery on tracks.
   - *Legion:* big squads with two AT troopers each and mortar teams from
     the barracks and a **barracks block**, light tanks and squad carriers
-    from the factory; 1.8× infantry cap, 0.8× vehicles. Super unit: the
+    from the factory; 1.6× infantry cap, 0.8× vehicles. Super unit: the
     Siege Crawler, slow heavy mortars that drops off a squad every 40
     seconds.
+  - *Skyline:* gunships, bombers and scout copters from its **airpad**,
+    battle tanks and flak walkers from the factory; 2.5× air cap, 0.8×
+    infantry and vehicles. Super unit: the Airship Carrier, a slow
+    armoured airship that launches drones.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
   the squad then fights (and is refilled in territory) like any other, and
-  the carrier loads up again a minute later. Each doctrine's
+  the carrier loads up again a minute later (the Airship Carrier works the
+  same way with drones). Each doctrine's
   units, caps, buildings and Eternal fallback waves are data in
   `game/doctrines.ts`.
-- **Unit caps:** each side has a cap per category: infantry, vehicles and
-  super units (the Titan and the other doctrines' super units), leaned by
+- **Aircraft** fly over terrain, buildings and ground units, and circle
+  whatever they're fighting rather than parking over it. Only weapons
+  made for it reach them: AT troopers' missiles, MG trucks, flak, towers,
+  striders, Titans and other aircraft. Explosions reach as far up as they
+  do sideways, so a shell bursting on the ground doesn't touch an aircraft
+  overhead. Shot-down aircraft fall out of the sky.
+- **Unit caps:** each side has a cap per category: infantry, vehicles,
+  aircraft and super units (the Titan and the other doctrines' super units), leaned by
   the side's doctrine. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
   mech bay. The super cap can grow during a battle, with the tide ramp (up
@@ -282,7 +303,10 @@ src/
 - Each base has an HQ, barracks, vehicle factory and mech bay that produce
   units on timers, plus its doctrine's signature building and guard
   towers. What each building turns out depends on the doctrine. Infantry come in squads of riflemen
-  with an AT trooper. A civilian town sits in no-man's land.
+  with an AT trooper. Squads march huddled together and open out once
+  they have something to shoot at, have fired or have been hit (for six
+  seconds after), so a big infantry army fits on its rally ground but one
+  shell still doesn't catch a whole squad in a fight. A civilian town sits in no-man's land.
 - **When to attack** (`game/offensive.ts`). With the default *readiness*
   timing, each team masses at home until it fields at least 70% of its unit
   cap and its army outweighs the defence at the enemy base (units and
@@ -354,7 +378,7 @@ src/
   production, so they never keep a side alive in Conquest, and a knocked-out
   side's outposts go back to their garrisons. They're rebuilt in both modes.
 - Siege units (Titans, Howitzers, rocket trucks, Land-trains, Siege
-  Crawlers) prefer shelling buildings.
+  Crawlers, bombers) prefer shelling buildings.
 - In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
   enemies are nearby, and a faction with no production left gets fallback
   waves. In Conquest, ruins stay ruins.
@@ -386,5 +410,7 @@ src/
 14. ~~Flat armour, healing in your own territory (replacing the repair
     outpost), AT soldiers in the infantry.~~
 15. ~~Faction doctrines, the first three: Armour, Raiders, Legion.~~
-16. Next: aircraft and anti-air (the Skyline doctrine), then the remaining
-    doctrines (Bastion, Talon, Tidewater, Firestorm).
+16. ~~Aircraft and anti-air: the Scout Copter and flak for everyone, the
+    Skyline doctrine.~~
+17. Next: the remaining doctrines (Bastion, with the howitzer as its
+    signature unit; Talon, Tidewater, Firestorm).

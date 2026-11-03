@@ -6,8 +6,8 @@ import { UnitCategory, UnitDef } from './units';
 import { doctrineOf } from './doctrines';
 
 /**
- * Unit caps. Each side has a cap per category (infantry, vehicles, super
- * units) rather than one for its whole army, so production that's full in
+ * Unit caps. Each side has a cap per category (infantry, vehicles, aircraft,
+ * super units) rather than one for its whole army, so production that's full in
  * one category keeps building the others. Super units are rare on purpose:
  * a small cap of their own and a slow mech bay. With the outpost gate on
  * (off by default, see BattleSettings.armies.superGate), a side on a map with
@@ -18,7 +18,7 @@ import { doctrineOf } from './doctrines';
  * or a big map ends with more than one on the field.
  */
 
-export const CATEGORIES: UnitCategory[] = ['infantry', 'vehicle', 'super'];
+export const CATEGORIES: UnitCategory[] = ['infantry', 'vehicle', 'air', 'super'];
 
 export type CategoryCounts = Record<UnitCategory, number>;
 
@@ -27,7 +27,7 @@ export type CategoryCounts = Record<UnitCategory, number>;
  * at their outpost and aren't part of the army.
  */
 export function countByCategory(world: World, sides: number): CategoryCounts[] {
-  const out = Array.from({ length: sides }, () => ({ infantry: 0, vehicle: 0, super: 0 }));
+  const out = Array.from({ length: sides }, () => ({ infantry: 0, vehicle: 0, air: 0, super: 0 }));
   for (const e of world.query(Unit, Faction)) {
     const f = world.req(e, Faction).id;
     if (f < 0 || world.has(e, Guard)) continue;

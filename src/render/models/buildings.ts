@@ -105,6 +105,21 @@ registerModel('bld:tankDepot', (faction) => {
   return g;
 });
 
+registerModel('bld:airpad', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  // A landing pad with its marking, a small control hut and a windsock mast.
+  g.add(box(5.4, 0.3, 5.4, CONCRETE, 0, 0.15, 0));
+  g.add(box(3.2, 0.04, 0.5, secondary, 0.3, 0.32, 0));
+  g.add(box(0.5, 0.06, 2.4, secondary, -0.9, 0.33, 0));
+  g.add(box(0.5, 0.06, 2.4, secondary, 1.5, 0.33, 0));
+  g.add(box(1.4, 1.3, 1.2, METAL, -1.9, 0.95, -1.9));
+  g.add(box(1.5, 0.2, 1.3, primary, -1.9, 1.7, -1.9));
+  g.add(box(0.12, 2.2, 0.12, DARK, 2.3, 1.4, -2.3));
+  g.add(box(0.5, 0.2, 0.2, primary, 2.6, 2.35, -2.3));
+  return g;
+});
+
 registerModel('bld:motorPool', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const g = new THREE.Group();

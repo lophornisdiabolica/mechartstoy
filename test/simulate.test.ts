@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BattleResult, doctrinePlans, formatTable, headToHead, orthogonalArray, runBattle, Scenario, SCENARIOS, scenarioSettings, summarize, summarizeDoctrines } from '../src/sim/simulate';
+import { BattleResult, doctrinePlans, formatTable, formatUnits, headToHead, orthogonalArray, runBattle, Scenario, SCENARIOS, scenarioSettings, summarize, summarizeDoctrines, unitReport, unitsCsv } from '../src/sim/simulate';
 import { settingsFromParams } from '../src/ui/settingsUrl';
 
 const short: Scenario = { id: 'test', label: 'Test', battles: 1, quick: 1, setup: (s) => (s.map.size = 'small'), minutes: 0.5 };
 
 function result(minutes: number, winner: number | null, seed: string): BattleResult {
-  const side = { name: 'A', doctrine: 'armour' as const, team: 1, out: null, kills: 10, lost: 5, razed: 2, captured: 1, attacks: 3 };
+  const side = { name: 'A', doctrine: 'armour' as const, team: 1, out: null, kills: 10, lost: 5, razed: 2, captured: 1, attacks: 3, units: {} };
   return { scenario: 'x', seed, minutes, decided: winner !== null, winner, sides: [side, { ...side, team: 2 }], msPerTick: 0.5, link: '' };
 }
 
@@ -47,7 +47,7 @@ describe('balance runs', () => {
   });
 
   it('the orthogonal array pairs every two columns with every pair of values equally often', () => {
-    for (const [levels, factors] of [[3, 2], [3, 4], [3, 6], [3, 8], [5, 3]]) {
+    for (const [levels, factors] of [[3, 2], [3, 4], [3, 6], [3, 8], [5, 3], [4, 2], [4, 5], [4, 8], [8, 3], [9, 4]]) {
       const rows = orthogonalArray(levels, factors);
       expect(rows[0].length).toBe(factors);
       for (let a = 0; a < factors; a++) {
@@ -61,13 +61,14 @@ describe('balance runs', () => {
     }
     expect(orthogonalArray(3, 4).length).toBe(9);
     expect(orthogonalArray(3, 6).length).toBe(27);
-    expect(() => orthogonalArray(4, 2)).toThrow();
+    expect(orthogonalArray(4, 2).length).toBe(16);
+    expect(() => orthogonalArray(6, 2)).toThrow();
   });
 
   it('doctrine plans give every side a doctrine, and doctrine results add up', () => {
     const plans = doctrinePlans(2);
-    expect(plans.length).toBe(9);
-    expect(new Set(plans).size).toBe(9);
+    expect(plans.length).toBe(16);
+    expect(new Set(plans).size).toBe(16);
     const s = scenarioSettings(SCENARIOS[0], 1, plans[5]);
     expect(s.factions.map((f) => f.doctrine)).toEqual(plans[5].split('&').map((p) => p.split('=')[1]));
 
@@ -81,4 +82,20 @@ describe('balance runs', () => {
     expect(headToHead([a, b]).armour.legion).toBe(1);
     expect(headToHead([a, b]).legion.armour).toBe(1);
   });
+  it('the unit report adds up each doctrine’s unit types across battles, and ties back to the side totals', () => {
+    const r = runBattle({ ...short, minutes: 1.5, setup: (s) => ((s.map.size = 'small'), (s.factions[1].doctrine = 'legion')) }, 2);
+    for (const side of r.sides) {
+      const types = Object.values(side.units);
+      expect(types.reduce((a, t) => a + t.lost, 0)).toBe(side.lost);
+      expect(types.reduce((a, t) => a + t.kills, 0)).toBe(side.kills);
+      for (const t of types) expect(Object.values(t.victims).reduce((a, n) => a + n, 0)).toBe(t.kills);
+    }
+    expect(r.sides.reduce((a, s) => a + s.lost, 0)).toBeGreaterThan(0);
+    const twice = unitReport([r, r]);
+    const once = unitReport([r]);
+    expect(twice.map((row) => row.kills)).toEqual(once.map((row) => row.kills * 2));
+    expect(new Set(once.map((row) => row.doctrine))).toEqual(new Set(['armour', 'legion']));
+    expect(formatUnits([r])).toContain('legion:');
+    expect(unitsCsv([r]).split('\n')[0]).toBe('doctrine,unit,built,lost,kills,razed,killed_most,killed_most_by');
+  }, 30_000);
 });

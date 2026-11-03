@@ -69,6 +69,30 @@ export function objectiveIn(ctx: SimContext, faction: number): { x: number; z: n
   };
 }
 
+/** How far round a rally point units spread, and how far an infantry soldier stands from the rest of the squad. */
+const RALLY_SPREAD = 6;
+const SQUAD_HUDDLE = 1.2;
+
+/**
+ * A unit's spot relative to its rally point (and the waypoints it marches
+ * to). Vehicles each get their own. Infantry squads share one, with each
+ * soldier close by, so a squad moves as a tight group instead of soldiers
+ * scattering over the whole rally area (see separationSystem for how they
+ * spread out again once a fight starts).
+ */
+function rallyOffset(ctx: SimContext, def: UnitDef, squad: number): { x: number; z: number } {
+  const a = ctx.rng.range(0, Math.PI * 2);
+  if (def.class !== 'infantry') {
+    const r = Math.sqrt(ctx.rng.next()) * RALLY_SPREAD;
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+  }
+  // The squad's spot: spread by the golden angle so squads don't pile onto each other.
+  const sa = squad * 2.399963;
+  const sr = Math.sqrt((squad * 0.618034) % 1) * RALLY_SPREAD;
+  const r = Math.sqrt(ctx.rng.next()) * SQUAD_HUDDLE;
+  return { x: Math.cos(sa) * sr + Math.cos(a) * r, z: Math.sin(sa) * sr + Math.sin(a) * r };
+}
+
 /**
  * Create a combat unit from its definition. The single place units are assembled.
  * Units spawned with the same `squad` (see newSquad) stick together on the same lane.
@@ -100,13 +124,12 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     Armed,
     armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege),
   );
-  const spreadA = ctx.rng.range(0, Math.PI * 2);
-  const spreadR = Math.sqrt(ctx.rng.next()) * 6;
+  const offset = rallyOffset(ctx, def, squad);
   world.add(e, Ai, {
     objectiveX: x,
     objectiveZ: z,
-    rallyOffsetX: Math.cos(spreadA) * spreadR,
-    rallyOffsetZ: Math.sin(spreadA) * spreadR,
+    rallyOffsetX: offset.x,
+    rallyOffsetZ: offset.z,
     squad,
     lane: 0,
     laneAttack: -1,

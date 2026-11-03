@@ -385,6 +385,182 @@ function infantry(faction: number, kit: Kit): THREE.Object3D {
   });
 }
 
+// Armour's flak tank: a low hull with a squat turret and two short, raised barrels.
+registerModel('flakTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.2, 0.4, 0.42, 0.58));
+  root.add(box(2.0, 0.45, 1.1, primary, 0, 0.62, 0));
+  const turret = new THREE.Group();
+  turret.position.set(-0.1, 0.85, 0);
+  turret.add(box(0.95, 0.42, 0.9, secondary, 0, 0.21, 0));
+  for (const side of [-1, 1]) {
+    const barrel = new THREE.Group();
+    barrel.position.set(0.35, 0.3, side * 0.22);
+    barrel.rotation.z = 0.45;
+    barrel.add(box(1.1, 0.1, 0.1, DARK, 0.55, 0, 0));
+    barrel.add(box(0.2, 0.15, 0.15, METAL, 1.05, 0, 0));
+    turret.add(barrel);
+  }
+  root.add(turret);
+  return setRig(root, { turret });
+});
+
+/** Spins rotor groups round their mast: `spin` is radians per second. */
+function rotors(parts: { group: THREE.Group; spin: number }[]) {
+  return (s: AnimState) => {
+    for (const p of parts) p.group.rotation.y += p.spin * s.dt;
+  };
+}
+
+/** A two-blade rotor on a mast, as a group to spin. */
+function rotor(span: number, y: number, x = 0): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, y, 0);
+  g.add(box(span, 0.03, 0.12, DARK, 0, 0, 0));
+  g.add(box(0.12, 0.04, span, DARK, 0, 0, 0));
+  return g;
+}
+
+// Aircraft. Their origin rides at flying height (see MoveRules.altitude); the models sit round it.
+registerModel('scout', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(0.9, 0.4, 0.5, primary, 0.1, 0.25, 0)); // cabin
+  root.add(box(0.3, 0.25, 0.42, GLASS, 0.6, 0.27, 0));
+  root.add(box(1.1, 0.12, 0.12, primary, -0.85, 0.32, 0)); // tail boom
+  root.add(box(0.12, 0.35, 0.05, secondary, -1.35, 0.45, 0)); // fin
+  for (const side of [-1, 1]) root.add(box(0.8, 0.05, 0.05, DARK, 0.1, 0, side * 0.3)); // skids
+  const blades = rotor(1.8, 0.55, 0.05);
+  root.add(blades);
+  const turret = new THREE.Group();
+  turret.position.set(0.55, 0.05, 0);
+  turret.add(box(0.35, 0.08, 0.08, DARK, 0.18, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, animate: rotors([{ group: blades, spin: 30 }]) });
+});
+
+registerModel('gunship', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(1.5, 0.55, 0.7, primary, 0, 0.35, 0));
+  root.add(box(0.4, 0.3, 0.5, GLASS, 0.85, 0.45, 0));
+  root.add(box(1.4, 0.18, 0.18, primary, -1.3, 0.45, 0));
+  root.add(box(0.15, 0.5, 0.06, secondary, -1.95, 0.6, 0));
+  root.add(box(0.5, 0.06, 1.8, secondary, 0, 0.3, 0)); // stub wings
+  for (const side of [-1, 1]) root.add(box(0.6, 0.16, 0.16, DARK, 0.1, 0.18, side * 0.85)); // rocket pods
+  const blades = rotor(2.6, 0.75);
+  root.add(blades);
+  const turret = new THREE.Group();
+  turret.position.set(0.7, 0.05, 0);
+  turret.add(box(0.4, 0.1, 0.1, DARK, 0.2, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, animate: rotors([{ group: blades, spin: 26 }]) });
+});
+
+registerModel('bomber', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(2.2, 0.4, 0.55, primary, 0, 0.3, 0)); // fuselage
+  root.add(box(0.35, 0.25, 0.4, GLASS, 1.1, 0.38, 0));
+  root.add(box(0.8, 0.08, 3.0, secondary, 0.1, 0.35, 0)); // wings
+  root.add(box(0.45, 0.06, 1.1, secondary, -1.0, 0.45, 0)); // tailplane
+  root.add(box(0.4, 0.45, 0.06, primary, -1.0, 0.65, 0)); // fin
+  for (const side of [-1, 1]) {
+    root.add(box(0.6, 0.22, 0.22, METAL, 0.3, 0.24, side * 0.9)); // engines
+  }
+  root.add(box(0.9, 0.1, 0.3, DARK, 0.1, 0.08, 0)); // bomb bay
+  // Bombs fall straight out of the bay: a fixed "turret" under the belly.
+  const turret = new THREE.Group();
+  turret.position.set(0.1, 0.05, 0);
+  root.add(turret);
+  return setRig(root, { turret });
+});
+
+registerModel('drone', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(0.45, 0.16, 0.45, primary, 0, 0.15, 0));
+  const parts: { group: THREE.Group; spin: number }[] = [];
+  for (const [x, z] of [[0.35, 0.35], [0.35, -0.35], [-0.35, 0.35], [-0.35, -0.35]]) {
+    root.add(box(0.3, 0.04, 0.06, DARK, x / 2, 0.18, z / 2));
+    const g = new THREE.Group();
+    g.position.set(x, 0.22, z);
+    g.add(box(0.4, 0.02, 0.06, DARK, 0, 0, 0));
+    root.add(g);
+    parts.push({ group: g, spin: 40 });
+  }
+  const turret = new THREE.Group();
+  turret.position.set(0.2, 0.05, 0);
+  turret.add(box(0.2, 0.05, 0.05, DARK, 0.1, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, animate: rotors(parts) });
+});
+
+// Skyline's anti-air walker: a flak turret on long legs.
+registerModel('flakWalker', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.7;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.5, 0.9, primary, 0, 0.15, 0));
+  turret.add(box(0.5, 0.15, 0.95, secondary, -0.2, 0.47, 0));
+  for (const side of [-1, 1]) {
+    for (const up of [0, 1]) {
+      const barrel = new THREE.Group();
+      barrel.position.set(0.4, 0.25 + up * 0.18, side * 0.25);
+      barrel.rotation.z = 0.5;
+      barrel.add(box(0.9, 0.08, 0.08, DARK, 0.45, 0, 0));
+      turret.add(barrel);
+    }
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.8, 0.85, 0.18, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.1, side * 0.35);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 0.9, 0.45) });
+});
+
+// Skyline's super unit: a slow armoured airship with a flight deck that launches drones.
+registerModel('airship', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(4.6, 1.3, 1.7, primary, 0, 1.1, 0)); // envelope
+  root.add(box(3.6, 1.5, 1.3, primary, 0, 1.1, 0));
+  root.add(box(0.5, 0.9, 1.1, primary, 2.5, 1.1, 0)); // rounded nose
+  root.add(box(2.4, 0.35, 0.9, METAL, 0.3, 0.25, 0)); // gondola and flight deck
+  root.add(box(1.4, 0.06, 0.95, secondary, -0.4, 0.45, 0));
+  for (const side of [-1, 1]) {
+    root.add(box(0.8, 0.7, 0.08, secondary, -2.3, 1.2, side * 0.9)); // tail fins
+    root.add(box(0.4, 0.3, 0.3, METAL, -1.0, 0.9, side * 1.0)); // engine pods
+  }
+  root.add(box(0.7, 0.08, 2.4, secondary, -2.3, 1.1, 0));
+  const props = [-1, 1].map((side) => {
+    const g = new THREE.Group();
+    g.position.set(-1.25, 0.9, side * 1.0);
+    g.add(box(0.03, 0.6, 0.08, DARK, 0, 0, 0));
+    root.add(g);
+    return g;
+  });
+  const turret = new THREE.Group();
+  turret.position.set(1.0, 0.1, 0);
+  turret.add(box(0.5, 0.25, 0.5, secondary, 0, 0, 0));
+  turret.add(box(0.6, 0.08, 0.08, DARK, 0.4, 0.05, 0.1));
+  turret.add(box(0.6, 0.08, 0.08, DARK, 0.4, 0.05, -0.1));
+  root.add(turret);
+  return setRig(root, {
+    turret,
+    animate: (s: AnimState) => {
+      for (const g of props) g.rotation.x += 20 * s.dt;
+    },
+  });
+});
+
 registerModel('trooper', (faction) => infantry(faction, 'rifle'));
 registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));

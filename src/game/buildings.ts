@@ -126,6 +126,18 @@ export const BUILDING_DEFS = {
     rebuildDelay: 45,
     buildTime: 12,
   },
+  airpad: {
+    id: 'airpad',
+    name: 'Airpad',
+    model: 'bld:airpad',
+    hp: 750,
+    armor: 6,
+    radius: 2.8,
+    height: 1.6,
+    production: { table: [{ unit: 'scout', weight: 1, count: 1 }], interval: 24 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   motorPool: {
     id: 'motorPool',
     name: 'Motor Pool',

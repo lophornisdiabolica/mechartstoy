@@ -128,6 +128,7 @@ export const LIMITS = {
   hills: { min: 0, max: 2 },
   infantryCap: { min: 5, max: 120 },
   vehicleCap: { min: 0, max: 60 },
+  airCap: { min: 0, max: 40 },
   superCap: { min: 0, max: 6 },
   production: { min: 0.25, max: 3 },
   startingArmy: { min: 0, max: 12 },
@@ -153,7 +154,7 @@ export function defaultSettings(): BattleSettings {
     mode: 'eternal',
     map: { size: 'medium', water: 0.5, hills: 1, town: true, outposts: 'auto' },
     armies: {
-      caps: { infantry: 45, vehicle: 15, super: 1 },
+      caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
       superGate: false,
       production: 1,

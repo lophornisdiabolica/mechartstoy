@@ -9,10 +9,11 @@ import type { BuildingDef } from './buildings';
  * units each production building turns out, how its unit caps lean, which
  * super unit its mech bay builds, and one signature building in its base.
  *
- * Every doctrine shares a core: rifle squads with an AT trooper, a heavy unit
- * that can stand up to super units and buildings, the HQ and towers.
+ * Every doctrine shares a core: rifle squads with an AT trooper (whose
+ * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
+ * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'skyline';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -35,17 +36,18 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   armour: {
     id: 'armour',
     name: 'Armour',
-    blurb: 'Heavy tanks. Fewer infantry, more vehicles, and the Lancer heavy tank from its tank depot. Super unit: the Titan.',
-    caps: { infantry: 0.8, vehicle: 1.2 },
+    blurb: 'Heavy tanks. Fewer infantry, more vehicles, flak tanks against infantry and aircraft, and the Lancer heavy tank from its tank depot. Super unit: the Titan.',
+    caps: { infantry: 0.8, vehicle: 1.4 },
     production: {
       factory: {
         table: [
           { unit: 'tank', weight: 3, count: 1 },
           { unit: 'strider', weight: 2, count: 2 },
-          { unit: 'howitzer', weight: 1.2, count: 1 },
+          { unit: 'flakTank', weight: 2, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
-      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 60 },
+      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 45 },
       mechbay: { table: [{ unit: 'titan', weight: 1, count: 1 }] },
     },
     signature: 'tankDepot',
@@ -62,6 +64,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
           { unit: 'mgTruck', weight: 3, count: 2 },
           { unit: 'rocketTruck', weight: 3, count: 1 },
           { unit: 'buggy', weight: 1.5, count: 2 },
+          { unit: 'scout', weight: 0.8, count: 1 },
         ],
         interval: 14,
       },
@@ -80,7 +83,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
     id: 'legion',
     name: 'Legion',
     blurb: 'Infantry masses. Bigger squads, mortar teams, squad carriers and light tanks, with a barracks block. Super unit: the Siege Crawler, which drops off squads as it goes.',
-    caps: { infantry: 1.8, vehicle: 0.8 },
+    caps: { infantry: 1.6, vehicle: 0.8 },
     production: {
       // Big squads with two AT troopers each: the Legion's answer to armour is many rockets.
       barracks: { table: [rifleSquad(4, 3, 2), { unit: 'mortar', weight: 1, count: 2 }], interval: 12 },
@@ -89,6 +92,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
         table: [
           { unit: 'carrier', weight: 2, count: 1 },
           { unit: 'lightTank', weight: 2, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
       mechbay: { table: [{ unit: 'siegeCrawler', weight: 1, count: 1 }] },
@@ -96,17 +100,45 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
     signature: 'barracksBlock',
     waves: [rifleSquad(5, 5), { unit: 'mortar', weight: 1.5, count: 2 }, { unit: 'carrier', weight: 1.5, count: 1 }, { unit: 'lightTank', weight: 1.5, count: 1 }],
   },
+  skyline: {
+    id: 'skyline',
+    name: 'Skyline',
+    blurb: 'Aircraft. Gunships, bombers and scout copters from its airpad, flak walkers on the ground, a bigger air cap and fewer of everything else. Super unit: the Airship Carrier, which launches drones.',
+    caps: { infantry: 0.8, vehicle: 0.8, air: 2.5 },
+    production: {
+      factory: {
+        table: [
+          { unit: 'tank', weight: 2, count: 1 },
+          { unit: 'flakWalker', weight: 2, count: 1 },
+        ],
+      },
+      airpad: {
+        table: [
+          { unit: 'gunship', weight: 2, count: 1 },
+          { unit: 'bomber', weight: 1.2, count: 1 },
+          { unit: 'scout', weight: 1.5, count: 2 },
+        ],
+        interval: 22,
+      },
+      mechbay: { table: [{ unit: 'airship', weight: 1, count: 1 }] },
+    },
+    signature: 'airpad',
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'gunship', weight: 2, count: 1 }, { unit: 'scout', weight: 1.5, count: 2 }],
+  },
 };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'skyline'];
 
 /**
- * The default doctrine for faction slot `i`: Cobalt armour, Crimson raiders,
- * Ashen legion. Slots whose own doctrine isn't built yet cycle through these.
+ * Each faction slot's default doctrine, in faction order (see FACTIONS):
+ * Cobalt armour, Crimson raiders, Ashen legion, Ivory skyline. Slots whose
+ * own doctrine isn't built yet (Gilded, Violet, Teal, Ember) borrow one.
  */
+const SLOT_DOCTRINES: DoctrineId[] = ['armour', 'raiders', 'legion', 'armour', 'raiders', 'skyline', 'legion', 'armour'];
+
 export function defaultDoctrine(i: number): DoctrineId {
-  return DOCTRINE_IDS[i % DOCTRINE_IDS.length];
+  return SLOT_DOCTRINES[i % SLOT_DOCTRINES.length];
 }
 
 export function isDoctrine(v: unknown): v is DoctrineId {
