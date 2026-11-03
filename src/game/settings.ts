@@ -1,4 +1,5 @@
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, seatsFit } from '../world/battlefield';
+import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
@@ -12,6 +13,14 @@ import { defaultDoctrine, DoctrineId } from './doctrines';
  */
 export type BattleMode = 'eternal' | 'conquest';
 export type MapSize = 'small' | 'medium' | 'large';
+/**
+ * Where the bases go:
+ * - ring: round the edge of the map, allies side by side;
+ * - apart: round the edge, allies spread out between their enemies;
+ * - lines: teams face each other from opposite ends of the map.
+ */
+export type BaseLayout = 'ring' | 'apart' | 'lines';
+export type TownSize = 'small' | 'medium' | 'large';
 /** When armies attack: once they're strong enough (see offensive.ts), or on the tide's clock (see tide.ts). */
 export type AttackTiming = 'readiness' | 'tide';
 
@@ -62,7 +71,20 @@ export interface BattleSettings {
     water: number;
     /** Terrain height multiplier, 0 (flat) to 2. */
     hills: number;
-    town: boolean;
+    /**
+     * Width over depth, relative to the size's usual shape: above 1 is wider
+     * and shallower, below 1 narrower and deeper, with about the same area.
+     */
+    shape: number;
+    /** Ground, water, scenery and town style (see biomes.ts). Looks only. */
+    biome: BiomeId;
+    /** Where the bases go. */
+    layout: BaseLayout;
+    /** Civilian towns in no-man's land, and how big they are. */
+    towns: number;
+    townSize: TownSize;
+    /** Join the bases' water with channels and bridge them (see waterways.ts). */
+    waterways: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
   };
@@ -114,6 +136,16 @@ export interface BattleSettings {
   factions: FactionSettings[];
 }
 
+/** Town radius per size. */
+export const TOWN_SIZES: Record<TownSize, { radius: number; label: string }> = {
+  small: { radius: 8, label: 'Small' },
+  medium: { radius: 11, label: 'Medium' },
+  large: { radius: 15, label: 'Large' },
+};
+
+/** Water from which waterways also dig an inlet to bases that have no water (see WaterwayOptions.everyBase). */
+export const INLETS_FROM = 0.6;
+
 export const MAP_SIZES: Record<MapSize, { cols: number; rows: number; label: string }> = {
   small: { cols: 64, rows: 50, label: 'Small' },
   medium: { cols: 84, rows: 64, label: 'Medium' },
@@ -126,6 +158,8 @@ export const UNIT_IDS = Object.keys(UNIT_DEFS) as UnitId[];
 export const LIMITS = {
   water: { min: 0, max: 1 },
   hills: { min: 0, max: 2 },
+  shape: { min: 0.6, max: 1.8 },
+  towns: { min: 0, max: 4 },
   infantryCap: { min: 5, max: 120 },
   vehicleCap: { min: 0, max: 60 },
   airCap: { min: 0, max: 40 },
@@ -152,7 +186,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, town: true, outposts: 'auto' },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, outposts: 'auto' },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -213,12 +247,36 @@ export function teamLabels(s: BattleSettings): string[] {
 
 /**
  * Base seats in order round the map: sides grouped by team (teams in order
- * of their lowest member), so allies are neighbours.
+ * of their lowest member), so allies are neighbours. With the 'apart'
+ * layout, teams take turns instead, so allies are spread round the map.
  */
 export function seating(s: BattleSettings): number[] {
   const firstOf = new Map<number, number>();
   s.factions.forEach((f, i) => firstOf.has(f.team) || firstOf.set(f.team, i));
-  return s.factions.map((_, i) => i).sort((a, b) => firstOf.get(s.factions[a].team)! - firstOf.get(s.factions[b].team)! || a - b);
+  const grouped = s.factions.map((_, i) => i).sort((a, b) => firstOf.get(s.factions[a].team)! - firstOf.get(s.factions[b].team)! || a - b);
+  if (s.map.layout !== 'apart') return grouped;
+  // Deal teams round the table: first of each team, then second of each, and so on.
+  const teams = [...firstOf.keys()].map((t) => grouped.filter((i) => s.factions[i].team === t));
+  const out: number[] = [];
+  for (let k = 0; out.length < grouped.length; k++) for (const team of teams) if (team[k] !== undefined) out.push(team[k]);
+  return out;
+}
+
+/**
+ * Base places for the 'lines' layout, per seat: teams alternate between the
+ * west and east ends (the first team west), and each end's bases spread
+ * evenly from north to south. Null for the other layouts.
+ */
+export function basePlaces(s: BattleSettings, seats: number[]): { x: number; z: number }[] | null {
+  if (s.map.layout !== 'lines') return null;
+  const teams = [...new Set(seats.map((f) => s.factions[f].team))];
+  const west = seats.filter((f) => teams.indexOf(s.factions[f].team) % 2 === 0);
+  const east = seats.filter((f) => teams.indexOf(s.factions[f].team) % 2 === 1);
+  const along = (k: number, n: number) => (n === 1 ? 0 : -0.6 + (1.2 * k) / (n - 1));
+  return seats.map((f) => {
+    const side = west.includes(f) ? west : east;
+    return { x: side === west ? -0.72 : 0.72, z: along(side.indexOf(f), side.length) };
+  });
 }
 
 /** How many outposts to place: 'auto' is one per side. */
@@ -236,17 +294,35 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
   // More sides need more room: grow the map (keeping its shape) until every base fits with space between.
   const { cellSize, baseRadius } = DEFAULT_BATTLEFIELD;
   const n = s.factions.length;
+  // The shape stretches one way and squeezes the other, keeping the area.
+  const stretch = Math.sqrt(s.map.shape);
+  const cols = size.cols * stretch;
+  const rows = size.rows / stretch;
+  const seats = seating(s);
+  const places = basePlaces(s, seats);
+  // Bases on a line need room along the map's depth instead.
+  const fits = (scale: number) => {
+    const width = Math.round(cols * scale) * cellSize;
+    const depth = Math.round(rows * scale) * cellSize;
+    if (!places) return seatsFit(n, width, depth, baseRadius);
+    const perSide = Math.max(...[-1, 1].map((sign) => places.filter((p) => Math.sign(p.x) === sign).length));
+    return perSide <= 1 || (1.2 * depth) / 2 / (perSide - 1) >= baseRadius * 2 + 8;
+  };
   let scale = 1;
-  while (scale < 3 && !seatsFit(n, Math.round(size.cols * scale) * cellSize, Math.round(size.rows * scale) * cellSize, baseRadius)) scale += 0.05;
+  while (scale < 3 && !fits(scale)) scale += 0.05;
   return {
     ...DEFAULT_BATTLEFIELD,
-    cols: Math.round(size.cols * scale),
-    rows: Math.round(size.rows * scale),
+    cols: Math.round(cols * scale),
+    rows: Math.round(rows * scale),
     maxHeight,
     seaLevel,
-    town: s.map.town,
-    seats: seating(s),
+    seats,
+    places,
     outposts: outpostCount(s),
+    biome: s.map.biome,
+    waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',
+    towns: s.map.towns,
+    townRadius: TOWN_SIZES[s.map.townSize].radius,
   };
 }
 

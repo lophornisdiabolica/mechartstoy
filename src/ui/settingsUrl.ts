@@ -1,5 +1,6 @@
 import { isDoctrine } from '../game/doctrines';
-import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, UNIT_IDS } from '../game/settings';
+import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
+import { isBiome } from '../world/biomes';
 
 /**
  * Settings <-> URL query string. Only values that differ from the defaults are
@@ -12,6 +13,8 @@ import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, Map
 const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSettings) => number; set: (s: BattleSettings, v: number) => void }[] = [
   { key: 'water', limit: 'water', get: (s) => s.map.water, set: (s, v) => (s.map.water = v) },
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
+  { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
+  { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
   { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
   { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },
   { key: 'acap', limit: 'airCap', get: (s) => s.armies.caps.air, set: (s, v) => (s.armies.caps.air = Math.round(v)) },
@@ -57,7 +60,10 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.armies.superGrowth !== d.armies.superGrowth) p.set('sgrow', s.armies.superGrowth);
   if (s.armies.superGate !== d.armies.superGate) p.set('sgate', s.armies.superGate ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
-  if (s.map.town !== d.map.town) p.set('town', s.map.town ? '1' : '0');
+  if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
+  if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
+  if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
+  if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
   for (const id of UNIT_IDS) {
@@ -96,8 +102,17 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (gate === '0' || gate === '1') s.armies.superGate = gate === '1';
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
+  // Links from before there could be several towns say town=0 or town=1.
   const town = p.get('town');
-  if (town === '0' || town === '1') s.map.town = town === '1';
+  if (town === '0' || town === '1') s.map.towns = Number(town);
+  const biome = p.get('biome');
+  if (biome && isBiome(biome)) s.map.biome = biome;
+  const layout = p.get('layout');
+  if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
+  const tsize = p.get('tsize');
+  if (tsize && tsize in TOWN_SIZES) s.map.townSize = tsize as TownSize;
+  const ways = p.get('ways');
+  if (ways === '0' || ways === '1') s.map.waterways = ways === '1';
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));

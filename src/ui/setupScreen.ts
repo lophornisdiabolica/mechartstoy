@@ -1,4 +1,5 @@
-import { AttackTiming, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
@@ -269,17 +270,60 @@ export class SetupScreen {
     );
     row(map, 'Size', size.row);
     this.sync.push(() => size.set(this.settings.map.size));
+    slider(map, 'Shape', 'shape', 0.05, (s) => s.map.shape, (s, v) => (s.map.shape = v), (v) => (Math.abs(v - 1) < 0.01 ? 'Standard' : v > 1 ? `Wider ${times(v)}` : `Deeper ${times(1 / v)}`));
+    const biome = segmented<BiomeId>(
+      BIOME_IDS.map((b) => ({ label: BIOMES[b].label, value: b })),
+      (v) => {
+        this.settings.map.biome = v;
+        this.changed();
+      },
+    );
+    row(map, 'Biome', biome.row);
+    this.sync.push(() => biome.set(this.settings.map.biome));
+    map.append(el('p', { class: 'hint' }, 'The look of the land, its trees and its towns. It doesn’t change how anything moves.'));
+    const layout = segmented<BaseLayout>(
+      [
+        { label: 'Ring', value: 'ring', title: 'Round the edge of the map, allies side by side' },
+        { label: 'Allies apart', value: 'apart', title: 'Round the edge of the map, allies spread out between their enemies' },
+        { label: 'Lines', value: 'lines', title: 'Teams face each other from opposite ends of the map' },
+      ],
+      (v) => {
+        this.settings.map.layout = v;
+        this.changed();
+      },
+    );
+    row(map, 'Bases', layout.row);
+    this.sync.push(() => layout.set(this.settings.map.layout));
     slider(map, 'Water', 'water', 0.05, (s) => s.map.water, (s, v) => (s.map.water = v), (v) => (v === 0 ? 'None' : percent(v)));
-    slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
-    const town = el('input', { type: 'checkbox', 'aria-label': 'Civilian town' });
-    town.addEventListener('change', () => {
-      this.settings.map.town = town.checked;
+    const ways = el('input', { type: 'checkbox', 'aria-label': 'Waterways' });
+    ways.addEventListener('change', () => {
+      this.settings.map.waterways = ways.checked;
       this.changed();
     });
-    const townLabel = el('label', { class: 'check' });
-    townLabel.append(town, document.createTextNode(' Civilian town in the middle'));
-    row(map, 'Town', townLabel);
-    this.sync.push(() => (town.checked = this.settings.map.town));
+    const waysLabel = el('label', { class: 'check' });
+    waysLabel.append(ways, document.createTextNode(' Join the bases’ water with channels and bridges'));
+    row(map, 'Waterways', waysLabel);
+    this.sync.push(() => (ways.checked = this.settings.map.waterways));
+    map.append(el('p', { class: 'hint' }, 'Channels link the water near the bases so boats can reach each other, and from 60% water every base gets a harbour. Bridges carry the roads over.'));
+    slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
+    const towns = segmented<number>(
+      Array.from({ length: LIMITS.towns.max + 1 }, (_, i) => ({ label: i === 0 ? 'None' : String(i), value: i })),
+      (v) => {
+        this.settings.map.towns = v;
+        this.changed();
+      },
+    );
+    row(map, 'Towns', towns.row);
+    this.sync.push(() => towns.set(this.settings.map.towns));
+    const townSize = segmented<TownSize>(
+      (Object.keys(TOWN_SIZES) as TownSize[]).map((k) => ({ label: TOWN_SIZES[k].label, value: k })),
+      (v) => {
+        this.settings.map.townSize = v;
+        this.changed();
+      },
+    );
+    row(map, 'Town size', townSize.row);
+    this.sync.push(() => townSize.set(this.settings.map.townSize));
 
     // Armies
     const armies = section('Armies', false);

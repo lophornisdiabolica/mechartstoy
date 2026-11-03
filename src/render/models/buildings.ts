@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cylinder, factionColors, gableRoof, glowBox, registerModel, setRig } from '../models';
+import { TownStyle } from '../../world/biomes';
 
 /**
  * Low-poly building models, built facing +x (the front door side) and sized
@@ -20,11 +21,6 @@ const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
  * continuous random sizes would add new geometry for every building forever.
  */
 const stepped = (min: number, max: number, steps = 5) => min + ((max - min) * Math.floor(Math.random() * steps)) / (steps - 1);
-
-/** Civilian buildings get a varied roof; faction buildings use the faction colour. */
-function roofColor(faction: number): number {
-  return faction < 0 ? pick(CIVIC_ROOFS) : factionColors(faction).primary;
-}
 
 registerModel('bld:hq', (faction) => {
   const { primary, secondary } = factionColors(faction);
@@ -275,22 +271,100 @@ registerModel('bld:bunker', (faction) => {
   return g;
 });
 
+/**
+ * How civilian buildings look on this map (see BiomeDef.town). Set by the
+ * stage when a battle loads; faction buildings keep their own look.
+ */
+let townStyle: TownStyle = 'brick';
+
+export function setTownStyle(style: TownStyle): void {
+  townStyle = style;
+}
+
+/** Wall and roof colours per town style. */
+const TOWN_COLORS: Record<TownStyle, { walls: number[]; roofs: number[]; trim: number }> = {
+  brick: { walls: WALLS, roofs: CIVIC_ROOFS, trim: 0x8a8478 },
+  adobe: { walls: [0xe2c99c, 0xd8b787, 0xeedbb8, 0xcfa978], roofs: [0xc9a06c, 0xb98a58, 0x8fa3a8], trim: 0xb08a5c },
+  alpine: { walls: [0x6e4c35, 0x80593c, 0xe6ddcc, 0x5c4030], roofs: [0xeef2f5, 0xe2e8ec], trim: 0x4a3426 },
+  timber: { walls: [0x9a7650, 0xb08a5c, 0xd9cfbd, 0x8c6a46], roofs: [0x4f6b3a, 0x6b4a32, 0x7a5a3a, 0x5d6b4a], trim: 0x5b4030 },
+};
+
+/** A civilian building's wall colour, or the usual walls for faction buildings. */
+function wallColor(faction: number): number {
+  return pick(faction < 0 ? TOWN_COLORS[townStyle].walls : WALLS);
+}
+
+/** A civilian roof colour in the town style, or the faction colour. */
+function styledRoof(faction: number): number {
+  return faction < 0 ? pick(TOWN_COLORS[townStyle].roofs) : factionColors(faction).primary;
+}
+
+/**
+ * The roof on a box of the given footprint whose walls end at `h`: a gable
+ * (steep and deep in alpine towns, with snow on it), or a flat roof with a
+ * parapet in adobe towns.
+ */
+function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number): void {
+  const style = faction < 0 ? townStyle : 'brick';
+  const color = styledRoof(faction);
+  if (style === 'adobe') {
+    g.add(box(w + 0.08, 0.12, d + 0.08, color, 0, h + 0.06, 0));
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, d / 2));
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -d / 2));
+    return;
+  }
+  const pitch = style === 'alpine' ? 1.15 : style === 'timber' ? 0.8 : 0.7;
+  g.add(gableRoof(w + 0.2, d + 0.25, pitch, color, h));
+}
+
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
-  const walls = pick(WALLS);
+  const walls = wallColor(faction);
   const h = stepped(0.9, 1.3);
   g.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
-  g.add(gableRoof(2.1, 1.75, 0.7, roofColor(faction), h));
+  roofOn(g, 1.9, 1.5, h, faction);
   g.add(box(0.05, 0.6, 0.4, DARK, 0.96, 0.3, 0));
   g.add(box(0.4, 0.3, 0.04, WINDOW, -0.4, h * 0.6, 0.76));
   g.add(box(0.4, 0.3, 0.04, WINDOW, -0.4, h * 0.6, -0.76));
-  if (Math.random() < 0.5) g.add(box(0.25, 0.6, 0.25, 0x8a5a48, -0.5, h + 0.45, 0.4)); // chimney
+  if (faction < 0 && townStyle === 'adobe') {
+    // A little rooftop dome or a water barrel.
+    if (Math.random() < 0.4) g.add(cylinder(0.35, 0.4, 0.3, 8, 0xe8dcc0, -0.4, h + 0.3, 0.3));
+  } else if (Math.random() < 0.5) {
+    g.add(box(0.25, 0.6, 0.25, 0x8a5a48, -0.5, h + 0.45, 0.4)); // chimney
+  }
   return g;
 });
 
 registerModel('bld:block', (faction) => {
   const g = new THREE.Group();
-  const walls = pick(WALLS);
+  const walls = wallColor(faction);
+  const style = faction < 0 ? townStyle : 'brick';
+  if (style === 'adobe') {
+    // Stepped terraces, each storey set back from the one below.
+    const tiers = 2 + Math.floor(Math.random() * 2);
+    for (let t = 0; t < tiers; t++) {
+      const w = 2.5 - t * 0.55;
+      g.add(box(w, 0.9, w, walls, -t * 0.15, t * 0.9 + 0.45, 0));
+      g.add(box(w + 0.04, 0.18, 0.5, WINDOW, -t * 0.15, t * 0.9 + 0.5, 0));
+    }
+    g.add(box(0.06, 0.7, 0.5, DARK, 1.26, 0.35, 0));
+    return g;
+  }
+  if (style === 'alpine' || style === 'timber') {
+    // A tall hall: two storeys under a big roof.
+    const h = 2.2;
+    g.add(box(2.4, h, 2.2, walls, 0, h / 2, 0));
+    for (const y of [0.7, 1.6]) {
+      g.add(box(0.4, 0.35, 0.04, WINDOW, 0.5, y, 1.11));
+      g.add(box(0.4, 0.35, 0.04, WINDOW, -0.5, y, 1.11));
+      g.add(box(0.4, 0.35, 0.04, WINDOW, 0.5, y, -1.11));
+      g.add(box(0.4, 0.35, 0.04, WINDOW, -0.5, y, -1.11));
+    }
+    g.add(box(2.46, 0.12, 2.26, TOWN_COLORS[style].trim, 0, 1.15, 0)); // floor beam
+    roofOn(g, 2.4, 2.2, h, faction);
+    g.add(box(0.06, 0.8, 0.5, DARK, 1.21, 0.4, 0));
+    return g;
+  }
   const floors = 3 + Math.floor(Math.random() * 3);
   const floorH = 0.75;
   const h = floors * floorH;
@@ -306,7 +380,26 @@ registerModel('bld:block', (faction) => {
 
 registerModel('bld:spire', (faction) => {
   const g = new THREE.Group();
-  const accent = faction < 0 ? 0x6d7b86 : factionColors(faction).primary;
+  const style = faction < 0 ? townStyle : 'brick';
+  const accent = faction < 0 ? pick(TOWN_COLORS[style].roofs) : factionColors(faction).primary;
+  if (style === 'adobe') {
+    // A minaret: a slim tower with a balcony and a little dome.
+    g.add(cylinder(0.8, 0.9, 0.6, 8, wallColor(faction), 0, 0.3, 0));
+    g.add(cylinder(0.4, 0.5, 4.2, 8, wallColor(faction), 0, 2.7, 0));
+    g.add(cylinder(0.6, 0.6, 0.2, 8, TOWN_COLORS.adobe.trim, 0, 4.4, 0));
+    g.add(cylinder(0.32, 0.36, 0.7, 8, wallColor(faction), 0, 4.85, 0));
+    g.add(cylinder(0.02, 0.36, 0.6, 8, accent, 0, 5.5, 0));
+    return g;
+  }
+  if (style === 'alpine' || style === 'timber') {
+    // A steeple: a square tower with a pointed cap.
+    g.add(box(1.4, 3.8, 1.4, wallColor(faction), 0, 1.9, 0));
+    g.add(box(0.5, 0.6, 0.06, WINDOW, 0.71, 3.1, 0));
+    g.add(box(0.06, 0.6, 0.5, WINDOW, 0, 3.1, 0.71));
+    g.add(cylinder(0.02, 1.05, 1.9, 4, accent, 0, 4.75, 0));
+    g.add(box(0.06, 0.9, 0.06, METAL, 0, 6.1, 0));
+    return g;
+  }
   g.add(cylinder(0.9, 1.0, 0.5, 6, CONCRETE, 0, 0.25, 0));
   g.add(cylinder(0.45, 0.75, 4.5, 6, pick(WALLS), 0, 2.75, 0));
   g.add(cylinder(0.65, 0.65, 0.5, 6, accent, 0, 4.2, 0));
@@ -319,10 +412,23 @@ registerModel('bld:spire', (faction) => {
 
 registerModel('bld:silo', (faction) => {
   const g = new THREE.Group();
-  const accent = faction < 0 ? pick(CIVIC_ROOFS) : factionColors(faction).primary;
-  g.add(cylinder(0.85, 0.85, 2.4, 8, pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]), 0, 1.2, 0));
+  const accent = faction < 0 ? pick(TOWN_COLORS[townStyle].roofs) : factionColors(faction).primary;
+  const body = faction < 0 && townStyle === 'adobe' ? pick([0xd8c4a0, 0xcbb38a]) : faction < 0 && townStyle === 'timber' ? pick([0x9a7650, 0xb08a5c]) : pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]);
+  g.add(cylinder(0.85, 0.85, 2.4, 8, body, 0, 1.2, 0));
   g.add(cylinder(0.05, 0.9, 0.7, 8, accent, 0, 2.75, 0));
   g.add(box(0.1, 2.4, 0.1, METAL, 0.9, 1.2, 0)); // ladder
+  return g;
+});
+
+/** A long, low warehouse with a loading door, for a town's industrial district and harbour. */
+registerModel('bld:warehouse', (faction) => {
+  const g = new THREE.Group();
+  const walls = faction < 0 && townStyle === 'brick' ? pick([0xa9a49a, 0xb7b0a2, 0x9aa0a4]) : wallColor(faction);
+  g.add(box(3.4, 1.4, 2.0, walls, 0, 0.7, 0));
+  if (faction < 0 && townStyle === 'adobe') g.add(box(3.5, 0.14, 2.1, styledRoof(faction), 0, 1.47, 0));
+  else g.add(gableRoof(3.55, 2.2, townStyle === 'alpine' ? 0.9 : 0.45, faction < 0 && townStyle === 'brick' ? pick([0x6d7b86, 0x7a7e85, 0x8c4a3a]) : styledRoof(faction), 1.4));
+  g.add(box(0.06, 1.0, 1.0, DARK, 1.71, 0.5, 0)); // loading door
+  g.add(box(0.8, 0.5, 0.6, pick([0x8a5a38, 0x6d7b86, 0xb5654a]), 2.2, 0.25, 0.4)); // crates outside
   return g;
 });
 
