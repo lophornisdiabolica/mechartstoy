@@ -690,3 +690,17 @@ body {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+#setup .map-preview canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+  image-rendering: pixelated;
+}
+
+#setup .map-preview canvas:active {
+  cursor: grabbing;
+}

@@ -1,5 +1,5 @@
 import { isDoctrine } from '../game/doctrines';
-import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
+import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
@@ -69,6 +69,11 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.scrap !== d.map.scrap) p.set('scrap', s.map.scrap ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
+  // Hand-placed spots: "x,z;x,z", in fractions of the map's half-width and half-depth.
+  const spots = (list: MapSpot[]) => list.map((q) => `${fmt(round2(q.x))},${fmt(round2(q.z))}`).join(';');
+  if (s.map.placed.bases) p.set('bpos', spots(s.map.placed.bases));
+  if (s.map.placed.towns) p.set('tpos', spots(s.map.placed.towns));
+  if (s.map.placed.outposts) p.set('opos', spots(s.map.placed.outposts));
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
   for (const id of UNIT_IDS) {
     const t = s.units[id];
@@ -123,6 +128,16 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
   }
+  const spots = (key: string): MapSpot[] | null => {
+    const raw = p.get(key);
+    if (!raw) return null;
+    const list = raw.split(';').map((pair) => pair.split(',').map(Number));
+    if (list.some((q) => q.length !== 2 || !q.every(Number.isFinite))) return null;
+    return list.map(([x, z]) => ({ x: Math.max(-1, Math.min(1, x)), z: Math.max(-1, Math.min(1, z)) }));
+  };
+  if (p.has('bpos')) s.map.placed.bases = spots('bpos');
+  if (p.has('tpos')) s.map.placed.towns = spots('tpos');
+  if (p.has('opos')) s.map.placed.outposts = spots('opos');
   // Outpost kinds as a list, e.g. okinds=supply,gun (kept in the standard order).
   const okinds = p.get('okinds');
   if (okinds !== null) {
@@ -153,4 +168,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     const doctrine = p.get(`doc${i + 1}`);
     if (isDoctrine(doctrine)) f.doctrine = doctrine;
   });
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
 }

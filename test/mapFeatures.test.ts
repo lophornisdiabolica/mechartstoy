@@ -255,3 +255,46 @@ describe('outpost kinds', () => {
     for (const o of g.ctx.outposts) expect(['gun', 'relay']).toContain(o.kind.id);
   });
 });
+
+describe('placing by hand', () => {
+  it('puts bases, towns and outposts where they were placed', () => {
+    const g = game(21, (s) => {
+      s.map.towns = 2;
+      s.map.outposts = 2;
+      s.map.placed = {
+        bases: [
+          { x: -0.6, z: -0.5 },
+          { x: 0.6, z: 0.5 },
+        ],
+        towns: [
+          { x: 0, z: 0.4 },
+          { x: -0.1, z: -0.4 },
+        ],
+        outposts: [
+          { x: 0.5, z: -0.5 },
+          { x: -0.5, z: 0.5 },
+        ],
+      };
+    });
+    const f = g.field;
+    const at = (p: { x: number; z: number }) => ({ x: (p.x * f.width) / 2, z: (p.z * f.depth) / 2 });
+    const near = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z) < 1e-6;
+    expect(near(f.baseSites[0], at({ x: -0.6, z: -0.5 }))).toBe(true);
+    expect(near(f.baseSites[1], at({ x: 0.6, z: 0.5 }))).toBe(true);
+    expect(f.townSites.map((t) => ({ x: t.x, z: t.z }))).toEqual([at({ x: 0, z: 0.4 }), at({ x: -0.1, z: -0.4 })]);
+    expect(near(f.outpostSites[0], at({ x: 0.5, z: -0.5 }))).toBe(true);
+  });
+
+  it('ignores placements that no longer match the number of sides, towns or outposts, and round-trips them', () => {
+    const s = defaultSettings();
+    s.map.placed.towns = [{ x: 0.1, z: 0.2 }];
+    s.map.towns = 2;
+    const g = new Game(21, { settings: s, populate: false, autoSpawn: false });
+    expect(g.field.townSites.length).toBe(2);
+    s.map.placed.bases = [
+      { x: -0.25, z: 0.5 },
+      { x: 0.75, z: -0.33 },
+    ];
+    expect(settingsFromParams(settingsToParams(s)).map.placed).toEqual(s.map.placed);
+  });
+});

@@ -1,7 +1,8 @@
-import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
+import { MapPreview } from './mapPreview';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
@@ -140,6 +141,7 @@ export class SetupScreen {
       remove.addEventListener('click', () => {
         if (this.settings.factions.length <= 2) return;
         this.settings.factions.splice(i, 1);
+        this.settings.map.placed.bases = null;
         compactTeams(this.settings);
         this.rebuildSides();
         this.changed();
@@ -291,6 +293,7 @@ export class SetupScreen {
       ],
       (v) => {
         this.settings.map.layout = v;
+        this.settings.map.placed.bases = null;
         this.changed();
       },
     );
@@ -329,6 +332,7 @@ export class SetupScreen {
       Array.from({ length: LIMITS.towns.max + 1 }, (_, i) => ({ label: i === 0 ? 'None' : String(i), value: i })),
       (v) => {
         this.settings.map.towns = v;
+        this.settings.map.placed.towns = null;
         this.changed();
       },
     );
@@ -422,6 +426,7 @@ export class SetupScreen {
       counts,
       (v) => {
         this.settings.map.outposts = v;
+        this.settings.map.placed.outposts = null;
         this.changed();
       },
       'Number of outposts',
@@ -460,6 +465,30 @@ export class SetupScreen {
       ),
     );
 
+    // Placement: a map to drag the bases, towns and outposts round.
+    const placement = section('Placement', false);
+    const preview = new MapPreview((kind, spots) => {
+      this.settings.map.placed[kind] = spots;
+      this.changed();
+    });
+    const auto = el('button', { type: 'button' }, 'Place everything automatically');
+    auto.addEventListener('click', () => {
+      this.settings.map.placed = { bases: null, towns: null, outposts: null };
+      this.changed();
+    });
+    const placedNote = el('span', { class: 'value' });
+    const autoRow = el('div', { class: 'inline' });
+    autoRow.append(auto, placedNote);
+    placement.append(preview.root, autoRow);
+    placement.addEventListener('toggle', () => preview.update(cloneSettings(this.settings)));
+    this.sync.push(() => {
+      preview.update(cloneSettings(this.settings));
+      const p = placementsInUse(this.settings);
+      const by = [p.bases && 'bases', p.towns && 'towns', p.outposts && 'outposts'].filter(Boolean);
+      placedNote.textContent = by.length ? `Placed by hand: ${by.join(', ')}` : 'All placed automatically';
+      auto.disabled = by.length === 0;
+    });
+
     // Factions
     // The start button lives in the footer (built below); it's disabled while nobody has an enemy.
     let start: HTMLButtonElement;
@@ -471,6 +500,7 @@ export class SetupScreen {
       const n = this.settings.factions.length;
       if (n >= MAX_FACTIONS) return;
       this.settings.factions.push(defaultFaction(n));
+      this.settings.map.placed.bases = null;
       this.rebuildSides();
       this.changed();
     });

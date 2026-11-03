@@ -54,6 +54,9 @@ export interface BattlefieldConfig {
    * (-1 to 1), or null to place them round the map's edge (see seatPoint).
    */
   places: { x: number; z: number }[] | null;
+  /** Towns' and outposts' positions, in the same fractions, or null to place them automatically (towns then go by `towns`, outposts by `outposts`). */
+  townPlaces: { x: number; z: number }[] | null;
+  outpostPlaces: { x: number; z: number }[] | null;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -72,6 +75,8 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   towns: 1,
   townRadius: 11,
   places: null,
+  townPlaces: null,
+  outpostPlaces: null,
 };
 
 /** Width of town streets and the roads between towns. */
@@ -522,7 +527,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   const baseSites: BaseSite[] = seats.map((faction, k) => {
     const nudge = rng.range(-1, 1);
     const place = config.places?.[k];
-    const at = place ? { x: (place.x * width) / 2, z: (place.z * depth) / 2 } : seatPoint(k, seats.length, width, depth, baseRadius, nudge);
+    // (A placed base is kept on the map, pad and all.)
+    const inside = (v: number, half: number) => Math.max(-(half - baseRadius - 1), Math.min(half - baseRadius - 1, v * half));
+    const at = place ? { x: inside(place.x, width / 2), z: inside(place.z, depth / 2) } : seatPoint(k, seats.length, width, depth, baseRadius, nudge);
     return { faction, ...at, radius: baseRadius, height: 0 };
   });
   // Indexed by faction, so baseSites[f] is faction f's base.
@@ -593,13 +600,25 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   }
   // Candidates are always rolled so the rest of the map doesn't change with the number of towns.
   const townRng = rng.fork(0x746f776e);
-  if (best && config.towns > 0) {
+  // A spot given as fractions of the half-width and half-depth, kept far enough in for a pad of this radius.
+  const placedAt = (p: { x: number; z: number }, radius: number) => {
+    const inside = (v: number, half: number) => Math.max(-(half - radius - 2), Math.min(half - radius - 2, v * half));
+    return { x: inside(p.x, width / 2), z: inside(p.z, depth / 2) };
+  };
+  if (config.townPlaces) {
+    for (const p of config.townPlaces) {
+      const at = placedAt(p, townRadius);
+      const height = Math.max(seaLevel + 1, field.heightAt(at.x, at.z));
+      townSites.push({ ...at, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
+      flatten(at.x, at.z, townRadius, height);
+    }
+  } else if (best && config.towns > 0) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
     townSites.push({ x: best.x, z: best.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(best.x, best.z, townRadius, height);
   }
   // More towns, on their own stream: spread over no-man's land, away from the bases and each other.
-  for (let t = 1; t < config.towns; t++) {
+  for (let t = 1; t < (config.townPlaces ? 0 : config.towns); t++) {
     let pick: { x: number; z: number; score: number } | null = null;
     for (let n = 0; n < 60; n++) {
       const x = townRng.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
@@ -626,7 +645,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   connectTowns(field);
 
   // Outposts come last, so a map with none is the same map as before outposts existed.
-  const spots = placeOutposts(field, rng, config.outposts);
+  const spots = config.outpostPlaces ? config.outpostPlaces.map((p) => placedAt(p, OUTPOST_RADIUS)) : placeOutposts(field, rng, config.outposts);
   const kinds = dealOutpostKinds(spots, config.outpostKinds, rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
   spots.forEach((p, k) => {
     const height = Math.max(seaLevel + 1, field.heightAt(p.x, p.z));

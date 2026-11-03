@@ -118,12 +118,28 @@ battle, its exact map via `seed`).
   teams in two lines facing each other), water and hills, and how many
   **towns** (none to four) and how big. Towns have districts: a harbour of
   warehouses on the waterfront, an industrial quarter, taller blocks in the
-  centre, houses round them, and a paved main street. **Waterways** (on by
+  centre, houses round them, and a paved main street; **roads** join the
+  towns, along the easiest ground. **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an
   inlet dug to any that has none. Wherever water cuts the land, an
-  indestructible **bridge**, wide enough for the biggest walkers, carries
-  land units over while boats pass underneath.
+  indestructible **bridge**, just wide enough for the biggest walkers (who
+  would rather go round by land), carries land units over while boats pass
+  underneath. Bridges reach on past a corner of the shore until their whole
+  width lands, ramp gently, and cut a way into a bank that rises above
+  them. **Dense forest** (a slider) grows patches of big trees, distinct
+  from the light woods: they stop shots, so infantry find cover in them,
+  and slow vehicles, which flatten the trees they drive into; shots and
+  blasts knock them down too, and a cleared patch is open ground again.
+  **Scrap** (on by default): where enough vehicles are wrecked, the ground
+  turns to scrap, a slog for tracks and hovers and easy for long legs,
+  until it's cleared away four minutes later.
+- **Placement:** a map of the battle the settings make, on the setup
+  screen, where the bases, towns and outposts can be dragged to new spots.
+  Dropping one fixes where every one of its kind goes (kept in the link as
+  `bpos`, `tpos` and `opos`); the map is generated round them. Changing the
+  number of sides, towns or outposts, or the base layout, goes back to
+  automatic placement for that kind.
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
@@ -236,9 +252,11 @@ src/
     spatialGrid.ts   uniform grid for neighbour queries
   world/     battlefield data (no rendering)
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites; the ground layer,
-                     bridges, and changing the map mid-battle (paint, reshape, onChange)
+                     bridges, roads, and changing the map mid-battle (paint, setGround, reshape, onChange)
+    roads.ts         roads between towns, along the easiest ground
+    woods.ts         dense forest: trees that stop shots, fall to them and get flattened by vehicles
     ground.ts        kinds of ground (plain, road, scrap, dense forest) and what they cost each movement class
-    waterways.ts     channels joining the bases' water, and bridges wherever water cuts the land
+    waterways.ts     channels joining the bases' water, and bridges (fitted to their banks) wherever water cuts the land
     biomes.ts        biomes: colours, scenery mix and town style
     props.ts         scenery placement (the biome's trees, cacti, rocks...)
     settlements.ts   base and town layouts (building placements as data)
@@ -252,7 +270,8 @@ src/
     tide.ts          production tide, the tide's attack clock, and the ramps
     offensive.ts     when each team attacks: readiness, or the tide's clock
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
-    outposts.ts      capturable outposts: garrisons, capturing, bonuses
+    outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
+    scrap.ts         wreckage piling up into scrap, and being cleared
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there
     orders.ts        per-faction player orders (stance, rally point)
@@ -267,7 +286,8 @@ src/
     cameraRig.ts     isometric orthographic camera and controls
     fightWatch.ts    finds the fighting (from sim events) for the spectator camera
     tiltShift.ts     tilt-shift blur + colour grade passes
-    terrainMesh.ts   low-poly ground, soil skirt, water and bridges; redraws cells the map changes
+    terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips; redraws cells the map changes
+    woodsMesh.ts     the dense forest's trees, lying down where they've fallen
     propsMesh.ts     instanced scenery
     models.ts        model registry and rig (turret / animation hooks)
     models/          unit, building and projectile models
@@ -278,6 +298,7 @@ src/
   ui/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
+    mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     settingsUrl.ts   settings <-> URL query string (only non-default values)
     viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
@@ -290,16 +311,16 @@ src/
 ### Changing the map mid-battle
 
 The map isn't fixed once generated. `Battlefield.paint(x, z, radius,
-ground)` lays a kind of ground over an area (scrap where wrecks pile up, a
-road), `reshape(x, z, radius, fn)` changes heights (a canal, a wall's
-footing) and `addBridge` adds a bridge. Each tells everything listening
-through `onChange` which cells changed: the route grids recompute those
-cells and their connected regions and bump their version (so routes
-re-plan, as they do when buildings go up or down), and the terrain mesh
-redraws them. Nothing in the battle uses this yet; it's there for scrap
-piles, dense forest with trees that can be knocked down, walls, canals,
-and towns that engineers grow. Lanes, outposts and the scenery are still
-placed once, at the start.
+ground)` and `setGround(cells, ground)` lay a kind of ground (scrap, a
+road), `addRoad` paves a line, `reshape(x, z, radius, fn)` changes heights
+(a canal, a wall's footing) and `addBridge` adds a bridge. Each tells
+everything listening through `onChange` which cells changed: the route
+grids recompute those cells and their connected regions and bump their
+version (so routes re-plan, as they do when buildings go up or down), and
+the terrain mesh redraws them (and any road over them). Scrap from wrecks
+(`game/scrap.ts`) and dense forest being cleared (`world/woods.ts`) use it
+now; walls, canals and towns that engineers grow can use it later. Lanes,
+outposts and the light scenery are still placed once, at the start.
 
 ### Conventions
 
@@ -471,9 +492,17 @@ placed once, at the start.
   wears the colours of a faction not in the battle. A side takes one by
   having units inside the ring with no defenders there; more units take it
   faster, and two attacking teams at once stall each other. The towers and
-  bunker then switch sides. Holding one gives a bonus (`OutpostBonus`,
-  for now always faster production; the Outposts bonus setting scales it)
-  and makes the ground round it the holder's territory (see below). A production bonus adds the same to
+  bunker then switch sides. Each outpost is one of six kinds
+  (`OUTPOST_KINDS`; the setup screen picks which the map deals out), with
+  a building of its own and a bonus for its holder (`OutpostBonus`; the
+  Outposts bonus setting scales it): a *supply depot* (+10% production), an
+  *airstrip* (+2 aircraft cap), a *hilltop gun* (a long-range gun on the
+  highest outpost, firing for whoever holds it), a *comms relay* (the
+  holder's team grows impatient 40% faster while massing, so its attacks
+  set out sooner, and the mast spots for its guns), a *fuel depot* (+10%
+  production, and its tanks blow up) and a *ruined factory* (turns out one
+  of the holder's factory batches every 75 seconds). Every outpost makes
+  the ground round it the holder's territory (see below). A production bonus adds the same to
   every side (+10% of a normal side's rate), so a side boosted for uneven
   teams doesn't get three times as much from it. Attacking squads take any
   outpost on their lane on the way. The Holding setting keeps a share of
@@ -525,7 +554,8 @@ placed once, at the start.
 19. ~~Maps: biomes with their own town styles, map shape, base layouts,
     several towns with districts, waterways and bridges, and the ground
     layer that lets the map change mid-battle.~~
-20. Next: outpost types (airstrip, hilltop gun, comms relay, fuel depot,
-    ruined factory), placing bases, towns and outposts by hand on the setup
-    screen, and the first mid-battle map changes (scrap piling up, dense
-    forest).
+20. ~~Outpost kinds, placing bases, towns and outposts by hand, roads
+    between towns, bridges fitted to their banks, and the first mid-battle
+    map changes: scrap piling up, and dense forest that gets knocked down.~~
+21. Next: the Commander AI (and with it engineers, who could build walls,
+    dig canals and grow towns), then aircraft that fly like planes.
