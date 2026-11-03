@@ -35,7 +35,7 @@ describe('battle settings', () => {
   it('map settings change the battlefield', () => {
     const s = defaultSettings();
     s.map.size = 'large';
-    s.map.town = false;
+    s.map.towns = 0;
     s.map.water = 0;
     const game = new Game(3, { settings: s, populate: false, autoSpawn: false });
     expect(game.field.config.cols).toBeGreaterThan(DEFAULT_BATTLEFIELD.cols);
@@ -45,30 +45,13 @@ describe('battle settings', () => {
     }
   });
 
-  it('bases stay connected by land even with maximum water', () => {
+  it('bases stay connected by land even with maximum water (over bridges where needed)', () => {
     const s = defaultSettings();
     s.map.water = 1;
     for (let seed = 0; seed < 12; seed++) {
-      const field = new Game(seed * 31 + 1, { settings: s, populate: false, autoSpawn: false }).field;
-      const [a, b] = field.baseSites;
-      // Walk a flood fill over dry ground from one base to the other.
-      const step = field.config.cellSize;
-      const key = (x: number, z: number) => `${Math.round(x / step)},${Math.round(z / step)}`;
-      const seen = new Set([key(a.x, a.z)]);
-      const stack = [[a.x, a.z]];
-      let reached = false;
-      while (stack.length > 0 && !reached) {
-        const [x, z] = stack.pop()!;
-        reached = Math.hypot(x - b.x, z - b.z) < step;
-        for (const [dx, dz] of [[step, 0], [-step, 0], [0, step], [0, -step]]) {
-          const nx = x + dx;
-          const nz = z + dz;
-          if (!field.contains(nx, nz) || field.isWater(nx, nz) || seen.has(key(nx, nz))) continue;
-          seen.add(key(nx, nz));
-          stack.push([nx, nz]);
-        }
-      }
-      expect(reached, `seed ${seed}`).toBe(true);
+      const game = new Game(seed * 31 + 1, { settings: s, populate: false, autoSpawn: false });
+      const [a, b] = game.field.baseSites;
+      expect(game.ctx.nav.connected(a, b)).toBe(true);
     }
   });
 
@@ -93,7 +76,7 @@ describe('settings in the URL', () => {
     const s = defaultSettings();
     s.seed = 'hello world';
     s.mode = 'conquest';
-    s.map = { size: 'small', water: 0.2, hills: 1.35, town: false, outposts: 3 };
+    s.map = { size: 'small', water: 0.2, hills: 1.35, shape: 1.4, biome: 'snow', layout: 'lines', towns: 3, townSize: 'large', waterways: false, outposts: 3 };
     s.armies = { caps: { infantry: 70, vehicle: 25, air: 7, super: 3 }, superGrowth: 'outposts', superGate: true, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1, doctrine: 'legion' };

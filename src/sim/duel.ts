@@ -67,7 +67,7 @@ function duelGame(round: number, set: string): Game {
   s.map.size = 'small';
   s.map.water = 0;
   s.map.hills = 0.4;
-  s.map.town = false;
+  s.map.towns = 0;
   s.map.outposts = 0;
   s.factions = [0, 1].map((i) => ({ ...defaultFaction(i), team: i, doctrine: 'armour' }));
   applyParams(s, new URLSearchParams(set));

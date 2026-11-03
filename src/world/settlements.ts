@@ -126,24 +126,41 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras:
 export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): BuildingPlacement[] {
   const layout = new Layout(field);
   const spacing = 4.4;
-  const angle = rng.range(0, Math.PI / 2);
+  const angle = site.angle;
   const cells = Math.floor(site.radius / spacing);
+  // One wedge of the town is its industrial quarter (in towns big enough to have quarters).
+  const industry = site.radius >= 10 ? rng.range(-Math.PI, Math.PI) : null;
   for (let i = -cells; i <= cells; i++) {
     for (let j = -cells; j <= cells; j++) {
-      // Leave a main street clear through the middle.
+      // Leave the main street clear through the middle (along the town's angle).
       if (j === 0 || rng.chance(0.2)) continue;
       const lx = i * spacing + rng.range(-0.4, 0.4);
       const lz = j * spacing + rng.range(-0.4, 0.4);
       if (Math.hypot(lx, lz) > site.radius) continue;
       const x = site.x + lx * Math.cos(angle) - lz * Math.sin(angle);
       const z = site.z + lx * Math.sin(angle) + lz * Math.cos(angle);
-      // Taller buildings toward the centre.
-      const central = Math.hypot(lx, lz) < site.radius * 0.45;
-      const building: BuildingId = central ? rng.pick(['block', 'block', 'spire', 'house']) : rng.pick(['house', 'house', 'silo', 'block']);
+      const building = townBuilding(field, site, rng, x, z, industry);
       layout.tryPlace({ building, faction: -1, x, z, heading: -angle + rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) }, 0.6);
     }
   }
   return layout.placements;
+}
+
+/**
+ * What goes up at a spot in a town, by district: warehouses and silos on
+ * the waterfront (the harbour) and in the industrial quarter, taller blocks
+ * and the spire in the centre, houses everywhere else.
+ */
+function townBuilding(field: Battlefield, site: TownSite, rng: Rng, x: number, z: number, industry: number | null): BuildingId {
+  const harbour = [0, 1, 2, 3, 4, 5, 6, 7].some((a) => field.isWater(x + Math.cos((a * Math.PI) / 4) * 4.5, z + Math.sin((a * Math.PI) / 4) * 4.5));
+  if (harbour) return rng.pick(['warehouse', 'warehouse', 'silo', 'house']);
+  const d = Math.hypot(x - site.x, z - site.z);
+  if (industry !== null && d > site.radius * 0.35) {
+    const off = Math.atan2(z - site.z, x - site.x) - industry;
+    if (Math.abs(Math.atan2(Math.sin(off), Math.cos(off))) < Math.PI / 3.5) return rng.pick(['warehouse', 'silo', 'silo', 'block']);
+  }
+  // Taller buildings toward the centre.
+  return d < site.radius * 0.45 ? rng.pick(['block', 'block', 'spire', 'house']) : rng.pick(['house', 'house', 'silo', 'block']);
 }
 
 /** Water at least this deep counts as open water for a dock's door (boats need 0.2; see MOVE_RULES.naval). */

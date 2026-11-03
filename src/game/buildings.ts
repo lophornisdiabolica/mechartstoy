@@ -320,6 +320,17 @@ export const BUILDING_DEFS = {
     rebuildDelay: 70,
     buildTime: 6,
   },
+  warehouse: {
+    id: 'warehouse',
+    name: 'Warehouse',
+    model: 'bld:warehouse',
+    hp: 380,
+    armor: 4,
+    radius: 1.9,
+    height: 1.9,
+    rebuildDelay: 80,
+    buildTime: 8,
+  },
 } satisfies Record<string, BuildingDef>;
 
 export type BuildingId = keyof typeof BUILDING_DEFS;
