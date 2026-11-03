@@ -66,9 +66,10 @@ describe('balance runs', () => {
   });
 
   it('doctrine plans give every side a doctrine, and doctrine results add up', () => {
+    // Eight doctrines: an 8-level array has 64 rows.
     const plans = doctrinePlans(2);
-    expect(plans.length).toBe(16);
-    expect(new Set(plans).size).toBe(16);
+    expect(plans.length).toBe(64);
+    expect(new Set(plans).size).toBe(64);
     const s = scenarioSettings(SCENARIOS[0], 1, plans[5]);
     expect(s.factions.map((f) => f.doctrine)).toEqual(plans[5].split('&').map((p) => p.split('=')[1]));
 

@@ -1,4 +1,4 @@
-import { System } from '../../core/ecs';
+import { System, World } from '../../core/ecs';
 import {
   Ai,
   Armed,
@@ -7,6 +7,7 @@ import {
   Faction,
   GroundFollow,
   Health,
+  Hit,
   makeTransform,
   Mover,
   OutpostPart,
@@ -18,6 +19,7 @@ import {
   Wreck,
 } from '../components';
 import { SimContext } from '../context';
+import { applyDamage } from './projectiles';
 
 /** Seconds a wreck spends sinking into the ground before it's removed. */
 const SINK_TIME = 3;
@@ -57,6 +59,7 @@ export function deathSystem(ctx: SimContext): System {
           const part = world.get(e, OutpostPart);
           ctx.events.emit('buildingDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def, faction, killer });
           world.destroy(e);
+          if (def.explodes) explode(world, ctx, t, def.explodes, killer);
           const r = world.create();
           world.add(r, Transform, makeTransform(t.x, t.y, t.z, t.heading));
           world.add(r, Renderable, { model: 'rubble', scale: def.radius });
@@ -66,6 +69,22 @@ export function deathSystem(ctx: SimContext): System {
       }
     },
   };
+}
+
+/**
+ * A building going up (a fuel depot): hurts everything round it, its own
+ * side's units and buildings too, falling off toward the edge like splash.
+ * The kills go to whoever destroyed the building.
+ */
+function explode(world: World, ctx: SimContext, at: Transform, blast: { damage: number; radius: number }, killer: Hit | null): void {
+  ctx.grid.forEachNear(at.x, at.z, blast.radius + 3, (other, d2) => {
+    if (!world.has(other, Targetable) || world.req(other, Health).hp <= 0) return;
+    // Aircraft overhead are out of reach, as with any ground burst.
+    const edge = Math.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), Math.max(0, world.req(other, Transform).y - at.y));
+    if (edge > blast.radius) return;
+    applyDamage(world, ctx, other, blast.damage * (1 - 0.6 * (edge / blast.radius)), killer);
+  });
+  ctx.events.emit('impact', { x: at.x, y: at.y + 1, z: at.z, kind: 'artillery', splash: blast.radius });
 }
 
 export function wreckSystem(): System {

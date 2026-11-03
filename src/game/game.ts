@@ -150,10 +150,11 @@ export class Game {
 
   // Player commands. The UI calls these; they're the only way it changes the sim.
 
-  /** Drop a unit at a point. Returns false if the spot is unusable or the side is at its cap. */
+  /** Drop a unit at a point. Returns false if the spot is unusable for it or the side is at its cap. */
   spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
-    if (!this.field.contains(x, z, 1) || this.field.isWater(x, z)) return false;
     const def = this.ctx.units[unit];
+    // Boats only on water, land units only where they can go (hovers on either).
+    if (!this.field.contains(x, z, 1) || !this.ctx.navs.for(def.move).terrainAllowsAt(x, z)) return false;
     // Dropped units obey the caps, but not the super unit's outpost rule: placing them is the player's call.
     if (countByCategory(this.world, this.ctx.sides.count)[faction][def.category] >= capFor(this.ctx, faction, def.category)) return false;
     spawnUnit(this.world, this.ctx, def, faction, x, z);
@@ -171,7 +172,7 @@ export class Game {
 
   private populate(rng: Rng): void {
     const placements = [
-      ...this.field.baseSites.flatMap((site) => layoutBase(this.field, site, rng, doctrineOf(this.ctx, site.faction).signature)),
+      ...this.field.baseSites.flatMap((site) => layoutBase(this.field, site, rng, doctrineOf(this.ctx, site.faction))),
       ...this.field.townSites.flatMap((site) => layoutTown(this.field, site, rng)),
     ];
     for (const p of placements) {

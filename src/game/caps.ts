@@ -31,9 +31,40 @@ export function countByCategory(world: World, sides: number): CategoryCounts[] {
   for (const e of world.query(Unit, Faction)) {
     const f = world.req(e, Faction).id;
     if (f < 0 || world.has(e, Guard)) continue;
-    out[f][world.req(e, Unit).def.category]++;
+    const def = world.req(e, Unit).def;
+    // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army.
+    if (isBoat(def)) continue;
+    out[f][def.category]++;
   }
   return out;
+}
+
+/**
+ * Boats a side can have afloat at once (times its strength; see
+ * Sides.strength). Boats can only fight near water, so instead of taking
+ * vehicle cap from the land army they have a small limit of their own; a
+ * dock with every berth full builds its dry-land stand-in instead (see
+ * ProductionEntry.ifDry).
+ */
+export const BOAT_BERTHS = 6;
+
+export function isBoat(def: UnitDef): boolean {
+  return def.category !== 'super' && def.move === 'naval';
+}
+
+/** Boats afloat per side. */
+export function countBoats(world: World, sides: number): number[] {
+  const out = new Array<number>(sides).fill(0);
+  for (const e of world.query(Unit, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f >= 0 && isBoat(world.req(e, Unit).def)) out[f]++;
+  }
+  return out;
+}
+
+/** Whether a side has a free berth for another boat. */
+export function berthFree(ctx: SimContext, boats: number[], faction: number): boolean {
+  return boats[faction] < Math.round(BOAT_BERTHS * ctx.sides.strength[faction]);
 }
 
 /** The super cap from its base, after it's grown (see SuperGrowth). */

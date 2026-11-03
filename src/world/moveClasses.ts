@@ -3,7 +3,7 @@
  * nav grid for a class (see NavGrid) and the movement system read these
  * rules, so a new kind of mover is a new entry here.
  */
-export type MoveClass = 'foot' | 'tracked' | 'walker' | 'hover' | 'amphibious' | 'naval' | 'air';
+export type MoveClass = 'foot' | 'tracked' | 'walker' | 'climber' | 'hover' | 'amphibious' | 'naval' | 'air';
 
 export interface MoveRules {
   /** Deepest water (below sea level) it can enter: 0 keeps it on dry land, Infinity lets it go anywhere wet. */
@@ -35,8 +35,10 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   tracked: { ...land, steep: 3, town: 1.8 },
   /** Mechs: long legs take slopes in stride and wade through shallow water, but big ones keep out of towns. */
   walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, waterCost: 2, waterSpeed: 0.6 },
-  /** Hovercraft: skim water as easily as land, but can't climb steep ground. */
-  hover: { ...land, maxDepth: Infinity, steep: Infinity, town: 1.5, waterSpeed: 1.1 },
+  /** Spider walkers: many legs take any slope as easily as flat ground, and they're small enough for town streets. */
+  climber: { ...land, maxDepth: 0.6, steep: 1, town: 1, waterCost: 2, waterSpeed: 0.6 },
+  /** Hovercraft: skim water as easily as land, but steep ground is the worst going of any class. */
+  hover: { ...land, maxDepth: Infinity, steep: 6, town: 1.5, waterSpeed: 1.1 },
   /** Amphibious vehicles: drive on land, swim slowly. */
   amphibious: { ...land, maxDepth: Infinity, town: 1.8, waterCost: 2, waterSpeed: 0.5 },
   /** Boats: water only, and not the shallowest of it. */

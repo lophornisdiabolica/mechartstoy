@@ -65,11 +65,23 @@ describe('player orders', () => {
   it('every unit type can be dropped', () => {
     const s = defaultSettings();
     // Room for every super unit.
-    s.armies.caps.super = 6;
+    s.armies.caps.super = 10;
     const game = new Game(4, { settings: s, populate: false, autoSpawn: false });
     const site = game.field.baseSites[1];
-    for (const id of Object.keys(UNIT_DEFS) as (keyof typeof UNIT_DEFS)[]) {
-      expect(game.spawnUnitAt(id, 1, site.x, site.z)).toBe(true);
+    // Boats go on the nearest open water.
+    const f = game.field;
+    let water = { x: 0, z: 0, d: Infinity };
+    for (let x = f.bounds.minX + 2; x < f.bounds.maxX - 2; x++) {
+      for (let z = f.bounds.minZ + 2; z < f.bounds.maxZ - 2; z++) {
+        const d = Math.hypot(x - site.x, z - site.z);
+        if (d < water.d && f.heightAt(x, z) < f.seaLevel - 0.5) water = { x, z, d };
+      }
     }
+    for (const id of Object.keys(UNIT_DEFS) as (keyof typeof UNIT_DEFS)[]) {
+      const at = UNIT_DEFS[id].move === 'naval' ? water : site;
+      expect(game.spawnUnitAt(id, 1, at.x, at.z), id).toBe(true);
+    }
+    expect(game.spawnUnitAt('missileBoat', 1, site.x, site.z)).toBe(false);
+    expect(game.spawnUnitAt('tank', 1, water.x, water.z)).toBe(false);
   });
 });

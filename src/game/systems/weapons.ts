@@ -30,8 +30,8 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   let ez = tt.z + Math.sin(missA) * missR;
   let ey: number;
   let struck: Entity | null = target;
-  if (w.arc) {
-    // Lobbed: lands at the impact point, on the ground or at an aircraft's height.
+  if (w.arc || w.projectile === 'flame') {
+    // Lobbed, or flame (which licks round corners a little): lands at the impact point, on the ground or at an aircraft's height.
     const tm = world.get(target, Mover);
     ey = (tm && MOVE_RULES[tm.move].flies ? tt.y : ctx.field.surfaceAt(ex, ez)) + Math.min(1.5, targetRadius * 0.6);
   } else {
@@ -63,7 +63,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     ex,
     ey,
     ez,
-    arcHeight: w.arc && !dropped ? Math.max(2, dist * 0.35) : 0,
+    arcHeight: w.arc && !dropped ? Math.max(2, dist * 0.35) : w.projectile === 'flame' ? 0.4 : 0,
     elapsed: 0,
     duration: Math.max(0.05, flight / w.speed),
   });
@@ -115,7 +115,7 @@ export function weaponSystem(ctx: SimContext): System {
         const aligned = Math.abs(wrapAngle(desired - armed.aim)) < AIM_TOLERANCE;
         if (armed.cooldown <= 0 && inRange && aligned) {
           // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
-          if (!armed.weapon.arc) {
+          if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
             const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, armed.weapon.muzzleHeight);
             armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
             if (armed.blocked) continue;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AnimState, box, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
+import { AnimState, box, cylinder, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
 
 /**
  * Low-poly unit models. Each is a handful of boxes built facing +x, with
@@ -301,8 +301,8 @@ const TROOPER_W = 8;
 const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
-/** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, or a mortar tube. */
-type Kit = 'rifle' | 'launcher' | 'mortar';
+/** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, or a flamethrower and its fuel tank. */
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer';
 
 /** Two walk frames of an infantry sprite. */
 function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
@@ -327,6 +327,10 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
     } else if (kit === 'mortar') {
       px(6, 0, 1, 6, '#4a4f3a'); // mortar tube carried upright
       px(5, 6, 3, 1, '#222'); // base plate
+    } else if (kit === 'flamer') {
+      px(0, 3, 1, 4, '#b0451c'); // fuel tank on the back
+      px(5, 5, 2, 1, '#333'); // flame gun
+      px(7, 5, 1, 1, '#ff8a2a');
     } else {
       px(5, 4, 3, 1, '#222'); // rifle
     }
@@ -561,9 +565,325 @@ registerModel('airship', (faction) => {
   });
 });
 
+// Bastion: a railgun on a tracked hull, and the Fortress Walker with a sensor mast on its back.
+registerModel('railgun', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.3, 0.4, 0.42, 0.6));
+  root.add(box(2.1, 0.42, 1.08, primary, 0, 0.6, 0));
+  const turret = new THREE.Group();
+  turret.position.set(-0.3, 0.81, 0);
+  turret.add(box(1.0, 0.45, 0.9, secondary, 0, 0.22, 0));
+  turret.add(box(0.5, 0.18, 0.36, METAL, 0.65, 0.3, 0)); // capacitor housing
+  for (const side of [-1, 1]) turret.add(box(2.6, 0.1, 0.08, DARK, 1.6, 0.3, side * 0.12)); // twin rails
+  turret.add(box(0.2, 0.08, 0.34, METAL, 2.75, 0.3, 0)); // muzzle brace
+  root.add(turret);
+  return setRig(root, { turret });
+});
+
+registerModel('fortress', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  body.add(box(1.2, 0.5, 1.5, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.3;
+  turret.add(box(2.0, 1.2, 1.9, primary, 0, 0.6, 0));
+  turret.add(box(1.6, 0.25, 2.0, secondary, -0.1, 1.3, 0)); // armoured roof
+  turret.add(box(0.3, 0.3, 1.0, GLASS, 1.05, 0.85, 0));
+  for (const side of [-1, 1]) turret.add(box(1.6, 0.26, 0.26, DARK, 1.4, 0.45, side * 0.6)); // twin siege guns
+  turret.add(box(0.1, 0.8, 0.1, METAL, -0.6, 1.8, 0)); // sensor mast
+  turret.add(box(0.12, 0.5, 0.6, secondary, -0.5, 2.2, 0));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.3, 1.3, 0.42, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.6);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 1.6, 0.3) });
+});
+
+/**
+ * Spider legs: `pairs` legs down each side, splayed out and up to a knee and
+ * down to the ground, scuttling in alternating threes. `height` is the body's
+ * height above the ground.
+ */
+function spiderLegs(body: THREE.Group, pairs: number, length: number, spread: number, height: number, thickness: number) {
+  const reach = length * 0.45;
+  const raise = 0.6;
+  const splay = 0.3;
+  const shin = (height + reach * Math.sin(raise)) / Math.cos(splay);
+  const hips: THREE.Group[] = [];
+  for (let i = 0; i < pairs; i++) {
+    for (const side of [-1, 1]) {
+      const hip = new THREE.Group();
+      hip.position.set((i - (pairs - 1) / 2) * (length / pairs), 0, side * spread);
+      const thigh = new THREE.Group();
+      thigh.rotation.x = -side * raise;
+      thigh.add(box(thickness, thickness, reach, METAL, 0, 0, (side * reach) / 2));
+      const knee = new THREE.Group();
+      knee.position.z = side * reach;
+      knee.rotation.x = side * (raise - splay);
+      knee.add(box(thickness * 0.8, shin, thickness * 0.8, DARK, 0, -shin / 2, 0));
+      thigh.add(knee);
+      hip.add(thigh);
+      body.add(hip);
+      hips.push(hip);
+    }
+  }
+  let phase = 0;
+  let amount = 0;
+  return (s: AnimState) => {
+    phase += s.speed * s.dt * 6;
+    amount += ((s.speed > 0.05 ? 1 : 0) - amount) * Math.min(1, s.dt * 6);
+    hips.forEach((hip, k) => (hip.rotation.y = Math.sin(phase + (k % 2 === Math.floor(k / 2) % 2 ? 0 : Math.PI)) * 0.35 * amount));
+  };
+}
+
+// Talon: the spider walker, the Warhound and the Juggernaut.
+registerModel('spider', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.7;
+  root.add(body);
+  body.add(box(1.0, 0.35, 0.8, primary, 0, 0, 0));
+  body.add(box(0.5, 0.12, 0.6, secondary, -0.15, 0.235, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.25, 0.18, 0);
+  turret.add(box(0.4, 0.22, 0.4, METAL, 0, 0.11, 0));
+  for (const side of [-1, 1]) turret.add(box(0.6, 0.07, 0.07, DARK, 0.45, 0.12, side * 0.1));
+  body.add(turret);
+  return setRig(root, { turret, animate: spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11) });
+});
+
+registerModel('warhound', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.0;
+  root.add(body);
+  body.add(box(0.9, 0.4, 1.1, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.25;
+  turret.add(box(1.4, 0.8, 1.3, primary, 0, 0.4, 0));
+  turret.add(box(0.3, 0.22, 0.8, GLASS, 0.62, 0.55, 0));
+  turret.add(box(1.0, 0.18, 1.36, secondary, -0.15, 0.85, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(0.5, 0.45, 0.35, secondary, 0.1, 0.35, side * 0.85)); // arms
+    turret.add(box(1.3, 0.16, 0.16, DARK, 0.85, 0.3, side * 0.85)); // arm cannons
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.0, 1.0, 0.3, METAL, DARK);
+    leg.hip.position.set(0, -0.05, side * 0.45);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 1.2, 0.45) });
+});
+
+registerModel('juggernaut', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.9;
+  root.add(body);
+  body.add(box(1.4, 0.55, 1.7, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.35;
+  turret.add(box(2.2, 1.3, 2.0, primary, 0, 0.65, 0));
+  turret.add(box(0.35, 0.35, 1.2, GLASS, 1.2, 0.95, 0));
+  turret.add(box(1.8, 0.3, 2.1, secondary, -0.2, 1.45, 0));
+  for (const side of [-1, 1]) {
+    // Shoulder missile racks, bigger than the Titan's, and heavy arms.
+    const rack = new THREE.Group();
+    rack.position.set(-0.2, 1.75, side * 1.25);
+    rack.add(box(1.4, 0.8, 0.8, secondary));
+    rack.add(box(0.05, 0.62, 0.62, DARK, 0.72, 0, 0));
+    turret.add(rack);
+    turret.add(box(0.6, 0.6, 0.5, primary, 0.1, 0.5, side * 1.25));
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.45, 1.45, 0.48, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.7);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 1.8, 0.3) });
+});
+
+/** Hovers bob gently on their air cushion; boats rock on the water. */
+function bob(part: THREE.Object3D, height: number, roll: number) {
+  let phase = Math.random() * 6;
+  const y = part.position.y;
+  return (s: AnimState) => {
+    phase += s.dt * 2.2;
+    part.position.y = y + Math.sin(phase) * height;
+    part.rotation.x = Math.sin(phase * 0.7) * roll;
+  };
+}
+
+// Tidewater: the skimmer, missile boat, amphibious transport and Hover Fortress.
+registerModel('skimmer', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const hull = new THREE.Group();
+  root.add(hull);
+  hull.add(box(2.0, 0.25, 1.3, DARK, 0, 0.2, 0)); // skirt
+  hull.add(box(1.8, 0.35, 1.1, primary, 0, 0.45, 0));
+  hull.add(box(0.4, 0.2, 1.16, secondary, 0.75, 0.38, 0)); // nose
+  for (const side of [-1, 1]) hull.add(box(0.5, 0.12, 0.3, METAL, -0.75, 0.68, side * 0.35)); // lift fans
+  const turret = new THREE.Group();
+  turret.position.set(0.05, 0.62, 0);
+  turret.add(box(0.7, 0.28, 0.6, secondary, 0, 0.14, 0));
+  turret.add(box(0.9, 0.1, 0.1, DARK, 0.7, 0.15, 0));
+  hull.add(turret);
+  return setRig(root, { turret, animate: bob(hull, 0.04, 0) });
+});
+
+registerModel('missileBoat', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const hull = new THREE.Group();
+  root.add(hull);
+  hull.add(box(2.4, 0.4, 1.0, primary, 0, 0.1, 0));
+  hull.add(box(0.5, 0.3, 0.7, primary, 1.3, 0.05, 0)); // bow
+  hull.add(box(0.7, 0.5, 0.7, secondary, -0.5, 0.55, 0)); // wheelhouse
+  hull.add(box(0.06, 0.2, 0.5, GLASS, -0.13, 0.65, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.55, 0.3, 0);
+  turret.add(box(0.6, 0.3, 0.6, secondary, 0, 0.15, 0));
+  const rack = new THREE.Group();
+  rack.position.set(0, 0.45, 0);
+  rack.rotation.z = 0.3;
+  rack.add(box(0.7, 0.35, 0.55, METAL));
+  rack.add(box(0.05, 0.28, 0.45, DARK, 0.35, 0, 0));
+  turret.add(rack);
+  hull.add(turret);
+  return setRig(root, { turret, animate: bob(hull, 0.05, 0.05) });
+});
+
+registerModel('amphib', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.7, 0, 0.7], 0.55, 0.45));
+  root.add(box(2.2, 0.7, 1.15, primary, 0, 0.75, 0));
+  root.add(box(0.5, 0.4, 1.0, secondary, 1.2, 0.65, 0)); // boat prow
+  root.add(box(0.06, 0.5, 0.7, DARK, -1.13, 0.75, 0)); // rear door
+  const turret = new THREE.Group();
+  turret.position.set(0.2, 1.1, 0);
+  turret.add(box(0.4, 0.2, 0.4, secondary, 0, 0.1, 0));
+  turret.add(box(0.6, 0.07, 0.07, DARK, 0.4, 0.12, 0));
+  root.add(turret);
+  return setRig(root, { turret });
+});
+
+registerModel('hoverFortress', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const hull = new THREE.Group();
+  root.add(hull);
+  hull.add(box(3.6, 0.4, 2.6, DARK, 0, 0.25, 0)); // skirt
+  hull.add(box(3.4, 0.6, 2.4, primary, 0, 0.7, 0)); // deck
+  hull.add(box(0.9, 0.9, 1.2, secondary, -0.9, 1.45, 0)); // bridge
+  hull.add(box(0.06, 0.25, 0.9, GLASS, -0.42, 1.65, 0));
+  for (const side of [-1, 1]) for (const x of [-1.35, 1.35]) hull.add(box(0.6, 0.15, 0.6, METAL, x, 1.05, side * 0.75)); // lift fans
+  const turret = new THREE.Group();
+  turret.position.set(0.6, 1.0, 0);
+  turret.add(box(1.1, 0.4, 1.3, secondary, 0, 0.2, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(0.9, 0.45, 0.45, METAL, 0.15, 0.55, side * 0.4));
+    turret.add(box(0.05, 0.36, 0.36, DARK, 0.6, 0.55, side * 0.4));
+  }
+  hull.add(turret);
+  return setRig(root, { turret, animate: bob(hull, 0.05, 0) });
+});
+
+// Firestorm: the scorch buggy, Cinder Walker and Inferno Walker, all with fuel tanks to feed the flames.
+const FUEL = 0xb0451c;
+const FLAME_TIP = 0xff8a2a;
+
+registerModel('scorchBuggy', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.45, 0.45], 0.4, 0.36));
+  root.add(box(1.3, 0.24, 0.62, primary, 0, 0.44, 0));
+  root.add(cylinder(0.22, 0.22, 0.45, 8, FUEL, -0.4, 0.78, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.25, 0.56, 0);
+  turret.add(box(0.3, 0.2, 0.3, DARK, 0, 0.1, 0));
+  turret.add(box(0.6, 0.09, 0.09, METAL, 0.35, 0.12, 0));
+  turret.add(box(0.1, 0.14, 0.14, FLAME_TIP, 0.68, 0.12, 0));
+  root.add(turret);
+  return setRig(root, { turret });
+});
+
+registerModel('cinderWalker', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.5;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.1, 0.6, 1.0, primary, 0, 0.2, 0));
+  turret.add(box(0.3, 0.18, 0.6, GLASS, 0.5, 0.35, 0));
+  for (const side of [-1, 1]) {
+    turret.add(cylinder(0.2, 0.2, 0.7, 8, FUEL, -0.6, 0.35, side * 0.25)); // fuel tanks on its back
+    turret.add(box(0.9, 0.14, 0.14, DARK, 0.8, 0.05, side * 0.45)); // flame lances
+    turret.add(box(0.12, 0.2, 0.2, FLAME_TIP, 1.25, 0.05, side * 0.45));
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.75, 0.78, 0.22, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.3);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 0.9, 0.45) });
+});
+
+registerModel('inferno', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.65;
+  root.add(body);
+  body.add(box(2.6, 0.7, 1.6, primary, 0, 0, 0));
+  body.add(box(2.0, 0.2, 1.66, secondary, -0.2, 0.45, 0));
+  for (const side of [-1, 1]) body.add(cylinder(0.3, 0.3, 0.8, 8, FUEL, -0.9, 0.95, side * 0.45));
+  const turret = new THREE.Group();
+  turret.position.set(0.8, 0.55, 0);
+  turret.add(box(0.9, 0.5, 1.0, secondary, 0, 0.25, 0));
+  turret.add(box(0.2, 0.2, 0.7, GLASS, 0.5, 0.35, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(1.2, 0.2, 0.2, DARK, 0.9, 0.12, side * 0.35)); // projectors
+    turret.add(box(0.14, 0.28, 0.28, FLAME_TIP, 1.5, 0.12, side * 0.35));
+  }
+  body.add(turret);
+  // Four legs, stepping in diagonal pairs: front left with back right.
+  const legs = [
+    [0.9, -0.75],
+    [0.9, 0.75],
+    [-0.9, 0.75],
+    [-0.9, -0.75],
+  ].map(([x, z]) => {
+    const leg = makeLeg(1.15, 1.2, 0.34, METAL, DARK);
+    leg.hip.position.set(x, -0.3, z);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, animate: walker(legs, body, 1.4, 0.3) });
+});
+
 registerModel('trooper', (faction) => infantry(faction, 'rifle'));
 registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
+registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
 
 // Shared dark material for burnt-out hulks.
 export const CHARRED = flatMaterial(0x2a2623);

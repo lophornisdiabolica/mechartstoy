@@ -1,6 +1,6 @@
 import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Armed, Collider, Construction, Faction, Health, Mover, Targetable, Transform } from '../components';
+import { Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
@@ -64,17 +64,24 @@ function muzzleToward(world: World, e: Entity, armed: Armed, target: Entity): Po
  * at; if none of the best few is in the open, they take the best anyway
  * and are marked blocked (see Armed.blocked).
  */
-function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Entity | null {
+function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spotters: Spotter[]): Entity | null {
   const t = world.req(e, Transform);
   const faction = world.req(e, Faction).id;
   const candidates: { e: Entity; score: number }[] = [];
-  ctx.grid.forEachNear(t.x, t.z, armed.sight, (other, d2) => {
+  // A weapon that outranges its own sight can use an allied spotter's eyes for the difference.
+  const ours = armed.weapon.range > armed.sight ? spotters.filter((s) => ctx.sides.allied(s.faction, faction) && Math.hypot(s.x - t.x, s.z - t.z) < s.radius + armed.weapon.range) : [];
+  const reach = ours.length > 0 ? armed.weapon.range : armed.sight;
+  ctx.grid.forEachNear(t.x, t.z, reach, (other, d2) => {
     const otherFaction = world.req(other, Faction).id;
     // Only enemies; nobody aims at the civilian town (it only suffers stray fire).
     if (!ctx.sides.hostile(faction, otherFaction)) return;
     if (!canHit(world, armed, other)) return;
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;
+    if (d > armed.sight) {
+      const ot = world.req(other, Transform);
+      if (!ours.some((s) => (s.x - ot.x) ** 2 + (s.z - ot.z) ** 2 <= s.radius * s.radius)) return;
+    }
     const isBuilding = world.req(other, Targetable).kind === 'building';
     const waste = WASTE_PENALTY * (1 - hitWorth(world, armed, other));
     candidates.push({ e: other, score: d + waste + (isBuilding ? (armed.siege ? -BUILDING_PENALTY * 3 : BUILDING_PENALTY) : 0) });
@@ -82,7 +89,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed): Ent
   armed.blocked = false;
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.score - b.score || a.e - b.e);
-  if (armed.weapon.arc) return candidates[0].e;
+  if (armed.weapon.arc || armed.weapon.projectile === 'flame') return candidates[0].e;
   for (const c of candidates.slice(0, SIGHT_CHECKS)) {
     if (clearShot(world, ctx, muzzleToward(world, e, armed, c.e), c.e, e, faction)) return c.e;
   }
@@ -123,11 +130,42 @@ export function firingSpot(world: World, ctx: SimContext, e: Entity, armed: Arme
   return null;
 }
 
-/** Every armed entity (units and towers) picks the best enemy in sight. */
+/** Something that spots for its side's long-range weapons (see BuildingDef.spots and UnitDef.spots). */
+interface Spotter {
+  x: number;
+  z: number;
+  radius: number;
+  faction: number;
+}
+
+/** Every spotter on the field this tick: finished buildings and live units with a spotting radius. */
+function spotters(world: World): Spotter[] {
+  const out: Spotter[] = [];
+  for (const e of world.query(Building, Transform, Faction)) {
+    const radius = world.req(e, Building).def.spots;
+    if (radius && !world.has(e, Construction)) out.push({ ...xz(world, e), radius, faction: world.req(e, Faction).id });
+  }
+  for (const e of world.query(Unit, Transform, Faction)) {
+    const radius = world.req(e, Unit).def.spots;
+    if (radius) out.push({ ...xz(world, e), radius, faction: world.req(e, Faction).id });
+  }
+  return out;
+}
+
+function xz(world: World, e: Entity): { x: number; z: number } {
+  const t = world.req(e, Transform);
+  return { x: t.x, z: t.z };
+}
+
+/**
+ * Every armed entity (units and towers) picks the best enemy in sight, or
+ * (for weapons that outrange their sight) spotted by an ally.
+ */
 export function targetingSystem(ctx: SimContext): System {
   return {
     name: 'targeting',
     update(world) {
+      const spotting = spotters(world);
       for (const e of world.query(Armed, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
         const armed = world.req(e, Armed);
@@ -138,7 +176,7 @@ export function targetingSystem(ctx: SimContext): System {
         }
         if (world.time < armed.nextTargetAt) continue;
         armed.nextTargetAt = world.time + RETARGET_INTERVAL;
-        armed.target = findTarget(world, ctx, e, armed);
+        armed.target = findTarget(world, ctx, e, armed, spotting);
         const spot = armed.blocked && armed.target !== null ? firingSpot(world, ctx, e, armed, armed.target) : null;
         armed.spotX = spot?.x ?? null;
         armed.spotZ = spot?.z ?? null;

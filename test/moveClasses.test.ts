@@ -35,9 +35,10 @@ describe('movement classes', () => {
     // Deep water: only things that float or fly.
     for (const r of [hover, amphibious, naval, air]) expect(terrainAllows(r, 2, 0)).toBe(true);
     expect(terrainAllows(walker, 2, 0)).toBe(false);
-    // Cliffs stop hovers only.
-    expect(terrainAllows(hover, -1, 1.2)).toBe(false);
+    // Cliffs stop nothing, but hovers find them the worst going.
+    expect(terrainAllows(hover, -1, 1.2)).toBe(true);
     expect(terrainAllows(tracked, -1, 1.2)).toBe(true);
+    for (const r of [foot, tracked, walker]) expect(hover.steep).toBeGreaterThan(r.steep);
   });
 
   it('gives walkers routes through shallows that tracked vehicles must go round', () => {

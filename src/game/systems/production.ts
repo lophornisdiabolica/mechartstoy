@@ -4,18 +4,22 @@ import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
-import { canBuild, countByCategory } from '../caps';
+import { berthFree, canBuild, countBoats, countByCategory, isBoat } from '../caps';
 import { recordSquad } from '../territory';
-import { UnitId } from '../units';
+import { UnitDef, UnitId } from '../units';
+import { MoveClass } from '../../world/moveClasses';
 
 /**
- * The nearest spot to (x, z) with room for a unit of this radius, searching a
- * few rings outward. Keeps big units from rolling out wedged between buildings.
+ * The nearest spot to (x, z) with room for a unit of this radius and
+ * movement class, searching a few rings outward (more for boats, which need
+ * open water). Keeps big units from rolling out wedged between buildings.
  */
-export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number): { x: number; z: number } | null {
-  const ok = (px: number, pz: number) => ctx.field.contains(px, pz, 1) && ctx.nav.fitsAt(px, pz, radius);
+export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number, move: MoveClass = 'tracked'): { x: number; z: number } | null {
+  const grid = ctx.navs.for(move);
+  const ok = (px: number, pz: number) => ctx.field.contains(px, pz, 1) && grid.terrainAllowsAt(px, pz) && grid.fitsAt(px, pz, radius);
   if (ok(x, z)) return { x, z };
-  for (let ring = 1; ring <= 4; ring++) {
+  const naval = move === 'naval';
+  for (let ring = 1; ring <= (naval ? 8 : 4); ring++) {
     const d = ring * 1.5;
     for (let a = 0; a < 8; a++) {
       const px = x + Math.cos((a / 8) * Math.PI * 2) * d;
@@ -23,8 +27,8 @@ export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number)
       if (ok(px, pz)) return { x: px, z: pz };
     }
   }
-  // Nowhere roomy: anywhere dry will do.
-  return !ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1) ? { x, z } : null;
+  // Nowhere roomy: anywhere dry will do (but not for a boat).
+  return !naval && !ctx.field.isWater(x, z) && ctx.field.contains(x, z, 1) ? { x, z } : null;
 }
 
 /** Every unit in a production or wave entry's squad, in order: its main unit, then any it comes `with`. */
@@ -68,6 +72,7 @@ export function productionSystem(ctx: SimContext): System {
     update(world, dt) {
       const alive = countUnits(world, ctx.sides.count);
       const counts = countByCategory(world, ctx.sides.count);
+      const boats = countBoats(world, ctx.sides.count);
       const { armies } = ctx.settings;
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
@@ -86,7 +91,11 @@ export function productionSystem(ctx: SimContext): System {
         const total = producer.table.reduce((s, p) => s + p.weight, 0);
         let roll = ctx.rng.range(0, total);
         const entry = producer.table.find((p) => (roll -= p.weight) <= 0) ?? producer.table[0];
-        if (!canBuild(ctx, counts, faction, ctx.units[entry.unit])) continue;
+        // Boats need a free berth rather than vehicle cap (see BOAT_BERTHS); their stand-in needs the cap.
+        const first = ctx.units[entry.unit];
+        const standIn = entry.ifDry ? ctx.units[entry.ifDry] : null;
+        const room = (def: UnitDef) => (isBoat(def) ? berthFree(ctx, boats, faction) : canBuild(ctx, counts, faction, def));
+        if (!room(first) && !(standIn && room(standIn))) continue;
 
         // Units roll out of the front door.
         const t = world.req(e, Transform);
@@ -98,12 +107,21 @@ export function productionSystem(ctx: SimContext): System {
         const lineUp = squadLineUp(entry);
         recordSquad(ctx, squad, faction, lineUp);
         for (const id of lineUp) {
-          const def = ctx.units[id];
-          const spot = spawnSpot(ctx, doorX + ctx.rng.range(-1.2, 1.2), doorZ + ctx.rng.range(-1.2, 1.2), def.radius);
+          let def = ctx.units[id];
+          const x = doorX + ctx.rng.range(-1.2, 1.2);
+          const z = doorZ + ctx.rng.range(-1.2, 1.2);
+          // The rest of a squad comes out with it even past the cap (the cap gates whole batches), but boats need berths.
+          let spot = !isBoat(def) || berthFree(ctx, boats, faction) ? spawnSpot(ctx, x, z, def.radius, def.move) : null;
+          // A boat with no water to launch into, or no free berth, is built as its dry-land stand-in.
+          if (!spot && standIn && id === entry.unit) {
+            def = standIn;
+            spot = spawnSpot(ctx, x, z, def.radius, def.move);
+          }
           if (spot) {
             spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
             alive[faction]++;
-            counts[faction][def.category]++;
+            if (isBoat(def)) boats[faction]++;
+            else counts[faction][def.category]++;
           }
         }
       }

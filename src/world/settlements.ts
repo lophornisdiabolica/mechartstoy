@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import { BUILDING_DEFS, BuildingId, DECORATIVE_BUILDINGS } from '../game/buildings';
+import { BUILDING_DEFS, BuildingDef, BuildingId, DECORATIVE_BUILDINGS } from '../game/buildings';
 import { Battlefield, BaseSite, TownSite } from './battlefield';
 
 /** Radius of the clear ground kept in front of a production building's door. */
@@ -41,30 +41,45 @@ class Layout {
 
   /** Place if it doesn't overlap anything already placed or sit in water. Returns success. */
   tryPlace(p: BuildingPlacement, gap = 1): boolean {
-    const r = BUILDING_DEFS[p.building].radius;
-    if (!this.field.contains(p.x, p.z, r + 1)) return false;
+    if (!this.fits(p.x, p.z, BUILDING_DEFS[p.building].radius, gap)) return false;
+    this.placements.push(p);
+    return true;
+  }
+
+  /** Whether a building of this radius would fit here: on the map, dry, clear of the rest. */
+  fits(x: number, z: number, r: number, gap = 1): boolean {
+    if (!this.field.contains(x, z, r + 1)) return false;
     for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) {
-      if (this.field.isWater(p.x + dx, p.z + dz)) return false;
+      if (this.field.isWater(x + dx, z + dz)) return false;
     }
     for (const o of this.placements) {
       const or = BUILDING_DEFS[o.building].radius;
-      if (Math.hypot(o.x - p.x, o.z - p.z) < r + or + gap) return false;
+      if (Math.hypot(o.x - x, o.z - z) < r + or + gap) return false;
     }
     for (const o of this.reserved) {
-      if (Math.hypot(o.x - p.x, o.z - p.z) < r + o.r) return false;
+      if (Math.hypot(o.x - x, o.z - z) < r + o.r) return false;
     }
-    this.placements.push(p);
     return true;
   }
 }
 
+/** What a side's doctrine adds to its base (see DoctrineDef). */
+export interface BaseExtras {
+  /** The signature building. A coastal one goes on the nearest shore, or `inland` goes in its place. */
+  signature?: BuildingId;
+  inland?: BuildingId;
+  /** Guard towers on top of the usual three. */
+  extraTowers?: number;
+}
+
 /**
  * A faction base: HQ in the middle, production buildings toward the front
- * (plus the doctrine's `signature` building toward the back),
- * guard towers on the perimeter facing the enemy, and houses filling gaps.
- * A lane through the middle is kept clear so units can drive out.
+ * (plus the doctrine's signature building toward the back, or on the shore
+ * for a coastal one), guard towers on the perimeter facing the enemy, and
+ * houses filling gaps. A lane through the middle is kept clear so units can
+ * drive out.
  */
-export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, signature?: BuildingId): BuildingPlacement[] {
+export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras: BaseExtras = {}): BuildingPlacement[] {
   const layout = new Layout(field);
   const forward = site.faction === 0 ? 0 : Math.PI; // heading toward the enemy
   const f = site.faction;
@@ -78,13 +93,22 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, signatu
   layout.tryPlaceProducer({ building: 'barracks', faction: f, ...at(0.75, 8), heading: forward });
   layout.tryPlaceProducer({ building: 'factory', faction: f, ...at(-0.75, 8.5), heading: forward });
   layout.tryPlaceProducer({ building: 'mechbay', faction: f, ...at(Math.PI - 0.9, 10), heading: forward });
-  // The doctrine's signature building, in the first free spot round the back.
+  // The doctrine's signature building: on the shore if it's coastal and there is one, else in the first free spot round the back.
+  let signature = extras.signature;
+  if (signature && (BUILDING_DEFS[signature] as BuildingDef).coastal) {
+    const shore = findShore(field, site, BUILDING_DEFS[signature].radius, layout);
+    if (shore) layout.tryPlaceProducer({ building: signature, faction: f, ...shore });
+    signature = shore ? undefined : extras.inland;
+  }
   if (signature) {
     for (const [angle, dist] of [[Math.PI + 0.9, 10], [Math.PI + 1.6, 9], [Math.PI - 1.6, 9], [Math.PI, 12], [1.6, 10], [-1.6, 10]]) {
       if (layout.tryPlaceProducer({ building: signature, faction: f, ...at(angle, dist), heading: forward })) break;
     }
   }
-  for (const a of [-0.55, 0, 0.55]) {
+  // Towers across the front. The barracks' and factory's aprons usually leave room for only the
+  // middle one of the first three (which the balance was tuned with); extra ones go round the flanks.
+  const towers = [-0.55, 0, 0.55, -1.1, 1.1, -1.65, 1.65].slice(0, 3 + (extras.extraTowers ?? 0));
+  for (const a of towers) {
     layout.tryPlace({ building: 'tower', faction: f, ...at(a, site.radius - 1), heading: forward });
   }
 
@@ -120,4 +144,66 @@ export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): Buildi
     }
   }
   return layout.placements;
+}
+
+/** Water at least this deep counts as open water for a dock's door (boats need 0.2; see MOVE_RULES.naval). */
+const DOCK_DEPTH = 0.5;
+/** Furthest past the base's edge a dock goes looking for a shore. */
+const SHORE_SEARCH = 16;
+/** Grid step for measuring a body of water, and the cells of it that make it open water rather than a pond (about 250 square units). */
+const WATER_STEP = 1.5;
+const OPEN_WATER = 110;
+
+/**
+ * The nearest spot to a base for a building on the shore: dry ground for its
+ * footprint, its door facing open water (deep enough for boats, and a lake
+ * or sea rather than a pond). Null if there's none near enough.
+ */
+function findShore(field: Battlefield, site: BaseSite, radius: number, layout: Layout): { x: number; z: number; heading: number } | null {
+  const sizes = new Map<string, number>();
+  for (let dist = site.radius * 0.5; dist <= site.radius + SHORE_SEARCH; dist += 1.5) {
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const x = site.x + Math.cos(a) * dist;
+      const z = site.z - Math.sin(a) * dist;
+      if (!layout.fits(x, z, radius)) continue;
+      for (let h = 0; h < 16; h++) {
+        const heading = (h / 16) * Math.PI * 2;
+        const door = { x: x + Math.cos(heading) * (radius + 2.5), z: z - Math.sin(heading) * (radius + 2.5) };
+        if (deepWaterArea(field, door.x, door.z, OPEN_WATER, sizes) >= OPEN_WATER) return { x, z, heading };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Roughly how much boat-deep water (in WATER_STEP cells) is connected to a
+ * point, counting up to `cap`. Remembered per starting cell in `sizes`.
+ */
+function deepWaterArea(field: Battlefield, x: number, z: number, cap: number, sizes: Map<string, number>): number {
+  const deep = (i: number, j: number) => {
+    const px = i * WATER_STEP;
+    const pz = j * WATER_STEP;
+    return field.contains(px, pz, 1) && field.heightAt(px, pz) < field.seaLevel - DOCK_DEPTH;
+  };
+  const si = Math.round(x / WATER_STEP);
+  const sj = Math.round(z / WATER_STEP);
+  const key = `${si},${sj}`;
+  const known = sizes.get(key);
+  if (known !== undefined) return known;
+  if (!deep(si, sj)) return 0;
+  const seen = new Set<string>([key]);
+  const stack = [[si, sj]];
+  while (stack.length > 0 && seen.size < cap) {
+    const [i, j] = stack.pop()!;
+    for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+      const k = `${ni},${nj}`;
+      if (seen.has(k) || !deep(ni, nj)) continue;
+      seen.add(k);
+      stack.push([ni, nj]);
+    }
+  }
+  sizes.set(key, seen.size);
+  return seen.size;
 }
