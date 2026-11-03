@@ -24,8 +24,8 @@ export interface Trace {
   y: number;
   z: number;
   hit: Entity | null;
-  /** What stopped it: an entity (unit or building), the ground, or nothing within reach. */
-  stoppedBy: 'unit' | 'building' | 'ground' | 'nothing';
+  /** What stopped it: an entity (unit or building), a tree in a dense forest (see woods.ts), the ground, or nothing within reach. */
+  stoppedBy: 'unit' | 'building' | 'tree' | 'ground' | 'nothing';
 }
 
 /** Extra width shots get against units, so a near miss still counts (matches the old direct-hit test). */
@@ -105,6 +105,14 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
       }
     }
   });
+
+  // Dense forest's trees.
+  const tree = ctx.field.woods.firstHit(from.x, from.z, ux, uz, best, yAt);
+  if (tree !== null && tree < best) {
+    best = tree;
+    hit = null;
+    kind = 'tree';
+  }
 
   // The ground: walk the path until it dips under the surface (or water).
   for (let s = GROUND_STEP; s < best; s += GROUND_STEP) {

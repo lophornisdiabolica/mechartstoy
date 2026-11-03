@@ -11,6 +11,7 @@ import { Lanes } from './lanes';
 import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
 import { Offensive, offensiveSystem } from './offensive';
+import { scrapSystem } from './scrap';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -125,6 +126,7 @@ export class Game {
       projectileSystem(ctx),
       deathSystem(ctx),
       wreckSystem(),
+      scrapSystem(ctx),
       outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),

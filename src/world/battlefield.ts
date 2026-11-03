@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import { BiomeId } from './biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } from './ground';
 import { connectTowns } from './roads';
+import { growWoods, Woods } from './woods';
 import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
 
 /**
@@ -43,6 +44,8 @@ export interface BattlefieldConfig {
    * (also dig an inlet to any base without water).
    */
   waterways: 'off' | 'joined' | 'everyBase';
+  /** Dense forest (see woods.ts): roughly the share of open land it covers, 0 for none. */
+  forest: number;
   /** Civilian towns in no-man's land, and their radius. */
   towns: number;
   townRadius: number;
@@ -65,6 +68,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   outpostKinds: ['supply'],
   biome: 'temperate',
   waterways: 'joined',
+  forest: 0,
   towns: 1,
   townRadius: 11,
   places: null,
@@ -193,6 +197,8 @@ export class Battlefield {
   readonly ground: Uint8Array;
   readonly bridges: Bridge[] = [];
   readonly roads: Road[] = [];
+  /** Dense forest's trees (see woods.ts). */
+  readonly woods: Woods;
   /** Per cell: 1 where a road (see addRoad) covers it, so the terrain leaves its colour to the road strip. */
   readonly roadCell: Uint8Array;
   /** Per cell: the index of the bridge over it, or -1. */
@@ -220,6 +226,7 @@ export class Battlefield {
     this.ground = new Uint8Array(config.cols * config.rows);
     this.bridgeCell = new Int16Array(config.cols * config.rows).fill(-1);
     this.roadCell = new Uint8Array(config.cols * config.rows);
+    this.woods = new Woods(this);
   }
 
   /** The map cell (i, j) a point is in, clamped to the map. */
@@ -283,6 +290,21 @@ export class Battlefield {
     }
     if (n > 0) this.changed(area);
     return n;
+  }
+
+  /** Lay a kind of ground on these cells (indices into `ground`), announcing them as one change. */
+  setGround(cells: number[], ground: GroundId): void {
+    const code = groundCode(ground);
+    const { cols } = this.config;
+    let area: CellArea | null = null;
+    for (const k of cells) {
+      if (this.ground[k] === code) continue;
+      this.ground[k] = code;
+      const i = k % cols;
+      const j = (k - i) / cols;
+      area = area ? { i0: Math.min(area.i0, i), j0: Math.min(area.j0, j), i1: Math.max(area.i1, i), j1: Math.max(area.j1, j) } : { i0: i, j0: j, i1: i, j1: j };
+    }
+    if (area) this.changed(area);
   }
 
   /**
@@ -613,6 +635,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   });
   // Levelling towns and outposts may have raised ground by a bridge: cut it back.
   for (const b of field.bridges) cutBanks(field, b);
+  // Dense forest last, on its own random stream, round everything else.
+  growWoods(field, rng.fork(0x776f6f64), config.forest);
 
   return field;
 }

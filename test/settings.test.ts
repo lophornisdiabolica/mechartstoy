@@ -16,7 +16,7 @@ function run(game: Game, seconds: number): void {
 describe('battle settings', () => {
   it('defaults reproduce the hand-tuned map', () => {
     // The same terrain and town; outposts (one per side by default) are added on top.
-    expect(battlefieldConfig(defaultSettings())).toEqual({ ...DEFAULT_BATTLEFIELD, outposts: 2, outpostKinds: OUTPOST_KIND_IDS });
+    expect(battlefieldConfig(defaultSettings())).toEqual({ ...DEFAULT_BATTLEFIELD, outposts: 2, outpostKinds: OUTPOST_KIND_IDS, forest: 0.2 });
   });
 
   it('applies unit multipliers without touching the base definitions', () => {
@@ -76,7 +76,7 @@ describe('settings in the URL', () => {
     const s = defaultSettings();
     s.seed = 'hello world';
     s.mode = 'conquest';
-    s.map = { size: 'small', water: 0.2, hills: 1.35, shape: 1.4, biome: 'snow', layout: 'lines', towns: 3, townSize: 'large', waterways: false, outposts: 3, outpostKinds: ['gun', 'fuel'] };
+    s.map = { size: 'small', water: 0.2, hills: 1.35, shape: 1.4, biome: 'snow', layout: 'lines', towns: 3, townSize: 'large', waterways: false, forest: 0.45, scrap: false, outposts: 3, outpostKinds: ['gun', 'fuel'] };
     s.armies = { caps: { infantry: 70, vehicle: 25, air: 7, super: 3 }, superGrowth: 'outposts', superGate: true, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3 };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1, doctrine: 'legion' };

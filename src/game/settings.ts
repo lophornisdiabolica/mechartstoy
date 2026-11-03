@@ -85,6 +85,10 @@ export interface BattleSettings {
     townSize: TownSize;
     /** Join the bases' water with channels and bridge them (see waterways.ts). */
     waterways: boolean;
+    /** Dense forest, 0 (none) to 1: patches of big trees that block shots and slow vehicles until they're knocked down (see woods.ts). */
+    forest: number;
+    /** Wrecked vehicles pile up into scrap that's hard going for tracks and hovers (see scrap.ts). */
+    scrap: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
     /** The kinds of outpost to deal out (see OUTPOST_KINDS in outposts.ts); empty means supply depots only. */
@@ -175,6 +179,7 @@ export const LIMITS = {
   evenTeams: { min: 0, max: 1.5 },
   ramp: { min: 0, max: 1 },
   outposts: { min: 0, max: 12 },
+  forest: { min: 0, max: 1 },
   outpostBonus: { min: 0, max: 3 },
   outpostHold: { min: 0, max: 1 },
   unitStat: { min: 0.25, max: 3 },
@@ -188,7 +193,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, outposts: 'auto', outpostKinds: [...OUTPOST_KIND_IDS] },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...OUTPOST_KIND_IDS] },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -324,6 +329,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     outpostKinds: s.map.outpostKinds.length > 0 ? s.map.outpostKinds : ['supply'],
     biome: s.map.biome,
     waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',
+    forest: s.map.forest,
     towns: s.map.towns,
     townRadius: TOWN_SIZES[s.map.townSize].radius,
   };

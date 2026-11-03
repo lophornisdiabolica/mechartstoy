@@ -9,7 +9,7 @@ interface PropStyle {
   baseOffset: number;
 }
 
-function treeGeometry(): THREE.BufferGeometry {
+export function treeGeometry(): THREE.BufferGeometry {
   const canopy = ensureNonIndexed(new THREE.ConeGeometry(0.7, 1.8, 6));
   canopy.translate(0, 1.2, 0);
   const trunk = ensureNonIndexed(new THREE.CylinderGeometry(0.12, 0.15, 0.5, 5));
@@ -41,7 +41,7 @@ function paint(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
 }
 
 /** A conifer: stacked cones on a short trunk. `snow` caps each tier white. Coloured here, so its instance colour is white. */
-function pineGeometry(snow: boolean): THREE.BufferGeometry {
+export function pineGeometry(snow: boolean): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [paint(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 5).translate(0, 0.25, 0), 0x5b4030)];
   const tiers = [
     [0.75, 1.0, 0.75],

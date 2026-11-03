@@ -85,6 +85,8 @@ export function projectileSystem(ctx: SimContext): System {
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);
           });
         }
+        // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them.
+        ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });
         ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: w.splash });
         world.destroy(e);
       }

@@ -307,6 +307,23 @@ export class SetupScreen {
     row(map, 'Waterways', waysLabel);
     this.sync.push(() => (ways.checked = this.settings.map.waterways));
     map.append(el('p', { class: 'hint' }, 'Channels link the water near the bases so boats can reach each other, and from 60% water every base gets a harbour. Bridges carry the roads over.'));
+    slider(map, 'Dense forest', 'forest', 0.05, (s) => s.map.forest, (s, v) => (s.map.forest = v), (v) => (v === 0 ? 'None' : percent(v)));
+    const scrap = el('input', { type: 'checkbox', 'aria-label': 'Scrap' });
+    scrap.addEventListener('change', () => {
+      this.settings.map.scrap = scrap.checked;
+      this.changed();
+    });
+    const scrapLabel = el('label', { class: 'check' });
+    scrapLabel.append(scrap, document.createTextNode(' Wrecks pile up into scrap'));
+    row(map, 'Scrap', scrapLabel);
+    this.sync.push(() => (scrap.checked = this.settings.map.scrap));
+    map.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later.',
+      ),
+    );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
     const towns = segmented<number>(
       Array.from({ length: LIMITS.towns.max + 1 }, (_, i) => ({ label: i === 0 ? 'None' : String(i), value: i })),

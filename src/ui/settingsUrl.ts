@@ -15,6 +15,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'water', limit: 'water', get: (s) => s.map.water, set: (s, v) => (s.map.water = v) },
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
+  { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
   { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
   { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
   { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },
@@ -65,6 +66,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
+  if (s.map.scrap !== d.map.scrap) p.set('scrap', s.map.scrap ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
@@ -115,6 +117,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (tsize && tsize in TOWN_SIZES) s.map.townSize = tsize as TownSize;
   const ways = p.get('ways');
   if (ways === '0' || ways === '1') s.map.waterways = ways === '1';
+  const scrap = p.get('scrap');
+  if (scrap === '0' || scrap === '1') s.map.scrap = scrap === '1';
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
