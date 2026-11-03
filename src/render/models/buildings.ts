@@ -271,6 +271,100 @@ registerModel('bld:bunker', (faction) => {
   return g;
 });
 
+// Outpost kinds' buildings (see OUTPOST_KINDS in game/outposts.ts).
+
+/** An airstrip: a short runway with its markings, a hangar and a windsock. */
+registerModel('bld:airstrip', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.6, 0.18, 2.0, 0x6f6c66, 0, 0.09, 0.9));
+  for (const x of [-2, -0.7, 0.6, 1.9]) g.add(box(0.7, 0.04, 0.14, 0xe8e4da, x, 0.2, 0.9));
+  g.add(box(2.2, 1.1, 1.6, METAL, -1.2, 0.55, -1.1));
+  g.add(cylinder(0.8, 0.8, 2.2, 8, secondary, -1.2, 1.1, -1.1).rotateZ(Math.PI / 2));
+  g.add(box(0.05, 0.8, 1.0, DARK, -0.08, 0.5, -1.1)); // hangar door
+  g.add(box(0.1, 1.6, 0.1, DARK, 2.3, 0.8, -1.4));
+  g.add(box(0.5, 0.18, 0.18, primary, 2.6, 1.5, -1.4));
+  return g;
+});
+
+/** The hilltop gun: a sandbagged concrete emplacement with a long-barrelled gun on a turntable. */
+registerModel('bld:bigGun', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.6, 1.8, 0.7, 10, 0x9a9588, 0, 0.35, 0));
+  g.add(cylinder(1.65, 1.65, 0.12, 10, secondary, 0, 0.74, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.8;
+  turret.add(box(1.4, 0.7, 1.2, primary, -0.1, 0.35, 0));
+  turret.add(box(0.5, 0.5, 1.3, METAL, -0.6, 0.3, 0));
+  const barrel = box(2.6, 0.22, 0.22, DARK, 1.6, 0.55, 0);
+  barrel.rotation.z = 0.25;
+  turret.add(barrel);
+  turret.add(box(0.4, 0.34, 0.34, METAL, 0.6, 0.45, 0)); // breech
+  g.add(turret);
+  return setRig(g, { turret });
+});
+
+/** A comms relay: a guyed lattice mast with dishes, and a radio hut at its foot. */
+registerModel('bld:relayMast', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(2.4, 0.25, 2.4, CONCRETE, 0, 0.12, 0));
+  g.add(box(1.0, 0.9, 0.9, WALLS[2], -0.7, 0.7, 0.6)); // radio hut
+  g.add(box(1.1, 0.12, 1.0, primary, -0.7, 1.2, 0.6));
+  for (const x of [-0.25, 0.25]) for (const z of [-0.25, 0.25]) g.add(box(0.1, 6.0, 0.1, DARK, x + 0.3, 3.2, z - 0.3));
+  for (const y of [1.6, 3.2, 4.8]) g.add(box(0.56, 0.07, 0.56, secondary, 0.3, y, -0.3));
+  for (const [y, a] of [[4.2, 0], [5.4, 2.1], [3.0, 4.2]]) {
+    const dish = cylinder(0.45, 0.2, 0.18, 10, 0xd8d6d0, 0.3 + Math.cos(a) * 0.45, y, -0.3 + Math.sin(a) * 0.45);
+    dish.rotation.set(0, -a, Math.PI / 2);
+    g.add(dish);
+  }
+  const beacon = glowBox(0.15, 0.15, 0.15, 0xff5040);
+  beacon.position.set(0.3, 6.3, -0.3);
+  g.add(beacon);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beacon.userData.t = (beacon.userData.t ?? Math.random() * 2) + dt;
+      beacon.visible = beacon.userData.t % 1.2 < 0.6;
+    },
+  });
+});
+
+/** An outpost's fuel tanks: three round tanks in a bund, with pipework. They go up when destroyed. */
+registerModel('bld:fuelTanks', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.6, 0.3, 3.4, CONCRETE, 0, 0.15, 0));
+  for (const [x, z, r] of [[-0.8, -0.8, 0.75], [0.8, -0.6, 0.65], [-0.2, 0.9, 0.7]]) {
+    g.add(cylinder(r, r, 1.5, 10, 0xc9c4b8, x, 1.05, z));
+    g.add(cylinder(r + 0.02, r + 0.02, 0.18, 10, primary, x, 1.4, z));
+    g.add(cylinder(r * 0.7, r, 0.25, 10, 0xb0aba0, x, 1.9, z));
+  }
+  g.add(box(2.6, 0.12, 0.12, DARK, 0, 0.45, 0.1));
+  return g;
+});
+
+/** A ruined factory: a hall with broken walls and half its roof gone, patched with a new door and a crane. */
+registerModel('bld:ruinedFactory', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.4, CONCRETE, 0, 0.12, 0));
+  const brick = 0x8a6a58;
+  g.add(box(3.9, 2.2, 0.35, brick, 0.05, 1.3, -1.8)); // back wall
+  g.add(box(0.35, 2.1, 3.8, brick, -2.05, 1.3, 0)); // side wall
+  g.add(box(2.0, 1.2, 0.35, brick, -1.1, 0.85, 1.8)); // broken front wall
+  g.add(box(0.8, 0.6, 0.35, brick, 1.6, 0.55, 1.8));
+  g.add(box(4.0, 0.18, 2.0, 0x5d5a55, -0.05, 2.45, -0.8)); // what's left of the roof
+  g.add(box(0.35, 2.0, 2.2, primary, 2.0, 1.2, -0.6)); // patched door frame
+  g.add(box(0.06, 1.6, 1.6, DARK, 2.2, 1.0, -0.6));
+  g.add(cylinder(0.3, 0.4, 2.6, 6, DARK, -1.5, 2.6, -1.3)); // chimney
+  g.add(box(0.8, 0.5, 0.6, 0x6b6560, 0.6, 0.45, 0.8)); // rubble
+  g.add(box(0.5, 0.35, 0.5, 0x6b6560, 1.0, 0.3, 1.3));
+  g.add(box(0.2, 2.6, 0.2, secondary, 1.6, 1.4, 1.4)); // crane
+  g.add(box(1.6, 0.16, 0.16, secondary, 1.0, 2.7, 1.4));
+  return g;
+});
+
 /**
  * How civilian buildings look on this map (see BiomeDef.town). Set by the
  * stage when a battle loads; faction buildings keep their own look.

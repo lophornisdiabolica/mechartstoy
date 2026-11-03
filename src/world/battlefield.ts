@@ -2,7 +2,8 @@ import { createNoise2D } from 'simplex-noise';
 import { Rng } from '../core/rng';
 import { BiomeId } from './biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } from './ground';
-import { bridgeChannels, bridgeLand, carveWaterways, landReach, vertexAt } from './waterways';
+import { connectTowns } from './roads';
+import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -28,6 +29,12 @@ export interface BattlefieldConfig {
   seats: number[];
   /** Capturable outposts to place in no-man's land (fewer if they don't fit). */
   outposts: number;
+  /**
+   * What kinds of outpost to build (see OUTPOST_KINDS in game/outposts.ts):
+   * the map deals them out in a shuffled order, cycling through the list,
+   * with a hilltop gun going to the highest site.
+   */
+  outpostKinds: OutpostKind[];
   /** The map's look: ground and water colours, scenery and town style (see biomes.ts). */
   biome: BiomeId;
   /**
@@ -55,12 +62,16 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   baseRadius: 16,
   seats: [0, 1],
   outposts: 0,
+  outpostKinds: ['supply'],
   biome: 'temperate',
   waterways: 'joined',
   towns: 1,
   townRadius: 11,
   places: null,
 };
+
+/** Width of town streets and the roads between towns. */
+export const STREET_WIDTH = 3.2;
 
 /** Radius of an outpost's flattened pad. */
 export const OUTPOST_RADIUS = 7;
@@ -115,10 +126,19 @@ export interface TownSite {
   angle: number;
 }
 
+/**
+ * The kinds of outpost (what each one gives is in game/outposts.ts): a supply
+ * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot or a ruined
+ * factory.
+ */
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory';
+export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory'];
+
 /** A flattened clearing in no-man's land where a capturable outpost stands. */
 export interface OutpostSite {
   /** Index in Battlefield.outpostSites (and SimContext.outposts). */
   index: number;
+  kind: OutpostKind;
   x: number;
   z: number;
   radius: number;
@@ -136,14 +156,24 @@ export interface Bridge {
   bx: number;
   bz: number;
   width: number;
-  /** Deck height over the water; the ends ramp down to the banks. */
+  /** Deck height in the middle; the ends ramp down to meet the banks, no steeper than DECK_GRADE. */
   level: number;
 }
 
 /** Room under a bridge deck, above the water. */
 export const BRIDGE_CLEARANCE = 1.3;
-/** Length of the ramp at each end of a bridge. */
-const BRIDGE_RAMP = 4;
+/** Steepest a bridge's ramps get (rise over run). */
+export const DECK_GRADE = 0.35;
+
+/**
+ * A paved road: a strip of road ground along a line of points (see
+ * Battlefield.addRoad). Kept as a line, not just as cells, so it can be
+ * drawn as a smooth strip rather than a staircase of cells.
+ */
+export interface Road {
+  points: { x: number; z: number }[];
+  width: number;
+}
 
 export interface Bounds {
   minX: number;
@@ -162,6 +192,9 @@ export class Battlefield {
   /** Ground kind per map cell (cols * rows, row-major along x), as codes into GROUND_IDS. */
   readonly ground: Uint8Array;
   readonly bridges: Bridge[] = [];
+  readonly roads: Road[] = [];
+  /** Per cell: 1 where a road (see addRoad) covers it, so the terrain leaves its colour to the road strip. */
+  readonly roadCell: Uint8Array;
   /** Per cell: the index of the bridge over it, or -1. */
   private readonly bridgeCell: Int16Array;
   private readonly listeners: MapChangeListener[] = [];
@@ -186,6 +219,7 @@ export class Battlefield {
     };
     this.ground = new Uint8Array(config.cols * config.rows);
     this.bridgeCell = new Int16Array(config.cols * config.rows).fill(-1);
+    this.roadCell = new Uint8Array(config.cols * config.rows);
   }
 
   /** The map cell (i, j) a point is in, clamped to the map. */
@@ -279,7 +313,7 @@ export class Battlefield {
     return n;
   }
 
-  /** Put a bridge on the map. */
+  /** Put a bridge on the map (see waterways.ts placeBridge, which picks its ends and level and cuts the banks to fit). */
   addBridge(bridge: Bridge): void {
     const index = this.bridges.length;
     this.bridges.push(bridge);
@@ -305,11 +339,43 @@ export class Battlefield {
     if (t < 0 || t > 1) return null;
     const off = Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length;
     if (off > b.width / 2) return null;
-    // Ramps at each end, from the bank's height up to the deck.
-    const along = Math.min(t, 1 - t) * length;
-    const bank = t < 0.5 ? this.heightAt(b.ax, b.az) : this.heightAt(b.bx, b.bz);
-    const ramp = smoothstep(0, BRIDGE_RAMP, along);
-    return bank + (Math.max(bank, b.level) - bank) * ramp;
+    // Level in the middle, ramping down to meet the ground at each end (wherever it is now).
+    const ha = this.heightAt(b.ax, b.az);
+    const hb = this.heightAt(b.bx, b.bz);
+    return Math.min(b.level, ha + DECK_GRADE * t * length, hb + DECK_GRADE * (1 - t) * length);
+  }
+
+  /** Whether a point is on or within `margin` of a bridge (buildings keep off them). */
+  nearBridge(x: number, z: number, margin = 0): boolean {
+    return this.bridges.some((b) => distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz) < b.width / 2 + margin);
+  }
+
+  /**
+   * Pave a road along a line of points: road ground on every dry cell within
+   * half the width of the line (not on bridges, which are paved already).
+   * Works mid-battle too, like paint.
+   */
+  addRoad(points: { x: number; z: number }[], width: number): void {
+    if (points.length < 2) return;
+    this.roads.push({ points, width });
+    const { cols, cellSize } = this.config;
+    const code = groundCode('road');
+    const xs = points.map((p) => p.x);
+    const zs = points.map((p) => p.z);
+    const [i0, j0] = this.cellAt(Math.min(...xs) - width, Math.min(...zs) - width);
+    const [i1, j1] = this.cellAt(Math.max(...xs) + width, Math.max(...zs) + width);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const cx = this.bounds.minX + (i + 0.5) * cellSize;
+        const cz = this.bounds.minZ + (j + 0.5) * cellSize;
+        let d = Infinity;
+        for (let k = 1; k < points.length; k++) d = Math.min(d, distanceToSegment(cx, cz, points[k - 1].x, points[k - 1].z, points[k].x, points[k].z));
+        if (d > width / 2 || this.isWater(cx, cz) || this.deckAt(cx, cz) !== null) continue;
+        this.ground[j * cols + i] = code;
+        this.roadCell[j * cols + i] = 1;
+      }
+    }
+    this.changed({ i0, j0, i1, j1 });
   }
 
   /** Height of a bridge deck at a point, if a bridge is there and above the ground. */
@@ -392,6 +458,15 @@ export class Battlefield {
   clampZ(z: number, margin = 0): number {
     return Math.max(this.bounds.minZ + margin, Math.min(this.bounds.maxZ - margin, z));
   }
+}
+
+/** Distance from a point to the segment a-b. */
+export function distanceToSegment(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+  return Math.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -481,6 +556,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       const pz = z + Math.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
       score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0) + (field.deckAt(px, pz) !== null ? 50 : 0);
     }
+    // Levelling the town's ground would bury a bridge's end.
+    if (field.nearBridge(x, z, townRadius * 1.35)) score += 50;
     // With bases along the long edges too, keep the town off their pads.
     for (const site of baseSites) if (Math.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
     return score;
@@ -518,21 +595,50 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     townSites.push({ x: pick.x, z: pick.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(pick.x, pick.z, townRadius, height);
   }
-  // Each town's main street is paved.
+  // Each town's main street is paved, and roads join the towns.
   for (const t of townSites) {
-    const ux = Math.cos(t.angle);
-    const uz = Math.sin(t.angle);
-    field.paint(t.x, t.z, t.radius, 'road', (_, cx, cz) => Math.abs((cx - t.x) * uz - (cz - t.z) * ux) < 1.6);
+    const ux = Math.cos(t.angle) * t.radius;
+    const uz = Math.sin(t.angle) * t.radius;
+    field.addRoad([{ x: t.x - ux, z: t.z - uz }, { x: t.x + ux, z: t.z + uz }], STREET_WIDTH);
   }
+  connectTowns(field);
 
   // Outposts come last, so a map with none is the same map as before outposts existed.
-  for (const p of placeOutposts(field, rng, config.outposts)) {
+  const spots = placeOutposts(field, rng, config.outposts);
+  const kinds = dealOutpostKinds(spots, config.outpostKinds, rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
+  spots.forEach((p, k) => {
     const height = Math.max(seaLevel + 1, field.heightAt(p.x, p.z));
-    field.outpostSites.push({ index: field.outpostSites.length, x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
+    field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
-  }
+  });
+  // Levelling towns and outposts may have raised ground by a bridge: cut it back.
+  for (const b of field.bridges) cutBanks(field, b);
 
   return field;
+}
+
+/**
+ * Which kind each outpost is: the allowed kinds in a shuffled order (cycling
+ * if there are more outposts than kinds), except that a hilltop gun, if
+ * dealt, goes to the highest site.
+ */
+function dealOutpostKinds<P>(sites: P[], allowed: OutpostKind[], rng: Rng, height: (p: P) => number): OutpostKind[] {
+  if (sites.length === 0) return [];
+  const pool = allowed.length > 0 ? [...allowed] : ['supply' as OutpostKind];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const dealt = sites.map((_, k) => pool[k % pool.length]);
+  const gun = dealt.indexOf('gun');
+  if (gun >= 0) {
+    let top = 0;
+    sites.forEach((p, k) => {
+      if (height(p) > height(sites[top])) top = k;
+    });
+    [dealt[gun], dealt[top]] = [dealt[top], dealt[gun]];
+  }
+  return dealt;
 }
 
 /**
@@ -551,7 +657,7 @@ function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number
   for (let n = 0; n < 300; n++) {
     const x = rng.range(field.bounds.minX + r + 4, field.bounds.maxX - r - 4);
     const z = rng.range(field.bounds.minZ + r + 4, field.bounds.maxZ - r - 4);
-    if (!reach[index(x, z)] || field.deckAt(x, z) !== null) continue;
+    if (!reach[index(x, z)] || field.nearBridge(x, z, r * 1.35)) continue;
     const near = field.baseSites.map((b) => Math.hypot(b.x - x, b.z - z) - b.radius).sort((a, b) => a - b);
     if (near[0] < r + 8) continue;
     let flat = 0;

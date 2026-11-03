@@ -1,4 +1,4 @@
-import { Battlefield, BRIDGE_CLEARANCE } from './battlefield';
+import { Battlefield, Bridge, BRIDGE_CLEARANCE, DECK_GRADE } from './battlefield';
 
 /**
  * Water that links up, and bridges that cross it.
@@ -25,10 +25,19 @@ const CHANNEL_RADIUS = 2.8;
 const CHANNEL_DEPTH = 1.3;
 /** Room kept round base pads, towns' future spots aside: channels go round, not through. */
 const PAD_MARGIN = 3;
-/** Bridges' width: room for the biggest walkers to cross. */
-export const BRIDGE_WIDTH = 7;
+/** Bridges' width: room for the biggest walkers to cross, but no wider (whole land routes are still the better way for them). */
+export const BRIDGE_WIDTH = 5;
 /** How far a bridge reaches onto the bank at each end. */
 const BRIDGE_LANDING = 2;
+/** Furthest a bridge end is pushed on past its bank to land square on dry ground (round a corner of the shore, say). */
+const MAX_EXTEND = 8;
+/** Highest a deck is raised above the usual clearance to meet high banks; banks higher still are cut down to it. */
+const MAX_RAISE = 2.5;
+/** How far a cutting reaches back into a bank that rises above the deck, and how steeply it climbs back to the ground. */
+const APPROACH = 12;
+const APPROACH_GRADE = 0.3;
+/** How steeply the sides of a cutting rise. */
+const BANK_GRADE = 0.8;
 
 export interface WaterwayOptions {
   /**
@@ -89,8 +98,8 @@ function waterBodies(field: Battlefield, g: Grid): { body: Int32Array; size: num
   return { body, size };
 }
 
-/** Minimal binary heap of vertex indices keyed by a score array. */
-class Heap {
+/** Minimal binary heap of indices keyed by a score array (an index can be pushed again after its score drops). */
+export class Heap {
   private items: number[] = [];
   constructor(private readonly score: Float64Array) {}
   get size(): number {
@@ -300,10 +309,7 @@ export function bridgeChannels(field: Battlefield, channels: Channel[]): number 
           { x: c.x + nx * half, z: c.z + nz * half },
         ];
         // Only where both ends land on dry ground on the map, clear of other bridges.
-        if (ends.every((e) => field.contains(e.x, e.z, 2) && !field.isWater(e.x, e.z)) && field.deckAt(c.x, c.z) === null) {
-          field.addBridge({ ax: ends[0].x, az: ends[0].z, bx: ends[1].x, bz: ends[1].z, width: BRIDGE_WIDTH, level: field.seaLevel + BRIDGE_CLEARANCE });
-          built++;
-        }
+        if (ends.every((e) => field.contains(e.x, e.z, 2) && !field.isWater(e.x, e.z)) && placeBridge(field, ends[0], ends[1])) built++;
       }
       start = -1;
     }
@@ -406,15 +412,101 @@ export function bridgeLand(field: Battlefield): number {
     const len = Math.max(0.1, Math.hypot(b.x - a.x, b.z - a.z));
     const ux = (b.x - a.x) / len;
     const uz = (b.z - a.z) / len;
-    field.addBridge({
-      ax: a.x - ux * BRIDGE_LANDING,
-      az: a.z - uz * BRIDGE_LANDING,
-      bx: b.x + ux * BRIDGE_LANDING,
-      bz: b.z + uz * BRIDGE_LANDING,
-      width: BRIDGE_WIDTH,
-      level: field.seaLevel + BRIDGE_CLEARANCE,
-    });
+    if (!placeBridge(field, { x: a.x - ux * BRIDGE_LANDING, z: a.z - uz * BRIDGE_LANDING }, { x: b.x + ux * BRIDGE_LANDING, z: b.z + uz * BRIDGE_LANDING }, true)) return built;
     built++;
   }
   return built;
+}
+
+/**
+ * Build a bridge from about `a` to about `b`, fitted to the banks:
+ *
+ * - each end is pushed on along the bridge's line until its whole width is
+ *   on dry ground, so a bridge that meets the shore at a corner doesn't stop
+ *   half over the water;
+ * - the deck sits at the usual clearance over the water, or a little higher
+ *   to meet two high banks;
+ * - a bank that rises above the deck is cut down to it, with a cutting that
+ *   climbs back to the ground no steeper than APPROACH_GRADE, so the deck
+ *   never runs into a hillside and its ends are never steep.
+ *
+ * Returns false (and builds nothing) if it would overlap another bridge,
+ * unless `force` (a base would otherwise be cut off).
+ */
+export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, force = false): boolean {
+  const len0 = Math.hypot(b.x - a.x, b.z - a.z);
+  if (len0 < 0.1) return false;
+  const ux = (b.x - a.x) / len0;
+  const uz = (b.z - a.z) / len0;
+  const nx = -uz;
+  const nz = ux;
+  const half = BRIDGE_WIDTH / 2;
+  const sea = field.seaLevel;
+  // Dry across the whole width here, and a step further on.
+  const dryAt = (x: number, z: number) => [-1, -0.5, 0, 0.5, 1].every((f) => field.heightAt(x + nx * half * f, z + nz * half * f) >= sea + 0.15);
+  const landed = (p: { x: number; z: number }, out: number) => {
+    for (let e = 0; e <= MAX_EXTEND; e += 0.5) {
+      const x = p.x + ux * out * e;
+      const z = p.z + uz * out * e;
+      if (!field.contains(x, z, half + 1)) break;
+      if (dryAt(x, z) && dryAt(x + ux * out, z + uz * out)) return { x, z };
+    }
+    return p;
+  };
+  const A = landed(a, -1);
+  const B = landed(b, 1);
+  if (!force) {
+    for (let t = 0; t <= 1; t += 0.1) if (field.nearBridge(A.x + (B.x - A.x) * t, A.z + (B.z - A.z) * t, half)) return false;
+  }
+  const ga = field.heightAt(A.x, A.z);
+  const gb = field.heightAt(B.x, B.z);
+  const low = sea + BRIDGE_CLEARANCE;
+  const bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, level: Math.max(low, Math.min(ga, gb, low + MAX_RAISE)) };
+  cutBanks(field, bridge);
+  field.addBridge(bridge);
+  return true;
+}
+
+/**
+ * Cut the ground down wherever it rises above a bridge's deck or its
+ * approaches: under the deck, and in a cutting at each end that climbs back
+ * to the ground no steeper than APPROACH_GRADE, with sides no steeper than
+ * BANK_GRADE. Base pads are left alone. Map generation runs this again for
+ * every bridge once towns and outposts have levelled their ground.
+ */
+export function cutBanks(field: Battlefield, bridge: Bridge): void {
+  const { ax, az, bx, bz, level } = bridge;
+  const len = Math.hypot(bx - ax, bz - az);
+  const ux = (bx - ax) / len;
+  const uz = (bz - az) / len;
+  const half = bridge.width / 2;
+  const sea = field.seaLevel;
+  const ha = Math.min(level, field.heightAt(ax, az));
+  const hb = Math.min(level, field.heightAt(bx, bz));
+  const deck = (s: number) => Math.min(level, ha + DECK_GRADE * s, hb + DECK_GRADE * (len - s));
+  const { cols, rows } = field.config;
+  const reach = APPROACH + half + 3;
+  const [i0, j0] = field.cellAt(Math.min(ax, bx) - reach, Math.min(az, bz) - reach);
+  const [i1, j1] = field.cellAt(Math.max(ax, bx) + reach, Math.max(az, bz) + reach);
+  let cut = false;
+  for (let j = j0; j <= Math.min(rows, j1 + 1); j++) {
+    for (let i = i0; i <= Math.min(cols, i1 + 1); i++) {
+      const x = field.vertexX(i);
+      const z = field.vertexZ(j);
+      const s = (x - ax) * ux + (z - az) * uz;
+      const side = Math.max(0, Math.abs((x - ax) * -uz + (z - az) * ux) - half - 0.5);
+      let target: number;
+      if (s < 0) target = -s > APPROACH ? Infinity : ha - 0.05 + APPROACH_GRADE * -s;
+      else if (s > len) target = s - len > APPROACH ? Infinity : hb - 0.05 + APPROACH_GRADE * (s - len);
+      else target = deck(s) - 0.05;
+      // Never down into the water.
+      target = Math.max(target + BANK_GRADE * side, sea + 0.1);
+      const k = j * (cols + 1) + i;
+      if (field.heights[k] <= target) continue;
+      if (field.baseSites.some((site) => Math.hypot(site.x - x, site.z - z) < site.radius)) continue;
+      field.heights[k] = target;
+      cut = true;
+    }
+  }
+  if (cut) field.changed({ i0: Math.max(0, i0 - 1), j0: Math.max(0, j0 - 1), i1: Math.min(cols - 1, i1 + 1), j1: Math.min(rows - 1, j1 + 1) });
 }

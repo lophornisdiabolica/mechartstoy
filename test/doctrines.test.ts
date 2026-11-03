@@ -89,7 +89,8 @@ describe('Tidewater', () => {
   it('builds a dock on the coast and launches boats onto the water', () => {
     const game = battle(4, 1, ['tidewater', 'armour']);
     expect(buildingsOf(game, 0)).toContain('dock');
-    run(game, 90);
+    // Long enough for several batches: a batch can be skimmers instead.
+    run(game, 150);
     const boats = [...game.world.query(Unit, Transform)].filter((e) => game.world.req(e, Unit).def.id === 'missileBoat');
     expect(boats.length).toBeGreaterThan(0);
     for (const e of boats) {

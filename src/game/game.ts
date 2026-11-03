@@ -96,7 +96,7 @@ export class Game {
       buildings: tunedBuildings(settings),
       tide,
       lanes: new Lanes(this.field, nav, seed),
-      outposts: createOutposts(this.field.outpostSites, seed),
+      outposts: createOutposts(this.field.outpostSites),
       sides,
       offensive: new Offensive(sides, tide, () => settings.armies.attackTiming, this.field.config.cols),
       squads: 0,

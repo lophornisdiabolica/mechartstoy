@@ -91,7 +91,8 @@ describe('outposts', () => {
     expect(sides.hostile(GARRISON, -1)).toBe(false);
     // Towers are armed, and the bunker turns out guards.
     const parts = [...game.world.query(OutpostPart, Faction)];
-    expect(parts.filter((e) => game.world.has(e, Armed)).length).toBe(2 * game.ctx.outposts.length);
+    const guns = game.ctx.outposts.filter((o) => o.kind.id === 'gun').length;
+    expect(parts.filter((e) => game.world.has(e, Armed)).length).toBe(2 * game.ctx.outposts.length + guns);
     run(game, 15);
     const guards = [...game.world.query(Guard, Faction)];
     expect(guards.length).toBeGreaterThan(0);
@@ -150,7 +151,7 @@ describe('outposts', () => {
     const { ctx } = game;
     expect(outpostBonus(ctx, 0, 'production')).toBe(0);
     for (const o of ctx.outposts) capture(game.world, ctx, o, 0);
-    const production = ctx.outposts.filter((o) => o.bonus.kind === 'production').reduce((s, o) => s + o.bonus.amount, 0);
+    const production = ctx.outposts.reduce((s, o) => s + (o.kind.bonus?.kind === 'production' ? o.kind.bonus.amount : 0), 0);
     expect(production).toBeGreaterThan(0);
     expect(outpostBonus(ctx, 0, 'production')).toBeCloseTo(production);
     ctx.settings.armies.outpostBonus = 2;

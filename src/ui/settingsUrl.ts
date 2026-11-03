@@ -1,6 +1,7 @@
 import { isDoctrine } from '../game/doctrines';
 import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
+import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
 /**
  * Settings <-> URL query string. Only values that differ from the defaults are
@@ -65,6 +66,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
+  if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
   for (const id of UNIT_IDS) {
     const t = s.units[id];
@@ -116,6 +118,13 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
+  }
+  // Outpost kinds as a list, e.g. okinds=supply,gun (kept in the standard order).
+  const okinds = p.get('okinds');
+  if (okinds !== null) {
+    const listed = okinds.split(',').map((k) => k.trim());
+    const kinds = OUTPOST_KIND_IDS.filter((k) => listed.includes(k));
+    if (kinds.length > 0) s.map.outpostKinds = kinds;
   }
   for (const n of NUMBERS) {
     const raw = p.get(n.key);

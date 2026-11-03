@@ -1,5 +1,7 @@
 import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
+import { OUTPOST_KIND_IDS } from '../world/battlefield';
+import { OUTPOST_KINDS } from '../game/outposts';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
@@ -409,13 +411,35 @@ export class SetupScreen {
     );
     row(outposts, 'Outposts', count.row);
     this.sync.push(() => count.set(this.settings.map.outposts));
+    // Which kinds of outpost the map deals out: a toggle per kind, at least one on.
+    const kindBox = el('div', { class: 'inline kinds' });
+    const kindButtons = OUTPOST_KIND_IDS.map((k) => {
+      const b = el('button', { type: 'button', class: 'chip', title: OUTPOST_KINDS[k].blurb, 'aria-pressed': 'false' }, OUTPOST_KINDS[k].name);
+      b.addEventListener('click', () => {
+        const on = this.settings.map.outpostKinds.includes(k);
+        const next = on ? this.settings.map.outpostKinds.filter((x) => x !== k) : OUTPOST_KIND_IDS.filter((x) => x === k || this.settings.map.outpostKinds.includes(x));
+        if (next.length === 0) return;
+        this.settings.map.outpostKinds = next;
+        this.changed();
+      });
+      kindBox.append(b);
+      return b;
+    });
+    row(outposts, 'Kinds', kindBox);
+    this.sync.push(() =>
+      kindButtons.forEach((b, i) => {
+        const on = this.settings.map.outpostKinds.includes(OUTPOST_KIND_IDS[i]);
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      }),
+    );
     slider(outposts, 'Bonus', 'outpostBonus', 0.05, (s) => s.armies.outpostBonus, (s, v) => (s.armies.outpostBonus = v), (v) => (v === 0 ? 'None' : times(v)));
     slider(outposts, 'Holding', 'outpostHold', 0.05, (s) => s.armies.outpostHold, (s, v) => (s.armies.outpostHold = v), (v) => (v === 0 ? 'Off' : percent(v)));
     outposts.append(
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it. Each speeds up the holder’s production (+10% each at 1×) and counts as its territory, where resting units heal and squads refill. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
       ),
     );
 

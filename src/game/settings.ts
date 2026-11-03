@@ -1,4 +1,4 @@
-import { BattlefieldConfig, DEFAULT_BATTLEFIELD, seatsFit } from '../world/battlefield';
+import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
@@ -87,6 +87,8 @@ export interface BattleSettings {
     waterways: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
+    /** The kinds of outpost to deal out (see OUTPOST_KINDS in outposts.ts); empty means supply depots only. */
+    outpostKinds: OutpostKind[];
   };
   armies: {
     /** Units each side can have alive per category (see caps.ts). Super is the base, before it grows. */
@@ -186,7 +188,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, outposts: 'auto' },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, outposts: 'auto', outpostKinds: [...OUTPOST_KIND_IDS] },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -319,6 +321,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     seats,
     places,
     outposts: outpostCount(s),
+    outpostKinds: s.map.outpostKinds.length > 0 ? s.map.outpostKinds : ['supply'],
     biome: s.map.biome,
     waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',
     towns: s.map.towns,

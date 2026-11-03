@@ -96,6 +96,13 @@ export class CameraRig {
     this.target.z += (Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, z)) - this.target.z) * k;
   }
 
+  /** Look at a ground point straight away, optionally at a new zoom. */
+  jumpTo(x: number, z: number, zoom = this.targetZoom): void {
+    this.target.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, x));
+    this.target.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, z));
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+  }
+
   /** Ground distance from the view's centre to its farthest visible corner, roughly. */
   get viewRadius(): number {
     const h = this.viewHeight / this.zoom;

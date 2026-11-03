@@ -1,7 +1,7 @@
 import { World } from '../core/ecs';
 import { Faction, Guard, Unit } from './components';
 import { SimContext } from './context';
-import { outpostsHeldBy } from './outposts';
+import { outpostBonus, outpostsHeldBy } from './outposts';
 import { UnitCategory, UnitDef } from './units';
 import { doctrineOf } from './doctrines';
 
@@ -84,7 +84,9 @@ function superCap(ctx: SimContext, faction: number, base: number): number {
 export function capFor(ctx: SimContext, faction: number, category: UnitCategory): number {
   const base = ctx.settings.armies.caps[category] * (doctrineOf(ctx, faction).caps[category] ?? 1);
   const cap = category === 'super' ? superCap(ctx, faction, base) : base;
-  return Math.round(cap * ctx.sides.strength[faction]);
+  // Airstrips make room for more aircraft (unless aircraft are off altogether).
+  const strips = category === 'air' && base > 0 ? outpostBonus(ctx, faction, 'airCap') : 0;
+  return Math.round(cap * ctx.sides.strength[faction] + strips);
 }
 
 /** A side's whole army cap: every category's cap added up. */

@@ -1,8 +1,9 @@
 import { Entity, System, World } from '../core/ecs';
 import { Rng } from '../core/rng';
-import { OutpostSite } from '../world/battlefield';
-import { BuildingDef } from './buildings';
-import { Armed, Construction, Faction, GARRISON, Garrison, Guard, Health, OutpostPart, Rubble, Targetable, Transform, Unit } from './components';
+import { OutpostKind, OutpostSite } from '../world/battlefield';
+import { BuildingDef, BuildingId } from './buildings';
+import { Armed, Building, Construction, Faction, GARRISON, Garrison, Guard, Health, OutpostPart, Producer, Rubble, Targetable, Transform, Unit } from './components';
+import { productionFor } from './doctrines';
 import { SimContext } from './context';
 import { spawnSpot } from './systems/production';
 import { spawnBuilding, spawnUnit } from './spawn';
@@ -17,24 +18,57 @@ import { spawnBuilding, spawnUnit } from './spawn';
  */
 
 /**
- * What holding an outpost gives, besides territory (see territory.ts). New
- * kinds go here, with their effect where it matters (production for
- * 'production'). A future 'unlock' kind could let a side's factories build a
- * unit it otherwise can't, read by the production tables.
+ * What holding an outpost gives, besides territory (see territory.ts) and
+ * its own buildings. Each kind's effect is read where it matters:
+ * production in the production system, air cap in caps.ts, readiness in
+ * offensive.ts.
  */
 export type OutpostBonus =
   /** Holder's production goes up by this fraction of a normal side's (0.1 = +10%), whatever its team size. */
-  { kind: 'production'; amount: number };
+  | { kind: 'production'; amount: number }
+  /** Holder's aircraft cap goes up by this many. */
+  | { kind: 'airCap'; amount: number }
+  /** Holder's team gets impatient this much faster while massing for an attack (0.4 = 40% sooner), so readiness attacks set out sooner. */
+  | { kind: 'readiness'; amount: number };
 
-/** Bonus kinds in the order outposts are given them. Healing used to be one; it's now territory, which every outpost gives. */
-const BONUS_CYCLE: OutpostBonus[] = [{ kind: 'production', amount: 0.1 }];
+/**
+ * A kind of outpost: what it gives its holder, and the building it has on
+ * top of the usual post, two towers and a guard bunker.
+ */
+export interface OutpostKindDef {
+  id: OutpostKind;
+  name: string;
+  /** What it does, for the setup screen and the inspector. */
+  blurb: string;
+  bonus: OutpostBonus | null;
+  /** Its own building, opposite the bunker. */
+  building?: BuildingId;
+  /** Ruined factory: turns out one of the holder's factory batches this often (seconds, before production speed). */
+  salvage?: number;
+}
 
-/** Player-facing description of a bonus at a given strength (the settings' outpost bonus multiplier). */
-export function describeBonus(bonus: OutpostBonus, strength: number): string {
+export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
+  supply: { id: 'supply', name: 'Supply depot', blurb: 'Faster production', bonus: { kind: 'production', amount: 0.1 } },
+  airstrip: { id: 'airstrip', name: 'Airstrip', blurb: 'Room for more aircraft', bonus: { kind: 'airCap', amount: 2 }, building: 'airstrip' },
+  gun: { id: 'gun', name: 'Hilltop gun', blurb: 'A long-range gun on the highest ground, firing for whoever holds it', bonus: null, building: 'bigGun' },
+  relay: { id: 'relay', name: 'Comms relay', blurb: 'Attacks set out sooner, and its mast spots for the holder’s guns', bonus: { kind: 'readiness', amount: 0.4 }, building: 'relayMast' },
+  fuel: { id: 'fuel', name: 'Fuel depot', blurb: 'Faster production, but its tanks blow up when destroyed', bonus: { kind: 'production', amount: 0.1 }, building: 'fuelTanks' },
+  factory: { id: 'factory', name: 'Ruined factory', blurb: 'Patched up to turn out the odd vehicle for its holder', bonus: null, building: 'ruinedFactory', salvage: 75 },
+};
+
+/** Player-facing description of an outpost's bonus at a given strength (the settings' outpost bonus multiplier). */
+export function describeBonus(kind: OutpostKindDef, strength: number): string {
   const pct = (v: number) => `${Math.round(v * strength * 100)}%`;
+  const bonus = kind.bonus;
+  const extra = kind.id === 'fuel' ? ', and its tanks blow up when destroyed' : '';
+  if (!bonus) return kind.blurb;
   switch (bonus.kind) {
     case 'production':
-      return `+${pct(bonus.amount)} production`;
+      return `+${pct(bonus.amount)} production${extra}`;
+    case 'airCap':
+      return `+${Math.round(bonus.amount * strength)} aircraft`;
+    case 'readiness':
+      return `attacks set out ${pct(bonus.amount)} sooner`;
   }
 }
 
@@ -49,7 +83,7 @@ export interface Outpost {
   progress: number;
   /** The side whose team is capturing it, or -1. */
   claimant: number;
-  bonus: OutpostBonus;
+  kind: OutpostKindDef;
 }
 
 /** Units within this distance of the post count for capturing and defending it. */
@@ -68,13 +102,12 @@ function captureRate(n: number): number {
   return (1 + 0.25 * (Math.min(Math.max(n, 1), 6) - 1)) / CAPTURE_TIME;
 }
 
-/** Set up each outpost site's state and buildings, held by its garrison. */
-export function createOutposts(sites: OutpostSite[], seed: number): Outpost[] {
-  const offset = new Rng(seed ^ 0x0f0f).int(0, BONUS_CYCLE.length - 1);
-  return sites.map((s) => ({ index: s.index, x: s.x, z: s.z, owner: GARRISON, progress: 0, claimant: -1, bonus: BONUS_CYCLE[(s.index + offset) % BONUS_CYCLE.length] }));
+/** Set up each outpost site's state, held by its garrison. */
+export function createOutposts(sites: OutpostSite[]): Outpost[] {
+  return sites.map((s) => ({ index: s.index, x: s.x, z: s.z, owner: GARRISON, progress: 0, claimant: -1, kind: OUTPOST_KINDS[s.kind] }));
 }
 
-/** An outpost's post, two towers and a bunker, laid out round the site. */
+/** An outpost's post, two towers and a bunker, laid out round the site, and its kind's own building opposite the bunker. */
 export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rng: Rng): void {
   const a = rng.range(0, Math.PI * 2);
   const at = (angle: number, dist: number) => ({ x: outpost.x + Math.cos(a + angle) * dist, z: outpost.z + Math.sin(a + angle) * dist });
@@ -88,6 +121,12 @@ export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rn
   }
   const p = at(Math.PI / 2, 4.4);
   spawnOutpostPart(world, ctx, ctx.buildings.bunker, outpost, p.x, p.z, -(a + Math.PI / 2), false);
+  if (outpost.kind.building) {
+    const def = ctx.buildings[outpost.kind.building];
+    const q = at(-Math.PI / 2, 2.2 + def.radius);
+    // Facing out, away from the post.
+    spawnOutpostPart(world, ctx, def, outpost, q.x, q.z, -(a - Math.PI / 2), false);
+  }
 }
 
 /** Create one of an outpost's buildings, for its current owner. */
@@ -95,13 +134,28 @@ export function spawnOutpostPart(world: World, ctx: SimContext, def: BuildingDef
   const e = spawnBuilding(world, ctx, def, outpost.owner, x, z, heading, construct);
   world.add(e, OutpostPart, { outpost: outpost.index });
   if (def.id === 'bunker') world.add(e, Garrison, { timer: GUARD_INTERVAL * 0.5 });
+  salvageFor(world, ctx, e, outpost);
   return e;
+}
+
+/**
+ * A ruined factory turns out its holder's factory batches, slowly; held by
+ * its garrison it builds nothing.
+ */
+function salvageFor(world: World, ctx: SimContext, e: Entity, outpost: Outpost): void {
+  const every = outpost.kind.salvage;
+  // (A destroyed part is rubble, with no Building, until it's rebuilt.)
+  if (!every || world.get(e, Building)?.def.id !== outpost.kind.building) return;
+  world.remove(e, Producer);
+  if (outpost.owner < 0) return;
+  const table = productionFor(ctx, ctx.buildings.factory, outpost.owner)?.table;
+  if (table) world.add(e, Producer, { table, interval: every, timer: every * 0.5 });
 }
 
 /** Sum of a bonus kind over the outposts a side holds, scaled by the settings. */
 export function outpostBonus(ctx: SimContext, faction: number, kind: OutpostBonus['kind']): number {
   let sum = 0;
-  for (const o of ctx.outposts) if (o.owner === faction && o.bonus.kind === kind) sum += o.bonus.amount;
+  for (const o of ctx.outposts) if (o.owner === faction && o.kind.bonus?.kind === kind) sum += o.kind.bonus.amount;
   return sum * ctx.settings.armies.outpostBonus;
 }
 
@@ -181,6 +235,7 @@ export function capture(world: World, ctx: SimContext, o: Outpost, faction: numb
     if (f) f.id = faction;
     const armed = world.get(e, Armed);
     if (armed) armed.target = null;
+    salvageFor(world, ctx, e, o);
   }
   ctx.events.emit('outpostCaptured', { outpost: o.index, faction, previous, x: o.x, z: o.z });
 }

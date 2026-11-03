@@ -685,3 +685,8 @@ body {
     gap: 4px;
   }
 }
+
+#setup .kinds {
+  flex-wrap: wrap;
+  gap: 4px;
+}
