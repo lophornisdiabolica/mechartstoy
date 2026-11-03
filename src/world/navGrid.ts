@@ -201,6 +201,38 @@ export class NavGrid {
     return region;
   }
 
+  /** nearestInRegion's answers, by goal cell and region. */
+  private readonly regionReach = new Map<number, Point>();
+
+  /**
+   * The centre of the closest cell to (x, z) on terrain region `region` (see
+   * labelRegions), or (x, z) itself if it's on that region already or the
+   * region is unknown. Cached, since units ask about the same few goals.
+   */
+  nearestInRegion(x: number, z: number, region: number): Point {
+    const [gi, gj] = this.cellOf(x, z);
+    const gk = gj * this.cols + gi;
+    if (region < 0 || this.region[gk] === region) return { x, z };
+    const key = gk * 4096 + region;
+    let best = this.regionReach.get(key);
+    if (!best) {
+      let bestD = Infinity;
+      let bestK = gk;
+      for (let k = 0; k < this.region.length; k++) {
+        if (this.region[k] !== region) continue;
+        const i = k % this.cols;
+        const d = (i - gi) ** 2 + ((k - i) / this.cols - gj) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          bestK = k;
+        }
+      }
+      best = this.center(bestK % this.cols, Math.floor(bestK / this.cols));
+      this.regionReach.set(key, best);
+    }
+    return best;
+  }
+
   /** Changes whenever obstacles change. */
   get version(): number {
     return this.obstacles.version;
@@ -395,7 +427,10 @@ export class NavGrid {
     // rather than planning onward through a gap it can't fit.
     const start = (radius > 0 ? this.nearestOpen(from.x, from.z, 3, radius) : null) ?? this.nearestOpen(from.x, from.z);
     // A wide unit settles for a spot near the goal; much further away and it's better to squeeze in.
-    const goal = this.nearestOpen(to.x, to.z, radius > 0 ? 6 : 12, radius);
+    // A goal this class can't get to at all (a boat sent inland, a hover past a cliff) becomes the
+    // nearest spot it can: the shore closest to the enemy base, say.
+    const reach = this.nearestInRegion(to.x, to.z, start ? this.region[start[1] * this.cols + start[0]] : -1);
+    const goal = this.nearestOpen(reach.x, reach.z, radius > 0 ? 6 : 12, radius);
     if (!start || !goal) return null;
     const cols = this.cols;
     const sk = start[1] * cols + start[0];
@@ -459,7 +494,7 @@ export class NavGrid {
     for (let k = end; k !== -1; k = this.parent[k]) cells.push(k);
     cells.reverse();
     const points = cells.map((k) => this.center(k % cols, Math.floor(k / cols)));
-    if (found) points[points.length - 1] = this.fitsAt(to.x, to.z, radius) ? { x: to.x, z: to.z } : points[points.length - 1];
+    if (found) points[points.length - 1] = this.fitsAt(reach.x, reach.z, radius) ? reach : points[points.length - 1];
     return { points: this.smooth(from, points, radius), found };
   }
 

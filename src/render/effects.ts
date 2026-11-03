@@ -239,6 +239,14 @@ export class Effects {
   }
 
   private impact(x: number, y: number, z: number, kind: ProjectileKind, splash: number): void {
+    if (kind === 'flame') {
+      // Fire licking up where it lands, and a wisp of smoke: no blast, no dirt.
+      for (let i = 0; i < 3; i++) {
+        this.flashes.spawn({ x: x + rand(-0.4, 0.4) * splash, y: y + 0.1, z: z + rand(-0.4, 0.4) * splash, vy: rand(1, 2), life: rand(0.3, 0.6), size: 0.25 + splash * 0.2, endSize: 0.1, color: 0xffa040, endColor: 0x401000 });
+      }
+      this.smoke.spawn({ x, y: y + 0.3, z, vy: 1, life: 1.2, size: 0.2, endSize: 0.6, color: 0x3a3430, endColor: 0x8a8580, drag: 0.5 });
+      return;
+    }
     if (kind === 'bullet') {
       this.flashes.spawn({ x, y, z, life: 0.1, size: 0.2 + splash * 0.2, color: 0xffe0a0, endColor: 0x000000 });
       this.smoke.spawn({ x, y, z, vy: 0.6, life: 0.6, size: 0.12, endSize: 0.3, color: 0xa89c88 });

@@ -75,12 +75,12 @@ describe('battle settings', () => {
   it('the infantry cap from settings, leaned by the doctrine, limits dropped units', () => {
     const s = defaultSettings();
     s.armies.caps.infantry = 10;
-    s.factions[0].doctrine = 'legion'; // 1.6× infantry
+    s.factions[0].doctrine = 'legion'; // 1.7× infantry
     const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
     const base = game.field.baseSites[0];
     let placed = 0;
     for (let i = 0; i < 25; i++) if (game.spawnUnitAt('trooper', 0, base.x + (i % 5), base.z + Math.floor(i / 5))) placed++;
-    expect(placed).toBe(16);
+    expect(placed).toBe(17);
   });
 });
 

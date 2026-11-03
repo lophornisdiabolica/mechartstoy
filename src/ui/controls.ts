@@ -43,6 +43,7 @@ const MOVE_LABELS: Record<MoveClass, string> = {
   hover: 'Hover (crosses water)',
   amphibious: 'Amphibious',
   naval: 'Naval',
+  climber: 'Climber (takes any slope)',
   air: 'Aircraft',
 };
 const ROLE_LABELS: Record<Role, string> = {

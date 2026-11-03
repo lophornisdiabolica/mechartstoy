@@ -26,7 +26,8 @@ outposts taken and attacks launched. `--quick` runs about a third as many,
 the counts, and `--list` shows the scenarios. `--set "sgrow=none&scap=2"`
 changes settings for every battle (written as in the page URL), so running
 the same scenarios with each option of a setting compares them on the same
-battles. `--doctrines` gives each battle's sides doctrines from an
+battles. Every side plays Armour, so plain runs compare settings in mirror
+matches. `--doctrines` gives each battle's sides doctrines from an
 orthogonal array (every pair of doctrines meets equally often in each
 pair of slots, without playing every combination; see `orthogonalArray`)
 and adds a table of win rates per doctrine and head to head. The array
@@ -74,9 +75,9 @@ battle, its exact map via `seed`).
   make a bigger map.
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
-  Legion, Ivory Skyline, the rest borrowing one until their own doctrines
-  exist). Every doctrine fields rifle squads with AT troopers, the Scout
-  Copter and a heavy unit.
+  Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
+  Ember Firestorm). Every doctrine fields rifle squads with AT troopers,
+  the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
     vehicles (1.4×). The flak tank's scattered bursts catch a soldier or
@@ -88,13 +89,41 @@ battle, its exact map via `seed`).
     Super unit: the Land-train, an armoured rocket battery on tracks.
   - *Legion:* big squads with two AT troopers each and mortar teams from
     the barracks and a **barracks block**, light tanks and squad carriers
-    from the factory; 1.6× infantry cap, 0.8× vehicles. Super unit: the
+    from the factory; 1.7× infantry cap, 0.8× vehicles. Super unit: the
     Siege Crawler, slow heavy mortars that drops off a squad every 40
     seconds.
   - *Skyline:* gunships, bombers and scout copters from its **airpad**,
     battle tanks and flak walkers from the factory; 2.5× air cap, 0.8×
     infantry and vehicles. Super unit: the Airship Carrier, a slow
     armoured airship that launches drones.
+  - *Bastion:* howitzers (its signature unit), railgun batteries (long,
+    flat, armour-piercing shots), battle tanks and flak tanks, a **sensor
+    mast** and two extra guard towers; 1.1× vehicles. Howitzers and
+    railguns shoot further than their crews can see; inside the mast's
+    30-unit radius, or the Fortress Walker's 26, they fire at their full
+    range. Super unit: the Fortress Walker.
+  - *Talon:* packs of three striders, spider walkers (which take any slope
+    as easily as flat ground and fit down town streets, and shoot at
+    aircraft) and Warhound heavy walkers from the factory and a **mech
+    forge**; 1.05× vehicles, 0.8× infantry. Super unit: the Juggernaut.
+  - *Tidewater:* skimmer hover tanks, amphibious transports (which carry a
+    squad) and battle tanks from the factory; 1.35× vehicles, 0.8×
+    infantry. A **dock** on the nearest shore launches missile boats, if
+    there's open water within reach of the base (on the default maps
+    there usually isn't; from about 0.7 water up, usually there is).
+    Boats don't count against the vehicle cap: a side has six berths
+    (times its team boost), and a dock with them all full builds
+    skimmers.
+    Without a coast it gets a **hover pad** that turns out skimmers
+    instead, and it's the weaker for it. Boats can't take outposts or
+    follow the land lanes: they head for the enemy base and stop at the
+    nearest water to it. Super unit: the Hover Fortress.
+  - *Firestorm:* flame troopers in the squads, cinder walkers, light
+    tanks and scorch buggies from the factory, and more buggies from a
+    **fuel depot**, which blows up when destroyed, hurting everything
+    round it; 1.25× infantry, 1.2× vehicles. Flame is short-ranged and
+    splashes, and isn't stopped by cover: it licks round corners, so it's
+    best for clearing towns. Super unit: the Inferno Walker.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
   the squad then fights (and is refilled in territory) like any other, and
@@ -158,7 +187,7 @@ src/
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites
     props.ts         scenery placement (trees, rocks)
     settlements.ts   base and town layouts (building placements as data)
-    moveClasses.ts   movement classes (foot, tracked, walker, hover, amphibious, naval, air) and their terrain rules
+    moveClasses.ts   movement classes (foot, tracked, walker, climber, hover, amphibious, naval, air) and their terrain rules
     navGrid.ts       route-planning grid per movement class (terrain, slopes, towns, buildings) and A*
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
@@ -238,9 +267,11 @@ src/
   and mechs find them dear, and walkers take slopes easily. A straight line
   to the goal is only taken if it keeps to plain ground, and route
   smoothing never shortcuts across ground the route went round, so the
-  costs show up as routes. Aircraft fly straight at `altitude`, only bump
+  costs show up as routes. A goal a class can't get to at all (a boat
+  sent inland, or across a lake with no way round) becomes the nearest spot it can
+  reach (`NavGrid.nearestInRegion`). Aircraft fly straight at `altitude`, only bump
   into other aircraft, and can only be shot by weapons whose `targets` is
-  `air` or `both`. There are no hover, boat or air units yet.
+  `air` or `both`.
 - **Line of fire** (`game/lineOfFire.ts`). Direct-fire shots (bullets and
   shells, `arc: false`) are traced when fired and stop at the first
   building, rise in the ground or enemy unit in their way; a miss carries on
@@ -250,7 +281,7 @@ src/
   building or the ground is in the way (`Armed.blocked`), and the AI moves
   the unit to a nearby spot with a clear shot (`Armed.spotX/Z`, from
   `firingSpot` in `systems/targeting.ts`). Lobbed weapons fly over
-  everything. Buildings have a `height` for this, units use
+  everything, and flame licks round whatever's in the way. Buildings have a `height` for this, units use
   `unitHeight`. Infantry keep a little extra space between each other so
   splash catches fewer of them.
 - **Roles** (`Role` in `game/units.ts`). *Frontline* units lead and close
@@ -378,7 +409,7 @@ src/
   production, so they never keep a side alive in Conquest, and a knocked-out
   side's outposts go back to their garrisons. They're rebuilt in both modes.
 - Siege units (Titans, Howitzers, rocket trucks, Land-trains, Siege
-  Crawlers, bombers) prefer shelling buildings.
+  Crawlers, bombers and the other doctrines' super units) prefer shelling buildings.
 - In Eternal mode, destroyed buildings leave rubble and are rebuilt once no
   enemies are nearby, and a faction with no production left gets fallback
   waves. In Conquest, ruins stay ruins.
@@ -412,5 +443,7 @@ src/
 15. ~~Faction doctrines, the first three: Armour, Raiders, Legion.~~
 16. ~~Aircraft and anti-air: the Scout Copter and flak for everyone, the
     Skyline doctrine.~~
-17. Next: the remaining doctrines (Bastion, with the howitzer as its
-    signature unit; Talon, Tidewater, Firestorm).
+17. ~~The remaining doctrines: Bastion (with the howitzer as its
+    signature unit), Talon, Tidewater, Firestorm.~~
+18. Next: maps. Biomes (snow, desert, forest) with a whole-town
+    architecture style each, more or larger towns, and new outpost types.

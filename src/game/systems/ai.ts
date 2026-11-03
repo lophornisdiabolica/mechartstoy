@@ -142,7 +142,10 @@ export function aiSystem(ctx: SimContext): System {
         }
         // The outpost on this squad's lane, if any.
         const via = target >= 0 ? ctx.lanes.routes(faction, target)[ai.lane]?.via : null;
-        const outpost = via?.kind === 'outpost' ? ctx.outposts[via.index] : null;
+        // Boats can't take outposts or follow land lanes: they head straight for the enemy base
+        // and stop at the nearest water they can reach (see NavGrid.nearestInRegion).
+        const naval = mover.move === 'naval';
+        const outpost = via?.kind === 'outpost' && !naval ? ctx.outposts[via.index] : null;
         const ours = outpost !== null && ctx.sides.allied(outpost.owner, faction);
 
         // On auto, an attack is called off while the side's own base can't hold (Sides.recalling).
@@ -185,7 +188,7 @@ export function aiSystem(ctx: SimContext): System {
         }
 
         // March down the lane, then into the enemy base.
-        const waypoint = ctx.lanes.nextWaypoint(faction, target, ai.lane, t.x, t.z);
+        const waypoint = naval ? null : ctx.lanes.nextWaypoint(faction, target, ai.lane, t.x, t.z);
         if (waypoint) {
           // Squads spread out a little around the waypoint rather than queueing for one spot.
           mover.targetX = waypoint.x + ai.rallyOffsetX * 0.6;

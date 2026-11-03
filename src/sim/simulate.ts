@@ -24,10 +24,14 @@ export interface Scenario {
   minutes?: number;
 }
 
-/** Give each side its team: [0, 1] is 1v1, [0, 0, 1, 1] is 2v2, [0, 1, 2] a free-for-all. */
+/**
+ * Give each side its team: [0, 1] is 1v1, [0, 0, 1, 1] is 2v2, [0, 1, 2] a
+ * free-for-all. Every side plays Armour, so the scenarios compare settings
+ * in mirror matches; `--doctrines` swaps doctrines in on top.
+ */
 function sides(teams: number[]): (s: BattleSettings) => void {
   return (s) => {
-    s.factions = teams.map((team, i) => ({ ...defaultFaction(i), team }));
+    s.factions = teams.map((team, i) => ({ ...defaultFaction(i), team, doctrine: 'armour' }));
   };
 }
 

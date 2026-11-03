@@ -132,6 +132,88 @@ registerModel('bld:motorPool', (faction) => {
   return g;
 });
 
+// Bastion's sensor mast: a lattice tower with a turning radar dish.
+registerModel('bld:sensorMast', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(2.6, 0.3, 2.6, CONCRETE, 0, 0.15, 0));
+  g.add(box(0.8, 0.8, 1.0, WALLS[1], -0.85, 0.7, 0)); // equipment hut
+  for (const x of [-0.35, 0.35]) for (const z of [-0.35, 0.35]) g.add(box(0.12, 5.4, 0.12, DARK, x, 3.0, z));
+  for (const y of [1.5, 3, 4.5]) for (const z of [-0.35, 0.35]) g.add(box(0.84, 0.08, 0.08, secondary, 0, y, z));
+  g.add(box(1.0, 0.12, 1.0, primary, 0, 5.76, 0));
+  const dish = new THREE.Group();
+  dish.position.y = 5.82;
+  dish.add(box(0.1, 0.3, 0.1, METAL, 0, 0.15, 0));
+  dish.add(box(0.15, 0.7, 1.1, secondary, 0.12, 0.55, 0));
+  g.add(dish);
+  const beacon = glowBox(0.15, 0.15, 0.15, 0xff5040);
+  beacon.position.set(0.35, 5.95, 0.35);
+  g.add(beacon);
+  return setRig(g, {
+    animate: (s) => {
+      dish.rotation.y += s.dt * 1.2;
+    },
+  });
+});
+
+// Talon's mech forge: a tall hall with a gantry crane and smoking chimneys.
+registerModel('bld:mechForge', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.4, 0.25, 5.0, CONCRETE, 0, 0.12, 0));
+  g.add(box(4.4, 3.0, 4.0, METAL, -0.3, 1.75, 0));
+  g.add(box(4.6, 0.3, 4.2, primary, -0.3, 3.4, 0));
+  g.add(box(0.06, 2.6, 2.6, DARK, 1.93, 1.55, 0)); // walker door
+  g.add(box(0.12, 0.3, 2.9, secondary, 1.95, 3.0, 0));
+  g.add(box(0.3, 0.3, 3.6, secondary, 0.8, 3.75, 0)); // crane beam
+  for (const z of [-1.2, 1.2]) g.add(cylinder(0.35, 0.45, 1.8, 6, DARK, -1.6, 4.4, z));
+  return g;
+});
+
+// Tidewater's dock: a boathouse on the shore with piers running out over the water.
+registerModel('bld:dock', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.6, 0.3, 4.6, CONCRETE, 0, 0.15, 0));
+  g.add(box(3.0, 1.8, 3.4, WALLS[3], -0.6, 1.2, 0));
+  g.add(gableRoof(3.2, 3.6, 0.8, primary, 2.1));
+  g.add(box(0.06, 1.2, 2.0, DARK, 0.91, 0.9, 0)); // boat doors
+  for (const z of [-1.2, 1.2]) g.add(box(3.2, 0.2, 0.6, 0x7a5a3a, 3.6, 0.22, z)); // piers
+  g.add(box(0.25, 3.3, 0.25, secondary, 1.6, 1.95, -1.9)); // crane
+  g.add(box(2.6, 0.2, 0.2, secondary, 2.6, 3.4, -1.9));
+  return g;
+});
+
+// Tidewater's hover pad, for bases without a coast: a round apron, a control hut and a fan house.
+registerModel('bld:hoverPad', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(2.4, 2.5, 0.3, 12, CONCRETE, 0, 0.15, 0));
+  g.add(cylinder(1.6, 1.6, 0.04, 12, secondary, 0.3, 0.32, 0));
+  g.add(cylinder(1.3, 1.3, 0.06, 12, DARK, 0.3, 0.33, 0));
+  g.add(box(1.1, 1.1, 1.0, METAL, -1.6, 0.85, -1.4));
+  g.add(box(1.2, 0.15, 1.1, primary, -1.6, 1.47, -1.4));
+  g.add(cylinder(0.5, 0.5, 0.6, 8, METAL, -1.7, 0.6, 1.3));
+  return g;
+});
+
+// Firestorm's fuel depot: storage tanks, a pump shed and pipework. It goes up when destroyed.
+registerModel('bld:fuelDepot', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  for (const z of [-1.2, 1.2]) {
+    g.add(cylinder(0.9, 0.9, 2.0, 10, METAL, -1.2, 1.25, z));
+    g.add(cylinder(0.92, 0.92, 0.25, 10, primary, -1.2, 1.7, z));
+    g.add(cylinder(0.6, 0.9, 0.3, 10, METAL, -1.2, 2.4, z));
+  }
+  g.add(box(1.6, 1.2, 1.6, WALLS[1], 1.1, 0.85, 0.9)); // pump shed
+  g.add(box(1.7, 0.15, 1.7, secondary, 1.1, 1.52, 0.9));
+  g.add(box(2.2, 0.15, 0.15, DARK, 0.1, 0.5, -1.2)); // pipes
+  g.add(box(0.18, 0.18, 2.0, DARK, 0.3, 0.5, -0.2));
+  return g;
+});
+
 registerModel('bld:barracksBlock', (faction) => {
   const { primary } = factionColors(faction);
   const g = new THREE.Group();

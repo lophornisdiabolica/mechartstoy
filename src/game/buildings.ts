@@ -10,6 +10,8 @@ export interface ProductionEntry {
   count: number;
   /** Other units in the same squad, e.g. an AT soldier with the riflemen. */
   with?: { unit: UnitId; count: number };
+  /** Built instead when there's no water at the door for this (naval) unit to launch into. */
+  ifDry?: UnitId;
 }
 
 export interface BuildingDef {
@@ -33,6 +35,15 @@ export interface BuildingDef {
   weapon?: WeaponDef;
   sight?: number;
   turretTurnRate?: number;
+  /**
+   * Spotting radius: allied units can fire at enemies inside it that are past
+   * their own sight but within their weapon's range (see targeting.ts).
+   */
+  spots?: number;
+  /** Blows up when destroyed, hurting everything within the radius, friend or foe. */
+  explodes?: { damage: number; radius: number };
+  /** Built on a shore with its door facing open water (see layoutBase). */
+  coastal?: boolean;
   /** Seconds from destruction until reconstruction starts. */
   rebuildDelay: number;
   /** Seconds the construction animation takes. */
@@ -159,6 +170,72 @@ export const BUILDING_DEFS = {
     radius: 2.8,
     height: 3.4,
     production: { table: [{ unit: 'trooper', weight: 1, count: 6, with: { unit: 'atTrooper', count: 1 } }], interval: 18 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Bastion: a tall mast that spots for the artillery.
+  sensorMast: {
+    id: 'sensorMast',
+    name: 'Sensor Mast',
+    model: 'bld:sensorMast',
+    hp: 500,
+    armor: 7,
+    radius: 1.4,
+    height: 6,
+    spots: 30,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Talon: heavy walkers.
+  mechForge: {
+    id: 'mechForge',
+    name: 'Mech Forge',
+    model: 'bld:mechForge',
+    hp: 900,
+    armor: 8,
+    radius: 2.8,
+    height: 4,
+    production: { table: [{ unit: 'warhound', weight: 1, count: 1 }], interval: 45 },
+    rebuildDelay: 45,
+    buildTime: 12,
+  },
+  // Tidewater: boats from a dock on the coast, or hovers from a pad when the base has no coast.
+  dock: {
+    id: 'dock',
+    name: 'Dock',
+    model: 'bld:dock',
+    hp: 750,
+    armor: 6,
+    radius: 2.6,
+    height: 2.4,
+    production: { table: [{ unit: 'missileBoat', weight: 1, count: 2, ifDry: 'skimmer' }], interval: 28 },
+    coastal: true,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  hoverPad: {
+    id: 'hoverPad',
+    name: 'Hover Pad',
+    model: 'bld:hoverPad',
+    hp: 700,
+    armor: 6,
+    radius: 2.6,
+    height: 1.4,
+    production: { table: [{ unit: 'skimmer', weight: 1, count: 2 }], interval: 30 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Firestorm: fuel for the flamers, and a big bang when it goes.
+  fuelDepot: {
+    id: 'fuelDepot',
+    name: 'Fuel Depot',
+    model: 'bld:fuelDepot',
+    hp: 650,
+    armor: 6,
+    radius: 2.6,
+    height: 2.6,
+    production: { table: [{ unit: 'scorchBuggy', weight: 1, count: 2 }], interval: 30 },
+    explodes: { damage: 80, radius: 6 },
     rebuildDelay: 40,
     buildTime: 10,
   },
