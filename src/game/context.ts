@@ -23,6 +23,13 @@ export type GameEvents = {
   impact: { x: number; y: number; z: number; kind: ProjectileKind; splash: number };
   /** `killer` is whoever landed the last blow, if anyone did. */
   unitDestroyed: { entity: Entity; x: number; y: number; z: number; def: UnitDef; faction: number; killer: Hit | null };
+  /**
+   * Something took damage: `amount` is what actually came off its health
+   * (after armour, and no more than it had left). `victim` is its unit or
+   * building type and `category` its unit category, or 'building'. For balance
+   * stats; nothing in the sim listens.
+   */
+  damaged: { victim: string; category: string; faction: number; amount: number; by: Hit | null };
   /** A building dropped below half health (fires once per building). */
   buildingDamaged: { entity: Entity; x: number; y: number; z: number; def: BuildingDef };
   buildingDestroyed: { entity: Entity; x: number; y: number; z: number; def: BuildingDef; faction: number; killer: Hit | null };

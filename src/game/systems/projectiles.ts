@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform } from '../components';
+import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { entityHeight, UNIT_HIT_SLACK } from '../lineOfFire';
 
@@ -18,8 +18,19 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
   const building = world.get(e, Building);
   // As a battle escalates, sieges bite harder so a won field turns into a won battle.
   if (building) amount *= 1 + ctx.escalation.siege;
-  h.hp -= damageThrough(amount, h.armor);
+  const through = damageThrough(amount, h.armor);
+  h.hp -= through;
   h.hurtAt = world.time;
+  if (before > 0) {
+    const unit = world.get(e, Unit);
+    ctx.events.emit('damaged', {
+      victim: unit ? unit.def.id : building ? building.def.id : 'unknown',
+      category: unit ? unit.def.category : 'building',
+      faction: world.get(e, Faction)?.id ?? -1,
+      amount: Math.min(through, before),
+      by,
+    });
+  }
   // Only the blow that lands while it's still standing counts.
   if (by && before > 0) h.lastHit = by;
   if (building && before > h.max / 2 && h.hp <= h.max / 2 && h.hp > 0) {

@@ -93,6 +93,10 @@ export interface SideResult {
 export interface BattleResult {
   scenario: string;
   seed: string;
+  /** The map type it was played on (see MAP_TYPES), or '' for the scenario's own map. */
+  map: string;
+  /** Settings changed for this battle on top of the scenario, in the URL's format (including the map type's and the doctrines). */
+  set: string;
   /** Battle length in minutes (the time limit if undecided). */
   minutes: number;
   /** Conquest: whether someone won. Eternal battles are never decided. */
@@ -119,8 +123,31 @@ export function scenarioSettings(scenario: Scenario, battle: number, overrides =
   return s;
 }
 
-/** Play one battle of a scenario to the end (or its time limit). */
-export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now(), overrides = ''): BattleResult {
+/**
+ * Named map types for `--maps`, as settings in the URL's format. Each is a
+ * change to the scenario's own map, so `medium` is the scenario as it is.
+ */
+export const MAP_TYPES: Record<string, string> = {
+  medium: '',
+  wet: 'water=1',
+  dry: 'water=0',
+  hilly: 'hills=1.6',
+  rugged: 'water=1&hills=1.6',
+  small: 'size=small',
+  large: 'size=large',
+  notown: 'town=0',
+};
+
+/** A map type's settings: a name from MAP_TYPES, or a name and settings written as `name:query` (e.g. `flat:hills=0`). */
+export function mapType(spec: string): { name: string; set: string } {
+  if (spec in MAP_TYPES) return { name: spec, set: MAP_TYPES[spec] };
+  const eq = spec.indexOf(':');
+  if (eq > 0) return { name: spec.slice(0, eq), set: spec.slice(eq + 1) };
+  throw new Error(`Unknown map type "${spec}": use one of ${Object.keys(MAP_TYPES).join(', ')}, or name:query, e.g. "flat:hills=0"`);
+}
+
+/** Play one battle of a scenario to the end (or its time limit). `map` labels the map type the overrides set up. */
+export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now(), overrides = '', map = ''): BattleResult {
   const settings = scenarioSettings(scenario, battle, overrides);
   const game = new Game(hashSeed(settings.seed), { settings });
   const { sides } = game.ctx;
@@ -135,6 +162,7 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     game.step(dt);
     ticks++;
     if (ticks % SIM_HZ === 0) {
+      game.stats.sample(game.world, 1);
       for (let f = 0; f < sides.count; f++) {
         const now = !sides.eliminated[f] && game.ctx.offensive.attacking(f, game.world.time);
         if (now && !attacking[f]) attacks[f]++;
@@ -147,6 +175,8 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   return {
     scenario: scenario.id,
     seed: settings.seed,
+    map,
+    set: overrides,
     minutes: (outcome ? outcome.time : game.world.time) / 60,
     decided: outcome !== null && outcome.team !== null,
     winner: outcome && outcome.team !== null ? teamOrder.indexOf(outcome.team) + 1 : null,
@@ -359,12 +389,76 @@ export function doctrinePlans(sides: number): string[] {
   return orthogonalArray(DOCTRINE_IDS.length, sides).map((row) => row.map((d, i) => `doc${i + 1}=${DOCTRINE_IDS[d]}`).join('&'));
 }
 
+/** One battle's place in a run: its battle number, the settings it adds to the scenario, and its map type's name. */
+export interface BattlePlan {
+  battle: number;
+  set: string;
+  map: string;
+}
+
+/**
+ * The battles of a run of `count` battles (rounded up to whole passes over
+ * the orthogonal array when doctrines are on), with `set` added to every one.
+ *
+ * Map types (see mapType) work as one more factor:
+ * - `cross` plays every battle on every map type, so each type gets the full
+ *   picture (and the run is that many times longer).
+ * - Otherwise each battle gets one map type. With doctrines, it's another
+ *   column of the orthogonal array, so every doctrine meets every map type
+ *   equally often (exactly, when the number of map types divides the number of
+ *   doctrines) at no extra cost; without, the battles take turns.
+ */
+export function battlePlans(sides: number, count: number, options: { set?: string; doctrines?: boolean; maps?: string[]; cross?: boolean } = {}): BattlePlan[] {
+  const maps = (options.maps ?? []).map(mapType);
+  // The first value of a setting wins (see applyParams), so the array's doctrines and the map type come before `set`.
+  const join = (...parts: string[]) => parts.filter(Boolean).join('&');
+  const base = options.set ?? '';
+  // What each battle number plays before map types: doctrines from the array, or nothing.
+  let rows: { set: string; level: number }[];
+  if (options.doctrines) {
+    const array = orthogonalArray(DOCTRINE_IDS.length, sides + 1);
+    const passes = Math.max(1, Math.round(count / array.length));
+    rows = Array.from({ length: passes * array.length }, (_, i) => {
+      const row = array[i % array.length];
+      return { set: row.slice(0, sides).map((d, f) => `doc${f + 1}=${DOCTRINE_IDS[d]}`).join('&'), level: row[sides] };
+    });
+  } else {
+    rows = Array.from({ length: count }, (_, i) => ({ set: '', level: i }));
+  }
+  if (maps.length === 0) return rows.map((r, i) => ({ battle: i + 1, set: join(r.set, base), map: '' }));
+  if (options.cross) return maps.flatMap((m) => rows.map((r, i) => ({ battle: i + 1, set: join(r.set, m.set, base), map: m.name })));
+  return rows.map((r, i) => {
+    const m = maps[r.level % maps.length];
+    return { battle: i + 1, set: join(r.set, m.set, base), map: m.name };
+  });
+}
+
 export interface DoctrineSummary {
   doctrine: DoctrineId;
   /** Sides it played in decided battles, how many of those were on the winning team, and the rate. */
   played: number;
   won: number;
   rate: number;
+  /**
+   * The rate's margin of error: half the width of a 95% interval, so the
+   * true rate is likely within rate ± margin. Around ±12 points for 64 games.
+   */
+  margin: number;
+  /**
+   * Wins against what a coin toss would give: each side's fair share is one
+   * over the number of teams in its battle, so 1 is par in any team setup
+   * (in 1v1 it's just the rate times 2) and above 1 is doing better than par.
+   */
+  score: number;
+  /** The score's margin of error, the same way as `margin`. */
+  scoreMargin: number;
+}
+
+/** Half the width of a 95% interval for a rate measured as `won` out of `n`. Padded by a win and a loss, so 0 of 4 doesn't claim to be certain. */
+export function margin(won: number, n: number): number {
+  if (n === 0) return 1;
+  const p = (won + 1) / (n + 2);
+  return 1.96 * Math.sqrt((p * (1 - p)) / n);
 }
 
 /** Wins per doctrine across decided battles (a doctrine on several sides of one battle counts once per side). */
@@ -372,15 +466,21 @@ export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
   return DOCTRINE_IDS.map((doctrine) => {
     let played = 0;
     let won = 0;
+    let par = 0;
     for (const r of results) {
       if (!r.decided) continue;
+      const teams = new Set(r.sides.map((s) => s.team)).size;
       for (const s of r.sides) {
         if (s.doctrine !== doctrine) continue;
         played++;
+        par += 1 / teams;
         if (s.team === r.winner) won++;
       }
     }
-    return { doctrine, played, won, rate: played ? won / played : 0 };
+    const rate = played ? won / played : 0;
+    const share = played ? par / played : 1;
+    const m = margin(won, played);
+    return { doctrine, played, won, rate, margin: m, score: par ? won / par : 0, scoreMargin: m / share };
   });
 }
 
@@ -396,16 +496,46 @@ export function headToHead(results: BattleResult[]): Record<DoctrineId, Record<D
   return grid;
 }
 
-/** Plain-text tables of doctrine results. */
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+const pm = (x: number) => `±${Math.round(x * 100)}`;
+
+/** Plain-text tables of doctrine results: overall, per map type when there are several, and head to head. */
 export function formatDoctrines(results: BattleResult[]): string {
-  const lines = ['Doctrine    Played  Won   Win rate', '----------  ------  ----  --------'];
-  for (const d of summarizeDoctrines(results)) lines.push(`${pad(d.doctrine, 10)}  ${pad(String(d.played), 6)}  ${pad(String(d.won), 4)}  ${Math.round(d.rate * 100)}%`);
-  if (results.some((r) => r.sides.length === 2)) {
+  const doctrines = summarizeDoctrines(results).filter((d) => d.played > 0);
+  const lines = [
+    formatGrid(
+      ['Doctrine', 'Played', 'Won', 'Win rate', 'vs par'],
+      doctrines.map((d) => [d.doctrine, String(d.played), String(d.won), `${pct(d.rate)} ${pm(d.margin)}`, `${d.score.toFixed(2)}x ±${d.scoreMargin.toFixed(2)}`]),
+    ),
+    '',
+    'Win rates are ± a 95% margin of error. "vs par" is wins over a fair share (1 over the teams in the battle): 1.00x is even.',
+  ];
+  const maps = mapsIn(results);
+  if (maps.length > 1) {
+    const by = maps.map((m) => summarizeDoctrines(results.filter((r) => r.map === m)));
+    lines.push(
+      '',
+      'Win rate by map type:',
+      formatGrid(
+        ['Doctrine', ...maps, 'all'],
+        doctrines.map((d) => {
+          const i = DOCTRINE_IDS.indexOf(d.doctrine);
+          return [d.doctrine, ...by.map((b) => (b[i].played ? `${pct(b[i].rate)} ${pm(b[i].margin)}` : '-')), pct(d.rate)];
+        }),
+      ),
+    );
+  }
+  if (doctrines.length > 1 && results.some((r) => r.sides.length === 2)) {
     const grid = headToHead(results);
-    lines.push('', 'Two-sided battles, wins of each row against each column:', pad('', 10) + DOCTRINE_IDS.map((d) => pad(d, 9)).join(''));
-    for (const a of DOCTRINE_IDS) lines.push(pad(a, 10) + DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 9)).join(''));
+    lines.push('', 'Two-sided battles, wins of each row against each column:', pad('', 10) + DOCTRINE_IDS.map((d) => pad(d, 10)).join(''));
+    for (const a of DOCTRINE_IDS) lines.push(pad(a, 10) + DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 10)).join(''));
   }
   return lines.join('\n');
+}
+
+/** The map types in a set of results, in the order they first appear. */
+function mapsIn(results: BattleResult[]): string[] {
+  return [...new Set(results.map((r) => r.map ?? ''))].filter((m) => m !== '');
 }
 
 export interface UnitReportRow {
@@ -416,6 +546,14 @@ export interface UnitReportRow {
   lost: number;
   kills: number;
   razed: number;
+  /** Damage it did to enemies and took from them, and what it did by victim category (see TypeStats). */
+  dealt: number;
+  taken: number;
+  dealtTo: Record<string, number>;
+  /** Seconds on the field (all its units added up), with a target, and firing (see TypeStats). */
+  alive: number;
+  engaged: number;
+  firing: number;
   /** Enemy types it killed and was killed by, most first, with counts. */
   victims: [string, number][];
   killers: [string, number][];
@@ -424,7 +562,7 @@ export interface UnitReportRow {
 /**
  * Every side's unit tallies added up per doctrine and unit type, across all
  * the battles (decided or not): what each doctrine's units did, and what
- * they died to. Rows run by doctrine, then most kills first.
+ * they died to. Rows run by doctrine, then most damage first.
  */
 export function unitReport(results: BattleResult[]): UnitReportRow[] {
   const rows = new Map<string, UnitReportRow & { v: Record<string, number>; k: Record<string, number> }>();
@@ -433,11 +571,21 @@ export function unitReport(results: BattleResult[]): UnitReportRow[] {
       for (const [unit, t] of Object.entries(side.units ?? {})) {
         const key = `${side.doctrine}:${unit}`;
         let row = rows.get(key);
-        if (!row) rows.set(key, (row = { doctrine: side.doctrine, unit, built: 0, lost: 0, kills: 0, razed: 0, victims: [], killers: [], v: {}, k: {} }));
+        if (!row) {
+          row = { doctrine: side.doctrine, unit, built: 0, lost: 0, kills: 0, razed: 0, dealt: 0, taken: 0, dealtTo: {}, alive: 0, engaged: 0, firing: 0, victims: [], killers: [], v: {}, k: {} };
+          rows.set(key, row);
+        }
         row.built += t.built;
         row.lost += t.lost;
         row.kills += t.kills;
         row.razed += t.razed;
+        // Results saved before damage and time were tracked don't have them.
+        row.dealt += t.dealt ?? 0;
+        row.taken += t.taken ?? 0;
+        row.alive += t.alive ?? 0;
+        row.engaged += t.engaged ?? 0;
+        row.firing += t.firing ?? 0;
+        for (const [c, n] of Object.entries(t.dealtTo ?? {})) row.dealtTo[c] = (row.dealtTo[c] ?? 0) + n;
         for (const [id, n] of Object.entries(t.victims)) row.v[id] = (row.v[id] ?? 0) + n;
         for (const [id, n] of Object.entries(t.killers)) row.k[id] = (row.k[id] ?? 0) + n;
       }
@@ -446,7 +594,7 @@ export function unitReport(results: BattleResult[]): UnitReportRow[] {
   const ranked = (counts: Record<string, number>) => Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return [...rows.values()]
     .map(({ v, k, ...row }) => ({ ...row, victims: ranked(v), killers: ranked(k) }))
-    .sort((a, b) => DOCTRINE_IDS.indexOf(a.doctrine) - DOCTRINE_IDS.indexOf(b.doctrine) || b.kills - a.kills || a.unit.localeCompare(b.unit));
+    .sort((a, b) => DOCTRINE_IDS.indexOf(a.doctrine) - DOCTRINE_IDS.indexOf(b.doctrine) || b.dealt - a.dealt || b.kills - a.kills || a.unit.localeCompare(b.unit));
 }
 
 /** The top few of a ranked count list, as "trooper 150, tank 40". */
@@ -454,24 +602,56 @@ function top(list: [string, number][], n = 3): string {
   return list.slice(0, n).map(([id, c]) => `${id} ${c}`).join(', ');
 }
 
-/** Plain-text unit report: one table per doctrine (see unitReport). */
+/** Short names for victim categories in the damage split. */
+const CATEGORY_SHORT: Record<string, string> = { infantry: 'inf', vehicle: 'veh', air: 'air', super: 'sup', building: 'bld' };
+
+/** Where a type's damage went, biggest share first: "veh 60% inf 30%". Shares under 10% are left out. */
+export function damageSplit(dealtTo: Record<string, number>): string {
+  const total = Object.values(dealtTo).reduce((a, b) => a + b, 0);
+  if (total <= 0) return '-';
+  return Object.entries(dealtTo)
+    .filter(([, n]) => n / total >= 0.1)
+    .sort((a, b) => b[1] - a[1])
+    .map(([c, n]) => `${CATEGORY_SHORT[c] ?? c} ${pct(n / total)}`)
+    .join(' ');
+}
+
+/** Per built unit, or '-' for types that weren't built (buildings). */
+const each = (n: number, built: number, digits = 0) => (built ? (n / built).toFixed(digits) : '-');
+/** Per minute of cap slot held (see TypeStats.alive): what a slot spent on this type buys. */
+const perSlotMinute = (n: number, alive: number, digits = 0) => (alive > 0 ? ((n * 60) / alive).toFixed(digits) : '-');
+
+/**
+ * Plain-text unit report, one table per doctrine (see unitReport):
+ * - Dmg and Taken are per unit built: what a unit does before it dies, and what it soaks.
+ * - Dmg/slot-min and Kills/slot-min are per minute a cap slot spends on the type, so a
+ *   cheap unit that dies fast and a tough one that idles both show what they're worth.
+ * - Firing is the share of its field time spent shooting; Damage to splits its damage
+ *   by what it hit.
+ */
 export function formatUnits(results: BattleResult[]): string {
   const rows = unitReport(results);
   const out: string[] = [];
   for (const doctrine of DOCTRINE_IDS) {
-    const mine = rows.filter((r) => r.doctrine === doctrine);
+    // Buildings that only ever took fire (everything but towers) are left out here; the CSV has them.
+    const mine = rows.filter((r) => r.doctrine === doctrine && (r.built > 0 || r.kills > 0 || r.razed > 0 || r.dealt > 0));
     if (mine.length === 0) continue;
     out.push(
       `${doctrine}:`,
       formatGrid(
-        ['Unit', 'Built', 'Lost', 'Kills', 'Razed', 'Kills/built', 'Killed most', 'Killed most by'],
+        ['Unit', 'Built', 'Lost', 'Kills', 'Razed', 'Dmg', 'Taken', 'Dmg/slot-min', 'Kills/slot-min', 'Firing', 'Damage to', 'Killed most', 'Killed most by'],
         mine.map((r) => [
           r.unit,
           r.built ? String(r.built) : '-',
           String(r.lost),
           String(r.kills),
           String(r.razed),
-          r.built ? (r.kills / r.built).toFixed(2) : '-',
+          each(r.dealt, r.built),
+          each(r.taken, r.built),
+          perSlotMinute(r.dealt, r.alive),
+          perSlotMinute(r.kills, r.alive, 2),
+          r.alive > 0 ? pct(r.firing / r.alive) : '-',
+          damageSplit(r.dealtTo),
           top(r.victims),
           top(r.killers),
         ]),
@@ -479,15 +659,121 @@ export function formatUnits(results: BattleResult[]): string {
       '',
     );
   }
+  out.push('Dmg and Taken are per unit built. Slot-min is a minute of one cap slot spent on that unit. Firing is the share of field time spent shooting.');
   return out.join('\n').trimEnd();
 }
 
 /** Unit report rows as CSV, for a spreadsheet. */
 export function unitsCsv(results: BattleResult[]): string {
   const quote = (v: string) => (/[,"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const lines = ['doctrine,unit,built,lost,kills,razed,killed_most,killed_most_by'];
+  const cats = ['infantry', 'vehicle', 'air', 'super', 'building'];
+  const lines = [`doctrine,unit,built,lost,kills,razed,dealt,taken,${cats.map((c) => `dealt_${c}`).join(',')},alive_s,engaged_s,firing_s,killed_most,killed_most_by`];
   for (const r of unitReport(results)) {
-    lines.push([r.doctrine, r.unit, r.built, r.lost, r.kills, r.razed, quote(top(r.victims, 5)), quote(top(r.killers, 5))].join(','));
+    lines.push(
+      [
+        r.doctrine,
+        r.unit,
+        r.built,
+        r.lost,
+        r.kills,
+        r.razed,
+        Math.round(r.dealt),
+        Math.round(r.taken),
+        ...cats.map((c) => Math.round(r.dealtTo[c] ?? 0)),
+        Math.round(r.alive),
+        Math.round(r.engaged),
+        Math.round(r.firing),
+        quote(top(r.victims, 5)),
+        quote(top(r.killers, 5)),
+      ].join(','),
+    );
   }
   return lines.join('\n') + '\n';
+}
+
+/** A saved run (sims-results/*.json), as compareRuns reads it. */
+export interface SavedRun {
+  set?: string;
+  battles: BattleResult[];
+}
+
+/**
+ * A plain-text comparison of two saved runs, `before` and `after`: battle
+ * lengths per scenario, doctrine win rates with whether each change is bigger
+ * than the noise, how many of the same battles (same seed, map type and
+ * doctrines) changed winner, and the units whose damage per cap slot moved most.
+ */
+export function compareRuns(before: SavedRun, after: SavedRun): string {
+  const out: string[] = [];
+  const scenarios = [...new Set([...before.battles, ...after.battles].map((r) => r.scenario))];
+  out.push(
+    'Battle length (median minutes):',
+    formatGrid(
+      ['Scenario', 'Before', 'After', 'Battles'],
+      scenarios.map((id) => {
+        const a = before.battles.filter((r) => r.scenario === id);
+        const b = after.battles.filter((r) => r.scenario === id);
+        return [id, a.length ? min(median(a.map((r) => r.minutes))) : '-', b.length ? min(median(b.map((r) => r.minutes))) : '-', `${a.length} → ${b.length}`];
+      }),
+    ),
+  );
+
+  const da = summarizeDoctrines(before.battles);
+  const db = summarizeDoctrines(after.battles);
+  const rows = DOCTRINE_IDS.map((_, i) => [da[i], db[i]] as const).filter(([a, b]) => a.played > 0 || b.played > 0);
+  if (rows.length > 0) {
+    out.push(
+      '',
+      'Doctrine win rates:',
+      formatGrid(
+        ['Doctrine', 'Before', 'After', 'Change', ''],
+        rows.map(([a, b]) => {
+          const change = b.rate - a.rate;
+          // Bigger than the two margins together: probably a real change, not noise.
+          const real = Math.abs(change) > Math.hypot(a.margin, b.margin);
+          return [a.doctrine, a.played ? `${pct(a.rate)} ${pm(a.margin)}` : '-', b.played ? `${pct(b.rate)} ${pm(b.margin)}` : '-', `${change >= 0 ? '+' : ''}${Math.round(change * 100)}`, real ? 'beyond noise' : ''];
+        }),
+      ),
+    );
+  }
+
+  // The same battle in both runs: same scenario, seed, map type and doctrines (whatever else `--set` changed).
+  const key = (r: BattleResult) => `${r.scenario}|${r.seed}|${r.map ?? ''}|${r.sides.map((s) => s.doctrine).join(',')}`;
+  const earlier = new Map(before.battles.map((r) => [key(r), r]));
+  let same = 0;
+  let flipped = 0;
+  for (const r of after.battles) {
+    const e = earlier.get(key(r));
+    if (!e) continue;
+    same++;
+    if (e.winner !== r.winner) flipped++;
+  }
+  out.push('', same ? `${same} battles were played in both runs; ${flipped} of them (${pct(flipped / same)}) changed winner.` : 'No battle was played in both runs (different scenarios, seeds, map types or doctrines).');
+
+  const ua = new Map(unitReport(before.battles).map((r) => [`${r.doctrine}:${r.unit}`, r]));
+  const moved = unitReport(after.battles)
+    .map((b) => ({ b, a: ua.get(`${b.doctrine}:${b.unit}`) }))
+    .filter((x): x is { a: UnitReportRow; b: UnitReportRow } => !!x.a && x.a.alive > 0 && x.b.alive > 0 && x.a.dealt > 0)
+    .map(({ a, b }) => ({ a, b, ratio: b.dealt / b.alive / (a.dealt / a.alive) }))
+    .filter((x) => Math.abs(Math.log(x.ratio)) > Math.log(1.2))
+    .sort((x, y) => Math.abs(Math.log(y.ratio)) - Math.abs(Math.log(x.ratio)))
+    .slice(0, 20);
+  if (moved.length > 0) {
+    out.push(
+      '',
+      'Units whose damage per cap-slot minute moved more than 20%:',
+      formatGrid(
+        ['Doctrine', 'Unit', 'Dmg/slot-min', 'Kills/built', 'Built'],
+        moved.map(({ a, b, ratio }) => [
+          a.doctrine,
+          a.unit,
+          `${perSlotMinute(a.dealt, a.alive)} → ${perSlotMinute(b.dealt, b.alive)} (${ratio >= 1 ? '+' : ''}${Math.round((ratio - 1) * 100)}%)`,
+          `${each(a.kills, a.built, 2)} → ${each(b.kills, b.built, 2)}`,
+          `${a.built} → ${b.built}`,
+        ]),
+      ),
+    );
+  }
+  if ((before.set ?? '') !== (after.set ?? '')) out.push('', `Settings changed for every battle: before "${before.set ?? ''}", after "${after.set ?? ''}".`);
+  return out.join('\n');
 }
