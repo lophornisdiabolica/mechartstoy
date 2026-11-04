@@ -156,6 +156,16 @@ export function aiSystem(ctx: SimContext): System {
           // Form up at the player's flag; else hold this lane's outpost (unless the base itself
           // is under attack); else meet an attack on the base (or an ally's); else in front of
           // the base, leaning toward this squad's lane.
+          // A squad on a task force goes about its job (see commander/taskForces.ts): into an outpost
+          // to take it, or round it to hold it. The flag and stances override it.
+          const force = orders.stance === 'auto' && !orders.rally ? ctx.commander.taskForces.forSquad(ai.squad) : undefined;
+          if (force && force.side === faction) {
+            const o = ctx.outposts[force.outpost];
+            const p = patrolPoint(o, ai.squad, world.time);
+            const k = force.kind === 'take' ? 0.5 : 1;
+            moveTo(mover, t, o.x + (p.x - o.x) * k + ai.rallyOffsetX * 0.3, o.z + (p.z - o.z) * k + ai.rallyOffsetZ * 0.3, force.kind === 'take' ? o.x : p.x * 2 - o.x, force.kind === 'take' ? o.z : p.z * 2 - o.z);
+            continue;
+          }
           const home = ctx.field.baseSites[faction];
           const defend = orders.rally ? null : ctx.sides.defencePoint(faction);
           if (!orders.rally && outpost && holdsOutposts(ai.squad, armies.outpostHold) && !ctx.sides.underAttack(faction)) {

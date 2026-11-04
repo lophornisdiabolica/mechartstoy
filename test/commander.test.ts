@@ -51,3 +51,43 @@ describe('commander picture', () => {
     expect(goals.every((g) => g.score >= 0 && g.score <= 1)).toBe(true);
   });
 });
+
+describe('task forces', () => {
+  /** Two armies of tanks at home, two empty outposts, nothing built. */
+  function setup(share: number): Game {
+    const s = defaultSettings();
+    s.map.outposts = 2;
+    s.armies.taskForces = share;
+    const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
+    for (const f of [0, 1]) {
+      const b = game.field.baseSites[f];
+      for (let i = 0; i < 8; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, f, b.x + (i % 4) * 3 - 4, b.z + Math.floor(i / 4) * 3);
+    }
+    return game;
+  }
+
+  it('sends a few squads to take an outpost between attacks, and they take it', () => {
+    const game = setup(0.4);
+    run(game, PICTURE_INTERVAL * 2);
+    const forces = game.ctx.commander.taskForces.forces;
+    expect(forces.length).toBeGreaterThan(0);
+    for (const tf of forces) {
+      // Within its share of the army, and short of the whole army.
+      expect(tf.squads.length).toBeGreaterThan(0);
+      expect(tf.squads.length).toBeLessThan(8);
+    }
+    expect(game.ctx.commander.sides[forces[0].side].goals.some((g) => g.kind === 'take' && g.force === forces[0].id)).toBe(true);
+    run(game, 90);
+    expect(game.ctx.outposts.some((o) => o.owner >= 0)).toBe(true);
+  });
+
+  it('sends none when off, or when the player has planted a rally flag', () => {
+    const off = setup(0);
+    run(off, 10);
+    expect(off.ctx.commander.taskForces.forces).toEqual([]);
+    const flagged = setup(0.4);
+    for (const f of [0, 1]) flagged.setRally(f, flagged.field.baseSites[f]);
+    run(flagged, 10);
+    expect(flagged.ctx.commander.taskForces.forces).toEqual([]);
+  });
+});

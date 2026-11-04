@@ -48,10 +48,14 @@ const MOVE_LABELS: Record<MoveClass, string> = {
   air: 'Aircraft',
 };
 /** A side's goals in words, e.g. "Massing at its rally point, 40% ready to push Blue". */
-function describeGoals(goals: readonly Goal[], name: (side: number) => string): string {
+function describeGoals(goals: readonly Goal[], name: (side: number) => string, force: (goal: Goal) => string): string {
   if (goals.length === 0) return 'No plan';
   const words = goals.map((g, i) => {
     switch (g.kind) {
+      case 'take':
+        return `${force(g)} taking an outpost`;
+      case 'hold':
+        return `${force(g)} holding an outpost`;
       case 'defend':
         return 'Defending home';
       case 'mass':
@@ -168,7 +172,17 @@ export class Controls {
           line('Out of the battle');
           return row;
         }
-        line(describeGoals(side.goals, (g) => this.factions[g].name.split(' ')[0]));
+        line(
+          describeGoals(
+            side.goals,
+            (g) => this.factions[g].name.split(' ')[0],
+            (g) => {
+              const tf = c.taskForces.forces.find((t) => t.id === g.force);
+              const n = tf?.squads.length ?? 0;
+              return `a task force of ${n} ${n === 1 ? 'squad' : 'squads'}${tf && tf.launch > 0 ? ` (${Math.round((tf.strength / tf.launch) * 100)}% strength)` : ''}`;
+            },
+          ),
+        );
         const total = side.mix.infantry + side.mix.vehicle + side.mix.air + side.mix.super;
         line(`Army, outpost guards aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
         line(`Faces ${describeMix(side.enemyMix)}`);
