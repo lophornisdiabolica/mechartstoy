@@ -154,6 +154,7 @@ describe('production advice and styles', () => {
     goals: [],
     jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 },
     detours: 0,
+    detourPaths: [],
   });
 
   it('leans toward flak against aircraft it can’t answer, and away from it with none about', () => {

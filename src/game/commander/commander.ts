@@ -70,6 +70,8 @@ export interface SidePicture {
   jobs: Record<JobKind, number>;
   /** Squads going round ground that's dangerous to them (see threats.ts). */
   detours: number;
+  /** Each of those detours, from the squad to the point it's going round by (for the overlay). */
+  detourPaths: { fromX: number; fromZ: number; x: number; z: number }[];
 }
 
 function emptyMix(): UnitMix {
@@ -111,7 +113,7 @@ export class Commander {
     this.threats = new ThreatMap(ctx.field, sides);
     this.places = findPlaces(ctx.field, ctx.navs.land);
     this.placesVersion = ctx.navs.land.passableVersion;
-    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 }, detours: 0 }));
+    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 }, detours: 0, detourPaths: [] }));
   }
 
   /** Rebuild the picture and the goals from the battle as it stands. Reads the battle only. */
@@ -177,6 +179,7 @@ export class Commander {
     this.sides.forEach((side, f) => {
       side.jobs = { ...this.roles.counts(f), build: this.engineers.count(f) };
       side.detours = this.avoidance.detouring[f] ?? 0;
+      side.detourPaths = this.avoidance.paths[f] ?? [];
       side.goals = this.goalsFor(world, ctx, f);
       for (const tf of this.taskForces.forces) {
         if (tf.side !== f) continue;

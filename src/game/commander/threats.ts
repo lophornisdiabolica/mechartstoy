@@ -204,6 +204,8 @@ export class Avoidance {
   /** For the panel and tests: per side, squads on a detour now, and squads ever moved to a safer lane. */
   detouring: number[] = [];
   relaned: number[] = [];
+  /** Per side, each detour as the overlay draws it: from the squad to the point it's going round by. */
+  paths: { fromX: number; fromZ: number; x: number; z: number }[][] = [];
 
   /** Where a squad should go first to stay out of danger, if anywhere. */
   detourFor(squad: number): { x: number; z: number } | undefined {
@@ -248,6 +250,7 @@ export class Avoidance {
     const previous = this.detours;
     this.detours = new Map();
     this.detouring = new Array(ctx.sides.count).fill(0);
+    this.paths = ctx.sides.teams.map(() => []);
     if (!ctx.settings.armies.avoidance) return;
     const time = world.time;
     const marching = ctx.sides.teams.map((_, side) => {
@@ -302,6 +305,7 @@ export class Avoidance {
       if (kept && Math.hypot(kept.x - x, kept.z - z) > REACHED && cost(kept.x, kept.z) < straight * BETTER) {
         this.detours.set(squad, kept);
         this.detouring[s.side]++;
+        this.paths[s.side].push({ fromX: x, fromZ: z, x: kept.x, z: kept.z });
         continue;
       }
       // Otherwise swing out to whichever side is safest, if any is safe enough.
@@ -327,6 +331,7 @@ export class Avoidance {
       if (best) {
         this.detours.set(squad, best);
         this.detouring[s.side]++;
+        this.paths[s.side].push({ fromX: x, fromZ: z, x: best.x, z: best.z });
       }
     }
   }
