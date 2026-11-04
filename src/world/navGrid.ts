@@ -194,6 +194,11 @@ export class NavGrid {
   private clearanceTerrain = -1;
   /** Changes when a map change alters which cells this class can cross at all. */
   private terrainVersion = 0;
+
+  /** Changes whenever a map change alters which cells this class can cross at all (not just what they cost). */
+  get passableVersion(): number {
+    return this.terrainVersion;
+  }
   /** Which connected patch of passable terrain each cell is on (-1 for impassable); cells with different ids can't reach each other. */
   private region: Int32Array;
 
@@ -382,6 +387,15 @@ export class NavGrid {
   center(i: number, j: number): Point {
     const b = this.field.bounds;
     return { x: b.minX + (i + 0.5) * this.cellSize, z: b.minZ + (j + 0.5) * this.cellSize };
+  }
+
+  /** Whether the terrain alone keeps this class out of a point's cell (buildings aside). Off the map counts as yes. Cheaper than terrainAllowsAt, at cell resolution. */
+  terrainBlocksCell(x: number, z: number): boolean {
+    const b = this.field.bounds;
+    const i = Math.floor((x - b.minX) / this.cellSize);
+    const j = Math.floor((z - b.minZ) / this.cellSize);
+    if (i < 0 || j < 0 || i >= this.cols || j >= this.rows) return true;
+    return this.terrain[j * this.cols + i] === 1;
   }
 
   blocked(i: number, j: number): boolean {

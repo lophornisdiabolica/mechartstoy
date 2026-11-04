@@ -228,6 +228,37 @@ body {
   height: 100%;
 }
 
+#panel details.plans {
+  margin-top: 6px;
+}
+
+#panel details.plans > summary {
+  cursor: pointer;
+  color: #b3becb;
+}
+
+#panel details.plans .side {
+  margin-top: 6px;
+}
+
+#panel details.plans .title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#panel details.plans .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+#panel details.plans .line {
+  color: #b3becb;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
 #toast {
   position: fixed;
   left: 50%;

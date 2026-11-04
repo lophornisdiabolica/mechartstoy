@@ -105,6 +105,7 @@ export class App implements MatchControls {
     const view = loadViewPrefs();
     this.stage.shadows = view.shadows;
     this.stage.followFights = view.follow;
+    this.stage.showPlans = view.plans;
     this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),

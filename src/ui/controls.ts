@@ -1,6 +1,7 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
 import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { Goal, UnitMix } from '../game/commander/commander';
 import { describeBonus } from '../game/outposts';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
@@ -46,6 +47,42 @@ const MOVE_LABELS: Record<MoveClass, string> = {
   climber: 'Climber (takes any slope)',
   air: 'Aircraft',
 };
+/** A side's goals in words, e.g. "Massing at its rally point, 40% ready to push Blue". */
+function describeGoals(goals: readonly Goal[], name: (side: number) => string): string {
+  if (goals.length === 0) return 'No plan';
+  const words = goals.map((g, i) => {
+    switch (g.kind) {
+      case 'defend':
+        return 'Defending home';
+      case 'mass':
+        return 'Massing at its rally point';
+      case 'regroup':
+        return 'Regrouping at its rally point';
+      case 'push': {
+        const target = g.target !== null ? name(g.target) : 'the enemy';
+        return i === 0 ? `Pushing ${target}` : `${Math.round(g.score * 100)}% ready to push ${target}`;
+      }
+    }
+  });
+  return words.join(', ');
+}
+
+/** An army's make-up in words: "10 infantry, 14 vehicles, 2 aircraft; of them 3 artillery, 4 that can shoot aircraft". */
+function describeMix(mix: UnitMix): string {
+  const parts: string[] = [];
+  const add = (n: number, one: string, many = one) => n > 0 && parts.push(`${n} ${n === 1 ? one : many}`);
+  add(mix.infantry, 'infantry');
+  add(mix.vehicle, 'vehicle', 'vehicles');
+  add(mix.air, 'aircraft');
+  add(mix.super, 'super unit', 'super units');
+  if (parts.length === 0) return 'nothing';
+  // Roles cut across the kinds above, so they're said separately.
+  const roles: string[] = [];
+  if (mix.artillery > 0) roles.push(`${mix.artillery} artillery`);
+  if (mix.antiAir > 0) roles.push(`${mix.antiAir} that can shoot aircraft`);
+  return parts.join(', ') + (roles.length > 0 ? `; of them ${roles.join(', ')}` : '');
+}
+
 const ROLE_LABELS: Record<Role, string> = {
   frontline: 'frontline',
   artillery: 'artillery (fires from long range)',
@@ -61,6 +98,10 @@ export class Controls {
   private readonly toast = el('div', { id: 'toast' });
   private readonly inspect = el('div', { class: 'inspect' });
   private readonly intensity = el('p', { class: 'hint' });
+  private readonly plans = el('details', { class: 'plans' });
+  private readonly plansBody = el('div');
+  /** The Commander picture the plans list shows (its updatedAt). */
+  private plansShownAt = NaN;
   private readonly sync: (() => void)[] = [];
   private inspectTimer = 0;
   /** Removes every listener this panel added outside itself. */
@@ -105,7 +146,35 @@ export class Controls {
       this.renderInspect();
       const { tide, siege } = this.game.ctx.escalation;
       this.intensity.textContent = `Now: tide ${(1 + tide).toFixed(2)}×, siege ${(1 + siege).toFixed(2)}×`;
+      if (this.game.ctx.commander.updatedAt !== this.plansShownAt) this.renderPlans();
     }
+  }
+
+  /** Each side's goals, army and what it faces, while the list is open. */
+  private renderPlans(): void {
+    if (!this.plans.open) return;
+    const c = this.game.ctx.commander;
+    this.plansShownAt = c.updatedAt;
+    this.plansBody.replaceChildren(
+      ...c.sides.map((side, f) => {
+        const row = el('div', { class: 'side' });
+        const title = el('div', { class: 'title' });
+        const swatch = el('span', { class: 'swatch' });
+        swatch.style.background = hex(factionColors(f).primary);
+        title.append(swatch, document.createTextNode(this.factions[f].name));
+        row.append(title);
+        const line = (text: string) => row.append(el('div', { class: 'line' }, text));
+        if (this.game.ctx.sides.eliminated[f]) {
+          line('Out of the battle');
+          return row;
+        }
+        line(describeGoals(side.goals, (g) => this.factions[g].name.split(' ')[0]));
+        const total = side.mix.infantry + side.mix.vehicle + side.mix.air + side.mix.super;
+        line(`Army, outpost guards aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
+        line(`Faces ${describeMix(side.enemyMix)}`);
+        return row;
+      }),
+    );
   }
 
   private build(): void {
@@ -251,6 +320,21 @@ export class Controls {
       clearRally.disabled = !o?.rally;
     });
 
+    // Commanders: each side's picture of the battle and what it means to do (see game/commander).
+    const plans = section('Commanders');
+    const plansLabel = el('label', { class: 'check', title: "Draw each side's plan: arrows to where it's massing and what it means to push, fainter the less ready it is" });
+    const showPlans = el('input', { type: 'checkbox' });
+    showPlans.addEventListener('change', () => {
+      this.stage.showPlans = showPlans.checked;
+      this.saveView();
+    });
+    plansLabel.append(showPlans, document.createTextNode(' Show plans on the map'));
+    this.sync.push(() => (showPlans.checked = this.stage.showPlans));
+    this.plans.append(el('summary', {}, 'What each side means to do'));
+    this.plans.append(this.plansBody);
+    this.plans.addEventListener('toggle', () => this.renderPlans());
+    plans.append(plansLabel, this.plans);
+
     // Camera
     const cam = section('Camera');
     const followLabel = el('label', { class: 'check', title: 'Glide to wherever the fighting is. Panning the camera yourself turns this off.' });
@@ -322,7 +406,7 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans });
   }
 
   private setSpeed(v: number): void {

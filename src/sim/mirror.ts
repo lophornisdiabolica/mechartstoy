@@ -174,6 +174,8 @@ export class SimHost {
   private ticks = 0;
   private simMs = 0;
   private worstMs = 0;
+  /** The Commander picture last sent (its updatedAt): it changes every couple of seconds, so it's only sent when it does. */
+  private commanderSent = -Infinity;
 
   constructor(seed: number, settings: BattleSettings) {
     this.game = new Game(seed, { settings });
@@ -322,9 +324,11 @@ export class SimHost {
         eliminatedAt: ctx.sides.eliminatedAt,
         plans: ctx.offensive.plansState,
         outcome: ctx.outcome,
+        commander: ctx.commander.updatedAt !== this.commanderSent ? ctx.commander.state : null,
       }),
       profile,
     };
+    this.commanderSent = ctx.commander.updatedAt;
     this.destroyed = [];
     this.events = [];
     this.areas = [];
@@ -340,6 +344,7 @@ interface CtxState {
   eliminatedAt: (number | null)[];
   plans: Game['ctx']['offensive']['plansState'];
   outcome: Game['ctx']['outcome'];
+  commander: Game['ctx']['commander']['state'] | null;
 }
 
 /** The page's side: copies Frames into a view Game (see GameOptions.view). */
@@ -430,6 +435,7 @@ export class SimView {
     });
     ctx.offensive.plansState = s.plans;
     ctx.outcome = s.outcome;
+    if (s.commander) ctx.commander.state = s.commander;
 
     this.events.push(...frame.events);
     this.dying.push(...frame.destroyed);

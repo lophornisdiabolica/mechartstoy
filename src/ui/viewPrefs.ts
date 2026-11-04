@@ -9,17 +9,20 @@ export interface ViewPrefs {
   shadows: ShadowQuality;
   /** Spectator camera that follows the fighting. */
   follow: boolean;
+  /** Draw each side's plan on the map. */
+  plans: boolean;
 }
 
 const KEY = 'mbt.view';
 const SHADOWS: ShadowQuality[] = ['high', 'low', 'off'];
 
 export function loadViewPrefs(): ViewPrefs {
-  const prefs: ViewPrefs = { shadows: 'high', follow: false };
+  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<ViewPrefs>;
     if (SHADOWS.includes(saved.shadows as ShadowQuality)) prefs.shadows = saved.shadows!;
     if (typeof saved.follow === 'boolean') prefs.follow = saved.follow;
+    if (typeof saved.plans === 'boolean') prefs.plans = saved.plans;
   } catch {
     // Storage blocked or garbled: use the defaults.
   }

@@ -13,6 +13,7 @@ import { EntityView } from './entityView';
 import { FightWatch } from './fightWatch';
 import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
+import { CommanderOverlay } from './commanderOverlay';
 import { setFactionPalette } from './models';
 import './models/buildings';
 import './models/projectiles';
@@ -61,6 +62,9 @@ export class Stage {
   effects!: Effects;
   markers!: Markers;
   outpostRings!: OutpostRings;
+  commanderOverlay!: CommanderOverlay;
+  /** Draw each side's plan on the map (see CommanderOverlay). */
+  private plansShown = false;
   /** Finds the fighting for the spectator camera. */
   fights!: FightWatch;
   /** Entity highlighted by the UI. */
@@ -129,6 +133,7 @@ export class Stage {
       this.stopTerrain?.();
       this.stopWoods?.();
       this.entities.dispose();
+      this.commanderOverlay.dispose();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -151,13 +156,24 @@ export class Stage {
     this.effects = new Effects(game.events, field);
     this.markers = new Markers(game, this.entities);
     this.outpostRings = new OutpostRings(game);
-    battle.add(this.entities.root, this.entities.drawn, this.effects.root, this.markers.root, this.outpostRings.root);
+    this.commanderOverlay = new CommanderOverlay(game);
+    this.commanderOverlay.visible = this.plansShown;
+    battle.add(this.entities.root, this.entities.drawn, this.effects.root, this.markers.root, this.outpostRings.root, this.commanderOverlay.root);
     this.scene.add(battle);
     this.battle = battle;
 
     this.fights = new FightWatch(game.events, field.bounds);
     this.mapHalf = Math.max(field.width, field.depth) * 0.6;
     this.rig.setBounds(field.bounds);
+  }
+
+  get showPlans(): boolean {
+    return this.plansShown;
+  }
+
+  set showPlans(on: boolean) {
+    this.plansShown = on;
+    if (this.commanderOverlay) this.commanderOverlay.visible = on;
   }
 
   get shadows(): ShadowQuality {
@@ -218,6 +234,7 @@ export class Stage {
     this.effects.update(simSeconds);
     this.markers.update(frameSeconds, this.selected);
     this.outpostRings.update();
+    this.commanderOverlay.update();
     this.renderer.info.reset();
     this.composer.render(frameSeconds);
   }

@@ -48,6 +48,7 @@ function picture(game: Game) {
     orders: game.ctx.orders,
     eliminated: game.ctx.sides.eliminated,
     plans: game.ctx.offensive.plansState,
+    commander: JSON.parse(JSON.stringify(game.ctx.commander.state)) as unknown,
     ground: Array.from(game.field.ground),
     heights: Array.from(game.field.heights),
     fallen: game.field.woods.trees.map((t) => t.fell),

@@ -6,6 +6,7 @@ import { Battlefield } from '../world/battlefield';
 import { NavGrid, NavGrids } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Building, Collider, Faction, Hit, Mover, Transform } from './components';
+import type { Commander } from './commander/commander';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -91,6 +92,8 @@ export interface SimContext {
   sides: Sides;
   /** When each team attacks (see offensive.ts). */
   offensive: Offensive;
+  /** Each side's picture of the battle and its goals (see commander/commander.ts). */
+  commander: Commander;
   /** Attack routes across the map. */
   lanes: Lanes;
   /** Capturable outposts, one per Battlefield.outpostSites entry. */
