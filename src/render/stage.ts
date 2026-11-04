@@ -19,6 +19,7 @@ import './models/projectiles';
 import './models/units';
 import { buildProps } from './propsMesh';
 import { buildTerrain } from './terrainMesh';
+import { buildWoods } from './woodsMesh';
 import { BIOMES } from '../world/biomes';
 import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
@@ -76,6 +77,8 @@ export class Stage {
   private battle: THREE.Group | null = null;
   /** Stops the terrain redrawing for the battle being replaced (see buildTerrain). */
   private stopTerrain: (() => void) | undefined;
+  /** Stops the dense forest's trees following the battle being replaced (see buildWoods). */
+  private stopWoods: (() => void) | undefined;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -122,6 +125,7 @@ export class Stage {
     if (this.battle) {
       this.scene.remove(this.battle);
       this.stopTerrain?.();
+      this.stopWoods?.();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -137,7 +141,9 @@ export class Stage {
     const biome = BIOMES[field.config.biome];
     (this.scene.background as THREE.Color).set(biome.sky);
     setTownStyle(biome.town);
-    battle.add(terrain, buildProps(game.props, visualRng));
+    const woods = buildWoods(field, visualRng.fork(0x77));
+    this.stopWoods = woods.userData.dispose;
+    battle.add(terrain, buildProps(game.props, visualRng), woods);
     this.entities = new EntityView(game.world);
     this.effects = new Effects(game.events, field);
     this.markers = new Markers(game, this.entities);

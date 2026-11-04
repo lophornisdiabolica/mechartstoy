@@ -1,4 +1,4 @@
-import { BattlefieldConfig, DEFAULT_BATTLEFIELD, seatsFit } from '../world/battlefield';
+import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
@@ -85,8 +85,21 @@ export interface BattleSettings {
     townSize: TownSize;
     /** Join the bases' water with channels and bridge them (see waterways.ts). */
     waterways: boolean;
+    /** Dense forest, 0 (none) to 1: patches of big trees that block shots and slow vehicles until they're knocked down (see woods.ts). */
+    forest: number;
+    /** Wrecked vehicles pile up into scrap that's hard going for tracks and hovers (see scrap.ts). */
+    scrap: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
+    /** The kinds of outpost to deal out (see OUTPOST_KINDS in outposts.ts); empty means supply depots only. */
+    outpostKinds: OutpostKind[];
+    /**
+     * Bases, towns and outposts placed by hand (on the setup screen's map), as
+     * fractions of the map's half-width and half-depth (-1 to 1), or null to
+     * place them automatically. Bases are listed by side. A list that doesn't
+     * match the number of sides, towns or outposts is ignored.
+     */
+    placed: Placements;
   };
   armies: {
     /** Units each side can have alive per category (see caps.ts). Super is the base, before it grows. */
@@ -173,6 +186,7 @@ export const LIMITS = {
   evenTeams: { min: 0, max: 1.5 },
   ramp: { min: 0, max: 1 },
   outposts: { min: 0, max: 12 },
+  forest: { min: 0, max: 1 },
   outpostBonus: { min: 0, max: 3 },
   outpostHold: { min: 0, max: 1 },
   unitStat: { min: 0.25, max: 3 },
@@ -186,7 +200,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, outposts: 'auto' },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...OUTPOST_KIND_IDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -279,6 +293,28 @@ export function basePlaces(s: BattleSettings, seats: number[]): { x: number; z: 
   });
 }
 
+/** A spot on the map as fractions of its half-width and half-depth: -1 to 1 from one edge to the other. */
+export interface MapSpot {
+  x: number;
+  z: number;
+}
+
+export interface Placements {
+  bases: MapSpot[] | null;
+  towns: MapSpot[] | null;
+  outposts: MapSpot[] | null;
+}
+
+/** The hand placements that apply to these settings (lists of the right length), the rest null. */
+export function placementsInUse(s: BattleSettings): Placements {
+  const { bases, towns, outposts } = s.map.placed;
+  return {
+    bases: bases && bases.length === s.factions.length ? bases : null,
+    towns: towns && towns.length === s.map.towns ? towns : null,
+    outposts: outposts && outposts.length === outpostCount(s) ? outposts : null,
+  };
+}
+
 /** How many outposts to place: 'auto' is one per side. */
 export function outpostCount(s: BattleSettings): number {
   return s.map.outposts === 'auto' ? s.factions.length : s.map.outposts;
@@ -299,12 +335,15 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
   const cols = size.cols * stretch;
   const rows = size.rows / stretch;
   const seats = seating(s);
-  const places = basePlaces(s, seats);
+  const placed = placementsInUse(s);
+  const places = placed.bases ? seats.map((f) => placed.bases![f]) : basePlaces(s, seats);
   // Bases on a line need room along the map's depth instead.
   const fits = (scale: number) => {
     const width = Math.round(cols * scale) * cellSize;
     const depth = Math.round(rows * scale) * cellSize;
     if (!places) return seatsFit(n, width, depth, baseRadius);
+    // Placed by hand: every pair of bases has room between them.
+    if (placed.bases) return places.every((a, i) => places.every((b, j) => j <= i || Math.hypot(((a.x - b.x) * width) / 2, ((a.z - b.z) * depth) / 2) >= baseRadius * 2 + 4));
     const perSide = Math.max(...[-1, 1].map((sign) => places.filter((p) => Math.sign(p.x) === sign).length));
     return perSide <= 1 || (1.2 * depth) / 2 / (perSide - 1) >= baseRadius * 2 + 8;
   };
@@ -319,10 +358,14 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     seats,
     places,
     outposts: outpostCount(s),
+    outpostKinds: s.map.outpostKinds.length > 0 ? s.map.outpostKinds : ['supply'],
     biome: s.map.biome,
     waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',
+    forest: s.map.forest,
     towns: s.map.towns,
     townRadius: TOWN_SIZES[s.map.townSize].radius,
+    townPlaces: placed.towns,
+    outpostPlaces: placed.outposts,
   };
 }
 

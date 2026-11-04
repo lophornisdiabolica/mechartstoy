@@ -418,7 +418,7 @@ export class Controls {
     const part = w.get(e, OutpostPart);
     if (part) {
       const o = this.game.ctx.outposts[part.outpost];
-      lines.push(`Outpost: ${describeBonus(o.bonus, this.game.settings.armies.outpostBonus)} for its holder`);
+      lines.push(`${o.kind.name}: ${describeBonus(o.kind, this.game.settings.armies.outpostBonus)} for its holder`);
       if (o.claimant >= 0) lines.push(`${this.factions[o.claimant].name} taking it: ${Math.round(o.progress * 100)}%`);
     }
     const construction = w.get(e, Construction);

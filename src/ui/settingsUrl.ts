@@ -1,6 +1,7 @@
 import { isDoctrine } from '../game/doctrines';
-import { BattleSettings, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
+import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
+import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
 /**
  * Settings <-> URL query string. Only values that differ from the defaults are
@@ -14,6 +15,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'water', limit: 'water', get: (s) => s.map.water, set: (s, v) => (s.map.water = v) },
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
+  { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
   { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
   { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
   { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },
@@ -64,7 +66,14 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
+  if (s.map.scrap !== d.map.scrap) p.set('scrap', s.map.scrap ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
+  if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
+  // Hand-placed spots: "x,z;x,z", in fractions of the map's half-width and half-depth.
+  const spots = (list: MapSpot[]) => list.map((q) => `${fmt(round2(q.x))},${fmt(round2(q.z))}`).join(';');
+  if (s.map.placed.bases) p.set('bpos', spots(s.map.placed.bases));
+  if (s.map.placed.towns) p.set('tpos', spots(s.map.placed.towns));
+  if (s.map.placed.outposts) p.set('opos', spots(s.map.placed.outposts));
   for (const n of NUMBERS) if (n.get(s) !== n.get(d)) p.set(n.key, fmt(n.get(s)));
   for (const id of UNIT_IDS) {
     const t = s.units[id];
@@ -113,9 +122,28 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (tsize && tsize in TOWN_SIZES) s.map.townSize = tsize as TownSize;
   const ways = p.get('ways');
   if (ways === '0' || ways === '1') s.map.waterways = ways === '1';
+  const scrap = p.get('scrap');
+  if (scrap === '0' || scrap === '1') s.map.scrap = scrap === '1';
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
+  }
+  const spots = (key: string): MapSpot[] | null => {
+    const raw = p.get(key);
+    if (!raw) return null;
+    const list = raw.split(';').map((pair) => pair.split(',').map(Number));
+    if (list.some((q) => q.length !== 2 || !q.every(Number.isFinite))) return null;
+    return list.map(([x, z]) => ({ x: Math.max(-1, Math.min(1, x)), z: Math.max(-1, Math.min(1, z)) }));
+  };
+  if (p.has('bpos')) s.map.placed.bases = spots('bpos');
+  if (p.has('tpos')) s.map.placed.towns = spots('tpos');
+  if (p.has('opos')) s.map.placed.outposts = spots('opos');
+  // Outpost kinds as a list, e.g. okinds=supply,gun (kept in the standard order).
+  const okinds = p.get('okinds');
+  if (okinds !== null) {
+    const listed = okinds.split(',').map((k) => k.trim());
+    const kinds = OUTPOST_KIND_IDS.filter((k) => listed.includes(k));
+    if (kinds.length > 0) s.map.outpostKinds = kinds;
   }
   for (const n of NUMBERS) {
     const raw = p.get(n.key);
@@ -140,4 +168,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     const doctrine = p.get(`doc${i + 1}`);
     if (isDoctrine(doctrine)) f.doctrine = doctrine;
   });
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
 }

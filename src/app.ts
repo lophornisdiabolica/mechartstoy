@@ -90,6 +90,8 @@ export class App implements MatchControls {
     this.hud = hud;
     this.settings = settingsFromParams(new URLSearchParams(location.search));
     this.stage = new Stage(container);
+    // For poking at a running game from the browser console (and screenshot scripts) during development.
+    if (import.meta.env.DEV) (window as unknown as { app: App }).app = this;
     const view = loadViewPrefs();
     this.stage.shadows = view.shadows;
     this.stage.followFights = view.follow;

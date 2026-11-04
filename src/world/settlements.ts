@@ -52,6 +52,8 @@ class Layout {
     for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) {
       if (this.field.isWater(x + dx, z + dz)) return false;
     }
+    // Nothing on or against a bridge.
+    if (this.field.nearBridge(x, z, r + 1)) return false;
     for (const o of this.placements) {
       const or = BUILDING_DEFS[o.building].radius;
       if (Math.hypot(o.x - x, o.z - z) < r + or + gap) return false;
@@ -187,6 +189,8 @@ function findShore(field: Battlefield, site: BaseSite, radius: number, layout: L
       for (let h = 0; h < 16; h++) {
         const heading = (h / 16) * Math.PI * 2;
         const door = { x: x + Math.cos(heading) * (radius + 2.5), z: z - Math.sin(heading) * (radius + 2.5) };
+        // Boats leave through open water, not under a bridge.
+        if (field.nearBridge(door.x, door.z, 3)) continue;
         if (deepWaterArea(field, door.x, door.z, OPEN_WATER, sizes) >= OPEN_WATER) return { x, z, heading };
       }
     }

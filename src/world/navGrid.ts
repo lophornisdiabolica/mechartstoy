@@ -179,6 +179,7 @@ export class NavGrid {
     const slope = onDeck ? 0 : field.slopeAt(x, z);
     this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
     let cost = 1;
+    if (onDeck) cost *= rules.bridge;
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
     if (rules.town !== 1 && this.settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;

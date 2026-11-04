@@ -1,6 +1,6 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { MOVE_RULES } from '../../world/moveClasses';
+import { MOVE_RULES, MoveClass } from '../../world/moveClasses';
 import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 
@@ -222,11 +222,19 @@ export function movementSystem(ctx: SimContext): System {
         if (rules.flies || ctx.navs.for(m.move).terrainAllowsAt(nx, nz)) {
           t.x = nx;
           t.z = nz;
+          // Vehicles and big walkers flatten the dense forest's trees they push into.
+          if (CRUSHERS.has(m.move) && stepLen > 0) {
+            const r = world.get(e, Collider)?.radius ?? 0.5;
+            if (m.move !== 'walker' || r >= 1.2) field.woods.crush(nx, nz, r * 0.8, { x: t.x - Math.cos(t.heading), z: t.z + Math.sin(t.heading) });
+          }
         }
       }
     },
   };
 }
+
+/** Movement classes that knock trees flat by driving into them (infantry and spiders slip between them; walkers only if they're big). */
+const CRUSHERS = new Set<MoveClass>(['tracked', 'amphibious', 'hover', 'walker']);
 
 /** Keeps the nav grid's building obstacles in sync as buildings fall and rise. */
 export function navObstacleSystem(ctx: SimContext): System {

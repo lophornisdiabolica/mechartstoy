@@ -42,7 +42,8 @@ export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
     const y = field.heightAt(x, z);
     if (y < field.seaLevel + 0.3) continue;
     if ([...field.baseSites, ...field.townSites, ...field.outpostSites].some((s) => Math.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
-    if (field.deckAt(x, z) !== null || field.groundAt(x, z).id === 'road') continue;
+    // Roads stay clear, and dense forest has trees of its own (see woods.ts).
+    if (field.deckAt(x, z) !== null || field.groundAt(x, z).id !== 'plain') continue;
     const slope = field.slopeAt(x, z);
     const kind = weighted(rng, slope > STEEP ? biome.props.steep : biome.props.gentle);
     if (kind !== 'rock' && slope > 0.8) continue;

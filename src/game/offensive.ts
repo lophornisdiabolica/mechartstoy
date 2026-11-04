@@ -4,6 +4,7 @@ import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
 import { armyCap } from './caps';
+import { outpostBonus } from './outposts';
 import { attackNumber, isAttacking, TideSettings } from './tide';
 
 /*
@@ -166,7 +167,9 @@ export class Offensive {
         continue;
       }
       plan.state = 'massing';
-      plan.need = this.defence(world, ctx, target) * this.margin(time - plan.since);
+      // Comms relays make a team impatient sooner.
+      const relays = members.reduce((sum, f) => sum + outpostBonus(ctx, f, 'readiness'), 0);
+      plan.need = this.defence(world, ctx, target) * this.margin((time - plan.since) * (1 + relays));
       const units = members.reduce((s, f) => s + count[f], 0);
       const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0);
       plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));

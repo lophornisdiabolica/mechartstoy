@@ -1,5 +1,8 @@
-import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
+import { OUTPOST_KIND_IDS } from '../world/battlefield';
+import { OUTPOST_KINDS } from '../game/outposts';
+import { MapPreview } from './mapPreview';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
@@ -138,6 +141,7 @@ export class SetupScreen {
       remove.addEventListener('click', () => {
         if (this.settings.factions.length <= 2) return;
         this.settings.factions.splice(i, 1);
+        this.settings.map.placed.bases = null;
         compactTeams(this.settings);
         this.rebuildSides();
         this.changed();
@@ -289,6 +293,7 @@ export class SetupScreen {
       ],
       (v) => {
         this.settings.map.layout = v;
+        this.settings.map.placed.bases = null;
         this.changed();
       },
     );
@@ -305,11 +310,29 @@ export class SetupScreen {
     row(map, 'Waterways', waysLabel);
     this.sync.push(() => (ways.checked = this.settings.map.waterways));
     map.append(el('p', { class: 'hint' }, 'Channels link the water near the bases so boats can reach each other, and from 60% water every base gets a harbour. Bridges carry the roads over.'));
+    slider(map, 'Dense forest', 'forest', 0.05, (s) => s.map.forest, (s, v) => (s.map.forest = v), (v) => (v === 0 ? 'None' : percent(v)));
+    const scrap = el('input', { type: 'checkbox', 'aria-label': 'Scrap' });
+    scrap.addEventListener('change', () => {
+      this.settings.map.scrap = scrap.checked;
+      this.changed();
+    });
+    const scrapLabel = el('label', { class: 'check' });
+    scrapLabel.append(scrap, document.createTextNode(' Wrecks pile up into scrap'));
+    row(map, 'Scrap', scrapLabel);
+    this.sync.push(() => (scrap.checked = this.settings.map.scrap));
+    map.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later.',
+      ),
+    );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
     const towns = segmented<number>(
       Array.from({ length: LIMITS.towns.max + 1 }, (_, i) => ({ label: i === 0 ? 'None' : String(i), value: i })),
       (v) => {
         this.settings.map.towns = v;
+        this.settings.map.placed.towns = null;
         this.changed();
       },
     );
@@ -403,21 +426,68 @@ export class SetupScreen {
       counts,
       (v) => {
         this.settings.map.outposts = v;
+        this.settings.map.placed.outposts = null;
         this.changed();
       },
       'Number of outposts',
     );
     row(outposts, 'Outposts', count.row);
     this.sync.push(() => count.set(this.settings.map.outposts));
+    // Which kinds of outpost the map deals out: a toggle per kind, at least one on.
+    const kindBox = el('div', { class: 'inline kinds' });
+    const kindButtons = OUTPOST_KIND_IDS.map((k) => {
+      const b = el('button', { type: 'button', class: 'chip', title: OUTPOST_KINDS[k].blurb, 'aria-pressed': 'false' }, OUTPOST_KINDS[k].name);
+      b.addEventListener('click', () => {
+        const on = this.settings.map.outpostKinds.includes(k);
+        const next = on ? this.settings.map.outpostKinds.filter((x) => x !== k) : OUTPOST_KIND_IDS.filter((x) => x === k || this.settings.map.outpostKinds.includes(x));
+        if (next.length === 0) return;
+        this.settings.map.outpostKinds = next;
+        this.changed();
+      });
+      kindBox.append(b);
+      return b;
+    });
+    row(outposts, 'Kinds', kindBox);
+    this.sync.push(() =>
+      kindButtons.forEach((b, i) => {
+        const on = this.settings.map.outpostKinds.includes(OUTPOST_KIND_IDS[i]);
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      }),
+    );
     slider(outposts, 'Bonus', 'outpostBonus', 0.05, (s) => s.armies.outpostBonus, (s, v) => (s.armies.outpostBonus = v), (v) => (v === 0 ? 'None' : times(v)));
     slider(outposts, 'Holding', 'outpostHold', 0.05, (s) => s.armies.outpostHold, (s, v) => (s.armies.outpostHold = v), (v) => (v === 0 ? 'Off' : percent(v)));
     outposts.append(
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it. Each speeds up the holder’s production (+10% each at 1×) and counts as its territory, where resting units heal and squads refill. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
       ),
     );
+
+    // Placement: a map to drag the bases, towns and outposts round.
+    const placement = section('Placement', false);
+    const preview = new MapPreview((kind, spots) => {
+      this.settings.map.placed[kind] = spots;
+      this.changed();
+    });
+    const auto = el('button', { type: 'button' }, 'Place everything automatically');
+    auto.addEventListener('click', () => {
+      this.settings.map.placed = { bases: null, towns: null, outposts: null };
+      this.changed();
+    });
+    const placedNote = el('span', { class: 'value' });
+    const autoRow = el('div', { class: 'inline' });
+    autoRow.append(auto, placedNote);
+    placement.append(preview.root, autoRow);
+    placement.addEventListener('toggle', () => preview.update(cloneSettings(this.settings)));
+    this.sync.push(() => {
+      preview.update(cloneSettings(this.settings));
+      const p = placementsInUse(this.settings);
+      const by = [p.bases && 'bases', p.towns && 'towns', p.outposts && 'outposts'].filter(Boolean);
+      placedNote.textContent = by.length ? `Placed by hand: ${by.join(', ')}` : 'All placed automatically';
+      auto.disabled = by.length === 0;
+    });
 
     // Factions
     // The start button lives in the footer (built below); it's disabled while nobody has an enemy.
@@ -430,6 +500,7 @@ export class SetupScreen {
       const n = this.settings.factions.length;
       if (n >= MAX_FACTIONS) return;
       this.settings.factions.push(defaultFaction(n));
+      this.settings.map.placed.bases = null;
       this.rebuildSides();
       this.changed();
     });

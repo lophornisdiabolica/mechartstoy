@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
-import { Battlefield, Bridge } from '../world/battlefield';
+import { Battlefield, Bridge, Road } from '../world/battlefield';
 import { BIOMES } from '../world/biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS } from '../world/ground';
 
@@ -33,9 +33,9 @@ function faceColor(field: Battlefield, colors: ReturnType<typeof palette>, cell:
     const d = Math.hypot(cx - site.x, cz - site.z);
     if (d < site.radius * 0.85) c.lerp(colors.pad, 0.55);
   }
-  // Scrap, roads and the like show through.
+  // Scrap and the like show through (roads laid as roads are drawn as strips on top instead).
   const ground = GROUND_DEFS[GROUND_IDS[field.ground[cell]]];
-  if (ground.tint > 0) c.lerp(new THREE.Color(ground.color), ground.tint);
+  if (ground.tint > 0 && !field.roadCell[cell]) c.lerp(new THREE.Color(ground.color), ground.tint);
   // Per-face jitter gives the faceted low-poly look.
   c.offsetHSL(0, 0, shade * 0.04);
   return c;
@@ -106,9 +106,23 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   const bridges = new THREE.Group();
   bridges.name = 'bridges';
   for (const bridge of field.bridges) bridges.add(buildBridge(field, bridge));
-  group.add(groundMesh, buildSkirt(field), buildWater(field), bridges);
+  const roads = new THREE.Group();
+  roads.name = 'roads';
+  const drawRoads = () => {
+    for (const child of [...roads.children]) {
+      roads.remove(child);
+      (child as THREE.Mesh).geometry.dispose();
+    }
+    for (const road of field.roads) {
+      const mesh = buildRoad(field, road);
+      if (mesh) roads.add(mesh);
+    }
+  };
+  drawRoads();
+  group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
 
   let drawnBridges = field.bridges.length;
+  let drawnRoads = field.roads.length;
   const stop = field.onChange((area: CellArea) => {
     for (let j = Math.max(0, area.j0 - 1); j <= Math.min(rows - 1, area.j1 + 1); j++) {
       for (let i = Math.max(0, area.i0 - 1); i <= Math.min(cols - 1, area.i1 + 1); i++) writeCell(i, j);
@@ -118,9 +132,95 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     ground.computeVertexNormals();
     ground.computeBoundingSphere();
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
+    // Roads follow the ground, so redraw them if the ground under one moved (or there's a new one).
+    const touched = field.roads.some((r) => r.points.some((p) => {
+      const [i, j] = field.cellAt(p.x, p.z);
+      return i >= area.i0 - 2 && i <= area.i1 + 2 && j >= area.j0 - 2 && j <= area.j1 + 2;
+    }));
+    if (touched || drawnRoads !== field.roads.length) {
+      drawnRoads = field.roads.length;
+      drawRoads();
+    }
   });
   group.userData.dispose = stop;
   return group;
+}
+
+/** The ground mesh's own height at a point: the plane of the triangle it's in (heightAt blends the four corners, which isn't quite the same). */
+function meshHeightAt(field: Battlefield, x: number, z: number): number {
+  const { cellSize, cols, rows } = field.config;
+  const gx = Math.max(0, Math.min(cols - 1e-6, (x - field.bounds.minX) / cellSize));
+  const gz = Math.max(0, Math.min(rows - 1e-6, (z - field.bounds.minZ) / cellSize));
+  const i = Math.floor(gx);
+  const j = Math.floor(gz);
+  const fx = gx - i;
+  const fz = gz - j;
+  const h00 = field.vertexHeight(i, j);
+  const h10 = field.vertexHeight(i + 1, j);
+  const h01 = field.vertexHeight(i, j + 1);
+  const h11 = field.vertexHeight(i + 1, j + 1);
+  // Same diagonals as writeCell.
+  if ((i + j) % 2 === 0) return fx < fz ? h00 + (h11 - h01) * fx + (h01 - h00) * fz : h00 + (h10 - h00) * fx + (h11 - h10) * fz;
+  return fx + fz < 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
+}
+
+const ROAD_COLOR = 0x77736b;
+const ROAD_EDGE = 0x8f8a7e;
+/** How far across the road the strip samples the ground (it follows the ground's facets at these points). */
+const ROAD_ACROSS = [-1, -0.6, -0.2, 0.2, 0.6, 1];
+
+/**
+ * A road as a strip draped over the ground, following its line smoothly
+ * rather than the cells under it. Gaps where it crosses water (a bridge
+ * deck is road enough). Null if nothing's left to draw.
+ */
+function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
+  // Points every half unit along the line, with their direction.
+  const samples: { x: number; z: number; dx: number; dz: number }[] = [];
+  for (let k = 1; k < road.points.length; k++) {
+    const a = road.points[k - 1];
+    const b = road.points[k];
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len < 1e-6) continue;
+    const steps = Math.max(1, Math.ceil(len / 0.5));
+    for (let s = k === 1 ? 0 : 1; s <= steps; s++) samples.push({ x: a.x + ((b.x - a.x) * s) / steps, z: a.z + ((b.z - a.z) * s) / steps, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len });
+  }
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const fill = new THREE.Color(ROAD_COLOR);
+  const edge = new THREE.Color(ROAD_EDGE);
+  const half = road.width / 2;
+  const row = (p: (typeof samples)[number]) =>
+    ROAD_ACROSS.map((f) => {
+      const x = p.x - p.dz * half * f;
+      const z = p.z + p.dx * half * f;
+      return new THREE.Vector3(x, meshHeightAt(field, x, z) + 0.04, z);
+    });
+  const dry = (p: (typeof samples)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
+  for (let k = 1; k < samples.length; k++) {
+    if (!dry(samples[k - 1]) || !dry(samples[k])) continue;
+    const r0 = row(samples[k - 1]);
+    const r1 = row(samples[k]);
+    for (let q = 1; q < ROAD_ACROSS.length; q++) {
+      const c = q === 1 || q === ROAD_ACROSS.length - 1 ? edge : fill;
+      for (const v of [r0[q - 1], r1[q - 1], r1[q], r0[q - 1], r1[q], r0[q]]) {
+        positions.push(v.x, v.y, v.z);
+        colors.push(c.r, c.g, c.b);
+      }
+    }
+  }
+  if (positions.length === 0) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+  );
+  mesh.receiveShadow = true;
+  mesh.name = 'road';
+  return mesh;
 }
 
 /** A bridge: a concrete deck on piers, with railings, from bank to bank. */

@@ -11,6 +11,7 @@ import { Lanes } from './lanes';
 import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
 import { Offensive, offensiveSystem } from './offensive';
+import { scrapSystem } from './scrap';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -96,7 +97,7 @@ export class Game {
       buildings: tunedBuildings(settings),
       tide,
       lanes: new Lanes(this.field, nav, seed),
-      outposts: createOutposts(this.field.outpostSites, seed),
+      outposts: createOutposts(this.field.outpostSites),
       sides,
       offensive: new Offensive(sides, tide, () => settings.armies.attackTiming, this.field.config.cols),
       squads: 0,
@@ -125,6 +126,7 @@ export class Game {
       projectileSystem(ctx),
       deathSystem(ctx),
       wreckSystem(),
+      scrapSystem(ctx),
       outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),
