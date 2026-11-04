@@ -34,6 +34,7 @@ import { targetingSystem } from './systems/targeting';
 import { weaponSystem } from './systems/weapons';
 import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
+import { Commander, commanderSystem } from './commander/commander';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -116,6 +117,7 @@ export class Game {
       rosters: new Map(),
       escalation: { tide: 0, siege: 0 },
       outcome: null,
+      commander: new Commander({ field: this.field, navs }, settings.factions.length),
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -145,6 +147,8 @@ export class Game {
       outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),
+      // Last: it only reads the battle (see commander/commander.ts).
+      commanderSystem(ctx),
     ];
     for (const system of systems) this.world.addSystem(system);
 
