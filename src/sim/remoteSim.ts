@@ -36,6 +36,9 @@ export class RemoteSim {
     return this.view?.unborn ?? null;
   }
 
+  /** While fast-forwarding (see start): how far it's got, in sim seconds; null once it's there. */
+  onProgress: ((time: number | null) => void) | null = null;
+
   /** After a frame is shown: the ticks it covered, how long they took in all, the slowest, and the per-system profile if asked for. */
   onFrame: ((frame: Frame) => void) | null = null;
 
@@ -49,26 +52,42 @@ export class RemoteSim {
       }
       // An answer for a battle that's since been replaced.
       if (m.battle !== this.battle) return;
+      if (m.type === 'progress') {
+        this.onProgress?.(m.time);
+        return;
+      }
       this.inbox = m.frame;
       this.waiting = false;
     };
     this.worker.onerror = (e) => console.error('Sim worker failed:', e.message);
   }
 
-  /** Start a battle in the worker. Returns the view to render and read. */
-  start(seed: number, settings: BattleSettings): Game {
+  /** Start a battle in the worker, fast-forwarded `skip` seconds. Returns the view to render and read. */
+  start(seed: number, settings: BattleSettings, skip = 0): Game {
     this.battle++;
     const game = new Game(seed, { settings, view: true });
     const battle = this.battle;
     game.forward = (command) => this.post({ type: 'command', battle, command });
     this.view = new SimView(game);
-    this.post({ type: 'start', battle, seed, settings });
+    this.post({ type: 'start', battle, seed, settings, skip });
+    this.routesOn = false;
     this.waiting = false;
     this.due = 0;
     this.inbox = null;
     this.clock = new DrawClock();
     return game;
   }
+
+  /** Units' routes for the debug overlays (see Frame.routes): ask the worker to send them, or stop. Null until some arrive. */
+  routes(on: boolean): number[][] | null {
+    if (on !== this.routesOn) {
+      this.routesOn = on;
+      this.post({ type: 'routes', battle: this.battle, on });
+      if (!on && this.view) this.view.routes = null;
+    }
+    return this.view?.routes ?? null;
+  }
+  private routesOn = false;
 
   /** The battle's settings changed live (the control panel): pass them on. */
   settings(settings: BattleSettings): void {
@@ -92,6 +111,10 @@ export class RemoteSim {
       const frame = this.inbox;
       this.inbox = null;
       this.view.apply(frame);
+      if (frame.skipped) {
+        this.clock.jump(frame.time);
+        this.onProgress?.(null);
+      }
       this.clock.arrived(frame.time);
       this.onFrame?.(frame);
     }
@@ -127,6 +150,12 @@ export class DrawClock {
     const gap = this.newest - this.time;
     const pace = this.lead > 0 ? Math.min(1.5, Math.max(0.25, gap / this.lead)) : 1;
     this.time = Math.min(this.newest, this.time + simSeconds * pace);
+  }
+
+  /** Start drawing from `time` (after a fast-forward), as if the clock had been there all along. */
+  jump(time: number): void {
+    this.time = this.newest = time;
+    this.lead = 0;
   }
 
   /** A state for sim time `time` arrived. */
