@@ -219,7 +219,14 @@ export class SimHost {
     this.refs = new Refs(this.game);
     const { world, events, field } = this.game;
     // The page's view made these too.
-    for (const e of world.entities()) this.known.add(e);
+    for (const e of world.entities()) {
+      this.known.add(e);
+      // Its copies may not match until the first frame, which sends every
+      // field, and takes away any of these the entity has lost by then (all
+      // of them, if the page's copy has something this one never had). That
+      // matters after a fast-forward, when a lot has changed.
+      for (const sent of this.sent) sent.set(e, {});
+    }
     world.onDestroy((e) => {
       // Destruction happens at the end of a step, before its time moves on.
       if (this.known.delete(e)) this.destroyed.push([e, world.time + 1 / SIM_HZ]);
