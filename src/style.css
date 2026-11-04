@@ -759,3 +759,24 @@ body {
 #setup .map-preview canvas:active {
   cursor: grabbing;
 }
+
+/* The unit stats table's per-doctrine groups. */
+#setup details.units {
+  margin: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+#setup details.units > summary {
+  cursor: pointer;
+  user-select: none;
+  color: #c9d4e0;
+  padding: 4px 0;
+}
+
+#setup table.stats .result.sub {
+  padding-top: 0;
+  font-size: 10px;
+  opacity: 0.8;
+}

@@ -129,7 +129,14 @@ battle, its exact map via `seed`).
   longer battles). They can also be changed mid-battle from the Battle
   controls panel.
 - **Unit stats** take multipliers in steps of 0.05, and show what each stat
-  works out to (HP, damage per second, speed, range) under its box.
+  works out to (HP, damage per second, speed, range, and below that armour
+  and damage per hit) under its box. Units are grouped in folding sections:
+  the ones every side builds, then each doctrine's own.
+- **Between battles** a new battle can re-roll the map, biome, style, sides
+  and doctrines. Re-rolled sides go free-for-all, two even teams, two uneven
+  teams (1v3, 2v4...) or any of those. With repeats on (the default) a
+  doctrine can turn up more than once; the repeat gets a name and colour of
+  its own (Jade Vanguard, Rust Brigade...).
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other (unless
@@ -239,7 +246,8 @@ battle, its exact map via `seed`).
   aircraft and super units (the Titan and the other doctrines' super units), leaned by
   the side's doctrine. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
-  mech bay. The super cap can grow during a battle, with the tide ramp (up
+  mech bay, and losing one is a real setback: the bay starts the next from
+  scratch, a full build time away, whatever it had done while capped. The super cap can grow during a battle, with the tide ramp (up
   to 3× when the ramp tops out; the default) or by one for each outpost
   held past the first, or stay fixed. An option (off by default) only lets
   a side build them while it holds an outpost; it's off because the first

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BUILDING_DEFS } from '../src/game/buildings';
 import { capFor, countByCategory } from '../src/game/caps';
-import { GARRISON, Guard } from '../src/game/components';
+import { Faction, GARRISON, Guard, Health, Producer, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { BattleSettings, defaultSettings } from '../src/game/settings';
 import { spawnBuilding, spawnUnit } from '../src/game/spawn';
@@ -52,6 +52,29 @@ describe('super units', () => {
     spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, site.x, site.z, 0);
     run(game, BUILDING_DEFS.mechbay.production.interval * 1.5);
     expect(countByCategory(game.world, game.ctx.sides.count)[0].super).toBe(1);
+  });
+
+  it('losing one means waiting a full build for the next, with no head start from time spent at the cap', () => {
+    const game = emptyGame((s) => {
+      s.armies.caps.super = 1;
+      s.armies.superGrowth = 'none';
+      s.armies.tideStrength = 0;
+    });
+    const site = game.field.baseSites[0];
+    const bay = spawnBuilding(game.world, game.ctx, BUILDING_DEFS.mechbay, 0, site.x, site.z, 0);
+    const producer = game.world.req(bay, Producer);
+    const interval = BUILDING_DEFS.mechbay.production.interval;
+    // Built, then a long while at the cap, so the bay has rolled several times and is part way to its next.
+    run(game, interval * 4);
+    const supers = () => [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Unit).def.category === 'super' && game.world.req(e, Faction).id === 0);
+    expect(supers().length).toBe(1);
+    expect(producer.timer).toBeLessThan(interval * 0.9);
+    game.world.req(supers()[0], Health).hp = 0;
+    game.step(DT);
+    // The bay starts over: a whole build to go.
+    expect(producer.timer).toBeGreaterThan(interval * 0.99);
+    run(game, interval * 2);
+    expect(supers().length).toBe(1);
   });
 
   it('with the outpost gate on, are only built while the side holds an outpost', () => {

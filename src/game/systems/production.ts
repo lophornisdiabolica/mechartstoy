@@ -59,6 +59,19 @@ export function outnumbered(ctx: SimContext, alive: number[], faction: number): 
   return (theirs + 6) / (alive[faction] + 6);
 }
 
+/**
+ * When a side loses a super unit, every building of its that builds them
+ * starts over: the next one takes the full build time from now, with no
+ * head start from time spent waiting while the side was at its super cap.
+ */
+export function restartSuperBuilds(world: World, ctx: SimContext, faction: number): void {
+  for (const e of world.query(Producer, Faction)) {
+    if (world.req(e, Faction).id !== faction) continue;
+    const p = world.req(e, Producer);
+    if (p.table.some((entry) => ctx.units[entry.unit].category === 'super')) p.timer = Math.max(p.timer, p.interval);
+  }
+}
+
 /** The Commander's factor on a unit's production weight for a side. */
 function advice(ctx: SimContext, faction: number, unit: UnitId): number {
   const side = ctx.commander.sides[faction];

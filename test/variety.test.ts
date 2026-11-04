@@ -3,7 +3,7 @@ import { Rng } from '../src/core/rng';
 import { DOCTRINE_IDS } from '../src/game/doctrines';
 import { FACTIONS } from '../src/game/factions';
 import { defaultSettings, factionDefs, LIMITS } from '../src/game/settings';
-import { MAP_STYLES, rollBattle } from '../src/game/variety';
+import { MAP_STYLES, rollBattle, SECOND_IDENTITIES } from '../src/game/variety';
 import { settingsFromParams } from '../src/ui/settingsUrl';
 
 describe('variety between battles', () => {
@@ -68,6 +68,7 @@ describe('variety between battles', () => {
     s.variety.roll.doctrines = true;
     s.variety.sidesMin = 4;
     s.variety.sidesMax = 4;
+    s.variety.repeats = false;
     s.variety.doctrines = ['legion', 'skyline', 'tidewater', 'talon'];
     for (let k = 0; k < 20; k++) {
       const r = rollBattle(s, new Rng(k)).settings;
@@ -90,12 +91,51 @@ describe('variety between battles', () => {
     s.variety.roll.doctrines = true;
     s.variety.sidesMin = 6;
     s.variety.sidesMax = 6;
+    s.variety.repeats = false;
     s.variety.doctrines = ['armour', 'bastion'];
     const r = rollBattle(s, new Rng(7)).settings;
     expect(r.factions[0].name).toBe('My Lot');
     expect(r.factions[0].color).toBe(0x123456);
     expect(new Set(r.factions.map((f) => f.color)).size).toBe(6);
     expect(r.factions.filter((f) => f.doctrine === 'armour').length).toBe(3);
+  });
+
+  it('splits sides into two uneven teams when asked', () => {
+    const s = defaultSettings();
+    s.variety.roll.sides = true;
+    s.variety.sidesMin = 3;
+    s.variety.sidesMax = 7;
+    s.variety.teams = 'uneven';
+    for (let k = 0; k < 40; k++) {
+      const r = rollBattle(s, new Rng(k)).settings;
+      const sizes = [0, 1].map((t) => r.factions.filter((f) => f.team === t).length);
+      expect(sizes[0] + sizes[1]).toBe(r.factions.length);
+      expect(sizes[0]).toBeGreaterThanOrEqual(1);
+      expect(sizes[0]).toBeLessThan(sizes[1]);
+    }
+  });
+
+  it('can repeat a doctrine, giving the repeat its own name and colour', () => {
+    const s = defaultSettings();
+    s.variety.roll.sides = true;
+    s.variety.roll.doctrines = true;
+    s.variety.sidesMin = 5;
+    s.variety.sidesMax = 5;
+    s.variety.doctrines = ['legion', 'armour'];
+    let seen = false;
+    for (let k = 0; k < 20; k++) {
+      const r = rollBattle(s, new Rng(k)).settings;
+      expect(new Set(r.factions.map((f) => f.color)).size).toBe(5);
+      expect(new Set(r.factions.map((f) => f.name)).size).toBe(5);
+      for (const f of r.factions) {
+        const second = SECOND_IDENTITIES.find((d) => d.primary === f.color);
+        if (second) {
+          seen = true;
+          expect(f.name).toBe(second.name);
+        }
+      }
+    }
+    expect(seen).toBe(true);
   });
 
   it('round-trips through the URL', () => {
