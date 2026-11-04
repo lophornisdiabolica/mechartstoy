@@ -1,3 +1,4 @@
+import { isStyle } from '../game/commander/advice';
 import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
 import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
@@ -32,6 +33,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'siege', limit: 'ramp', get: (s) => s.armies.ramp.conquest.siege, set: (s, v) => (s.armies.ramp.conquest.siege = v) },
   { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
   { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
+  { key: 'advice', limit: 'advice', get: (s) => s.armies.advice, set: (s, v) => (s.armies.advice = v) },
   { key: 'tforce', limit: 'taskForces', get: (s) => s.armies.taskForces, set: (s, v) => (s.armies.taskForces = v) },
   { key: 'ohold', limit: 'outpostHold', get: (s) => s.armies.outpostHold, set: (s, v) => (s.armies.outpostHold = v) },
   { key: 'even', limit: 'evenTeams', get: (s) => s.armies.evenTeams, set: (s, v) => (s.armies.evenTeams = v) },
@@ -89,6 +91,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     if (f.color !== def.color) p.set(`color${i + 1}`, hexColor(f.color));
     if (f.team !== def.team) p.set(`team${i + 1}`, String(f.team + 1));
     if (f.doctrine !== def.doctrine) p.set(`doc${i + 1}`, f.doctrine);
+    if (f.style !== def.style) p.set(`style${i + 1}`, f.style);
   });
   // Variety between battles: vary=size,biome,... and its options.
   const v = s.variety;
@@ -178,6 +181,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     if (color && /^[0-9a-f]{6}$/i.test(color)) f.color = parseInt(color, 16);
     const doctrine = p.get(`doc${i + 1}`);
     if (isDoctrine(doctrine)) f.doctrine = doctrine;
+    const style = p.get(`style${i + 1}`);
+    if (isStyle(style)) f.style = style;
   });
   const vary = p.get('vary');
   if (vary !== null) {

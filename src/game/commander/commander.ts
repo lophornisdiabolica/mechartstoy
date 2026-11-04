@@ -5,6 +5,7 @@ import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { findPlaces, Place } from './places';
 import { StrengthMap } from './strength';
+import { Needs, needsOf } from './advice';
 import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
 
@@ -58,6 +59,10 @@ export interface SidePicture {
   mix: UnitMix;
   /** What its enemies field, together. */
   enemyMix: UnitMix;
+  /** Its enemies' strength in the air, together. */
+  enemyAir: number;
+  /** What its army is short of, which leans its production (see advice.ts). */
+  needs: Needs;
   goals: Goal[];
   /** How many of its units the Commander has given each kind of job (see roles.ts). */
   jobs: Record<JobKind, number>;
@@ -95,7 +100,7 @@ export class Commander {
     this.strength = new StrengthMap(ctx.field, sides);
     this.places = findPlaces(ctx.field, ctx.navs.land);
     this.placesVersion = ctx.navs.land.passableVersion;
-    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), goals: [], jobs: { cover: 0, overwatch: 0, escort: 0 } }));
+    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0 } }));
   }
 
   /** Rebuild the picture and the goals from the battle as it stands. Reads the battle only. */
@@ -139,6 +144,7 @@ export class Commander {
       side.armyX = count[f] > 0 ? sumX[f] / count[f] : null;
       side.armyZ = count[f] > 0 ? sumZ[f] / count[f] : null;
       side.enemyMix = emptyMix();
+      side.enemyAir = 0;
     });
     for (let f = 0; f < this.sides.length; f++) {
       for (const g of ctx.sides.enemiesOf(f)) {
@@ -146,7 +152,9 @@ export class Commander {
         const mine = this.sides[f].enemyMix;
         const theirs = this.sides[g].mix;
         for (const k of Object.keys(mine) as (keyof UnitMix)[]) mine[k] += theirs[k];
+        this.sides[f].enemyAir += this.sides[g].air;
       }
+      this.sides[f].needs = needsOf(this.sides[f]);
     }
     this.taskForces.update(world, ctx);
     this.roles.update(world, ctx, this.strength, this.taskForces);

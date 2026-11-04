@@ -693,7 +693,7 @@ body {
 
 #setup .side {
   display: grid;
-  grid-template-columns: 32px 1fr 92px 86px 30px;
+  grid-template-columns: 32px 1fr 92px 92px 80px 30px;
   align-items: center;
   gap: 6px;
 }
@@ -728,7 +728,7 @@ body {
 
 @media (max-width: 600px) {
   #setup .side {
-    grid-template-columns: 28px 1fr 76px 70px 26px;
+    grid-template-columns: 26px 1fr 70px 70px 62px 24px;
     gap: 4px;
   }
 }

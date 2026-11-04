@@ -1,3 +1,4 @@
+import type { Style } from './commander/advice';
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
@@ -59,6 +60,8 @@ export interface FactionSettings {
   team: number;
   /** What kind of army it fields (see doctrines.ts). */
   doctrine: DoctrineId;
+  /** Its Commander's temperament (see commander/advice.ts). */
+  style: Style;
 }
 
 export interface BattleSettings {
@@ -150,6 +153,12 @@ export interface BattleSettings {
      * off: the whole army masses and attacks together.
      */
     taskForces: number;
+    /**
+     * Most the Commander leans production toward what the battle needs (more flak against
+     * aircraft, and so on), as a share of each unit's weight in its doctrine's table: 0.3 is
+     * ±30%. 0 is off. See commander/advice.ts.
+     */
+    advice: number;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -206,6 +215,7 @@ export const LIMITS = {
   outpostBonus: { min: 0, max: 3 },
   outpostHold: { min: 0, max: 1 },
   taskForces: { min: 0, max: 0.8 },
+  advice: { min: 0, max: 0.6 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -234,6 +244,7 @@ export function defaultSettings(): BattleSettings {
       outpostBonus: 1,
       outpostHold: 0,
       taskForces: 0.35,
+      advice: 0.3,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],
@@ -243,7 +254,7 @@ export function defaultSettings(): BattleSettings {
 
 /** The default name, colour and doctrine for the side in slot `i`, on its own team. */
 export function defaultFaction(i: number): FactionSettings {
-  return { name: FACTIONS[i].name, color: FACTIONS[i].primary, team: i, doctrine: defaultDoctrine(i) };
+  return { name: FACTIONS[i].name, color: FACTIONS[i].primary, team: i, doctrine: defaultDoctrine(i), style: 'balanced' };
 }
 
 export { MAX_FACTIONS };

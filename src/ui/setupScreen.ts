@@ -6,6 +6,7 @@ import { MapPreview } from './mapPreview';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
+import { isStyle, STYLE_IDS, STYLES } from '../game/commander/advice';
 import { dropdown, el, hex, segmented } from './dom';
 import { Rng } from '../core/rng';
 import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, VarietyTeams } from '../game/variety';
@@ -131,6 +132,12 @@ export class SetupScreen {
       const team = el('select', { 'aria-label': `Side ${i + 1} team` });
       const doctrine = el('select', { 'aria-label': `Side ${i + 1} doctrine` });
       doctrine.append(...DOCTRINE_IDS.map((d) => el('option', { value: d, title: DOCTRINES[d].blurb }, DOCTRINES[d].name)));
+      const style = el('select', { 'aria-label': `Side ${i + 1} Commander style`, title: 'How its Commander plays' });
+      style.append(...STYLE_IDS.map((k) => el('option', { value: k, title: STYLES[k].blurb }, STYLES[k].name)));
+      style.addEventListener('change', () => {
+        if (isStyle(style.value)) this.settings.factions[i].style = style.value;
+        this.changed();
+      });
       const remove = el('button', { type: 'button', class: 'remove', title: 'Remove this side', 'aria-label': `Remove side ${i + 1}` }, '×');
       color.addEventListener('input', () => {
         this.settings.factions[i].color = parseInt(color.value.slice(1), 16);
@@ -156,7 +163,7 @@ export class SetupScreen {
         this.rebuildSides();
         this.changed();
       });
-      row.append(color, name, doctrine, team, remove);
+      row.append(color, name, doctrine, style, team, remove);
       this.sideList.append(row);
       return () => {
         const n = this.settings.factions.length;
@@ -167,6 +174,8 @@ export class SetupScreen {
         team.value = String(f.team);
         doctrine.value = f.doctrine;
         doctrine.title = DOCTRINES[f.doctrine].blurb;
+        style.value = f.style;
+        style.title = `${STYLES[f.style].name}: ${STYLES[f.style].blurb}`;
         remove.disabled = n <= 2;
       };
     });
@@ -538,6 +547,8 @@ export class SetupScreen {
     armies.append(el('p', { class: 'hint' }, 'The tide swings each side’s production up and down in turn. Swing is how far; length is one full cycle.'));
     slider(armies, 'Flanking', 'flanking', 0.05, (s) => s.armies.flanking, (s, v) => (s.armies.flanking = v), (v) => (v === 0 ? 'None' : percent(v)));
     armies.append(el('p', { class: 'hint' }, 'Share of squads sent down the other lanes instead of straight down the middle: through outposts and towns, or swinging wide where there are none.'));
+    slider(armies, 'Build advice', 'advice', 0.05, (s) => s.armies.advice, (s, v) => (s.armies.advice = v), (v) => (v === 0 ? 'Off' : `±${percent(v)}`));
+    armies.append(el('p', { class: 'hint' }, 'How far each side’s Commander leans production toward what the battle needs, within its doctrine: more flak against aircraft (fewer with none about), harder hitters against armour, more that sprays against infantry. Each side’s style (next to its doctrine under Sides) sets how it plays: cautious keeps together and waits for a clear edge, aggressive attacks sooner, a raider sends small forces far afield and builds fast units.'));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);

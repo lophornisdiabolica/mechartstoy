@@ -318,6 +318,7 @@ src/
       strength.ts      strength map: each side's fighting strength per 6-unit cell, on the ground, in the air and against aircraft
       places.ts        the map's key places: bases, outposts, towns, bridges, narrow crossings and high ground
       taskForces.ts    squads sent off between attacks to take outposts or save the side's own
+      advice.ts        production advice (leaning each doctrine's table toward what the battle needs) and per-side styles
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
@@ -536,6 +537,19 @@ outposts and the light scenery are still placed once, at the start.
   nearest vehicles keep round each super unit. Like task forces, the rally
   flag and stances override these, and an attack on the base calls
   everyone home except the flak.
+- **Production advice and styles** (`game/commander/advice.ts`). Within
+  its doctrine's own table, each side's Commander leans production toward
+  what it's short of, by at most the *Build advice* setting (±30% of a
+  unit's weight by default; 0 is off). Short of anti-air against enemy
+  aircraft, it builds more flak (and other guns that can shoot aircraft,
+  at half the lean), and less with no aircraft about; against an enemy
+  that's mostly armour, more hard hitters (35+ damage a hit); against one
+  that's mostly infantry, more that sprays (splash, or light guns). Each
+  side also has a style, picked next to its doctrine: *balanced*;
+  *cautious* (half the task forces, wants 1.25× the edge before a team
+  attack, prefers near outposts); *aggressive* (1.3× the task forces,
+  attacks with 0.8× the edge); or *raider* (1.7× the task forces, goes for
+  far-off outposts, and leans production toward fast units).
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan

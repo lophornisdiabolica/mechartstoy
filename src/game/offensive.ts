@@ -5,6 +5,7 @@ import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
 import { armyCap } from './caps';
 import { outpostBonus } from './outposts';
+import { STYLES } from './commander/advice';
 import { attackNumber, isAttacking, TideSettings } from './tide';
 
 /*
@@ -179,7 +180,9 @@ export class Offensive {
       plan.state = 'massing';
       // Comms relays make a team impatient sooner.
       const relays = members.reduce((sum, f) => sum + outpostBonus(ctx, f, 'readiness'), 0);
-      plan.need = this.defence(world, ctx, target) * this.margin((time - plan.since) * (1 + relays));
+      // Its Commanders' styles make it want more or less of an edge (see commander/advice.ts).
+      const style = members.reduce((sum, f) => sum + STYLES[ctx.settings.factions[f]?.style ?? 'balanced'].margin, 0) / members.length;
+      plan.need = this.defence(world, ctx, target) * this.margin((time - plan.since) * (1 + relays)) * style;
       const units = members.reduce((s, f) => s + count[f], 0);
       const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0);
       plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));

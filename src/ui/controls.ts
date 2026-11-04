@@ -2,6 +2,7 @@ import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
 import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
 import { Goal, UnitMix } from '../game/commander/commander';
+import { STYLES } from '../game/commander/advice';
 import { describeBonus } from '../game/outposts';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
@@ -165,7 +166,8 @@ export class Controls {
         const title = el('div', { class: 'title' });
         const swatch = el('span', { class: 'swatch' });
         swatch.style.background = hex(factionColors(f).primary);
-        title.append(swatch, document.createTextNode(this.factions[f].name));
+        const style = this.game.settings.factions[f]?.style ?? 'balanced';
+        title.append(swatch, document.createTextNode(this.factions[f].name + (style !== 'balanced' ? ` (${STYLES[style].name.toLowerCase()})` : '')));
         row.append(title);
         const line = (text: string) => row.append(el('div', { class: 'line' }, text));
         if (this.game.ctx.sides.eliminated[f]) {
@@ -191,6 +193,14 @@ export class Controls {
           side.jobs.escort > 0 ? `${side.jobs.escort} escorting the super unit` : '',
         ].filter(Boolean);
         if (jobs.length > 0) line(`Jobs: ${jobs.join(', ')}`);
+        const limit = this.game.settings.armies.advice;
+        const pct = (v: number) => `${Math.round(Math.abs(v) * limit * 100)}%`;
+        const { antiAir, antiArmour } = side.needs;
+        const lean = [
+          antiAir > 0.1 ? `more anti-air (+${pct(antiAir)})` : antiAir < -0.1 ? `less anti-air (−${pct(antiAir)})` : '',
+          antiArmour > 0.1 ? `more hard hitters (+${pct(antiArmour)})` : antiArmour < -0.1 ? `more that sprays infantry (+${pct(antiArmour)})` : '',
+        ].filter(Boolean);
+        if (limit > 0 && lean.length > 0) line(`Building ${lean.join(', ')}`);
         line(`Faces ${describeMix(side.enemyMix)}`);
         return row;
       }),
