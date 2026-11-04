@@ -318,6 +318,7 @@ src/
       strength.ts      strength map: each side's fighting strength per 6-unit cell, on the ground, in the air and against aircraft
       places.ts        the map's key places: bases, outposts, towns, bridges, narrow crossings and high ground
       taskForces.ts    squads sent off between attacks to take outposts or save the side's own
+      roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     scrap.ts         wreckage piling up into scrap, and being cleared
@@ -525,6 +526,16 @@ outposts and the light scenery are still placed once, at the start.
   force joins the attack, and an attack on the side's base calls them all
   home. Boats and super units stay with the main army. The rally flag and
   any stance but auto override task forces.
+- **Jobs that suit the unit** (`game/commander/roles.ts`). Flak (flak
+  tanks and walkers) goes to whatever of its side's the enemy's aircraft
+  are over (its base, its army, outposts it holds, its task forces), where
+  its side has least anti-air for them, and a task force heading where
+  there are enemy aircraft takes flak first. Between attacks, artillery
+  waits on the highest ground within 30 units of the rally point (if it's
+  at least 1.5 higher, and not out in front). On an attack, the three
+  nearest vehicles keep round each super unit. Like task forces, the rally
+  flag and stances override these, and an attack on the base calls
+  everyone home except the flak.
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan

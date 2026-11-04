@@ -185,6 +185,12 @@ export class Controls {
         );
         const total = side.mix.infantry + side.mix.vehicle + side.mix.air + side.mix.super;
         line(`Army, outpost guards aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
+        const jobs = [
+          side.jobs.cover > 0 ? `${side.jobs.cover} flak covering against aircraft` : '',
+          side.jobs.overwatch > 0 ? `${side.jobs.overwatch} artillery on high ground` : '',
+          side.jobs.escort > 0 ? `${side.jobs.escort} escorting the super unit` : '',
+        ].filter(Boolean);
+        if (jobs.length > 0) line(`Jobs: ${jobs.join(', ')}`);
         line(`Faces ${describeMix(side.enemyMix)}`);
         return row;
       }),

@@ -4,6 +4,7 @@ import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { CAPTURE_RADIUS } from '../outposts';
 import { MAP_SIZES } from '../settings';
+import { ANTI_AIR } from './roles';
 
 /*
  * Task forces (Commander step 2): between attacks, a side can send a few
@@ -61,6 +62,8 @@ interface SquadInfo {
   x: number;
   z: number;
   units: number;
+  /** Whether it has flak in it (see roles.ts). */
+  flak: boolean;
   /** Boats and super units stay with the main army (outposts are on land, and escorting the super unit is a later step). */
   free: boolean;
 }
@@ -77,12 +80,13 @@ function squadsOf(world: World): Map<number, SquadInfo> {
     const def = world.req(e, Unit).def;
     const move = world.get(e, Mover)?.move ?? def.move;
     let s = out.get(squad);
-    if (!s) out.set(squad, (s = { side, strength: 0, x: 0, z: 0, units: 0, free: true }));
+    if (!s) out.set(squad, (s = { side, strength: 0, x: 0, z: 0, units: 0, flak: false, free: true }));
     s.strength += fightingStrength(world, e);
     s.x += t.x;
     s.z += t.z;
     s.units++;
     if (move === 'naval' || def.category === 'super') s.free = false;
+    if (ANTI_AIR.has(def.id)) s.flak = true;
   }
   for (const s of out.values()) {
     s.x /= s.units;
@@ -197,9 +201,11 @@ export class TaskForces {
       if (!best || cost < best.cost) best = { outpost: o.index, kind: ours ? 'hold' : 'take', need, cost };
     }
     if (!best) return;
-    // The nearest free squads, until there's enough.
+    // The nearest free squads, until there's enough; flak first if enemy aircraft are about the outpost.
     const o = ctx.outposts[best.outpost];
-    free.sort((a, b) => Math.hypot(a[1].x - o.x, a[1].z - o.z) - Math.hypot(b[1].x - o.x, b[1].z - o.z) || a[0] - b[0]);
+    const air = ctx.sides.enemiesOf(side).reduce((sum, g) => sum + ctx.commander.strength.near(ctx.commander.strength.air, g, o.x, o.z, DEFENCE_RADIUS), 0) > 0;
+    const first = (s: SquadInfo) => (air && s.flak ? 0 : 1);
+    free.sort((a, b) => first(a[1]) - first(b[1]) || Math.hypot(a[1].x - o.x, a[1].z - o.z) - Math.hypot(b[1].x - o.x, b[1].z - o.z) || a[0] - b[0]);
     const picked: number[] = [];
     let strength = 0;
     let x = 0;
