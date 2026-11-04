@@ -16,8 +16,9 @@ import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from '
 export type VarietyKey = 'size' | 'biome' | 'style' | 'sides' | 'doctrines';
 export const VARIETY_KEYS: VarietyKey[] = ['size', 'biome', 'style', 'sides', 'doctrines'];
 
-/** How re-rolled sides are split into teams. */
-export type VarietyTeams = 'ffa' | 'two' | 'either';
+/** How re-rolled sides are split into teams: every side for itself, two even teams, two uneven teams (1v3, 2v4...), or any of those. */
+export type VarietyTeams = 'ffa' | 'two' | 'uneven' | 'either';
+export const VARIETY_TEAMS: VarietyTeams[] = ['ffa', 'two', 'uneven', 'either'];
 
 export interface VarietySettings {
   /** Which settings to re-roll between battles. */
@@ -25,10 +26,12 @@ export interface VarietySettings {
   /** Range for the number of sides, when they're re-rolled. */
   sidesMin: number;
   sidesMax: number;
-  /** Teams for re-rolled sides: every side for itself, two teams, or either at random. */
+  /** Teams for re-rolled sides: every side for itself, two even teams, two uneven teams, or any of those at random. */
   teams: VarietyTeams;
   /** The doctrines to draw from, when they're re-rolled. */
   doctrines: DoctrineId[];
+  /** Whether a doctrine can come up for more than one side (each copy gets its own name and colour). */
+  repeats: boolean;
   /** Minutes before a battle that hasn't ended gives way to the next one; 0 never does. */
   after: number;
 }
@@ -43,6 +46,7 @@ export function defaultVariety(): VarietySettings {
     sidesMax: 4,
     teams: 'either',
     doctrines: [...DOCTRINE_IDS],
+    repeats: true,
     after: 0,
   };
 }
@@ -125,18 +129,28 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     const n = rng.int(lo, hi);
     // Keep the sides already set up, in order; add default ones past them.
     s.factions = Array.from({ length: n }, (_, i) => (base.factions[i] ? { ...base.factions[i] } : defaultFaction(i)));
-    const two = v.teams === 'two' || (v.teams === 'either' && rng.chance(0.5));
-    // Two teams: deal the sides out alternately, so neither team gets all the strong doctrines by slot.
-    s.factions.forEach((f, i) => (f.team = two ? i % 2 : i));
+    const split = v.teams === 'either' ? rng.pick<Exclude<VarietyTeams, 'either'>>(['ffa', 'two', 'uneven']) : v.teams;
+    if (split === 'uneven' && n >= 3) {
+      // Uneven: a smaller team (1v2, 1v3, 2v4...) of sides picked at random.
+      const few = rng.int(1, Math.ceil(n / 2) - 1);
+      const small = new Set(shuffle(s.factions.map((_, i) => i), rng).slice(0, few));
+      s.factions.forEach((f, i) => (f.team = small.has(i) ? 0 : 1));
+      label.push(`${n} sides, ${few}v${n - few}`);
+    } else {
+      const two = split !== 'ffa';
+      // Two teams: deal the sides out alternately, so neither team gets all the strong doctrines by slot.
+      s.factions.forEach((f, i) => (f.team = two ? i % 2 : i));
+      label.push(`${n} sides${two && n > 2 ? ', two teams' : ''}`);
+    }
     s.map.placed.bases = null;
     if (s.map.outposts === 'auto') s.map.placed.outposts = null;
-    label.push(`${n} sides${two && n > 2 ? ', two teams' : ''}`);
   }
   if (v.roll.doctrines) {
     const pool = v.doctrines.length > 0 ? v.doctrines : DOCTRINE_IDS;
-    // Each doctrine once while the pool lasts, then again from a fresh shuffle.
+    // With repeats, any doctrine for any side; without, each once while the pool lasts, then again from a fresh shuffle.
     let bag: DoctrineId[] = [];
     const draw = () => {
+      if (v.repeats) return rng.pick(pool);
       if (bag.length === 0) bag = shuffle([...pool], rng);
       return bag.pop()!;
     };
@@ -155,19 +169,39 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
 
 /** A side still wearing a standard name and colour (its slot's, or another slot's from an earlier roll). */
 function isPlainIdentity(f: FactionSettings, i: number): boolean {
-  const slot = FACTIONS.find((d) => d.primary === f.color);
+  const slot = FACTIONS.find((d) => d.primary === f.color) ?? SECOND_IDENTITIES.find((d) => d.primary === f.color);
   return (slot !== undefined && slot.name === f.name.trim()) || (f.name.trim() === '' && f.color === FACTIONS[i].primary);
 }
 
 /**
+ * Names and colours for a second side of a doctrine already in the battle,
+ * so two Legions read as two different armies: none of them is a standard
+ * faction's.
+ */
+export const SECOND_IDENTITIES: readonly { name: string; primary: number }[] = [
+  { name: 'Jade Vanguard', primary: 0x4f9a4a },
+  { name: 'Rust Brigade', primary: 0xa0522d },
+  { name: 'Slate Cohort', primary: 0x5a6b7d },
+  { name: 'Rose Order', primary: 0xd46a8c },
+  { name: 'Azure Pact', primary: 0x3ab0e0 },
+  { name: 'Olive Front', primary: 0x7d8a3a },
+  { name: 'Sable Watch', primary: 0x3d3d48 },
+  { name: 'Copper Assembly', primary: 0xb87333 },
+];
+
+/**
  * The standard name and colour for a side with this doctrine: the faction
- * whose default doctrine it is (Cobalt for Armour, Crimson for Raiders...),
- * or, if another side already wears those, the first free standard colours.
+ * whose default doctrine it is (Cobalt for Armour, Crimson for Raiders...).
+ * If another side already wears those (a repeated doctrine), the first free
+ * second identity, and failing that the first free standard colours.
  */
 function identityFor(doctrine: DoctrineId, used: Set<number>, sides: FactionSettings[], self: number): Pick<FactionSettings, 'name' | 'color'> {
   const taken = (c: number) => used.has(c) || sides.some((f, j) => j > self && f.color === c && !isPlainIdentity(f, j));
   const home = FACTIONS[DOCTRINE_IDS.indexOf(doctrine)];
-  const def = home && !taken(home.primary) ? home : (FACTIONS.find((d) => !taken(d.primary)) ?? FACTIONS[self]);
+  if (home && !taken(home.primary)) return { name: home.name, color: home.primary };
+  const second = SECOND_IDENTITIES.find((d) => !taken(d.primary));
+  if (second) return { name: second.name, color: second.primary };
+  const def = FACTIONS.find((d) => !taken(d.primary)) ?? FACTIONS[self];
   return { name: def.name, color: def.primary };
 }
 

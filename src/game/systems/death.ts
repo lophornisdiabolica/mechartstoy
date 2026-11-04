@@ -1,4 +1,5 @@
 import { System, World } from '../../core/ecs';
+import { restartSuperBuilds } from './production';
 import {
   Ai,
   Armed,
@@ -6,6 +7,7 @@ import {
   Collider,
   Faction,
   GroundFollow,
+  Guard,
   Health,
   Hit,
   makeTransform,
@@ -44,6 +46,8 @@ export function deathSystem(ctx: SimContext): System {
         const unit = world.get(e, Unit);
         if (unit) {
           ctx.events.emit('unitDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def: unit.def, faction, killer });
+          // Losing a super unit is a real setback: the next one takes a full build from now.
+          if (unit.def.category === 'super' && faction >= 0 && !world.has(e, Guard)) restartSuperBuilds(world, ctx, faction);
           if (unit.def.wreckTime <= 0) {
             world.destroy(e);
             continue;
