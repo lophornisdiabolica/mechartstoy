@@ -14,6 +14,7 @@ npm run build    # typecheck + production build into dist/
 npm run sims     # balance runs: play many battles headlessly, print stats
 npm run bench    # sim speed on fixed battles, with a fingerprint of the result
 npm run map -- "seed=abc&biome=desert"   # the map a battle would get, as a PNG
+npm run shot -- 1v1-7 --at 12m           # a screenshot from the real renderer
 ```
 
 ### Balance runs
@@ -84,6 +85,32 @@ from a saved run. `--timeline` saves timelines for every battle in the
 JSON, and `--profile` prints how long each part of the sim took (per
 system, see `World.profile`) and the slowest tick.
 
+Every battle also gets a **score beyond win or loss**: each side's team's
+share of all the armies' fighting strength, averaged over the battle, and
+for a won battle the **margin**, the winners' share at the end. The
+doctrine table shows the share against par as **Strength** (1.00x is even),
+over every battle a doctrine played, won, lost or undecided, so a close loss
+counts for more than a rout and fewer battles give a clear answer;
+`--compare` compares it too.
+
+`--sweep "tforce=0,0.35,0.7"` plays the same battles once per value of a
+setting (any setting as written in a battle's link, or a unit's stat
+multiplier written `skimmer.hp=0.9,1,1.1`) and prints lengths, wins,
+margins and doctrine win rates and strength per value side by side, for
+sizing a change before making it.
+
+`--latin` (two-sided scenarios, with `--maps`) separates matchups from
+maps: every pairing of two different doctrines meets every map type once,
+taking turns at which is side 1, and the results are shown per pairing and
+map type, with the pairings each doctrine wins on some map type and loses
+on another. That's 28 battles per map type (112 on four), against the
+doctrine array's 64 or 128 where each pairing lands on one or two map
+types.
+
+To watch a battle at a particular point, add `&at=25m` (or `90s`, or
+`12:30`) to its link: the battle opens straight away, fast-forwarded to
+that point in the worker, and plays on from there.
+
 ### Performance
 
 `npm run bench` plays three fixed battles (1v1 medium, 2v2 large, an
@@ -102,6 +129,21 @@ same numbers live, with draw calls, triangles and meshes.
 `npm run map -- WHAT` draws the map a battle would get, top down, as a PNG
 in `maps-out/`: WHAT is a battle link or query string, or a sims seed such
 as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
+
+`npm run shot -- WHAT` saves screenshots of a battle from the real renderer,
+in headless Chromium (it needs Playwright: `npm i -D playwright && npx
+playwright install chromium`), to `shots-out/`. `--at 12m` fast-forwards
+first, `--look x,z,zoom` (or `base2`, or `fight` to follow the fighting)
+points the camera, `--every 30s --count 6` takes a series, `--clean` hides
+the HUD and panel, `--plans` shows the Commanders' plans, and `--size`
+sets the picture size. `npm run shot -- --help` lists the rest.
+
+In the browser, **O** opens the **debug overlays**: every side's lanes
+and rally points, each unit's planned route, targets and line of fire
+(red where a shot is blocked, with a line to the spot the unit is moving
+to for a clear one), the strength map the Commanders read, and what the
+ground costs each movement class to cross. They stay on across battles
+until switched off.
 
 Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
@@ -129,7 +171,14 @@ battle, its exact map via `seed`).
   longer battles). They can also be changed mid-battle from the Battle
   controls panel.
 - **Unit stats** take multipliers in steps of 0.05, and show what each stat
-  works out to (HP, damage per second, speed, range) under its box.
+  works out to (HP, damage per second, speed, range, and below that armour
+  and damage per hit) under its box. Units are grouped in folding sections:
+  the ones every side builds, then each doctrine's own.
+- **Between battles** a new battle can re-roll the map, biome, style, sides
+  and doctrines. Re-rolled sides go free-for-all, two even teams, two uneven
+  teams (1v3, 2v4...) or any of those. With repeats on (the default) a
+  doctrine can turn up more than once; the repeat gets a name and colour of
+  its own (Jade Vanguard, Rust Brigade...).
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other (unless
@@ -239,7 +288,8 @@ battle, its exact map via `seed`).
   aircraft and super units (the Titan and the other doctrines' super units), leaned by
   the side's doctrine. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
-  mech bay. The super cap can grow during a battle, with the tide ramp (up
+  mech bay, and losing one is a real setback: the bay starts the next from
+  scratch, a full build time away, whatever it had done while capped. The super cap can grow during a battle, with the tide ramp (up
   to 3× when the ramp tops out; the default) or by one for each outpost
   held past the first, or stay fixed. An option (off by default) only lets
   a side build them while it holds an outpost; it's off because the first
@@ -371,6 +421,7 @@ src/
     outpostRings.ts  capture rings round outposts, filling as a side takes one
     commanderOverlay.ts  each side's plan as arrows on the map, and markers on crossings, bridges and high ground
     frontLines.ts    front lines: who holds which ground, shaded from a strength map
+    debugOverlay.ts  debug overlays: lanes, routes, line of fire, strength map, route costs
   ui/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
@@ -379,6 +430,7 @@ src/
     ticker.ts        the battle ticker's feed
     battleChart.ts   army strength through the battle, for the end-of-battle chart
     photoMode.ts     photo mode (H): no interface, free camera, time of day, save a picture
+    debugPanel.ts    the debug overlays' switches (O)
     settingsUrl.ts   settings <-> URL query string (only non-default values)
     viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
@@ -588,14 +640,29 @@ outposts and the light scenery are still placed once, at the start.
   under Armies, 2 by default; 0 is off) when its Commander has work for
   them. For now the work is fortifying where the army masses: a line of
   three wall segments 7 units in front of the rally point, facing the
-  enemy base, for each of the two nearest enemies. A wall stops shots like
+  enemy base, for each of the two nearest enemies, with a field tower (a
+  guard tower; at most two per side) just behind it. A wall stops shots like
   any building, so it's cover, and attackers have to go round it or knock
-  it down. Walls crumble over ten minutes and aren't rebuilt (no rubble),
+  it down. Walls crumble over ten minutes and towers over fifteen; neither
+  is rebuilt (no rubble),
   and a side has at most six standing. Engineers don't build where an
   enemy unit is within 14 units, take no cap, never join an attack or a
   task force, and wait at home when there's nothing to build; the rally
   flag and stances pause their work. Docks, hover pads, bridge repairs
   and canals are still to come.
+- **Keeping out of where they're weak** (`game/commander/threats.ts`).
+  Each Commander maps how dangerous every part of the field is to
+  infantry (artillery, big blasts and flame most), vehicles (hard
+  hitters) and aircraft (flak), spread over each weapon's reach plus a
+  margin. What's avoided is a kind's counters, not the enemy as a whole:
+  the danger beyond that kind's usual share of the enemy's danger. At the
+  start of each attack, a squad whose lane has its counters gathered on it
+  takes the lane where they aren't, so infantry go round the side the
+  enemy's artillery covers; on the march, a squad about to walk into
+  counters that outgun it swings out to whichever side is safer, then
+  carries on (aircraft go round flak the same way). Squads already
+  fighting don't detour. *Keep out of where they're weak* under Armies
+  turns it off (URL `avoid=0`).
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan

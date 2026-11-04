@@ -6,6 +6,7 @@ import { objectiveIn } from '../spawn';
 import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
+import { threatKindOf } from '../commander/threats';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -143,6 +144,8 @@ export function aiSystem(ctx: SimContext): System {
         const target = ctx.sides.target(faction, attack) ?? -1;
         if (ai.laneAttack !== attack || ai.target !== target) {
           ai.lane = target >= 0 ? ctx.lanes.laneFor(faction, target, attack, ai.squad, armies.flanking) : 0;
+          // The Commander may move it to a lane less dangerous to its kind of unit (see commander/threats.ts).
+          if (target >= 0 && def && orders.stance === 'auto' && !orders.rally) ai.lane = ctx.commander.avoidance.lane(ctx, faction, target, ai.lane, threatKindOf(def, mover.move));
           ai.laneAttack = attack;
           ai.target = target;
           if (target >= 0) {
@@ -224,6 +227,16 @@ export function aiSystem(ctx: SimContext): System {
           mover.targetZ = outpost.z + (p.z - outpost.z) * k + ai.rallyOffsetZ * 0.3;
           mover.faceX = outpost.x;
           mover.faceZ = outpost.z;
+          continue;
+        }
+
+        // Going round ground that's dangerous to this squad, if the Commander says so (see commander/threats.ts).
+        const detour = !naval && orders.stance === 'auto' && !orders.rally ? ctx.commander.avoidance.detourFor(ai.squad) : undefined;
+        if (detour) {
+          mover.targetX = detour.x + ai.rallyOffsetX * 0.6;
+          mover.targetZ = detour.z + ai.rallyOffsetZ * 0.6;
+          mover.faceX = mover.targetX;
+          mover.faceZ = mover.targetZ;
           continue;
         }
 

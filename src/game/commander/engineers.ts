@@ -3,13 +3,15 @@ import { Building, Construction, Faction, Health, Targetable, Transform, Unit } 
 import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
+import { BuildingDef } from '../buildings';
 
 /*
  * Engineers (Commander step 6). Every doctrine's HQ trains a few engineers
  * when its Commander has work for them, up to the engineers setting per
  * side. Their work for now is fortifying where the army masses: a short line
  * of wall segments a little in front of each rally point, facing the enemy
- * base it leads to (for the two nearest enemies). A wall stops shots like
+ * base it leads to (for the two nearest enemies), with a field tower (a guard
+ * tower, at most TOWERS_MOST per side) just behind it. A wall stops shots like
  * any building, so it's cover, and attackers have to go round it or knock it
  * down. Walls crumble over BuildingDef.lasts and aren't rebuilt, so they
  * don't pile up, and a side has at most WALLS_MOST at once.
@@ -37,8 +39,14 @@ const SAFE_RADIUS = 14;
 const STAND_BACK = 2;
 const REACH = 3;
 
-/** A wall an engineer is sent to build: where it goes and faces, and where the engineer stands. */
+/** Field towers a side has standing at once (a low cap: they're strong). */
+export const TOWERS_MOST = 2;
+/** How far behind the wall line a field tower goes. */
+const TOWER_BACK = 3.5;
+
+/** Something an engineer is sent to build: what, where it goes and faces, and where the engineer stands. */
 export interface BuildJob {
+  def: BuildingDef;
   x: number;
   z: number;
   heading: number;
@@ -51,6 +59,7 @@ export class Engineers {
   /** Per side: engineers alive, walls standing and wall spots open (as of the last update), and when the HQ may train the next. */
   private engineers: number[] = [];
   private walls: number[] = [];
+  private towers: number[] = [];
   private open: number[] = [];
   private trainAt: number[] = [];
   /** Every wall standing or going up, as of the last update plus those put up since (some may be gone). */
@@ -73,6 +82,11 @@ export class Engineers {
     return this.walls[side] ?? 0;
   }
 
+  /** Field towers a side has standing. */
+  towersOf(side: number): number {
+    return this.towers[side] ?? 0;
+  }
+
   private sideOf = new Map<Entity, number>();
 
   /** Find each side's open wall spots and hand them to its engineers (with the Commander's picture). */
@@ -82,6 +96,7 @@ export class Engineers {
     const n = ctx.sides.count;
     this.engineers = new Array(n).fill(0);
     this.walls = new Array(n).fill(0);
+    this.towers = new Array(n).fill(0);
     this.open = new Array(n).fill(0);
     const crew: Entity[][] = Array.from({ length: n }, () => []);
     for (const e of world.query(Unit, Faction, Transform)) {
@@ -93,15 +108,20 @@ export class Engineers {
     this.wallList = [];
     for (const e of world.query(Building, Faction)) {
       const f = world.req(e, Faction).id;
-      if (f < 0 || f >= n || !world.req(e, Building).def.lasts) continue;
-      this.walls[f]++;
+      const def = world.req(e, Building).def;
+      if (f < 0 || f >= n || !def.lasts) continue;
+      if (def.id === 'fieldTower') this.towers[f]++;
+      else this.walls[f]++;
       this.wallList.push(e);
     }
     if (ctx.settings.armies.engineers <= 0) return;
     for (let side = 0; side < n; side++) {
       const orders = ctx.orders[side];
       if (ctx.sides.eliminated[side] || orders.stance !== 'auto' || orders.rally !== null) continue;
-      const spots = this.spots(world, ctx, side).slice(0, Math.max(0, WALLS_MOST - this.walls[side]));
+      // Within the caps: towers first (they're placed first along each front), then walls.
+      let towers = TOWERS_MOST - this.towers[side];
+      let walls = WALLS_MOST - this.walls[side];
+      const spots = this.spots(world, ctx, side).filter((s) => (s.def.id === 'fieldTower' ? towers-- > 0 : walls-- > 0));
       this.open[side] = spots.length;
       // Each engineer to the nearest open spot, in a fixed order.
       for (const e of crew[side]) {
@@ -126,8 +146,11 @@ export class Engineers {
       .sort((a, b) => Math.hypot(field.baseSites[a].x - home.x, field.baseSites[a].z - home.z) - Math.hypot(field.baseSites[b].x - home.x, field.baseSites[b].z - home.z) || a - b)
       .slice(0, FRONTS);
     const nav = ctx.navs.land;
-    const r = ctx.buildings.wall.radius;
     const out: BuildJob[] = [];
+    const add = (def: BuildingDef, x: number, z: number, heading: number, dx: number, dz: number, back: number) => {
+      if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || !this.safe(world, ctx, side, x, z)) return;
+      out.push({ def, x, z, heading, standX: x - dx * back, standZ: z - dz * back });
+    };
     for (const enemy of fronts) {
       const rally = ctx.lanes.rally(side, enemy, 0);
       const base = field.baseSites[enemy];
@@ -136,12 +159,11 @@ export class Engineers {
       const dz = (base.z - rally.z) / d;
       // Forward is (cos h, -sin h) (see Transform.heading).
       const heading = Math.atan2(-dz, dx);
+      // A field tower just behind the middle of the line, then the wall segments.
+      add(ctx.buildings.fieldTower, rally.x + dx * (AHEAD - TOWER_BACK), rally.z + dz * (AHEAD - TOWER_BACK), heading, dx, dz, STAND_BACK);
       for (let k = 0; k < SEGMENTS; k++) {
         const off = (k - (SEGMENTS - 1) / 2) * SEGMENT_GAP;
-        const x = rally.x + dx * AHEAD - dz * off;
-        const z = rally.z + dz * AHEAD + dx * off;
-        if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, r) || !this.safe(world, ctx, side, x, z)) continue;
-        out.push({ x, z, heading, standX: x - dx * STAND_BACK, standZ: z - dz * STAND_BACK });
+        add(ctx.buildings.wall, rally.x + dx * AHEAD - dz * off, rally.z + dz * AHEAD + dx * off, heading, dx, dz, STAND_BACK);
       }
     }
     return out;
@@ -170,9 +192,11 @@ export class Engineers {
       const t = world.req(e, Transform);
       if (Math.hypot(job.standX - t.x, job.standZ - t.z) > REACH) continue;
       this.jobs.delete(e);
-      if (this.walls[side] >= WALLS_MOST || !ctx.navs.land.fitsAt(job.x, job.z, ctx.buildings.wall.radius)) continue;
-      this.wallList.push(spawnBuilding(world, ctx, ctx.buildings.wall, side, job.x, job.z, job.heading, true));
-      this.walls[side]++;
+      const tower = job.def.id === 'fieldTower';
+      if ((tower ? this.towers[side] >= TOWERS_MOST : this.walls[side] >= WALLS_MOST) || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
+      this.wallList.push(spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true));
+      if (tower) this.towers[side]++;
+      else this.walls[side]++;
       this.open[side] = Math.max(0, this.open[side] - 1);
     }
 
@@ -197,7 +221,7 @@ export class Engineers {
       }
     }
 
-    // Walls crumble over their lifetime (not while they're still going up).
+    // Walls and field towers crumble over their lifetime (not while they're still going up).
     for (const e of this.wallList) {
       if (!world.isAlive(e) || world.has(e, Construction)) continue;
       const h = world.get(e, Health);

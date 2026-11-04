@@ -4,8 +4,8 @@ import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
 import { MapPreview } from './mapPreview';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
-import { UNIT_DEFS, UnitDef } from '../game/units';
-import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
+import { UNIT_DEFS, UnitDef, UnitId } from '../game/units';
+import { DOCTRINE_IDS, DOCTRINES, doctrineUnits, isDoctrine } from '../game/doctrines';
 import { isStyle, STYLE_IDS, STYLES } from '../game/commander/advice';
 import { dropdown, el, hex, segmented } from './dom';
 import { Rng } from '../core/rng';
@@ -53,16 +53,31 @@ function dps(def: UnitDef): number {
   return (w.damage * w.burst) / w.cooldown;
 }
 
-/** What a stat works out to after its multiplier, for the stats table. */
-const STAT_RESULTS: Record<keyof UnitTuning, (def: UnitDef) => { text: string; title: string }> = {
-  hp: (d) => ({ text: short(d.hp), title: `${short(d.hp)} hit points${d.armor > 0 ? `, armour ${d.armor} (taken off every hit)` : ''}` }),
+/** What a stat works out to after its multiplier, for the stats table (with a second line for armour and damage per hit). */
+const STAT_RESULTS: Record<keyof UnitTuning, (def: UnitDef) => { text: string; sub?: string; title: string }> = {
+  hp: (d) => ({ text: short(d.hp), sub: `armour ${d.armor}`, title: `${short(d.hp)} hit points, armour ${d.armor} (taken off every hit)` }),
   damage: (d) => ({
     text: `${short(dps(d))}/s`,
-    title: `${short(dps(d))} damage per second: ${short(d.weapon.damage)} per shot${d.weapon.burst > 1 ? ` × ${d.weapon.burst}` : ''}, every ${d.weapon.cooldown}s`,
+    sub: `${short(d.weapon.damage)} a hit${d.weapon.burst > 1 ? ` ×${d.weapon.burst}` : ''}`,
+    title: `${short(dps(d))} damage per second: ${short(d.weapon.damage)} per hit${d.weapon.burst > 1 ? ` × ${d.weapon.burst} a burst` : ''}, every ${d.weapon.cooldown}s`,
   }),
   speed: (d) => ({ text: short(d.speed), title: `${short(d.speed)} metres per second` }),
   range: (d) => ({ text: `${short(d.weapon.range)}m`, title: `Range ${short(d.weapon.range)} metres` }),
 };
+
+/** The stats table's groups: the units every side fields, then each doctrine's own. */
+function unitGroups(): { name: string; units: UnitId[] }[] {
+  const lists = DOCTRINE_IDS.map((d) => doctrineUnits(DOCTRINES[d]));
+  // Every side's HQ trains rifle squads and engineers; anything every doctrine builds counts too.
+  const core = UNIT_IDS.filter((id) => id === 'trooper' || id === 'atTrooper' || (UNIT_DEFS[id] as UnitDef).builds || lists.every((l) => l.includes(id)));
+  const groups = [{ name: 'Every side', units: core }];
+  DOCTRINE_IDS.forEach((d, i) => groups.push({ name: DOCTRINES[d].name, units: UNIT_IDS.filter((id) => lists[i].includes(id) && !core.includes(id)) }));
+  // Anything no group has yet (so every unit can still be tuned).
+  const shown = new Set(groups.flatMap((g) => g.units));
+  const rest = UNIT_IDS.filter((id) => !shown.has(id));
+  if (rest.length > 0) groups.push({ name: 'Other', units: rest });
+  return groups;
+}
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 8);
@@ -353,7 +368,8 @@ export class SetupScreen {
       [
         { label: 'Free-for-all', value: 'ffa', title: 'Every side for itself' },
         { label: 'Two teams', value: 'two', title: 'Sides dealt alternately into two teams' },
-        { label: 'Either', value: 'either', title: 'Free-for-all or two teams, at random' },
+        { label: 'Uneven', value: 'uneven', title: 'Two teams of different sizes: 1v2, 1v3, 2v4... (the smaller team gets bigger armies)' },
+        { label: 'Any', value: 'either', title: 'Free-for-all, two teams or uneven teams, at random' },
       ],
       (v) => {
         this.settings.variety.teams = v;
@@ -376,11 +392,23 @@ export class SetupScreen {
       (on) => (this.settings.variety.doctrines = on),
       1,
     );
+    const repeats = el('input', { type: 'checkbox', 'aria-label': 'Repeat doctrines' });
+    repeats.addEventListener('change', () => {
+      this.settings.variety.repeats = repeats.checked;
+      this.changed();
+    });
+    const repeatsLabel = el('label', { class: 'check' });
+    repeatsLabel.append(repeats, document.createTextNode(' The same doctrine can come up for more than one side'));
+    row(variety, 'Repeats', repeatsLabel);
+    this.sync.push(() => {
+      repeats.checked = this.settings.variety.repeats;
+      repeats.disabled = !this.settings.variety.roll.doctrines;
+    });
     variety.append(
       el(
         'p',
         { class: 'hint' },
-        'Re-rolled doctrines are drawn from the pool, each once before any comes up twice. A side with a standard name takes the name and colours that go with its new doctrine. New sides past the ones listed under Sides get the standard ones.',
+        'Re-rolled doctrines are drawn from the pool: with repeats, any for any side; without, each once before any comes up twice. A side with a standard name takes the name and colours that go with its new doctrine, and a second side of the same doctrine gets a name and colour of its own. New sides past the ones listed under Sides get the standard ones.',
       ),
     );
     const after = dropdown(
@@ -550,7 +578,17 @@ export class SetupScreen {
     slider(armies, 'Build advice', 'advice', 0.05, (s) => s.armies.advice, (s, v) => (s.armies.advice = v), (v) => (v === 0 ? 'Off' : `±${percent(v)}`));
     armies.append(el('p', { class: 'hint' }, 'How far each side’s Commander leans production toward what the battle needs, within its doctrine: more flak against aircraft (fewer with none about), harder hitters against armour, more that sprays against infantry. Each side’s style (next to its doctrine under Sides) sets how it plays: cautious keeps together and waits for a clear edge, aggressive attacks sooner, a raider sends small forces far afield and builds fast units.'));
     slider(armies, 'Engineers', 'engineers', 1, (s) => s.armies.engineers, (s, v) => (s.armies.engineers = v), (v) => (v === 0 ? 'Off' : `${v} per side`));
-    armies.append(el('p', { class: 'hint' }, 'Each side’s HQ trains up to this many engineers, who put up short walls in front of where its army masses. Walls stop shots like any building and crumble after ten minutes.'));
+    armies.append(el('p', { class: 'hint' }, 'Each side’s HQ trains up to this many engineers, who put up short walls in front of where its army masses, with a field tower behind them (two at most). Walls stop shots like any building; walls crumble after ten minutes and towers after fifteen.'));
+    const avoid = el('input', { type: 'checkbox', 'aria-label': 'Units avoid danger' });
+    avoid.addEventListener('change', () => {
+      this.settings.armies.avoidance = avoid.checked;
+      this.changed();
+    });
+    const avoidLabel = el('label', { class: 'check' });
+    avoidLabel.append(avoid, document.createTextNode(' Keep out of where they’re weak'));
+    row(armies, 'Squads', avoidLabel);
+    armies.append(el('p', { class: 'hint' }, 'Each Commander maps how dangerous the field is to infantry, vehicles and aircraft. Squads take the lane least dangerous to them, and on the march swing round ground they’d be outgunned on: infantry round artillery, aircraft round flak.'));
+    this.sync.push(() => (avoid.checked = this.settings.armies.avoidance));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);
@@ -691,45 +729,56 @@ export class SetupScreen {
 
     // Unit stats
     const units = section('Unit stats', false);
-    const table = el('table', { class: 'stats' });
-    const headRow = el('tr');
-    headRow.append(el('th'));
-    for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) headRow.append(el('th', {}, STAT_LABELS[k]));
-    table.append(headRow);
     const { min, max } = LIMITS.unitStat;
     let tuned = tunedUnits(this.settings);
     this.sync.push(() => (tuned = tunedUnits(this.settings)));
-    for (const id of UNIT_IDS) {
-      const tr = el('tr');
-      tr.append(el('th', {}, UNIT_DEFS[id].name));
-      for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) {
-        const td = el('td');
-        const input = el('input', { type: 'number', min: String(min), max: String(max), step: '0.05', 'aria-label': `${UNIT_DEFS[id].name} ${STAT_LABELS[k]} multiplier` });
-        input.addEventListener('change', () => {
-          const v = Math.round(Number(input.value) * 100) / 100;
-          this.settings.units[id][k] = Number.isFinite(v) && v > 0 ? Math.max(min, Math.min(max, v)) : 1;
-          this.changed();
-        });
-        const result = el('span', { class: 'result' });
-        td.append(input, result);
-        tr.append(td);
-        this.sync.push(() => {
-          input.value = String(this.settings.units[id][k]);
-          input.classList.toggle('changed', this.settings.units[id][k] !== 1);
-          const r = STAT_RESULTS[k](tuned[id]);
-          result.textContent = r.text;
-          result.title = r.title;
-          result.classList.toggle('changed', this.settings.units[id][k] !== 1);
-        });
+    // A collapsible group per doctrine, after the units every side has.
+    const groups: HTMLElement[] = [];
+    for (const g of unitGroups()) {
+      const group = el('details', { class: 'units' });
+      group.append(el('summary', {}, `${g.name} (${g.units.length})`));
+      const table = el('table', { class: 'stats' });
+      const headRow = el('tr');
+      headRow.append(el('th'));
+      for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) headRow.append(el('th', {}, STAT_LABELS[k]));
+      table.append(headRow);
+      for (const id of g.units) {
+        const tr = el('tr');
+        tr.append(el('th', {}, UNIT_DEFS[id].name));
+        for (const k of Object.keys(STAT_LABELS) as (keyof UnitTuning)[]) {
+          const td = el('td');
+          const input = el('input', { type: 'number', min: String(min), max: String(max), step: '0.05', 'aria-label': `${UNIT_DEFS[id].name} ${STAT_LABELS[k]} multiplier` });
+          input.addEventListener('change', () => {
+            const v = Math.round(Number(input.value) * 100) / 100;
+            this.settings.units[id][k] = Number.isFinite(v) && v > 0 ? Math.max(min, Math.min(max, v)) : 1;
+            this.changed();
+          });
+          const result = el('span', { class: 'result' });
+          const second = el('span', { class: 'result sub' });
+          td.append(input, result, second);
+          tr.append(td);
+          this.sync.push(() => {
+            input.value = String(this.settings.units[id][k]);
+            input.classList.toggle('changed', this.settings.units[id][k] !== 1);
+            const r = STAT_RESULTS[k](tuned[id]);
+            result.textContent = r.text;
+            result.title = r.title;
+            result.classList.toggle('changed', this.settings.units[id][k] !== 1);
+            second.textContent = r.sub ?? '';
+            second.title = r.title;
+          });
+        }
+        table.append(tr);
       }
-      table.append(tr);
+      group.append(table);
+      groups.push(group);
     }
     const resetUnits = el('button', { type: 'button' }, 'Reset unit stats');
     resetUnits.addEventListener('click', () => {
       this.settings.units = defaultSettings().units;
       this.changed();
     });
-    units.append(el('p', { class: 'hint' }, 'Multipliers on each unit’s normal stats, in steps of 0.05. 1 is as designed. The number under each box is what the stat works out to (damage is per second).'), table, resetUnits);
+    units.append(el('p', { class: 'hint' }, 'Multipliers on each unit’s normal stats, in steps of 0.05. 1 is as designed. Under each box is what the stat works out to: health and armour (taken off every hit), damage per second and per hit. A unit several doctrines share shows under each.'), ...groups, resetUnits);
 
     // Footer
     const foot = el('footer');

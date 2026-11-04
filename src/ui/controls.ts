@@ -195,9 +195,10 @@ export class Controls {
           side.jobs.cover > 0 ? `${side.jobs.cover} flak covering against aircraft` : '',
           side.jobs.overwatch > 0 ? `${side.jobs.overwatch} artillery on high ground` : '',
           side.jobs.escort > 0 ? `${side.jobs.escort} escorting the super unit` : '',
-          side.jobs.build > 0 ? `${side.jobs.build} engineer${side.jobs.build === 1 ? '' : 's'} putting up walls` : '',
+          side.jobs.build > 0 ? `${side.jobs.build} engineer${side.jobs.build === 1 ? '' : 's'} fortifying` : '',
         ].filter(Boolean);
         if (jobs.length > 0) line(`Jobs: ${jobs.join(', ')}`);
+        if (side.detours > 0) line(`Going round danger: ${side.detours} squad${side.detours === 1 ? '' : 's'} swinging wide of what outguns them`);
         const limit = this.game.settings.armies.advice;
         const pct = (v: number) => `${Math.round(Math.abs(v) * limit * 100)}%`;
         const { antiAir, antiArmour } = side.needs;

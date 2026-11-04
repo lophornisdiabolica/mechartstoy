@@ -1,8 +1,9 @@
 import { ComponentType, Entity } from '../core/ecs';
-import { Armed, Building, Collider, Construction, Faction, Guard, Health, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
+import { Armed, Building, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
 import { GameEvents } from '../game/context';
 import { Command, Game, SIM_HZ } from '../game/game';
 import { BattleSettings } from '../game/settings';
+import { SideStats } from '../game/stats';
 import { wrapAngle } from '../game/systems/movement';
 import { CellState } from '../world/battlefield';
 import { CellArea } from '../world/ground';
@@ -59,14 +60,21 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
 
 /** Page to worker. */
 export type ToSim =
-  | { type: 'start'; battle: number; seed: number; settings: BattleSettings }
+  /** `skip`: fast-forward this many seconds before the first frame (the `at` URL option). */
+  | { type: 'start'; battle: number; seed: number; settings: BattleSettings; skip?: number }
   /** Play `steps` ticks, then send a Frame (`profile`: time each system). */
   | { type: 'step'; battle: number; steps: number; profile: boolean }
   | { type: 'command'; battle: number; command: Command }
-  | { type: 'settings'; battle: number; settings: BattleSettings };
+  | { type: 'settings'; battle: number; settings: BattleSettings }
+  /** Send units' planned routes with frames (for the debug overlays), or stop. */
+  | { type: 'routes'; battle: number; on: boolean };
 
 /** Worker to page. */
-export type FromSim = { type: 'frame'; battle: number; frame: Frame } | { type: 'error'; message: string };
+export type FromSim =
+  | { type: 'frame'; battle: number; frame: Frame }
+  /** While fast-forwarding: how far it's got, in sim seconds. */
+  | { type: 'progress'; battle: number; time: number }
+  | { type: 'error'; message: string };
 
 export interface Frame {
   time: number;
@@ -97,6 +105,30 @@ export interface Frame {
   worstMs: number;
   /** Milliseconds per system over those ticks, when asked for. */
   profile: [string, number][] | null;
+  /**
+   * After a fast-forward: the battle's stats so far (the events that built
+   * them weren't sent), and a sign for the page to jump its drawing clock.
+   */
+  skipped?: { sides: SideStats[]; townRazed: number };
+  /** When asked for (see SimHost.routes): each moving unit's route, as [entity, goal x, goal z, then x, z of each waypoint left]. */
+  routes?: number[][];
+}
+
+/** Seconds between the routes sent for the debug overlays. */
+const ROUTES_EVERY = 0.25;
+
+/** Every moving unit's route now: entity, where it's headed, then the waypoints it has left (see Frame.routes). */
+export function unitRoutes(world: Game['world']): number[][] {
+  const out: number[][] = [];
+  for (const e of world.query(Mover, Transform)) {
+    const m = world.req(e, Mover);
+    if (m.targetX === null || m.targetZ === null) continue;
+    const route = [e, m.targetX, m.targetZ];
+    const path = m.nav.path;
+    if (path) for (let k = m.nav.pathIndex; k < path.length; k++) route.push(path[k].x, path[k].z);
+    out.push(route);
+  }
+  return out;
 }
 
 /**
@@ -176,6 +208,11 @@ export class SimHost {
   private worstMs = 0;
   /** The Commander picture last sent (its updatedAt): it changes every couple of seconds, so it's only sent when it does. */
   private commanderSent = -Infinity;
+  /** Fast-forwarded since the last frame (see skip). */
+  private skipped = false;
+  /** Send units' routes with frames, for the debug overlays; and when they were last sent. */
+  routes = false;
+  private routesAt = -Infinity;
 
   constructor(seed: number, settings: BattleSettings) {
     this.game = new Game(seed, { settings });
@@ -208,6 +245,20 @@ export class SimHost {
       this.worstMs = Math.max(this.worstMs, took);
     }
     if (steps > 0) this.dirty = true;
+  }
+
+  /**
+   * Fast-forward `ticks` ticks without keeping their poses or events: the
+   * page jumps to where the battle has got to (the `at` URL option). Map
+   * changes, fallen trees and deaths are still sent; the stats the events
+   * would have built go with the next frame instead.
+   */
+  skip(ticks: number): void {
+    for (let i = 0; i < ticks; i++) this.game.step(1 / SIM_HZ);
+    this.events = [];
+    this.poses = [];
+    this.skipped = true;
+    this.dirty = true;
   }
 
   /** Where everything with a Transform is now. */
@@ -327,7 +378,11 @@ export class SimHost {
         commander: ctx.commander.updatedAt !== this.commanderSent ? ctx.commander.state : null,
       }),
       profile,
+      ...(this.skipped ? { skipped: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
+      ...(this.routes && world.time - this.routesAt >= ROUTES_EVERY ? { routes: unitRoutes(world) } : {}),
     };
+    if (frame.routes) this.routesAt = world.time;
+    this.skipped = false;
     this.commanderSent = ctx.commander.updatedAt;
     this.destroyed = [];
     this.events = [];
@@ -376,6 +431,8 @@ export class SimView {
   private dying: [Entity, number][] = [];
   /** Entities that exist but that drawing hasn't reached the birth of yet: don't draw them. */
   readonly unborn = new Set<Entity>();
+  /** Units' routes, when the worker was asked for them (see Frame.routes). */
+  routes: number[][] | null = null;
 
   constructor(readonly game: Game) {
     this.refs = new Refs(game);
@@ -436,6 +493,19 @@ export class SimView {
     ctx.offensive.plansState = s.plans;
     ctx.outcome = s.outcome;
     if (s.commander) ctx.commander.state = s.commander;
+    if (frame.routes) this.routes = frame.routes;
+    if (frame.skipped) {
+      const stats = this.game.stats;
+      frame.skipped.sides.forEach((side, f) => Object.assign(stats.sides[f], side));
+      stats.townRazed = frame.skipped.townRazed;
+      // Nothing from before the jump is left to show.
+      this.events = [];
+      this.dying = this.dying.filter(([, t]) => t > frame.time);
+      for (const [e] of frame.destroyed) world.destroy(e);
+      world.flush();
+      frame.destroyed = [];
+      this.poses = this.poses.slice(-1);
+    }
 
     this.events.push(...frame.events);
     this.dying.push(...frame.destroyed);

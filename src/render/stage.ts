@@ -15,6 +15,7 @@ import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
 import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
+import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
 import { setFactionPalette } from './models';
 import './models/buildings';
 import './models/projectiles';
@@ -25,6 +26,8 @@ import { buildWoods } from './woodsMesh';
 import { BIOMES } from '../world/biomes';
 import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
+
+const DEBUG_IDS = DEBUG_LAYERS.map((l) => l.id);
 
 const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -70,6 +73,8 @@ export class Stage {
   private readonly sunOffset = SUN_OFFSET.clone();
   private readonly sky: THREE.HemisphereLight;
   private hour: number | null = null;
+  /** The debug overlays (see DebugOverlay), replaced with each battle; the layers shown carry over. */
+  debugOverlay!: DebugOverlay;
   /** Draw each side's plan on the map (see CommanderOverlay). */
   private plansShown = false;
   /** Finds the fighting for the spectator camera. */
@@ -143,6 +148,7 @@ export class Stage {
       this.entities.dispose();
       this.commanderOverlay.dispose();
       this.frontLines.dispose();
+      this.debugOverlay.dispose();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -170,6 +176,13 @@ export class Stage {
     this.frontLines = new FrontLines(game);
     this.frontLines.visible = this.frontsShown;
     battle.add(this.frontLines.root);
+    const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
+    const costClass = this.debugOverlay?.costClass;
+    this.debugOverlay = new DebugOverlay(game);
+    if (costClass) this.debugOverlay.costClass = costClass;
+    battle.add(this.debugOverlay.root);
+    // Shown once the caller has set where routes come from (see App.startBattle).
+    this.debugCarry = debugShown;
     battle.add(this.entities.root, this.entities.drawn, this.effects.root, this.markers.root, this.outpostRings.root, this.commanderOverlay.root);
     this.scene.add(battle);
     this.battle = battle;
@@ -225,6 +238,15 @@ export class Stage {
   capture(): string {
     this.composer.render(0);
     return this.renderer.domElement.toDataURL('image/png');
+  }
+
+  /** Debug layers that were showing before this battle loaded, to show again (see restoreDebug). */
+  private debugCarry: DebugLayer[] = [];
+
+  /** Show again the debug layers the last battle had on (after the overlay's routeSource is set). */
+  restoreDebug(): void {
+    for (const l of this.debugCarry) this.debugOverlay.show(l, true);
+    this.debugCarry = [];
   }
 
   get showPlans(): boolean {
@@ -296,6 +318,7 @@ export class Stage {
     this.outpostRings.update();
     this.commanderOverlay.update();
     this.frontLines.update(frameSeconds);
+    this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();
     this.composer.render(frameSeconds);
   }

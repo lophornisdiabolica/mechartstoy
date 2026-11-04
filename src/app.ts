@@ -12,12 +12,13 @@ import { Stage } from './render/stage';
 import { loadViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
 import { el, hex } from './ui/dom';
-import { settingsFromParams, settingsToParams } from './ui/settingsUrl';
+import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
 import { Ticker } from './ui/ticker';
 import { BattleHistory } from './ui/battleChart';
 import { PhotoMode } from './ui/photoMode';
+import { DebugPanel } from './ui/debugPanel';
 import { RemoteSim } from './sim/remoteSim';
 
 /** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
@@ -89,6 +90,8 @@ export class App implements MatchControls {
 
   private readonly hud: HTMLElement;
   private readonly banner = el('div', { id: 'banner', hidden: '' });
+  /** Shown while a battle is fast-forwarding to the `at` URL option. */
+  private readonly skipNote = el('div', { id: 'skipping', hidden: '' });
   private fps = 0;
   private hudTimer = 0;
   private bannerShownFor: Game | null = null;
@@ -98,6 +101,7 @@ export class App implements MatchControls {
   private readonly tickerFeed = new Ticker();
   private readonly history = new BattleHistory();
   private readonly photo: PhotoMode;
+  private readonly debug: DebugPanel;
   /** Plays the battle in a worker thread; null plays it on the page (`?worker=0`, or no worker support). */
   private readonly sim: RemoteSim | null;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
@@ -119,17 +123,19 @@ export class App implements MatchControls {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
       render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha, frameSeconds),
     });
-    document.body.append(this.banner);
+    document.body.append(this.banner, this.skipNote);
     this.photo = new PhotoMode(this.stage, this.loop);
     this.perf = new PerfOverlay(this.stage);
+    this.debug = new DebugPanel(this.stage);
     if (this.sim) this.sim.onFrame = (f) => this.perf.simFrame(f.ticks, f.simMs, f.worstMs, f.profile);
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (key === 'escape' && this.photo.active) return this.photo.leave();
-      if (key !== 'p' && key !== 'h') return;
+      if (key !== 'p' && key !== 'o' && key !== 'h') return;
       if ((e.target instanceof HTMLInputElement && e.target.type !== 'range') || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       if (key === 'p') this.perf.toggle();
+      else if (key === 'o') this.debug.toggle();
       else if (!this.setup.visible) this.photo.toggle();
     });
     this.setup = new SetupScreen(this.settings, {
@@ -139,8 +145,15 @@ export class App implements MatchControls {
         this.writeUrl(s);
       },
     });
-    // The first battle runs behind the setup screen as a backdrop.
-    this.startBattle(this.settings, this.settings.seed || randomSeed());
+    // `at` opens the battle straight away, fast-forwarded (e.g. a sims link plus &at=25m).
+    const at = parseAt(new URLSearchParams(location.search).get('at'));
+    if (at !== null) {
+      this.setup.hide();
+      this.startBattle(this.settings, this.settings.seed || randomSeed(), '', at);
+    } else {
+      // The first battle runs behind the setup screen as a backdrop.
+      this.startBattle(this.settings, this.settings.seed || randomSeed());
+    }
     this.loop.start();
   }
 
@@ -192,12 +205,30 @@ export class App implements MatchControls {
     this.battle.controls = null;
   }
 
-  private startBattle(settings: BattleSettings, seed: string, label = ''): void {
+  /** Start a battle, fast-forwarded `skip` seconds (the `at` URL option). */
+  private startBattle(settings: BattleSettings, seed: string, label = '', skip = 0): void {
     this.dropControls();
-    const game = this.sim ? this.sim.start(hashSeed(seed), settings) : new Game(hashSeed(seed), { settings });
+    let game: Game;
+    if (this.sim) {
+      game = this.sim.start(hashSeed(seed), settings, skip);
+      this.skipNote.hidden = skip <= 0;
+      this.skipNote.textContent = `Fast-forwarding to ${clock(skip)}…`;
+      this.sim.onProgress = (time) => {
+        this.skipNote.hidden = time === null;
+        if (time !== null) this.skipNote.textContent = `Fast-forwarding to ${clock(skip)}… ${clock(time)}`;
+      };
+    } else {
+      game = new Game(hashSeed(seed), { settings });
+      // On the page: play it out before anything listens for effects.
+      for (let i = Math.round(skip * SIM_HZ); i > 0 && game.outcome === null; i--) game.step(1 / SIM_HZ);
+    }
     const factions = factionDefs(settings);
     this.stage.load(game, factions);
     if (this.sim) this.stage.entities.hidden = this.sim.hidden;
+    const sim = this.sim;
+    this.stage.debugOverlay.routeSource = sim ? (on) => sim.routes(on) : null;
+    this.stage.restoreDebug();
+    this.debug.refresh();
     this.perf.attach(game);
     this.tickerFeed.attach(game, factions);
     this.history.attach(game);
@@ -359,7 +390,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats · H photo mode`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats · O overlays · H photo mode`
     );
   }
 

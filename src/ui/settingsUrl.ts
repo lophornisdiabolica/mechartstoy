@@ -42,7 +42,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
 
-const UNIT_STATS = ['hp', 'damage', 'speed', 'range'] as const;
+export const UNIT_STATS = ['hp', 'damage', 'speed', 'range'] as const;
 
 function clamp(v: number, limit: keyof typeof LIMITS): number {
   const { min, max } = LIMITS[limit];
@@ -66,6 +66,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.armies.attackTiming !== d.armies.attackTiming) p.set('attacks', s.armies.attackTiming);
   if (s.armies.superGrowth !== d.armies.superGrowth) p.set('sgrow', s.armies.superGrowth);
   if (s.armies.superGate !== d.armies.superGate) p.set('sgate', s.armies.superGate ? '1' : '0');
+  if (s.armies.avoidance !== d.armies.avoidance) p.set('avoid', s.armies.avoidance ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
@@ -101,6 +102,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (rolled.length) p.set('vary', rolled.join(','));
   if (v.sidesMin !== dv.sidesMin || v.sidesMax !== dv.sidesMax) p.set('vsides', `${v.sidesMin}-${v.sidesMax}`);
   if (v.teams !== dv.teams) p.set('vteams', v.teams);
+  if (v.repeats !== dv.repeats) p.set('vrep', v.repeats ? '1' : '0');
   if (v.doctrines.join(',') !== dv.doctrines.join(',')) p.set('vdocs', v.doctrines.join(','));
   if (v.after !== dv.after) p.set('vafter', String(v.after));
   return p;
@@ -124,6 +126,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (grow === 'none' || grow === 'tide' || grow === 'outposts') s.armies.superGrowth = grow;
   const gate = p.get('sgate');
   if (gate === '0' || gate === '1') s.armies.superGate = gate === '1';
+  const avoid = p.get('avoid');
+  if (avoid === '0' || avoid === '1') s.armies.avoidance = avoid === '1';
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   // Links from before there could be several towns say town=0 or town=1.
@@ -197,7 +201,9 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     s.variety.sidesMax = Math.max(lo, hi);
   }
   const vteams = p.get('vteams');
-  if (vteams === 'ffa' || vteams === 'two' || vteams === 'either') s.variety.teams = vteams;
+  if (vteams === 'ffa' || vteams === 'two' || vteams === 'uneven' || vteams === 'either') s.variety.teams = vteams;
+  const vrep = p.get('vrep');
+  if (vrep === '0' || vrep === '1') s.variety.repeats = vrep === '1';
   const vdocs = p.get('vdocs');
   if (vdocs !== null) {
     const listed = vdocs.split(',').map((k) => k.trim());
@@ -210,4 +216,21 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+/**
+ * The `at` URL option: open the battle fast-forwarded to this point, in
+ * seconds. Written as minutes ("25" or "25m"), seconds ("90s") or
+ * minutes and seconds ("12:30"). Null if missing or unreadable.
+ */
+export function parseAt(value: string | null): number | null {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  let seconds: number;
+  const mmss = v.match(/^(\d+):(\d{1,2})$/);
+  if (mmss) seconds = Number(mmss[1]) * 60 + Number(mmss[2]);
+  else if (/^\d+(\.\d+)?s$/.test(v)) seconds = Number(v.slice(0, -1));
+  else if (/^\d+(\.\d+)?m?$/.test(v)) seconds = Number(v.replace('m', '')) * 60;
+  else return null;
+  return seconds > 0 && Number.isFinite(seconds) ? seconds : null;
 }

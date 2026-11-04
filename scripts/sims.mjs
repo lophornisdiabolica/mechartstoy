@@ -64,6 +64,17 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      applies as usual; --from FILE takes the doctrines, map
                      type and settings that battle had in a saved run
                      (--map NAME picks one when it was played on several)
+  --sweep SPEC       play the same battles once per value of a setting and
+                     compare them, e.g. --sweep "tforce=0,0.35,0.7" (any
+                     setting as written in the battle's link) or
+                     --sweep "skimmer.hp=0.9,1,1.1" (a unit's hp, damage,
+                     speed or range multiplier), for sizing a change
+                     before making it
+  --latin            matchups apart from maps, for two-sided scenarios:
+                     every pairing of two different doctrines meets every
+                     map type (--maps) once, taking turns at which is side
+                     1, and the pairings are shown per map type. 28 battles
+                     per map type; --battles rounds to whole passes
   --list             list the scenarios and stop
   --help             this text
 
@@ -94,6 +105,8 @@ function parseArgs(argv) {
     battle: null,
     from: null,
     map: null,
+    sweep: null,
+    latin: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -118,6 +131,8 @@ function parseArgs(argv) {
     else if (a === '--battle') opts.battle = argv[++i];
     else if (a === '--from') opts.from = argv[++i];
     else if (a === '--map') opts.map = argv[++i];
+    else if (a === '--sweep') opts.sweep = argv[++i];
+    else if (a === '--latin') opts.latin = true;
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -147,16 +162,23 @@ async function main() {
     console.error(`Note: with ${opts.maps.length} map types, doctrines meet them only roughly equally often (exactly with 1, 2, 4 or 8).`);
   }
   const picked = opts.seeds ? sim.parseBattleNumbers(opts.seeds) : null;
-  const jobs = scenarios.flatMap((s) => {
+  const variants = opts.sweep ? sim.sweepVariants(opts.sweep) : null;
+  if (opts.latin && opts.doctrines) throw new Error('--latin picks the doctrines itself: leave out --doctrines');
+  const planned = scenarios.flatMap((s) => {
     // Enough battles in the plan to reach the highest number picked.
     const normal = opts.battles ?? (opts.quick ? s.quick : s.battles);
     const n = picked ? Math.max(normal, picked[picked.length - 1]) : normal;
     // With doctrines, each pass over the orthogonal array plays every row once, on fresh maps.
     const sides = sim.scenarioSettings(s, 1, opts.set).factions.length;
-    const plans = sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap });
+    if (opts.latin && sides !== 2) throw new Error(`--latin is for two-sided scenarios; ${s.id} has ${sides} sides (try --only 1v1)`);
+    const plans = opts.latin
+      ? sim.latinPlans(opts.battles ?? 0, opts.maps, opts.set)
+      : sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap });
     const only = picked && new Set(picked);
     return plans.filter((p) => !only || only.has(p.battle)).map((p) => ({ scenario: s.id, ...p, options: { profile: opts.profile, timeline: opts.timeline } }));
   });
+  // A sweep plays every battle once per value, the value first so it wins over --set.
+  const jobs = variants ? variants.flatMap((v) => planned.map((j) => ({ ...j, set: [v.set, j.set].filter(Boolean).join('&'), variant: v.label }))) : planned;
   if (jobs.length === 0) throw new Error('No battles to play: --seeds picked battle numbers past the end of the run (try --battles)');
   // Big battles first, so the run doesn't end waiting on one of them.
   const size = { small: 0.6, medium: 1, large: 2 };
@@ -166,7 +188,7 @@ async function main() {
   }));
   jobs.sort((a, b) => cost.get(b.scenario) - cost.get(a.scenario));
   const workers = Math.min(opts.workers, jobs.length);
-  console.error(`${jobs.length} battles in ${scenarios.length} scenarios, ${workers} at a time${opts.set ? `, with ${opts.set}` : ''}${opts.maps.length ? ` on ${opts.maps.join(', ')}` : ''}…`);
+  console.error(`${jobs.length} battles in ${scenarios.length} scenarios, ${workers} at a time${opts.set ? `, with ${opts.set}` : ''}${opts.maps.length ? ` on ${opts.maps.join(', ')}` : ''}${variants ? `, ${variants.length} variants` : ''}…`);
 
   const results = [];
   const started = Date.now();
@@ -184,7 +206,7 @@ async function main() {
           results.push(msg.result);
           const r = msg.result;
           const outcome = r.winner !== null ? `team ${r.winner} won` : r.decided ? 'draw' : 'no winner';
-          console.error(`[${results.length}/${jobs.length}] ${r.seed}${r.map ? ` (${r.map})` : ''}: ${r.minutes.toFixed(1)} min, ${outcome}`);
+          console.error(`[${results.length}/${jobs.length}] ${r.seed}${r.map ? ` (${r.map})` : ''}${r.variant ? ` [${r.variant}]` : ''}: ${r.minutes.toFixed(1)} min, ${outcome}`);
           feed();
         });
         worker.on('error', fail);
@@ -196,13 +218,23 @@ async function main() {
   const summaries = scenarios.map((s) => sim.summarize(s, results.filter((r) => r.scenario === s.id).sort((a, b) => a.seed.localeCompare(b.seed, undefined, { numeric: true }))));
   const eternal = new Set(scenarios.filter((s) => s.minutes).map((s) => s.id));
   console.log('');
-  console.log(sim.formatTable(summaries, eternal));
-  console.log('');
-  if (opts.doctrines || opts.maps.length > 1) {
-    console.log(sim.formatDoctrines(results));
+  if (variants) {
+    console.log(`Sweep of ${opts.sweep}:`);
+    console.log(sim.formatSweep(results, variants));
     console.log('');
+  } else {
+    console.log(sim.formatTable(summaries, eternal));
+    console.log('');
+    if (opts.doctrines || opts.latin || opts.maps.length > 1) {
+      console.log(sim.formatDoctrines(results));
+      console.log('');
+    }
+    if (opts.latin) {
+      console.log(sim.formatLatin(results));
+      console.log('');
+    }
   }
-  if (opts.doctrines || opts.units) {
+  if ((opts.doctrines || opts.latin || opts.units) && !variants) {
     console.log('Units, all battles together:');
     console.log(sim.formatUnits(results));
     console.log('');
@@ -213,19 +245,19 @@ async function main() {
     console.log('');
   }
   console.log('Lengths in minutes. Wins by team: T1 is the first side\'s team (the lone side in 1v3).');
-  console.log('Kills, razed, outposts and attacks are per battle, all sides together.');
+  console.log('Kills, razed, outposts and attacks are per battle, all sides together. Margin is the winners\' share of the armies\' strength at the end.');
   if (opts.set) console.log(`Settings changed for every battle: ${opts.set}`);
   console.log(`Took ${((Date.now() - started) / 60000).toFixed(1)} minutes.`);
 
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
   const dir = join(root, 'sims-results');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ set: opts.set, maps: opts.maps, summaries, battles: results }, null, 2));
+  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ set: opts.set, maps: opts.maps, sweep: opts.sweep, latin: opts.latin, summaries, battles: results }, null, 2));
   const csv = [
-    'scenario,seed,map,doctrines,minutes,winner,decided,kills,razed,captured,attacks,ms_per_tick,link',
+    'scenario,seed,map,variant,doctrines,minutes,winner,margin,decided,kills,razed,captured,attacks,ms_per_tick,link',
     ...results.map((r) => {
       const sum = (k) => r.sides.reduce((a, s) => a + s[k], 0);
-      return [r.scenario, r.seed, r.map, r.sides.map((s) => s.doctrine).join(' '), r.minutes.toFixed(2), r.winner ?? '', r.decided, sum('kills'), sum('razed'), sum('captured'), sum('attacks'), r.msPerTick.toFixed(3), `?${r.link}`].join(',');
+      return [r.scenario, r.seed, r.map, r.variant ?? '', r.sides.map((s) => s.doctrine).join(' '), r.minutes.toFixed(2), r.winner ?? '', r.margin == null ? '' : r.margin.toFixed(3), r.decided, sum('kills'), sum('razed'), sum('captured'), sum('attacks'), r.msPerTick.toFixed(3), `?${r.link}`].join(',');
     }),
   ].join('\n');
   writeFileSync(join(dir, `${stamp}.csv`), csv + '\n');
@@ -286,7 +318,8 @@ async function workerMain() {
   parentPort.on('message', (job) => {
     if (job === null) return process.exit(0);
     const scenario = sim.SCENARIOS.find((s) => s.id === job.scenario);
-    parentPort.postMessage({ result: sim.runBattle(scenario, job.battle, undefined, job.set, job.map, job.options) });
+    const result = sim.runBattle(scenario, job.battle, undefined, job.set, job.map, job.options);
+    parentPort.postMessage({ result: job.variant ? { ...result, variant: job.variant } : result });
   });
   parentPort.postMessage({ ready: true });
 }
