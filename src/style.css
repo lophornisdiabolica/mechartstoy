@@ -686,6 +686,14 @@ body {
   }
 }
 
+#setup .range {
+  align-items: center;
+}
+
+#setup .range select {
+  flex: 1;
+}
+
 #setup .kinds {
   flex-wrap: wrap;
   gap: 4px;

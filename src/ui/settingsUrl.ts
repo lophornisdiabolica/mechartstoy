@@ -1,4 +1,5 @@
-import { isDoctrine } from '../game/doctrines';
+import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
+import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
 import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
@@ -88,6 +89,15 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     if (f.team !== def.team) p.set(`team${i + 1}`, String(f.team + 1));
     if (f.doctrine !== def.doctrine) p.set(`doc${i + 1}`, f.doctrine);
   });
+  // Variety between battles: vary=size,biome,... and its options.
+  const v = s.variety;
+  const dv = d.variety;
+  const rolled = VARIETY_KEYS.filter((k) => v.roll[k]);
+  if (rolled.length) p.set('vary', rolled.join(','));
+  if (v.sidesMin !== dv.sidesMin || v.sidesMax !== dv.sidesMax) p.set('vsides', `${v.sidesMin}-${v.sidesMax}`);
+  if (v.teams !== dv.teams) p.set('vteams', v.teams);
+  if (v.doctrines.join(',') !== dv.doctrines.join(',')) p.set('vdocs', v.doctrines.join(','));
+  if (v.after !== dv.after) p.set('vafter', String(v.after));
   return p;
 }
 
@@ -168,6 +178,27 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     const doctrine = p.get(`doc${i + 1}`);
     if (isDoctrine(doctrine)) f.doctrine = doctrine;
   });
+  const vary = p.get('vary');
+  if (vary !== null) {
+    const listed = vary.split(',').map((k) => k.trim());
+    for (const k of VARIETY_KEYS) s.variety.roll[k] = listed.includes(k);
+  }
+  const vsides = p.get('vsides')?.match(/^(\d+)-(\d+)$/);
+  if (vsides) {
+    const [lo, hi] = [Number(vsides[1]), Number(vsides[2])].map((n) => Math.max(2, Math.min(MAX_FACTIONS, n)));
+    s.variety.sidesMin = Math.min(lo, hi);
+    s.variety.sidesMax = Math.max(lo, hi);
+  }
+  const vteams = p.get('vteams');
+  if (vteams === 'ffa' || vteams === 'two' || vteams === 'either') s.variety.teams = vteams;
+  const vdocs = p.get('vdocs');
+  if (vdocs !== null) {
+    const listed = vdocs.split(',').map((k) => k.trim());
+    const docs = DOCTRINE_IDS.filter((d) => listed.includes(d));
+    if (docs.length > 0) s.variety.doctrines = docs;
+  }
+  const vafter = p.get('vafter');
+  if (vafter !== null && VARIETY_AFTER.includes(Number(vafter))) s.variety.after = Number(vafter);
 }
 
 function round2(v: number): number {

@@ -1,5 +1,5 @@
 import { FixedLoop } from './core/loop';
-import { hashSeed } from './core/rng';
+import { hashSeed, Rng } from './core/rng';
 import { Building, Faction, Producer, Unit } from './game/components';
 import { BuildingId } from './game/buildings';
 import { FactionDef } from './game/factions';
@@ -7,6 +7,7 @@ import { Game, SIM_HZ } from './game/game';
 import { outpostsHeldBy } from './game/outposts';
 import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
+import { rollBattle, varietyOn } from './game/variety';
 import { Stage } from './render/stage';
 import { loadViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
@@ -58,6 +59,10 @@ function randomSeed(): string {
 interface Battle {
   game: Game;
   seed: string;
+  /** What this battle was started with (a re-roll of the setup's settings, when variety is on). */
+  settings: BattleSettings;
+  /** What was re-rolled for it, for the HUD; empty if nothing was. */
+  label: string;
   factions: FactionDef[];
   /** The control panel; null while the battle is only a backdrop behind the setup screen. */
   controls: Controls | null;
@@ -127,7 +132,9 @@ export class App implements MatchControls {
   }
 
   settingsChanged(): void {
-    this.writeUrl({ ...this.settings, seed: this.battle.seed });
+    // The panel changes the live battle's settings; keep the setup's in step.
+    if (this.battle.settings !== this.settings) this.settings.armies.ramp = structuredClone(this.battle.settings.armies.ramp);
+    this.writeUrl({ ...this.battle.settings, seed: this.battle.seed });
   }
 
   private startFromSetup(settings: BattleSettings): void {
@@ -144,14 +151,14 @@ export class App implements MatchControls {
     this.battle.controls = null;
   }
 
-  private startBattle(settings: BattleSettings, seed: string): void {
+  private startBattle(settings: BattleSettings, seed: string, label = ''): void {
     this.dropControls();
     const game = new Game(hashSeed(seed), { settings });
     const factions = factionDefs(settings);
     this.stage.load(game, factions);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
-    this.battle = { game, seed, factions, controls };
+    this.battle = { game, seed, settings, label, factions, controls };
     this.banner.hidden = true;
     this.bannerShownFor = null;
     this.hudTimer = 0;
@@ -165,8 +172,10 @@ export class App implements MatchControls {
     controls?.update(frameSeconds);
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
 
-    const outcome = game.outcome;
-    if (outcome && !this.setup.visible) {
+    // A battle that hasn't ended by the variety time limit gives way to the next.
+    const after = this.battle.settings.variety.after;
+    const ended = game.outcome !== null || (after > 0 && game.world.time >= after * 60);
+    if (ended && !this.setup.visible) {
       if (this.bannerShownFor !== game) this.showBanner();
       if (this.loop.timeScale > 0) this.bannerTime += frameSeconds;
       const left = Math.ceil(VICTORY_PAUSE - this.bannerTime);
@@ -187,19 +196,26 @@ export class App implements MatchControls {
       this.endBattle();
       return;
     }
-    // Same settings, fresh map.
-    this.startBattle(this.settings, randomSeed());
+    // Same settings, fresh map, and a fresh roll of whatever the setup asked to vary.
+    const seed = randomSeed();
+    if (!varietyOn(this.settings.variety)) {
+      this.startBattle(this.settings, seed);
+      return;
+    }
+    const roll = rollBattle(this.settings, new Rng(hashSeed(`variety:${seed}`)));
+    this.startBattle(roll.settings, seed, roll.label);
   }
 
   private showBanner(): void {
     const { game, factions } = this.battle;
-    const outcome = game.outcome!;
-    const winners = outcome.winners.map((f) => factions[f]);
+    const outcome = game.outcome;
+    const winners = outcome ? outcome.winners.map((f) => factions[f]) : [];
     this.bannerShownFor = game;
     this.bannerTime = 0;
+    const title = !outcome ? 'Time’s up' : winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`;
     this.banner.replaceChildren(
-      el('div', { class: 'title' }, winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`),
-      el('div', { class: 'sub' }, `after ${clock(outcome.time)}`),
+      el('div', { class: 'title' }, title),
+      el('div', { class: 'sub' }, outcome ? `after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
       this.summary(),
       el('div', { class: 'next' }),
     );
@@ -211,7 +227,7 @@ export class App implements MatchControls {
   private summary(): HTMLElement {
     const { game, factions } = this.battle;
     const { stats, ctx } = game;
-    const outcome = game.outcome!;
+    const outcome = game.outcome;
     const table = el('table', { class: 'summary' });
     const typeName = (id: string) => ctx.units[id as UnitId]?.name ?? ctx.buildings[id as BuildingId]?.name ?? id;
     const columns: [string, string, (f: number) => string][] = [
@@ -235,7 +251,7 @@ export class App implements MatchControls {
         'Won, or when the side lost its last production building',
         (f) => {
           const out = ctx.sides.eliminatedAt[f];
-          if (outcome.winners.includes(f)) return out === null ? 'Won' : `Won (out ${clock(out)})`;
+          if (outcome?.winners.includes(f)) return out === null ? 'Won' : `Won (out ${clock(out)})`;
           return out === null ? '—' : `Out ${clock(out)}`;
         },
       ],
@@ -261,7 +277,7 @@ export class App implements MatchControls {
   }
 
   private hudText(): string {
-    const { game, factions, seed } = this.battle;
+    const { game, factions, seed, label } = this.battle;
     const losses = game.stats.sides.map((s) => s.lost);
     const w = game.world;
     const alive = factions.map(() => 0);
@@ -291,7 +307,7 @@ export class App implements MatchControls {
     });
     return (
       `${lines.join('\n')}\n` +
-      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
+      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
       `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause`
     );
   }

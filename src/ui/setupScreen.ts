@@ -7,6 +7,16 @@ import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef } from '../game/units';
 import { DOCTRINE_IDS, DOCTRINES, isDoctrine } from '../game/doctrines';
 import { dropdown, el, hex, segmented } from './dom';
+import { Rng } from '../core/rng';
+import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, VarietyTeams } from '../game/variety';
+
+const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
+  size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual' },
+  biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
+  style: { label: 'Map style', title: 'Water, hills, dense forest and towns together, from one of the map styles' },
+  sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
+  doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
+};
 
 const MODE_HINTS: Record<BattleMode, string> = {
   eternal: 'Ruined buildings are rebuilt and the war goes on forever.',
@@ -245,23 +255,144 @@ export class SetupScreen {
       modeHint.textContent = MODE_HINTS[this.settings.mode];
     });
 
-    const seedWrap = el('div', { class: 'inline' });
-    const seed = el('input', { type: 'text', placeholder: 'random', maxlength: '40', spellcheck: 'false', 'aria-label': 'Seed' });
-    seed.addEventListener('input', () => {
-      this.settings.seed = seed.value.trim();
-      this.callbacks.change(cloneSettings(this.settings));
+    // The seed box, used here and again under the placement map.
+    const seedControl = (parent: HTMLElement) => {
+      const wrap = el('div', { class: 'inline' });
+      const seed = el('input', { type: 'text', placeholder: 'random', maxlength: '40', spellcheck: 'false', 'aria-label': 'Seed' });
+      seed.addEventListener('input', () => {
+        this.settings.seed = seed.value.trim();
+        // Not a full refresh, which would rewrite this box while it's typed in, but the other seed box and the map follow.
+        this.refresh();
+        this.callbacks.change(cloneSettings(this.settings));
+      });
+      const reroll = el('button', { type: 'button', title: 'Roll a new seed' }, 'Roll');
+      reroll.addEventListener('click', () => {
+        this.settings.seed = randomSeed();
+        this.changed();
+      });
+      const clear = el('button', { type: 'button', title: 'A new map every time' }, 'Clear');
+      clear.addEventListener('click', () => {
+        this.settings.seed = '';
+        this.changed();
+      });
+      wrap.append(seed, reroll, clear);
+      row(parent, 'Seed', wrap);
+      this.sync.push(() => {
+        if (document.activeElement !== seed) seed.value = this.settings.seed;
+        clear.disabled = this.settings.seed === '';
+      });
+    };
+    seedControl(battle);
+    battle.append(el('p', { class: 'hint' }, 'The same seed and settings always make the same map. Leave it empty for a new map every time.'));
+
+    // Between battles: what to re-roll for every battle after the first.
+    const variety = section('Between battles', false);
+    // A row of toggle chips; `min` keeps at least that many on.
+    const chips = <T extends string>(parent: HTMLElement, label: string, items: { id: T; label: string; title: string }[], get: () => T[], set: (on: T[]) => void, min: number) => {
+      const box = el('div', { class: 'inline kinds' });
+      const buttons = items.map((item) => {
+        const b = el('button', { type: 'button', class: 'chip', title: item.title, 'aria-pressed': 'false' }, item.label);
+        b.addEventListener('click', () => {
+          const on = get();
+          const next = on.includes(item.id) ? on.filter((x) => x !== item.id) : items.map((x) => x.id).filter((x) => x === item.id || on.includes(x));
+          if (next.length < min) return;
+          set(next);
+          this.changed();
+        });
+        box.append(b);
+        return b;
+      });
+      row(parent, label, box);
+      this.sync.push(() =>
+        buttons.forEach((b, i) => {
+          const on = get().includes(items[i].id);
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', String(on));
+        }),
+      );
+    };
+    chips(
+      variety,
+      'Re-roll',
+      VARIETY_KEYS.map((k) => ({ id: k, ...VARIETY_LABELS[k] })),
+      () => VARIETY_KEYS.filter((k) => this.settings.variety.roll[k]),
+      (on) => VARIETY_KEYS.forEach((k) => (this.settings.variety.roll[k] = on.includes(k))),
+      0,
+    );
+    variety.append(
+      el(
+        'p',
+        { class: 'hint' },
+        `The battle you start uses the settings as they are here. Every battle after it re-rolls what’s picked, and keeps the rest. Map styles: ${MAP_STYLES.map((m) => m.label).join(', ')}.`,
+      ),
+    );
+    const sideCounts = Array.from({ length: MAX_FACTIONS - 1 }, (_, i) => ({ label: String(i + 2), value: i + 2 }));
+    const fewest = dropdown(sideCounts, (v) => {
+      this.settings.variety.sidesMin = v;
+      this.settings.variety.sidesMax = Math.max(v, this.settings.variety.sidesMax);
+      this.changed();
+    }, 'Fewest sides');
+    const most = dropdown(sideCounts, (v) => {
+      this.settings.variety.sidesMax = v;
+      this.settings.variety.sidesMin = Math.min(v, this.settings.variety.sidesMin);
+      this.changed();
+    }, 'Most sides');
+    const range = el('div', { class: 'inline range' });
+    range.append(fewest.row, el('span', {}, 'to'), most.row);
+    row(variety, 'Sides', range);
+    const teams = segmented<VarietyTeams>(
+      [
+        { label: 'Free-for-all', value: 'ffa', title: 'Every side for itself' },
+        { label: 'Two teams', value: 'two', title: 'Sides dealt alternately into two teams' },
+        { label: 'Either', value: 'either', title: 'Free-for-all or two teams, at random' },
+      ],
+      (v) => {
+        this.settings.variety.teams = v;
+        this.changed();
+      },
+    );
+    row(variety, 'Teams', teams.row);
+    this.sync.push(() => {
+      const v = this.settings.variety;
+      fewest.set(v.sidesMin);
+      most.set(v.sidesMax);
+      teams.set(v.teams);
+      for (const c of [fewest.row, most.row, ...teams.row.querySelectorAll('button')]) (c as HTMLButtonElement | HTMLSelectElement).disabled = !v.roll.sides;
     });
-    const reroll = el('button', { type: 'button', title: 'Roll a new seed' }, 'Roll');
-    reroll.addEventListener('click', () => {
-      this.settings.seed = randomSeed();
+    chips(
+      variety,
+      'Doctrine pool',
+      DOCTRINE_IDS.map((d) => ({ id: d, label: DOCTRINES[d].name, title: DOCTRINES[d].blurb })),
+      () => this.settings.variety.doctrines,
+      (on) => (this.settings.variety.doctrines = on),
+      1,
+    );
+    variety.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Re-rolled doctrines are drawn from the pool, each once before any comes up twice. A side with a standard name takes the name and colours that go with its new doctrine. New sides past the ones listed under Sides get the standard ones.',
+      ),
+    );
+    const after = dropdown(
+      VARIETY_AFTER.map((m) => ({ label: m === 0 ? 'Never (play to the end)' : `After ${m} minutes`, value: m })),
+      (v) => {
+        this.settings.variety.after = v;
+        this.changed();
+      },
+      'Move on to a new battle',
+    );
+    row(variety, 'Move on', after.row);
+    this.sync.push(() => after.set(this.settings.variety.after));
+    const rollNow = el('button', { type: 'button', title: 'Re-roll what’s picked into the settings here now, to see or start one' }, 'Roll now');
+    rollNow.addEventListener('click', () => {
+      this.settings = rollBattle(this.settings, new Rng(Math.floor(Math.random() * 2 ** 32))).settings;
       this.changed();
     });
-    seedWrap.append(seed, reroll);
-    row(battle, 'Seed', seedWrap);
-    battle.append(el('p', { class: 'hint' }, 'The same seed and settings always make the same map. Leave it empty for a new map every time.'));
-    this.sync.push(() => {
-      if (document.activeElement !== seed) seed.value = this.settings.seed;
-    });
+    const rollRow = el('div', { class: 'inline' });
+    rollRow.append(rollNow);
+    variety.append(rollRow, el('p', { class: 'hint' }, 'Move on ends a battle that’s still going after that long (an Eternal war never ends by itself), so the toy can be left running. Roll now re-rolls what’s picked into the settings here, to look at or start.'));
+    this.sync.push(() => (rollNow.disabled = !VARIETY_KEYS.some((k) => this.settings.variety.roll[k])));
 
     // Map
     const map = section('Map', false);
@@ -461,7 +592,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
       ),
     );
 
@@ -479,7 +610,9 @@ export class SetupScreen {
     const placedNote = el('span', { class: 'value' });
     const autoRow = el('div', { class: 'inline' });
     autoRow.append(auto, placedNote);
-    placement.append(preview.root, autoRow);
+    placement.append(preview.root);
+    seedControl(placement);
+    placement.append(autoRow);
     placement.addEventListener('toggle', () => preview.update(cloneSettings(this.settings)));
     this.sync.push(() => {
       preview.update(cloneSettings(this.settings));
