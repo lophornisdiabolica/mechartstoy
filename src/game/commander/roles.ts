@@ -39,7 +39,8 @@ const ESCORTS = 3;
 /** How far round the super unit its escorts keep. */
 const ESCORT_RING = 5;
 
-export type JobKind = 'cover' | 'overwatch' | 'escort';
+/** 'build' jobs are the engineers' (see engineers.ts); the rest are handed out here. */
+export type JobKind = 'cover' | 'overwatch' | 'escort' | 'build';
 
 /** A unit's job: where to be, and for an escort, whom to stay with. */
 export interface Job {
@@ -70,7 +71,7 @@ export class Roles {
 
   /** How many of a side's units have each kind of job, as of the last update (for the panel and tests). */
   counts(side: number): Record<JobKind, number> {
-    return this.tally[side] ?? { cover: 0, overwatch: 0, escort: 0 };
+    return this.tally[side] ?? { cover: 0, overwatch: 0, escort: 0, build: 0 };
   }
 
   private tally: Record<JobKind, number>[] = [];
@@ -78,7 +79,7 @@ export class Roles {
   /** Hand out jobs afresh. `forces` are the task forces (their squads are busy). */
   update(world: World, ctx: SimContext, strength: StrengthMap, forces: TaskForces): void {
     this.jobs.clear();
-    this.tally = ctx.sides.teams.map(() => ({ cover: 0, overwatch: 0, escort: 0 }));
+    this.tally = ctx.sides.teams.map(() => ({ cover: 0, overwatch: 0, escort: 0, build: 0 }));
     const time = world.time;
     const sides = ctx.sides;
     // Each side's candidates, in a fixed order (the query's).

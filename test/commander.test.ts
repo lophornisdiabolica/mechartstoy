@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { adviceFactor, needsOf, STYLES } from '../src/game/commander/advice';
 import { PICTURE_INTERVAL, SidePicture } from '../src/game/commander/commander';
+import { WALLS_MOST } from '../src/game/commander/engineers';
+import { countByCategory } from '../src/game/caps';
+import { Ai, Building, Faction, Guard, Health, Rubble, Transform, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
-import { spawnUnit } from '../src/game/spawn';
+import { spawnBuilding, spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
 
 const DT = 1 / 30;
@@ -149,7 +152,7 @@ describe('production advice and styles', () => {
     enemyAir,
     needs: { antiAir: 0, antiArmour: 0 },
     goals: [],
-    jobs: { cover: 0, overwatch: 0, escort: 0 },
+    jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 },
   });
 
   it('leans toward flak against aircraft it can’t answer, and away from it with none about', () => {
@@ -188,5 +191,62 @@ describe('production advice and styles', () => {
       return game.ctx.commander.taskForces.forces.filter((tf) => tf.side === 0).reduce((n, tf) => n + tf.squads.length, 0);
     };
     expect(sent('raider')).toBeGreaterThan(sent('cautious'));
+  });
+});
+
+describe('engineers', () => {
+  const walls = (game: Game, side: number) => [...game.world.query(Building, Faction, Transform)].filter((e) => game.world.req(e, Building).def.lasts && game.world.req(e, Faction).id === side);
+  const engineers = (game: Game, side: number) => [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Unit).def.builds && game.world.req(e, Faction).id === side);
+
+  it('the HQ trains engineers, who wall off the front of the rally point and stay out of the army', () => {
+    const game = new Game(7);
+    run(game, 45);
+    for (let side = 0; side < 2; side++) {
+      const built = walls(game, side);
+      expect(built.length).toBeGreaterThan(0);
+      expect(built.length).toBeLessThanOrEqual(WALLS_MOST);
+      const crew = engineers(game, side);
+      expect(crew.length).toBeGreaterThan(0);
+      expect(crew.length).toBeLessThanOrEqual(game.settings.armies.engineers);
+      // Nearer the rally point than home, and a little toward the enemy from it.
+      const home = game.field.baseSites[side];
+      const enemy = game.field.baseSites[1 - side];
+      const rally = game.ctx.lanes.rally(side, 1 - side, 0);
+      for (const w of built) {
+        const t = game.world.req(w, Transform);
+        expect(Math.hypot(t.x - rally.x, t.z - rally.z)).toBeLessThan(Math.hypot(t.x - home.x, t.z - home.z));
+        expect(Math.hypot(t.x - enemy.x, t.z - enemy.z)).toBeLessThan(Math.hypot(rally.x - enemy.x, rally.z - enemy.z));
+      }
+      // No cap, no task force.
+      for (const e of crew) expect(game.ctx.commander.taskForces.forSquad(game.world.req(e, Ai).squad)).toBeUndefined();
+    }
+    const counts = countByCategory(game.world, 2);
+    const infantry = (side: number) => [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Faction).id === side && game.world.req(e, Unit).def.category === 'infantry' && !game.world.req(e, Unit).def.builds && !game.world.has(e, Guard)).length;
+    expect(counts[0].infantry).toBe(infantry(0));
+  });
+
+  it('builds nothing when off', () => {
+    const s = defaultSettings();
+    s.armies.engineers = 0;
+    const game = new Game(7, { settings: s });
+    run(game, 45);
+    expect(walls(game, 0).length + walls(game, 1).length).toBe(0);
+    expect(engineers(game, 0).length + engineers(game, 1).length).toBe(0);
+  });
+
+  it('walls crumble over their lifetime and leave no rubble', () => {
+    const game = new Game(7, { populate: false, autoSpawn: false });
+    const { world, ctx } = game;
+    const b = game.field.baseSites[0];
+    const def = ctx.buildings.wall;
+    const w = spawnBuilding(world, ctx, def, 0, b.x + 6, b.z + 6, 0);
+    const engineers = ctx.commander.engineers;
+    engineers.update(world, ctx);
+    engineers.tick(world, ctx, def.lasts! / 4);
+    expect(world.req(w, Health).hp).toBeCloseTo(def.hp * 0.75, 3);
+    engineers.tick(world, ctx, def.lasts!);
+    game.step(DT);
+    expect(world.isAlive(w)).toBe(false);
+    expect([...world.query(Rubble)].length).toBe(0);
   });
 });

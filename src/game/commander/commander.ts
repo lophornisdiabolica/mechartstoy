@@ -6,6 +6,7 @@ import { fightingStrength } from '../offensive';
 import { findPlaces, Place } from './places';
 import { StrengthMap } from './strength';
 import { Needs, needsOf } from './advice';
+import { Engineers } from './engineers';
 import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
 
@@ -92,6 +93,8 @@ export class Commander {
   readonly taskForces = new TaskForces();
   /** Jobs that suit particular units: flak covering, artillery on high ground, escorts (worker only: the page doesn't need them). */
   readonly roles = new Roles();
+  /** Engineers' building jobs (see engineers.ts). */
+  readonly engineers = new Engineers();
   /** The land grid's passableVersion the places were found for (scrap and felled trees don't move them). */
   private placesVersion = -1;
 
@@ -100,7 +103,7 @@ export class Commander {
     this.strength = new StrengthMap(ctx.field, sides);
     this.places = findPlaces(ctx.field, ctx.navs.land);
     this.placesVersion = ctx.navs.land.passableVersion;
-    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0 } }));
+    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 } }));
   }
 
   /** Rebuild the picture and the goals from the battle as it stands. Reads the battle only. */
@@ -124,6 +127,8 @@ export class Commander {
       if (f < 0 || f >= this.sides.length || world.has(e, Guard)) continue;
       const side = this.sides[f];
       const def = world.req(e, Unit).def;
+      // Engineers aren't part of the army (see engineers.ts).
+      if (def.builds) continue;
       const t = world.req(e, Transform);
       sumX[f] += t.x;
       sumZ[f] += t.z;
@@ -158,8 +163,9 @@ export class Commander {
     }
     this.taskForces.update(world, ctx);
     this.roles.update(world, ctx, this.strength, this.taskForces);
+    this.engineers.update(world, ctx);
     this.sides.forEach((side, f) => {
-      side.jobs = { ...this.roles.counts(f) };
+      side.jobs = { ...this.roles.counts(f), build: this.engineers.count(f) };
       side.goals = this.goalsFor(world, ctx, f);
       for (const tf of this.taskForces.forces) {
         if (tf.side !== f) continue;

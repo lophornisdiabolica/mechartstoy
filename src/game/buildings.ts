@@ -46,6 +46,11 @@ export interface BuildingDef {
   coastal?: boolean;
   /** Seconds from destruction until reconstruction starts. */
   rebuildDelay: number;
+  /**
+   * Built by engineers in battle (see commander/engineers.ts): it crumbles over this many
+   * seconds, and isn't rebuilt when destroyed, so fortifications don't pile up for ever.
+   */
+  lasts?: number;
   /** Seconds the construction animation takes. */
   buildTime: number;
 }
@@ -270,6 +275,18 @@ export const BUILDING_DEFS = {
     turretTurnRate: 2.5,
     rebuildDelay: 30,
     buildTime: 6,
+  },
+  wall: {
+    id: 'wall',
+    name: 'Wall',
+    model: 'bld:wall',
+    hp: 700,
+    armor: 10,
+    radius: 1.2,
+    height: 1.2,
+    lasts: 600,
+    rebuildDelay: 0,
+    buildTime: 8,
   },
   outpost: {
     id: 'outpost',

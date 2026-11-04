@@ -53,7 +53,18 @@ export function aiSystem(ctx: SimContext): System {
         const faction = world.req(e, Faction).id;
         const guard = world.get(e, Guard);
         const post = guard ? ctx.outposts[guard.outpost] : null;
-        const role: Role = world.get(e, Unit)?.def.role ?? 'frontline';
+        const def = world.get(e, Unit)?.def;
+        // Engineers go and build what the Commander wants built, or wait at home (see commander/engineers.ts).
+        if (def?.builds) {
+          const job = ctx.commander.engineers.jobFor(e);
+          const home = ctx.field.baseSites[faction];
+          const enemy = ctx.sides.target(faction, ctx.offensive.attack(faction, world.time));
+          const face = enemy !== null ? ctx.field.baseSites[enemy] : { x: 0, z: 0 };
+          if (job) moveTo(mover, t, job.standX, job.standZ, job.x, job.z);
+          else moveTo(mover, t, home.x + ai.rallyOffsetX * 0.5, home.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
+          continue;
+        }
+        const role: Role = def?.role ?? 'frontline';
         const lookAround = role !== 'frontline' && world.time >= ai.roleCheckAt;
         if (lookAround) ai.roleCheckAt = world.time + ROLE_CHECK;
 

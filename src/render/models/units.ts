@@ -301,8 +301,8 @@ const TROOPER_W = 8;
 const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
-/** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, or a flamethrower and its fuel tank. */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer';
+/** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'wrench';
 
 /** Two walk frames of an infantry sprite. */
 function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
@@ -318,7 +318,7 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       g.fillStyle = c;
       g.fillRect(ox + x, y, w, h);
     };
-    px(2, 0, 4, 3, hex(secondary)); // helmet
+    px(2, 0, 4, 3, kit === 'wrench' ? '#f0c419' : hex(secondary)); // helmet (an engineer's hard hat)
     px(3, 2, 2, 1, '#e0b48a'); // face
     px(2, 3, 4, 4, hex(primary)); // torso
     if (kit === 'launcher') {
@@ -331,6 +331,12 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       px(0, 3, 1, 4, '#b0451c'); // fuel tank on the back
       px(5, 5, 2, 1, '#333'); // flame gun
       px(7, 5, 1, 1, '#ff8a2a');
+    } else if (kit === 'wrench') {
+      px(1, 2, 1, 1, '#f0c419'); // hard hat brim, either side of the face
+      px(6, 2, 1, 1, '#f0c419');
+      px(6, 3, 1, 4, '#9aa0a8'); // wrench
+      px(5, 3, 3, 1, '#9aa0a8');
+      px(0, 4, 1, 3, '#6b4a2a'); // tool bag
     } else {
       px(5, 4, 3, 1, '#222'); // rifle
     }
@@ -886,6 +892,7 @@ registerModel('trooper', (faction) => infantry(faction, 'rifle'));
 registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
 registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
+registerModel('engineer', (faction) => infantry(faction, 'wrench'));
 
 // Shared dark material for burnt-out hulks.
 export const CHARRED = flatMaterial(0x2a2623);

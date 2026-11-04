@@ -186,11 +186,12 @@ export class Controls {
           ),
         );
         const total = side.mix.infantry + side.mix.vehicle + side.mix.air + side.mix.super;
-        line(`Army, outpost guards aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
+        line(`Army, outpost guards and engineers aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
         const jobs = [
           side.jobs.cover > 0 ? `${side.jobs.cover} flak covering against aircraft` : '',
           side.jobs.overwatch > 0 ? `${side.jobs.overwatch} artillery on high ground` : '',
           side.jobs.escort > 0 ? `${side.jobs.escort} escorting the super unit` : '',
+          side.jobs.build > 0 ? `${side.jobs.build} engineer${side.jobs.build === 1 ? '' : 's'} putting up walls` : '',
         ].filter(Boolean);
         if (jobs.length > 0) line(`Jobs: ${jobs.join(', ')}`);
         const limit = this.game.settings.armies.advice;

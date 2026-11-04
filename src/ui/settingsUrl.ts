@@ -34,6 +34,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
   { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
   { key: 'advice', limit: 'advice', get: (s) => s.armies.advice, set: (s, v) => (s.armies.advice = v) },
+  { key: 'eng', limit: 'engineers', get: (s) => s.armies.engineers, set: (s, v) => (s.armies.engineers = Math.round(v)) },
   { key: 'tforce', limit: 'taskForces', get: (s) => s.armies.taskForces, set: (s, v) => (s.armies.taskForces = v) },
   { key: 'ohold', limit: 'outpostHold', get: (s) => s.armies.outpostHold, set: (s, v) => (s.armies.outpostHold = v) },
   { key: 'even', limit: 'evenTeams', get: (s) => s.armies.evenTeams, set: (s, v) => (s.armies.evenTeams = v) },

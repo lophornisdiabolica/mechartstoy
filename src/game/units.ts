@@ -91,6 +91,8 @@ export interface UnitDef {
   carries?: { squad: { unit: string; count: number }[]; every: number };
   /** Spots for allies' long-range weapons, like a sensor mast (see BuildingDef.spots). */
   spots?: number;
+  /** A builder (see commander/engineers.ts): it isn't part of the army, takes no cap and never joins an attack. */
+  builds?: boolean;
 }
 
 /** A weapon with the usual defaults filled in, for the units below that only change a few things. */
@@ -1157,6 +1159,28 @@ export const UNIT_DEFS = {
     weapon: flamer('Inferno projectors', 10, 22, 8, 1.6, 3, 3.5),
     wreckTime: 35,
     siege: true,
+  },
+  // Every doctrine's builder (see commander/engineers.ts): its base's HQ trains one when the Commander has work for it.
+  engineer: {
+    id: 'engineer',
+    name: 'Engineer',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
+    role: 'support',
+    model: 'engineer',
+    hp: 30,
+    armor: 0,
+    speed: 1.7,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 12,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: { ...rifle, name: 'Sidearm', damage: 2, range: 8 },
+    wreckTime: 0,
+    siege: false,
+    builds: true,
   },
 } satisfies Record<string, UnitDef>;
 

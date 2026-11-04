@@ -261,6 +261,16 @@ registerModel('bld:outpost', (faction) => {
 });
 
 /** An outpost bunker: a low concrete blockhouse with a firing slit. */
+/** An engineer's wall segment: a low concrete wall across the way it faces, with a stripe in the side's colour. */
+registerModel('bld:wall', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(0.7, 0.2, 2.6, 0x8f8a7e, 0, 0.1, 0));
+  g.add(box(0.5, 1.0, 2.5, 0xa6a194, 0, 0.6, 0));
+  g.add(box(0.52, 0.12, 2.52, primary, 0, 1.14, 0));
+  return g;
+});
+
 registerModel('bld:bunker', (faction) => {
   const { primary } = factionColors(faction);
   const g = new THREE.Group();
