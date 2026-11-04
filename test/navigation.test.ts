@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { BUILDING_DEFS } from '../src/game/buildings';
 import { Ai, Building, Collider, Mover, Transform } from '../src/game/components';
@@ -201,5 +201,17 @@ describe('route upkeep', () => {
     const near = game.ctx.navs.land.cellOf(b.x + 7, b.z);
     game.ctx.navs.land.obstacles.record({ i0: near[0], j0: near[1], i1: near[0], j1: near[1] });
     expect(game.ctx.navs.land.obstacles.changedSince(nav.pathVersion, { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 })).toBe(true);
+  });
+  it('units setting off together from the same spot to the same goal share one planned route', () => {
+    const game = quietGame();
+    const s = game.field.baseSites[0];
+    // A wall of houses with a gap, so the way there needs planning.
+    for (const dz of [-9, -6, -3, 3, 6, 9]) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.house, 1, s.x, s.z + dz, 0);
+    const plans = vi.spyOn(game.ctx.navs.land, 'findPath');
+    const squad = [0, 0.05, 0.1, 0.15].map((d) => puppet(game, 'tank', s.x - 8 + d, s.z + 2 + d));
+    for (const e of squad) goTo(game, e, s.x + 8, s.z + 2);
+    game.step(DT);
+    for (const e of squad) expect(game.world.req(e, Mover).nav.path).not.toBeNull();
+    expect(plans).toHaveBeenCalledTimes(1);
   });
 });
