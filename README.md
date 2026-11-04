@@ -375,7 +375,7 @@ road), `addRoad` paves a line, `reshape(x, z, radius, fn)` changes heights
 (a canal, a wall's footing) and `addBridge` adds a bridge. Each tells
 everything listening through `onChange` which cells changed: the route
 grids recompute those cells and their connected regions and bump their
-version (so routes re-plan, as they do when buildings go up or down), and
+version (so routes through those cells re-plan, as they do when buildings go up or down), and
 the terrain mesh redraws them (and any road over them). Scrap from wrecks
 (`game/scrap.ts`) and dense forest being cleared (`world/woods.ts`) use it
 now; walls, canals and towns that engineers grow can use it later. Lanes,
@@ -404,7 +404,14 @@ outposts and the light scenery are still placed once, at the start.
   otherwise plans an A* route on the nav grid, steers around obstacles in
   the way, and sidesteps if it stops making progress. Routes respect the
   unit's radius: the nav grid keeps a clearance map, so a Titan only plans
-  through gaps it fits. Spawning (`spawnSpot` in `systems/production.ts`)
+  through gaps it fits. Routes are shared and kept (Commander step 5): a
+  map or building change only re-plans routes whose cells it touched
+  (`NavObstacles.changedSince`, which remembers the last 256 changes), and
+  a unit setting off from about where another just planned from (within
+  two cells), to about the same place and of about the same size, takes
+  that route for 2 seconds after it was planned, so a squad or task
+  force plans once. On the 8-side large battle that cut route planning
+  from about 45,000 plans in 5 minutes to 12,000. Spawning (`spawnSpot` in `systems/production.ts`)
   also checks there's room, and base layouts keep an apron clear in front of
   production doors.
 - **Movement classes** (`world/moveClasses.ts`). Every unit has one, and
