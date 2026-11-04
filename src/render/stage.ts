@@ -14,6 +14,7 @@ import { FightWatch } from './fightWatch';
 import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
 import { CommanderOverlay } from './commanderOverlay';
+import { FrontLines } from './frontLines';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
 import { setFactionPalette } from './models';
 import './models/buildings';
@@ -66,6 +67,12 @@ export class Stage {
   markers!: Markers;
   outpostRings!: OutpostRings;
   commanderOverlay!: CommanderOverlay;
+  frontLines!: FrontLines;
+  private frontsShown = false;
+  /** Where the sun sits relative to what it lights (see daylight). */
+  private readonly sunOffset = SUN_OFFSET.clone();
+  private readonly sky: THREE.HemisphereLight;
+  private hour: number | null = null;
   /** The debug overlays (see DebugOverlay), replaced with each battle; the layers shown carry over. */
   debugOverlay!: DebugOverlay;
   /** Draw each side's plan on the map (see CommanderOverlay). */
@@ -109,7 +116,8 @@ export class Stage {
       this.onFollowStopped?.();
     };
 
-    this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x4a4436, 1.3));
+    this.sky = new THREE.HemisphereLight(0xdfeeff, 0x4a4436, 1.3);
+    this.scene.add(this.sky);
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.position.copy(SUN_OFFSET);
     this.sun.castShadow = true;
@@ -139,6 +147,7 @@ export class Stage {
       this.stopWoods?.();
       this.entities.dispose();
       this.commanderOverlay.dispose();
+      this.frontLines.dispose();
       this.debugOverlay.dispose();
       disposeTree(this.battle);
     }
@@ -164,6 +173,9 @@ export class Stage {
     this.outpostRings = new OutpostRings(game);
     this.commanderOverlay = new CommanderOverlay(game);
     this.commanderOverlay.visible = this.plansShown;
+    this.frontLines = new FrontLines(game);
+    this.frontLines.visible = this.frontsShown;
+    battle.add(this.frontLines.root);
     const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
     const costClass = this.debugOverlay?.costClass;
     this.debugOverlay = new DebugOverlay(game);
@@ -178,6 +190,54 @@ export class Stage {
     this.fights = new FightWatch(game.events, field.bounds);
     this.mapHalf = Math.max(field.width, field.depth) * 0.6;
     this.rig.setBounds(field.bounds);
+  }
+
+  /** Front lines: a soft shading of who holds which ground (see FrontLines). */
+  get showFronts(): boolean {
+    return this.frontsShown;
+  }
+
+  set showFronts(on: boolean) {
+    this.frontsShown = on;
+    if (this.frontLines) this.frontLines.visible = on;
+  }
+
+  /** The time of day the light is set for (photo mode), or null for the usual light. */
+  get daylight(): number | null {
+    return this.hour;
+  }
+
+  /**
+   * Light the scene for an hour of the day, 5 (dawn) to 19 (dusk): the sun
+   * rises in the east, swings round the south and sets in the west, low
+   * sun warmer and dimmer. Null puts back the usual light. Looks only.
+   */
+  set daylight(hour: number | null) {
+    this.hour = hour;
+    if (hour === null) {
+      this.sunOffset.copy(SUN_OFFSET);
+      this.sun.color.set(0xfff1dc);
+      this.sun.intensity = 2.6;
+      this.sky.intensity = 1.3;
+      return;
+    }
+    const day = Math.max(0, Math.min(1, (hour - 5) / 14));
+    // Height of the sun: 0 at dawn and dusk, highest at noon.
+    const up = Math.sin(day * Math.PI);
+    const elevation = Math.max(0.06, up * 1.05);
+    // From the east (+x) through the south (+z) to the west.
+    const azimuth = day * Math.PI;
+    const d = 110;
+    this.sunOffset.set(Math.cos(azimuth) * Math.cos(elevation) * d, Math.sin(elevation) * d, Math.sin(azimuth) * Math.cos(elevation) * d);
+    this.sun.color.set(0xffa25c).lerp(new THREE.Color(0xfff1dc), Math.min(1, up * 1.6));
+    this.sun.intensity = 0.9 + 1.7 * up;
+    this.sky.intensity = 0.55 + 0.75 * up;
+  }
+
+  /** The picture on screen now, as a PNG data URL (drawn again first, so the canvas still holds it). */
+  capture(): string {
+    this.composer.render(0);
+    return this.renderer.domElement.toDataURL('image/png');
   }
 
   /** Debug layers that were showing before this battle loaded, to show again (see restoreDebug). */
@@ -241,7 +301,7 @@ export class Stage {
     const v = t.dot(up);
     const snapped = _snap.copy(t).addScaledVector(right, Math.round(u / texel) * texel - u).addScaledVector(up, Math.round(v / texel) * texel - v);
     this.sun.target.position.copy(snapped);
-    this.sun.position.copy(snapped).add(SUN_OFFSET);
+    this.sun.position.copy(snapped).add(this.sunOffset);
     this.sun.target.updateMatrixWorld();
   }
 
@@ -257,6 +317,7 @@ export class Stage {
     this.markers.update(frameSeconds, this.selected);
     this.outpostRings.update();
     this.commanderOverlay.update();
+    this.frontLines.update(frameSeconds);
     this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();
     this.composer.render(frameSeconds);

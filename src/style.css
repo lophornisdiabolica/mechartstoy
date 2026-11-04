@@ -800,6 +800,138 @@ body {
   cursor: grabbing;
 }
 
+#panel button.wide {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* Battle ticker: a quiet feed in the top-left corner, newest at the bottom. */
+#ticker {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  max-width: min(420px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  z-index: 4;
+  font-size: 12px;
+}
+
+#ticker[hidden] {
+  display: none;
+}
+
+#ticker .line {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: rgba(16, 20, 28, 0.72);
+  color: #e6edf3;
+  transition: opacity 0.3s;
+}
+
+#ticker .time {
+  color: #8b98a8;
+  font-variant-numeric: tabular-nums;
+}
+
+#ticker .side {
+  font-weight: 600;
+}
+
+/* Post-battle chart in the victory banner. */
+#banner .chart {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+#banner .chart svg {
+  display: block;
+  margin: 2px auto 4px;
+  max-width: 100%;
+  height: auto;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+
+#banner .chart .turn {
+  stroke: #e8d27a;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+#banner .chart .axis,
+#banner .chart .note {
+  color: #8b98a8;
+}
+
+/* Photo mode: no interface but the photo bar. */
+body.photo #hud,
+body.photo #panel,
+body.photo #toast,
+body.photo #ticker,
+body.photo #banner,
+body.photo #perf,
+body.photo #debug {
+  display: none !important;
+}
+
+#photo {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 14px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(16, 20, 28, 0.78);
+  color: #e6edf3;
+  font-size: 12px;
+  z-index: 6;
+}
+
+#photo[hidden] {
+  display: none;
+}
+
+#photo label.slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#photo input[type='range'] {
+  width: 90px;
+}
+
+#photo .buttons {
+  display: flex;
+  gap: 6px;
+}
+
+#photo button {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+#photo button.primary {
+  background: #e8d27a;
+  border-color: #e8d27a;
+  color: #1a1d24;
+}
+
 /* The unit stats table's per-doctrine groups. */
 #setup details.units {
   margin: 4px 0;

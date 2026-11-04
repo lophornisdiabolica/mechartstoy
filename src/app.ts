@@ -15,6 +15,9 @@ import { el, hex } from './ui/dom';
 import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
+import { Ticker } from './ui/ticker';
+import { BattleHistory } from './ui/battleChart';
+import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
 import { RemoteSim } from './sim/remoteSim';
 
@@ -95,6 +98,9 @@ export class App implements MatchControls {
   /** Unpaused seconds the banner has been up. */
   private bannerTime = 0;
   private readonly perf: PerfOverlay;
+  private readonly tickerFeed = new Ticker();
+  private readonly history = new BattleHistory();
+  private readonly photo: PhotoMode;
   private readonly debug: DebugPanel;
   /** Plays the battle in a worker thread; null plays it on the page (`?worker=0`, or no worker support). */
   private readonly sim: RemoteSim | null;
@@ -110,21 +116,27 @@ export class App implements MatchControls {
     this.stage.shadows = view.shadows;
     this.stage.followFights = view.follow;
     this.stage.showPlans = view.plans;
+    this.stage.showFronts = view.fronts;
+    this.tickerFeed.on = view.ticker;
     this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
       render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha, frameSeconds),
     });
     document.body.append(this.banner, this.skipNote);
+    this.photo = new PhotoMode(this.stage, this.loop);
     this.perf = new PerfOverlay(this.stage);
     this.debug = new DebugPanel(this.stage);
     if (this.sim) this.sim.onFrame = (f) => this.perf.simFrame(f.ticks, f.simMs, f.worstMs, f.profile);
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
-      if ((key !== 'p' && key !== 'o') || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (key === 'escape' && this.photo.active) return this.photo.leave();
+      if (key !== 'p' && key !== 'o' && key !== 'h') return;
+      if ((e.target instanceof HTMLInputElement && e.target.type !== 'range') || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       if (key === 'p') this.perf.toggle();
-      else this.debug.toggle();
+      else if (key === 'o') this.debug.toggle();
+      else if (!this.setup.visible) this.photo.toggle();
     });
     this.setup = new SetupScreen(this.settings, {
       start: (s) => this.startFromSetup(s),
@@ -152,11 +164,24 @@ export class App implements MatchControls {
   /** End this battle now and open the setup screen. */
   endBattle(): void {
     this.setupAfterBattle = false;
+    this.photo.leave();
     this.dropControls();
     this.banner.hidden = true;
     this.loop.timeScale = 1;
     this.setup.show(this.settings);
     this.writeUrl(this.settings);
+  }
+
+  get ticker(): boolean {
+    return this.tickerFeed.on;
+  }
+
+  set ticker(on: boolean) {
+    this.tickerFeed.on = on;
+  }
+
+  photoMode(): void {
+    this.photo.enter();
   }
 
   settingsChanged(): void {
@@ -205,6 +230,8 @@ export class App implements MatchControls {
     this.stage.restoreDebug();
     this.debug.refresh();
     this.perf.attach(game);
+    this.tickerFeed.attach(game, factions);
+    this.history.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
     this.battle = { game, seed, settings, label, factions, controls };
@@ -219,6 +246,8 @@ export class App implements MatchControls {
     const { game, controls } = this.battle;
     this.stage.render(alpha, frameSeconds, frameSeconds * this.loop.timeScale);
     controls?.update(frameSeconds);
+    this.tickerFeed.update(frameSeconds);
+    this.history.update();
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
     this.perf.frame(frameSeconds);
 
@@ -237,6 +266,7 @@ export class App implements MatchControls {
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.5;
       this.hud.hidden = this.setup.visible;
+      this.tickerFeed.root.style.display = this.setup.visible ? 'none' : '';
       this.hud.textContent = this.hudText();
     }
   }
@@ -262,11 +292,13 @@ export class App implements MatchControls {
     const winners = outcome ? outcome.winners.map((f) => factions[f]) : [];
     this.bannerShownFor = game;
     this.bannerTime = 0;
+    const chart = this.history.render(factions);
     const title = !outcome ? 'Time’s up' : winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`;
     this.banner.replaceChildren(
       el('div', { class: 'title' }, title),
       el('div', { class: 'sub' }, outcome ? `after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
       this.summary(),
+      ...(chart ? [chart] : []),
       el('div', { class: 'next' }),
     );
     this.banner.style.setProperty('--accent', winners.length === 0 ? '#e8d27a' : hex(winners[0].primary));
@@ -358,7 +390,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats · O overlays`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats · O overlays · H photo mode`
     );
   }
 

@@ -11,18 +11,24 @@ export interface ViewPrefs {
   follow: boolean;
   /** Draw each side's plan on the map. */
   plans: boolean;
+  /** Shade who holds which ground (see FrontLines). */
+  fronts: boolean;
+  /** The battle ticker's feed (see Ticker). */
+  ticker: boolean;
 }
 
 const KEY = 'mbt.view';
 const SHADOWS: ShadowQuality[] = ['high', 'low', 'off'];
 
 export function loadViewPrefs(): ViewPrefs {
-  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false };
+  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false, fronts: false, ticker: true };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<ViewPrefs>;
     if (SHADOWS.includes(saved.shadows as ShadowQuality)) prefs.shadows = saved.shadows!;
     if (typeof saved.follow === 'boolean') prefs.follow = saved.follow;
     if (typeof saved.plans === 'boolean') prefs.plans = saved.plans;
+    if (typeof saved.fronts === 'boolean') prefs.fronts = saved.fronts;
+    if (typeof saved.ticker === 'boolean') prefs.ticker = saved.ticker;
   } catch {
     // Storage blocked or garbled: use the defaults.
   }
