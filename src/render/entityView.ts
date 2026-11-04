@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
 import { Armed, Construction, Faction, Renderable, Transform, Wreck } from '../game/components';
+import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
 import { CHARRED } from './models/units';
 
@@ -18,22 +19,56 @@ interface ViewEntry {
   lastX: number;
   lastZ: number;
   wrecked: boolean;
+  /** The model's meshes and sprites, which the batcher draws. */
+  meshes: THREE.Mesh[];
+  sprites: THREE.Sprite[];
 }
 
 const _ahead = new THREE.Vector3();
 
+/** Whether a part and everything between it and its model's root is visible (models blink lights by hiding them). */
+function shown(part: THREE.Object3D, top: THREE.Object3D): boolean {
+  for (let o: THREE.Object3D | null = part; o; o = o.parent) {
+    if (!o.visible) return false;
+    if (o === top) return true;
+  }
+  return true;
+}
+
 /**
  * Mirrors ECS entities into the Three.js scene. The simulation never touches
  * Three objects; this view creates, positions, animates and removes them.
+ *
+ * The models themselves (under `root`) are hidden: they're there to be
+ * posed, animated and picked. What's drawn is the batcher's instanced copy
+ * of them (`drawn`), a draw call per kind of part instead of per part.
  */
 export class EntityView {
+  /** The models, posed but not drawn; raycast against these to pick entities. */
   readonly root = new THREE.Group();
+  /** What's drawn: add to the scene alongside root. */
+  readonly drawn: THREE.Object3D;
+  private readonly batcher = new Batcher();
   private readonly entries = new Map<Entity, ViewEntry>();
   private readonly owners = new WeakMap<THREE.Object3D, Entity>();
 
   constructor(private readonly world: World) {
     this.root.name = 'entities';
+    this.root.visible = false;
+    // Its matrices are brought up to date in sync, just before batching; the renderer needn't do it again.
+    this.root.matrixWorldAutoUpdate = false;
+    this.drawn = this.batcher.root;
     world.onDestroy((e) => this.remove(e));
+  }
+
+  /** Free the batches' GPU buffers (when the battle is unloaded). */
+  dispose(): void {
+    this.batcher.dispose();
+  }
+
+  /** Draw calls the entities take (before shadows), for the stats readout. */
+  get batches(): number {
+    return this.batcher.batches;
   }
 
   /**
@@ -54,7 +89,13 @@ export class EntityView {
         const r = w.req(e, Renderable);
         const obj = createModel(r.model, faction);
         obj.scale.setScalar(r.scale);
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false };
+        const meshes: THREE.Mesh[] = [];
+        const sprites: THREE.Sprite[] = [];
+        obj.traverse((o) => {
+          if ((o as THREE.Sprite).isSprite) sprites.push(o as THREE.Sprite);
+          else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+        });
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites };
         this.entries.set(e, entry);
         this.owners.set(obj, e);
         this.root.add(obj);
@@ -92,6 +133,19 @@ export class EntityView {
       entry.lastX = x;
       entry.lastZ = z;
     }
+    this.batch();
+  }
+
+  /** Copy every visible part into the batches. */
+  private batch(): void {
+    this.root.updateMatrixWorld();
+    const b = this.batcher;
+    b.begin();
+    for (const entry of this.entries.values()) {
+      for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m);
+      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s);
+    }
+    b.end();
   }
 
   get count(): number {

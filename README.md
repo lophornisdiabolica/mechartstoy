@@ -319,7 +319,8 @@ src/
     propsMesh.ts     instanced scenery
     models.ts        model registry and rig (turret / animation hooks)
     models/          unit, building and projectile models
-    entityView.ts    mirrors ECS entities into the scene each frame
+    entityView.ts    mirrors ECS entities into the scene each frame (posed models, drawn through the batcher)
+    batcher.ts       draws every model part as instanced batches: boxes as one scaled unit box, flat colours per instance
     effects.ts       particles for flashes, explosions, smoke, debris
     markers.ts       rally flags and the selection ring
     outpostRings.ts  capture rings round outposts, filling as a side takes one

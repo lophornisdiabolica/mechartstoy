@@ -100,5 +100,6 @@ describe('combat', () => {
       const depth = game.field.seaLevel - game.field.heightAt(t.x, t.z);
       expect(depth).toBeLessThan(MOVE_RULES[game.world.req(e, Unit).def.move].maxDepth + 0.3);
     }
-  });
+    // Two minutes of battle take about 4 s alone and more beside the other test files.
+  }, 20000);
 });
