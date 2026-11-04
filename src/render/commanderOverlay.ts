@@ -69,7 +69,8 @@ function marker(field: Battlefield, x: number, z: number, radius: number): THREE
  * What each side's Commander means to do, drawn on the map (see
  * game/commander): an arrow in the side's colour from its army to each goal
  * in turn, fainter the less ready it is for it, an arrow from each task
- * force to its outpost, a ring at home for a side
+ * force to its outpost, a fainter one for each squad swinging round danger
+ * (see game/commander/threats.ts), a ring at home for a side
  * that's defending, and markers on the crossings, bridges and high ground it
  * knows about. Purely visual, and off unless asked for.
  */
@@ -121,6 +122,11 @@ export class CommanderOverlay {
         const g = arrow(field, start.x, start.z, goal.x, goal.z);
         if (g) this.add(g, color, force ? 0.85 : opacity(goal));
         if (!force) from = goal;
+      }
+      // Squads going round danger: a fainter arrow to the point they're swinging out to.
+      for (const d of side.detourPaths) {
+        const g = arrow(field, d.fromX, d.fromZ, d.x, d.z);
+        if (g) this.add(g, color, 0.45);
       }
     });
   }

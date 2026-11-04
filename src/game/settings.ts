@@ -164,6 +164,11 @@ export interface BattleSettings {
      * commander/engineers.ts). 0 is off.
      */
     engineers: number;
+    /**
+     * Whether the Commander keeps squads out of where they're weak: lanes and detours that
+     * steer round ground dangerous to their kind of unit (see commander/threats.ts).
+     */
+    avoidance: boolean;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -252,6 +257,7 @@ export function defaultSettings(): BattleSettings {
       taskForces: 0.35,
       advice: 0.3,
       engineers: 2,
+      avoidance: true,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],

@@ -66,6 +66,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.armies.attackTiming !== d.armies.attackTiming) p.set('attacks', s.armies.attackTiming);
   if (s.armies.superGrowth !== d.armies.superGrowth) p.set('sgrow', s.armies.superGrowth);
   if (s.armies.superGate !== d.armies.superGate) p.set('sgate', s.armies.superGate ? '1' : '0');
+  if (s.armies.avoidance !== d.armies.avoidance) p.set('avoid', s.armies.avoidance ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
@@ -125,6 +126,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (grow === 'none' || grow === 'tide' || grow === 'outposts') s.armies.superGrowth = grow;
   const gate = p.get('sgate');
   if (gate === '0' || gate === '1') s.armies.superGate = gate === '1';
+  const avoid = p.get('avoid');
+  if (avoid === '0' || avoid === '1') s.armies.avoidance = avoid === '1';
   const size = p.get('size');
   if (size && size in MAP_SIZES) s.map.size = size as MapSize;
   // Links from before there could be several towns say town=0 or town=1.

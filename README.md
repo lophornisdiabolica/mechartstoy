@@ -614,14 +614,29 @@ outposts and the light scenery are still placed once, at the start.
   under Armies, 2 by default; 0 is off) when its Commander has work for
   them. For now the work is fortifying where the army masses: a line of
   three wall segments 7 units in front of the rally point, facing the
-  enemy base, for each of the two nearest enemies. A wall stops shots like
+  enemy base, for each of the two nearest enemies, with a field tower (a
+  guard tower; at most two per side) just behind it. A wall stops shots like
   any building, so it's cover, and attackers have to go round it or knock
-  it down. Walls crumble over ten minutes and aren't rebuilt (no rubble),
+  it down. Walls crumble over ten minutes and towers over fifteen; neither
+  is rebuilt (no rubble),
   and a side has at most six standing. Engineers don't build where an
   enemy unit is within 14 units, take no cap, never join an attack or a
   task force, and wait at home when there's nothing to build; the rally
   flag and stances pause their work. Docks, hover pads, bridge repairs
   and canals are still to come.
+- **Keeping out of where they're weak** (`game/commander/threats.ts`).
+  Each Commander maps how dangerous every part of the field is to
+  infantry (artillery, big blasts and flame most), vehicles (hard
+  hitters) and aircraft (flak), spread over each weapon's reach plus a
+  margin. What's avoided is a kind's counters, not the enemy as a whole:
+  the danger beyond that kind's usual share of the enemy's danger. At the
+  start of each attack, a squad whose lane has its counters gathered on it
+  takes the lane where they aren't, so infantry go round the side the
+  enemy's artillery covers; on the march, a squad about to walk into
+  counters that outgun it swings out to whichever side is safer, then
+  carries on (aircraft go round flak the same way). Squads already
+  fighting don't detour. *Keep out of where they're weak* under Armies
+  turns it off (URL `avoid=0`).
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan

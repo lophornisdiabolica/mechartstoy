@@ -276,6 +276,22 @@ export const BUILDING_DEFS = {
     rebuildDelay: 30,
     buildTime: 6,
   },
+  // A guard tower engineers put up behind their walls (see commander/engineers.ts); it crumbles like the walls.
+  fieldTower: {
+    id: 'fieldTower',
+    name: 'Field Tower',
+    model: 'bld:tower',
+    hp: 400,
+    armor: 8,
+    radius: 0.9,
+    height: 2.2,
+    weapon: towerCannon,
+    sight: 16,
+    turretTurnRate: 2.5,
+    lasts: 900,
+    rebuildDelay: 0,
+    buildTime: 10,
+  },
   wall: {
     id: 'wall',
     name: 'Wall',
