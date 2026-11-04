@@ -150,6 +150,8 @@ class Heap {
 export class NavObstacles {
   /** Changes whenever obstacles change, or the map does (so routes get re-planned). */
   version = 0;
+  /** The latest changes: the version each brought in and the cells it touched (see changedSince). */
+  private readonly log: { version: number; area: CellArea }[] = [];
   /** Changes only when a building is marked or unmarked: what clearance maps depend on, with each grid's terrain. */
   blockVersion = 0;
   /** Number of obstacles covering each cell. */
@@ -161,7 +163,31 @@ export class NavObstacles {
   ) {
     this.occupied = new Uint16Array(cols * rows);
   }
+
+  /** Something changed in these cells: bump the version and remember where. */
+  record(area: CellArea): void {
+    this.version++;
+    this.log.push({ version: this.version, area });
+    if (this.log.length > CHANGE_LOG) this.log.shift();
+  }
+
+  /**
+   * Whether anything changed in an area since `version`. When the log no
+   * longer reaches back that far, it can't tell, so it says yes.
+   */
+  changedSince(version: number, area: CellArea): boolean {
+    if (version >= this.version) return false;
+    if (this.log.length === 0 || this.log[0].version > version + 1) return true;
+    for (let k = this.log.length - 1; k >= 0 && this.log[k].version > version; k--) {
+      const c = this.log[k].area;
+      if (c.i0 <= area.i1 && c.i1 >= area.i0 && c.j0 <= area.j1 && c.j1 >= area.j0) return true;
+    }
+    return false;
+  }
 }
+
+/** How many recent map and obstacle changes NavObstacles remembers where they were. */
+const CHANGE_LOG = 256;
 
 /**
  * Coarse grid for route planning, for one movement class (see
@@ -501,7 +527,7 @@ export class NavGrid {
         this.occupied[k] = Math.max(0, this.occupied[k] + delta);
       }
     }
-    this.obstacles.version++;
+    this.obstacles.record({ i0, j0, i1, j1 });
     this.obstacles.blockVersion++;
   }
 
@@ -720,7 +746,8 @@ export class NavGrids {
     // A change to the map mid-battle re-reads those cells on every grid, and re-plans every route.
     field.onChange((area) => {
       for (const grid of this.grids.values()) grid.refresh(area);
-      this.land.obstacles.version++;
+      // Refreshing re-reads a cell's neighbours too, so the change reaches one cell further.
+      this.land.obstacles.record({ i0: area.i0 - 1, j0: area.j0 - 1, i1: area.i1 + 1, j1: area.j1 + 1 });
     });
   }
 

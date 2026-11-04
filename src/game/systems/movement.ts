@@ -1,7 +1,9 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
 import { MOVE_RULES, MoveClass } from '../../world/moveClasses';
-import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, Transform, Unit } from '../components';
+import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, NavState, Transform, Unit } from '../components';
+import { NavGrid } from '../../world/navGrid';
+import { CellArea } from '../../world/ground';
 import { SimContext } from '../context';
 
 export function wrapAngle(a: number): number {
@@ -34,6 +36,68 @@ const PLAIN_GROUND = 1;
 /** Heading error (radians) above which a unit counts as turning rather than stuck. */
 const TURNING = 0.6;
 
+/** Seconds a planned route stays on offer to units setting off nearby for the same place. */
+const SHARE_TIME = 2;
+/** Most routes on offer per grid (older ones are dropped). */
+const SHARE_MOST = 256;
+
+interface SharedRoute {
+  path: { x: number; z: number }[];
+  at: number;
+  version: number;
+  area: CellArea;
+}
+
+/** Routes on offer, per grid, by where they start and end (see shareKey). */
+const shared = new WeakMap<NavGrid, Map<string, SharedRoute>>();
+
+/**
+ * Squads and task forces set off together for the same place, so one route
+ * serves them all: the start and goal, each to within two cells (3 world
+ * units), and the unit's size (to half a unit).
+ */
+function shareKey(grid: NavGrid, from: { x: number; z: number }, to: { x: number; z: number }, radius: number): string {
+  const [si, sj] = grid.cellOf(from.x, from.z);
+  const [gi, gj] = grid.cellOf(to.x, to.z);
+  return `${si >> 1},${sj >> 1},${gi >> 1},${gj >> 1},${Math.ceil(radius * 2)}`;
+}
+
+/** A route another unit planned lately from about here to about there, ending at this unit's own goal; null if none still holds. */
+function sharedRoute(grid: NavGrid, time: number, from: { x: number; z: number }, to: { x: number; z: number }, radius: number): { x: number; z: number }[] | null {
+  const r = shared.get(grid)?.get(shareKey(grid, from, to, radius));
+  if (!r || time - r.at > SHARE_TIME || r.path.length === 0 || grid.obstacles.changedSince(r.version, r.area)) return null;
+  const path = r.path.slice();
+  path[path.length - 1] = { x: to.x, z: to.z };
+  return path;
+}
+
+/** Offer a freshly planned route to units setting off nearby for the same place. */
+function shareRoute(grid: NavGrid, time: number, from: { x: number; z: number }, to: { x: number; z: number }, radius: number, path: { x: number; z: number }[]): void {
+  let routes = shared.get(grid);
+  if (!routes) shared.set(grid, (routes = new Map()));
+  if (routes.size >= SHARE_MOST) routes.clear();
+  const nav = { path, pathI0: 0, pathJ0: 0, pathI1: 0, pathJ1: 0 } as NavState;
+  pathArea(grid, nav, from, radius);
+  routes.set(shareKey(grid, from, to, radius), { path, at: time, version: grid.version, area: { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 } });
+}
+
+/** Remember the cells a fresh path runs through, with room for the unit, so only changes there spoil it. */
+function pathArea(grid: NavGrid, nav: NavState, from: { x: number; z: number }, radius: number): void {
+  let minX = from.x;
+  let maxX = from.x;
+  let minZ = from.z;
+  let maxZ = from.z;
+  for (const p of nav.path ?? []) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z);
+    maxZ = Math.max(maxZ, p.z);
+  }
+  const room = radius + grid.cellSize * 2;
+  [nav.pathI0, nav.pathJ0] = grid.cellOf(minX - room, minZ - room);
+  [nav.pathI1, nav.pathJ1] = grid.cellOf(maxX + room, maxZ + room);
+}
+
 /**
  * Pick the point to steer at this tick: a sidestep detour, the goal itself
  * if the straight line is clear, or the next waypoint of a planned route.
@@ -56,15 +120,24 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
   }
 
   const drifted = Math.hypot(goal.x - nav.pathGoalX, goal.z - nav.pathGoalZ) > GOAL_DRIFT;
-  const stale = nav.path === null || nav.pathVersion !== grid.version || (drifted && world.time >= nav.replanAt);
-  if (stale && budget.plans > 0) {
-    budget.plans--;
-    nav.path = grid.findPath(here, goal, radius);
+  // A change to the map or its buildings only spoils routes through the cells it touched.
+  if (nav.path !== null && nav.pathVersion !== grid.version) {
+    if (grid.obstacles.changedSince(nav.pathVersion, { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 })) nav.path = null;
+    else nav.pathVersion = grid.version;
+  }
+  const stale = nav.path === null || (drifted && world.time >= nav.replanAt);
+  // A unit near another heading the same way, on a route planned just now, takes that route (see sharedRoute).
+  const borrowed = stale ? sharedRoute(grid, world.time, here, goal, radius) : null;
+  if (stale && (borrowed || budget.plans > 0)) {
+    if (!borrowed) budget.plans--;
+    nav.path = borrowed ?? grid.findPath(here, goal, radius);
+    if (!borrowed && nav.path) shareRoute(grid, world.time, here, goal, radius, nav.path);
     nav.pathIndex = 0;
     nav.pathGoalX = goal.x;
     nav.pathGoalZ = goal.z;
     nav.pathVersion = grid.version;
     nav.replanAt = world.time + REPLAN_INTERVAL;
+    pathArea(grid, nav, here, radius);
   }
   const path = nav.path;
   if (!path || path.length === 0) return goal;

@@ -77,8 +77,13 @@ export interface NavState {
   pathIndex: number;
   pathGoalX: number;
   pathGoalZ: number;
-  /** NavGrid version the path was planned against. */
+  /** NavGrid version the path was last checked against (see NavObstacles.changedSince). */
   pathVersion: number;
+  /** The cells the path runs through, as a rectangle (with room for the unit): only changes there make it re-plan. */
+  pathI0: number;
+  pathJ0: number;
+  pathI1: number;
+  pathJ1: number;
   replanAt: number;
   /** Cached "straight line to the goal is clear" answer, and when to re-check it. */
   direct: boolean;
@@ -101,6 +106,10 @@ export function makeNavState(): NavState {
     pathGoalX: 0,
     pathGoalZ: 0,
     pathVersion: -1,
+    pathI0: 0,
+    pathJ0: 0,
+    pathI1: -1,
+    pathJ1: -1,
     replanAt: 0,
     direct: false,
     directCheckAt: 0,

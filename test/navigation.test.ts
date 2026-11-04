@@ -6,7 +6,7 @@ import { Game } from '../src/game/game';
 import { spawnBuilding, spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
 import { generateBattlefield } from '../src/world/battlefield';
-import { NavGrid } from '../src/world/navGrid';
+import { NavGrid, NavObstacles } from '../src/world/navGrid';
 
 const DT = 1 / 30;
 
@@ -171,3 +171,35 @@ describe('unit movement', () => {
   });
 });
 
+
+describe('route upkeep', () => {
+  it('knows which areas changed since a version, and says yes when it can no longer tell', () => {
+    const o = new NavObstacles(100, 100);
+    const v = o.version;
+    o.record({ i0: 10, j0: 10, i1: 12, j1: 12 });
+    expect(o.changedSince(v, { i0: 0, j0: 0, i1: 5, j1: 5 })).toBe(false);
+    expect(o.changedSince(v, { i0: 12, j0: 0, i1: 20, j1: 10 })).toBe(true);
+    expect(o.changedSince(o.version, { i0: 0, j0: 0, i1: 99, j1: 99 })).toBe(false);
+    for (let k = 0; k < 400; k++) o.record({ i0: 90, j0: 90, i1: 91, j1: 91 });
+    expect(o.changedSince(v, { i0: 0, j0: 0, i1: 5, j1: 5 })).toBe(true);
+  });
+
+  it('keeps a route a building goes up far away from, and re-plans one it lands on', () => {
+    const game = new Game(4, { populate: false, autoSpawn: false });
+    const b = game.field.baseSites[0];
+    const e = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x, b.z);
+    const m = game.world.req(e, Mover);
+    const nav = m.nav;
+    // A route already planned, as if round something.
+    nav.path = [{ x: b.x + 5, z: b.z }, { x: b.x + 10, z: b.z }];
+    nav.pathVersion = game.ctx.navs.land.version;
+    [nav.pathI0, nav.pathJ0] = game.ctx.navs.land.cellOf(b.x - 3, b.z - 3);
+    [nav.pathI1, nav.pathJ1] = game.ctx.navs.land.cellOf(b.x + 13, b.z + 3);
+    const far = game.ctx.navs.land.cellOf(b.x + 60, b.z + 60);
+    game.ctx.navs.land.obstacles.record({ i0: far[0], j0: far[1], i1: far[0] + 1, j1: far[1] + 1 });
+    expect(game.ctx.navs.land.obstacles.changedSince(nav.pathVersion, { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 })).toBe(false);
+    const near = game.ctx.navs.land.cellOf(b.x + 7, b.z);
+    game.ctx.navs.land.obstacles.record({ i0: near[0], j0: near[1], i1: near[0], j1: near[1] });
+    expect(game.ctx.navs.land.obstacles.changedSince(nav.pathVersion, { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 })).toBe(true);
+  });
+});
