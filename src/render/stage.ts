@@ -19,6 +19,8 @@ import './models/projectiles';
 import './models/units';
 import { buildProps } from './propsMesh';
 import { buildTerrain } from './terrainMesh';
+import { BIOMES } from '../world/biomes';
+import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
 
 const _dir = new THREE.Vector3();
@@ -72,6 +74,8 @@ export class Stage {
   private readonly raycaster = new THREE.Raycaster();
   private ground!: THREE.Object3D;
   private battle: THREE.Group | null = null;
+  /** Stops the terrain redrawing for the battle being replaced (see buildTerrain). */
+  private stopTerrain: (() => void) | undefined;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -117,6 +121,7 @@ export class Stage {
   load(game: Game, factions: readonly FactionDef[]): void {
     if (this.battle) {
       this.scene.remove(this.battle);
+      this.stopTerrain?.();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -127,7 +132,11 @@ export class Stage {
 
     const visualRng = new Rng(game.seed ^ 0x5eed);
     const terrain = buildTerrain(field, visualRng);
+    this.stopTerrain = terrain.userData.dispose;
     this.ground = terrain.getObjectByName('ground')!;
+    const biome = BIOMES[field.config.biome];
+    (this.scene.background as THREE.Color).set(biome.sky);
+    setTownStyle(biome.town);
     battle.add(terrain, buildProps(game.props, visualRng));
     this.entities = new EntityView(game.world);
     this.effects = new Effects(game.events, field);

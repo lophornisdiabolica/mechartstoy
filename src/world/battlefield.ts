@@ -1,5 +1,8 @@
 import { createNoise2D } from 'simplex-noise';
 import { Rng } from '../core/rng';
+import { BiomeId } from './biomes';
+import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } from './ground';
+import { bridgeChannels, bridgeLand, carveWaterways, landReach, vertexAt } from './waterways';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -17,8 +20,6 @@ export interface BattlefieldConfig {
   seaLevel: number;
   /** Radius of the flattened pad reserved for each faction's base. */
   baseRadius: number;
-  /** Put a civilian town in no-man's land. */
-  town: boolean;
   /**
    * Which faction sits at each base seat, going round the map from the west
    * (see seatPoint). Its length is the number of bases. Teammates are given
@@ -27,6 +28,22 @@ export interface BattlefieldConfig {
   seats: number[];
   /** Capturable outposts to place in no-man's land (fewer if they don't fit). */
   outposts: number;
+  /** The map's look: ground and water colours, scenery and town style (see biomes.ts). */
+  biome: BiomeId;
+  /**
+   * Join the bases' water with channels (see waterways.ts): 'off', 'joined'
+   * (link the water bases already have, when two or more do) or 'everyBase'
+   * (also dig an inlet to any base without water).
+   */
+  waterways: 'off' | 'joined' | 'everyBase';
+  /** Civilian towns in no-man's land, and their radius. */
+  towns: number;
+  townRadius: number;
+  /**
+   * Base positions per seat as fractions of the half-width and half-depth
+   * (-1 to 1), or null to place them round the map's edge (see seatPoint).
+   */
+  places: { x: number; z: number }[] | null;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -36,9 +53,13 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   maxHeight: 9,
   seaLevel: 1.4,
   baseRadius: 16,
-  town: true,
   seats: [0, 1],
   outposts: 0,
+  biome: 'temperate',
+  waterways: 'joined',
+  towns: 1,
+  townRadius: 11,
+  places: null,
 };
 
 /** Radius of an outpost's flattened pad. */
@@ -90,6 +111,8 @@ export interface TownSite {
   z: number;
   radius: number;
   height: number;
+  /** Which way its streets run: the main street runs along this angle (radians from +x). */
+  angle: number;
 }
 
 /** A flattened clearing in no-man's land where a capturable outpost stands. */
@@ -102,6 +125,26 @@ export interface OutpostSite {
   height: number;
 }
 
+/**
+ * A bridge over water: a straight deck from bank to bank, wide enough for
+ * tanks, that can't be destroyed. Land units drive over it and boats pass
+ * underneath (see Battlefield.deckAt). It's part of the map, not a building.
+ */
+export interface Bridge {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  width: number;
+  /** Deck height over the water; the ends ramp down to the banks. */
+  level: number;
+}
+
+/** Room under a bridge deck, above the water. */
+export const BRIDGE_CLEARANCE = 1.3;
+/** Length of the ramp at each end of a bridge. */
+const BRIDGE_RAMP = 4;
+
 export interface Bounds {
   minX: number;
   maxX: number;
@@ -109,10 +152,21 @@ export interface Bounds {
   maxZ: number;
 }
 
+/** Something that wants to know when the map changes (see Battlefield.onChange). */
+export type MapChangeListener = (area: CellArea) => void;
+
 export class Battlefield {
   readonly width: number;
   readonly depth: number;
   readonly bounds: Bounds;
+  /** Ground kind per map cell (cols * rows, row-major along x), as codes into GROUND_IDS. */
+  readonly ground: Uint8Array;
+  readonly bridges: Bridge[] = [];
+  /** Per cell: the index of the bridge over it, or -1. */
+  private readonly bridgeCell: Int16Array;
+  private readonly listeners: MapChangeListener[] = [];
+  /** Bumps on every change, for anything that caches what the map looked like. */
+  version = 0;
 
   constructor(
     readonly config: BattlefieldConfig,
@@ -130,6 +184,141 @@ export class Battlefield {
       minZ: -this.depth / 2,
       maxZ: this.depth / 2,
     };
+    this.ground = new Uint8Array(config.cols * config.rows);
+    this.bridgeCell = new Int16Array(config.cols * config.rows).fill(-1);
+  }
+
+  /** The map cell (i, j) a point is in, clamped to the map. */
+  cellAt(x: number, z: number): [number, number] {
+    const { cellSize, cols, rows } = this.config;
+    const i = Math.max(0, Math.min(cols - 1, Math.floor((x - this.bounds.minX) / cellSize)));
+    const j = Math.max(0, Math.min(rows - 1, Math.floor((z - this.bounds.minZ) / cellSize)));
+    return [i, j];
+  }
+
+  /** What covers the ground at a point (see ground.ts). */
+  groundAt(x: number, z: number): GroundDef {
+    const [i, j] = this.cellAt(x, z);
+    return GROUND_DEFS[GROUND_IDS[this.ground[j * this.config.cols + i]]];
+  }
+
+  /**
+   * Hear about every change to the map: the rectangle of cells whose
+   * height, ground or bridges changed. Route grids, the terrain mesh and
+   * anything else that caches the map listen, so a change made mid-battle
+   * shows up everywhere.
+   */
+  onChange(listener: MapChangeListener): () => void {
+    this.listeners.push(listener);
+    return () => this.listeners.splice(this.listeners.indexOf(listener), 1);
+  }
+
+  /** Tell the listeners that these cells changed. */
+  changed(area: CellArea): void {
+    this.version++;
+    for (const l of [...this.listeners]) l(area);
+  }
+
+  /** The cells within `radius` of a point, as a rectangle. */
+  areaAround(x: number, z: number, radius: number): CellArea {
+    const [i0, j0] = this.cellAt(x - radius, z - radius);
+    const [i1, j1] = this.cellAt(x + radius, z + radius);
+    return { i0, j0, i1, j1 };
+  }
+
+  /**
+   * Lay a kind of ground over the cells whose centres are within `radius` of
+   * a point (e.g. scrap where a wreck falls). `where` can skip cells, for
+   * example to only cover plain ground. Returns how many cells changed.
+   */
+  paint(x: number, z: number, radius: number, ground: GroundId, where?: (current: GroundId, cx: number, cz: number) => boolean): number {
+    const area = this.areaAround(x, z, radius);
+    const code = groundCode(ground);
+    const { cols, cellSize } = this.config;
+    let n = 0;
+    for (let j = area.j0; j <= area.j1; j++) {
+      for (let i = area.i0; i <= area.i1; i++) {
+        const cx = this.bounds.minX + (i + 0.5) * cellSize;
+        const cz = this.bounds.minZ + (j + 0.5) * cellSize;
+        const k = j * cols + i;
+        if (this.ground[k] === code || Math.hypot(cx - x, cz - z) > radius) continue;
+        if (where && !where(GROUND_IDS[this.ground[k]], cx, cz)) continue;
+        this.ground[k] = code;
+        n++;
+      }
+    }
+    if (n > 0) this.changed(area);
+    return n;
+  }
+
+  /**
+   * Change the ground's height round a point: `shape` gets each vertex's
+   * height and its distance from the point and returns the new height (dig
+   * a canal, raise a wall's footing). Returns how many vertices moved.
+   */
+  reshape(x: number, z: number, radius: number, shape: (height: number, distance: number) => number): number {
+    const { cols, cellSize } = this.config;
+    const i0 = Math.max(0, Math.floor((x - radius - this.bounds.minX) / cellSize));
+    const i1 = Math.min(cols, Math.ceil((x + radius - this.bounds.minX) / cellSize));
+    const j0 = Math.max(0, Math.floor((z - radius - this.bounds.minZ) / cellSize));
+    const j1 = Math.min(this.config.rows, Math.ceil((z + radius - this.bounds.minZ) / cellSize));
+    let n = 0;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const d = Math.hypot(this.vertexX(i) - x, this.vertexZ(j) - z);
+        if (d > radius) continue;
+        const k = j * (cols + 1) + i;
+        const h = shape(this.heights[k], d);
+        if (h === this.heights[k]) continue;
+        this.heights[k] = h;
+        n++;
+      }
+    }
+    // Cells touching a moved vertex change shape (and slope, one cell further out).
+    if (n > 0) this.changed({ i0: Math.max(0, i0 - 2), j0: Math.max(0, j0 - 2), i1: Math.min(cols - 1, i1 + 1), j1: Math.min(this.config.rows - 1, j1 + 1) });
+    return n;
+  }
+
+  /** Put a bridge on the map. */
+  addBridge(bridge: Bridge): void {
+    const index = this.bridges.length;
+    this.bridges.push(bridge);
+    const { cols, cellSize } = this.config;
+    const pad = bridge.width / 2;
+    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, Math.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + pad);
+    for (let j = area.j0; j <= area.j1; j++) {
+      for (let i = area.i0; i <= area.i1; i++) {
+        const cx = this.bounds.minX + (i + 0.5) * cellSize;
+        const cz = this.bounds.minZ + (j + 0.5) * cellSize;
+        if (this.deckOf(bridge, cx, cz) !== null) this.bridgeCell[j * cols + i] = index;
+      }
+    }
+    this.changed(area);
+  }
+
+  /** A bridge's deck height at a point, or null if the point isn't on it. */
+  private deckOf(b: Bridge, x: number, z: number): number | null {
+    const dx = b.bx - b.ax;
+    const dz = b.bz - b.az;
+    const length = Math.hypot(dx, dz);
+    const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
+    if (t < 0 || t > 1) return null;
+    const off = Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length;
+    if (off > b.width / 2) return null;
+    // Ramps at each end, from the bank's height up to the deck.
+    const along = Math.min(t, 1 - t) * length;
+    const bank = t < 0.5 ? this.heightAt(b.ax, b.az) : this.heightAt(b.bx, b.bz);
+    const ramp = smoothstep(0, BRIDGE_RAMP, along);
+    return bank + (Math.max(bank, b.level) - bank) * ramp;
+  }
+
+  /** Height of a bridge deck at a point, if a bridge is there and above the ground. */
+  deckAt(x: number, z: number): number | null {
+    const [i, j] = this.cellAt(x, z);
+    const index = this.bridgeCell[j * this.config.cols + i];
+    if (index < 0) return null;
+    const deck = this.deckOf(this.bridges[index], x, z);
+    return deck !== null && deck > this.heightAt(x, z) ? deck : null;
   }
 
   get seaLevel(): number {
@@ -168,8 +357,14 @@ export class Battlefield {
     return (h00 * (1 - fx) + h10 * fx) * (1 - fz) + (h01 * (1 - fx) + h11 * fx) * fz;
   }
 
-  /** Height a unit should stand at: ground, or the water surface for anything over water. */
+  /** Height a unit should stand at: ground, a bridge deck, or the water surface for anything over water. */
   surfaceAt(x: number, z: number): number {
+    const deck = this.deckAt(x, z);
+    return Math.max(this.heightAt(x, z), this.seaLevel, deck ?? -Infinity);
+  }
+
+  /** Height a boat floats at: the water surface (or the ground, if it's run aground), passing under bridges. */
+  waterSurfaceAt(x: number, z: number): number {
     return Math.max(this.heightAt(x, z), this.seaLevel);
   }
 
@@ -204,66 +399,6 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/**
- * With lots of water a base can end up on an island. Flood-fill dry land
- * from the first base; any base it doesn't reach gets a causeway to the
- * nearest base it does, until every base is joined up.
- */
-function ensureLandBridges(field: Battlefield, heights: Float32Array): void {
-  const { cols, rows, cellSize } = field.config;
-  const index = (x: number, z: number) => {
-    const i = Math.round((x - field.bounds.minX) / cellSize);
-    const j = Math.round((z - field.bounds.minZ) / cellSize);
-    return j * (cols + 1) + i;
-  };
-  const dry = (k: number) => heights[k] >= field.seaLevel;
-  const sites = field.baseSites;
-  for (let round = 0; round < sites.length; round++) {
-    const seen = new Uint8Array(heights.length);
-    const start = index(sites[0].x, sites[0].z);
-    const stack = [start];
-    seen[start] = 1;
-    while (stack.length > 0) {
-      const k = stack.pop()!;
-      const i = k % (cols + 1);
-      const j = (k - i) / (cols + 1);
-      for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
-        if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
-        const nk = nj * (cols + 1) + ni;
-        if (!seen[nk] && dry(nk)) {
-          seen[nk] = 1;
-          stack.push(nk);
-        }
-      }
-    }
-    const reached = sites.filter((s) => seen[index(s.x, s.z)]);
-    const cut = sites.find((s) => !seen[index(s.x, s.z)]);
-    if (!cut) return;
-    let to = reached[0];
-    for (const s of reached) if (Math.hypot(s.x - cut.x, s.z - cut.z) < Math.hypot(to.x - cut.x, to.z - cut.z)) to = s;
-    causeway(field, heights, cut, to);
-  }
-}
-
-/** Raise a strip of dry land straight from a to b. */
-function causeway(field: Battlefield, heights: Float32Array, a: { x: number; z: number }, b: { x: number; z: number }): void {
-  const { cols, rows } = field.config;
-  const length = Math.hypot(b.x - a.x, b.z - a.z);
-  const deck = field.seaLevel + 0.5;
-  for (let j = 0; j <= rows; j++) {
-    for (let i = 0; i <= cols; i++) {
-      const px = field.vertexX(i);
-      const pz = field.vertexZ(j);
-      // Distance from the segment between the two bases.
-      const t = Math.max(0, Math.min(1, ((px - a.x) * (b.x - a.x) + (pz - a.z) * (b.z - a.z)) / (length * length)));
-      const d = Math.hypot(px - (a.x + (b.x - a.x) * t), pz - (a.z + (b.z - a.z) * t));
-      const w = 1 - smoothstep(3, 6, d);
-      const k = j * (cols + 1) + i;
-      if (w > 0 && heights[k] < deck) heights[k] = heights[k] * (1 - w) + deck * w;
-    }
-  }
-}
-
 export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAULT_BATTLEFIELD): Battlefield {
   const { cols, rows, cellSize, maxHeight, seaLevel, baseRadius } = config;
   const noise = createNoise2D(() => rng.next());
@@ -285,14 +420,14 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     return sum / norm;
   };
 
-  // Base pads sit round the edge of the map, each nudged a little along it.
+  // Base pads sit round the edge of the map, each nudged a little along it, unless the layout places them.
   const seats = config.seats;
-  const baseSites: BaseSite[] = seats.map((faction, k) => ({
-    faction,
-    ...seatPoint(k, seats.length, width, depth, baseRadius, rng.range(-1, 1)),
-    radius: baseRadius,
-    height: 0,
-  }));
+  const baseSites: BaseSite[] = seats.map((faction, k) => {
+    const nudge = rng.range(-1, 1);
+    const place = config.places?.[k];
+    const at = place ? { x: (place.x * width) / 2, z: (place.z * depth) / 2 } : seatPoint(k, seats.length, width, depth, baseRadius, nudge);
+    return { faction, ...at, radius: baseRadius, height: 0 };
+  });
   // Indexed by faction, so baseSites[f] is faction f's base.
   baseSites.sort((a, b) => a.faction - b.faction);
 
@@ -332,29 +467,62 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     flatten(site.x, site.z, site.radius, site.height);
   }
 
-  ensureLandBridges(field, heights);
+  // Water joined up between the bases (on their own random stream, so dry maps don't change), then
+  // bridges wherever that, or the lakes themselves, cut the land.
+  if (config.waterways !== 'off') bridgeChannels(field, carveWaterways(field, { everyBase: config.waterways === 'everyBase' }));
+  bridgeLand(field);
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
-  const townRadius = 11;
-  let best: { x: number; z: number; score: number } | null = null;
-  for (let n = 0; n < 40; n++) {
-    const x = rng.range(-width * 0.16, width * 0.16);
-    const z = rng.range(-depth / 2 + townRadius + 2, depth / 2 - townRadius - 2);
+  const townRadius = config.townRadius;
+  const townSpot = (x: number, z: number) => {
     let score = 0;
     for (let a = 0; a < 8; a++) {
       const px = x + Math.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
       const pz = z + Math.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
-      score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
+      score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0) + (field.deckAt(px, pz) !== null ? 50 : 0);
     }
     // With bases along the long edges too, keep the town off their pads.
     for (const site of baseSites) if (Math.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
+    return score;
+  };
+  let best: { x: number; z: number; score: number } | null = null;
+  for (let n = 0; n < 40; n++) {
+    const x = rng.range(-width * 0.16, width * 0.16);
+    const z = rng.range(-depth / 2 + townRadius + 2, depth / 2 - townRadius - 2);
+    const score = townSpot(x, z);
     if (!best || score < best.score) best = { x, z, score };
   }
-  // Candidates are always rolled so the rest of the map doesn't change with the town toggle.
-  if (best && config.town) {
+  // Candidates are always rolled so the rest of the map doesn't change with the number of towns.
+  const townRng = rng.fork(0x746f776e);
+  if (best && config.towns > 0) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
-    townSites.push({ x: best.x, z: best.z, radius: townRadius, height });
+    townSites.push({ x: best.x, z: best.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(best.x, best.z, townRadius, height);
+  }
+  // More towns, on their own stream: spread over no-man's land, away from the bases and each other.
+  for (let t = 1; t < config.towns; t++) {
+    let pick: { x: number; z: number; score: number } | null = null;
+    for (let n = 0; n < 60; n++) {
+      const x = townRng.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
+      const z = townRng.range(-depth / 2 + townRadius + 3, depth / 2 - townRadius - 3);
+      const gap = townSites.reduce((m, s) => Math.min(m, Math.hypot(s.x - x, s.z - z) - s.radius - townRadius), Infinity);
+      if (gap < 6) continue;
+      // Contested ground: about as far from the nearest base as the next.
+      const near = baseSites.map((b) => Math.hypot(b.x - x, b.z - z)).sort((a, b) => a - b);
+      const contest = near.length > 1 ? (near[1] - near[0]) / (near[0] + 1) : 0;
+      const score = townSpot(x, z) * 2 + contest * 20 - Math.min(gap, 40) * 0.3;
+      if (!pick || score < pick.score) pick = { x, z, score };
+    }
+    if (!pick || pick.score >= 50) break;
+    const height = Math.max(seaLevel + 1, field.heightAt(pick.x, pick.z));
+    townSites.push({ x: pick.x, z: pick.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
+    flatten(pick.x, pick.z, townRadius, height);
+  }
+  // Each town's main street is paved.
+  for (const t of townSites) {
+    const ux = Math.cos(t.angle);
+    const uz = Math.sin(t.angle);
+    field.paint(t.x, t.z, t.radius, 'road', (_, cx, cz) => Math.abs((cx - t.x) * uz - (cz - t.z) * ux) < 1.6);
   }
 
   // Outposts come last, so a map with none is the same map as before outposts existed.
@@ -375,37 +543,15 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
  */
 function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number; z: number }[] {
   if (count <= 0) return [];
-  const { cols, rows } = field.config;
-  // Land the bases can reach (after the land bridges).
-  const reach = new Uint8Array((cols + 1) * (rows + 1));
-  const index = (x: number, z: number) => {
-    const i = Math.round((x - field.bounds.minX) / field.config.cellSize);
-    const j = Math.round((z - field.bounds.minZ) / field.config.cellSize);
-    return Math.max(0, Math.min(rows, j)) * (cols + 1) + Math.max(0, Math.min(cols, i));
-  };
-  const start = index(field.baseSites[0].x, field.baseSites[0].z);
-  const stack = [start];
-  reach[start] = 1;
-  while (stack.length > 0) {
-    const k = stack.pop()!;
-    const i = k % (cols + 1);
-    const j = (k - i) / (cols + 1);
-    for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
-      if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
-      const nk = nj * (cols + 1) + ni;
-      if (!reach[nk] && field.heights[nk] >= field.seaLevel) {
-        reach[nk] = 1;
-        stack.push(nk);
-      }
-    }
-  }
-
+  // Land the bases can reach (over bridges too).
+  const reach = landReach(field);
+  const index = (x: number, z: number) => vertexAt(field, x, z);
   const r = OUTPOST_RADIUS;
   const candidates: { x: number; z: number; flat: number; contest: number }[] = [];
   for (let n = 0; n < 300; n++) {
     const x = rng.range(field.bounds.minX + r + 4, field.bounds.maxX - r - 4);
     const z = rng.range(field.bounds.minZ + r + 4, field.bounds.maxZ - r - 4);
-    if (!reach[index(x, z)]) continue;
+    if (!reach[index(x, z)] || field.deckAt(x, z) !== null) continue;
     const near = field.baseSites.map((b) => Math.hypot(b.x - x, b.z - z) - b.radius).sort((a, b) => a - b);
     if (near[0] < r + 8) continue;
     let flat = 0;

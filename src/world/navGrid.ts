@@ -1,4 +1,5 @@
 import { Battlefield } from './battlefield';
+import { CellArea } from './ground';
 import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
 
 export interface Point {
@@ -110,6 +111,8 @@ export class NavGrid {
   readonly rules: MoveRules;
   readonly obstacles: NavObstacles;
 
+  /** Towns and outposts, whose ground costs what MoveRules.town says. */
+  private readonly settled: { x: number; z: number; radius: number }[];
   /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
   private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
@@ -118,7 +121,7 @@ export class NavGrid {
   private readonly clearance: Float32Array;
   private clearanceVersion = -1;
   /** Which connected patch of passable terrain each cell is on (-1 for impassable); cells with different ids can't reach each other. */
-  private readonly region: Int32Array;
+  private region: Int32Array;
 
   // Scratch buffers reused across searches.
   private readonly g: Float32Array;
@@ -136,7 +139,7 @@ export class NavGrid {
    */
   constructor(
     private readonly field: Battlefield,
-    move: MoveClass = 'tracked',
+    readonly move: MoveClass = 'tracked',
     obstacles?: NavObstacles,
     readonly cellSize = 1.5,
   ) {
@@ -149,22 +152,8 @@ export class NavGrid {
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.occupied;
     this.clearance = new Float32Array(n);
-    const rules = this.rules;
-    const towns = [...field.townSites, ...field.outpostSites];
-    for (let j = 0; j < this.rows; j++) {
-      for (let i = 0; i < this.cols; i++) {
-        const { x, z } = this.center(i, j);
-        const k = j * this.cols + i;
-        const depth = field.seaLevel - field.heightAt(x, z);
-        const slope = field.slopeAt(x, z);
-        this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
-        let cost = 1;
-        if (depth > 0) cost *= rules.waterCost;
-        else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
-        if (rules.town !== 1 && towns.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
-        this.cost[k] = cost;
-      }
-    }
+    this.settled = [...field.townSites, ...field.outpostSites];
+    for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
@@ -172,6 +161,44 @@ export class NavGrid {
     this.stamp = new Uint32Array(n);
     this.closed = new Uint32Array(n);
     this.open = new Heap(this.f);
+  }
+
+  /**
+   * Work out one cell's terrain from the map: whether this class can be
+   * there at all, and what it costs to cross (slopes, water, towns and
+   * outposts, and the ground's kind). On a bridge deck, land classes see dry,
+   * level ground; boats still see the water underneath.
+   */
+  private computeCell(k: number): void {
+    const field = this.field;
+    const rules = this.rules;
+    const i = k % this.cols;
+    const { x, z } = this.center(i, (k - i) / this.cols);
+    const onDeck = !rules.flies && rules.minDepth === 0 && field.deckAt(x, z) !== null;
+    const depth = onDeck ? 0 : field.seaLevel - field.heightAt(x, z);
+    const slope = onDeck ? 0 : field.slopeAt(x, z);
+    this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
+    let cost = 1;
+    if (depth > 0) cost *= rules.waterCost;
+    else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
+    if (rules.town !== 1 && this.settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
+    if (!rules.flies && depth <= 0) cost *= field.groundAt(x, z).cost[this.move] ?? 1;
+    this.cost[k] = cost;
+  }
+
+  /**
+   * Re-read part of the map after it changed (see Battlefield.onChange):
+   * recompute those cells, re-label the connected regions, and bump the
+   * version so routes planned on the old map get re-planned.
+   */
+  refresh(area: CellArea): void {
+    const i0 = Math.max(0, area.i0 - 1);
+    const j0 = Math.max(0, area.j0 - 1);
+    const i1 = Math.min(this.cols - 1, area.i1 + 1);
+    const j1 = Math.min(this.rows - 1, area.j1 + 1);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.computeCell(j * this.cols + i);
+    this.region = this.labelRegions();
+    this.regionReach.clear();
   }
 
   /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
@@ -270,6 +297,8 @@ export class NavGrid {
     if (!this.field.contains(x, z)) return false;
     // Sampled at the point itself rather than the cell, so units walk right up to the shore.
     const f = this.field;
+    // Land units can be anywhere on a bridge deck.
+    if (!this.rules.flies && this.rules.minDepth === 0 && f.deckAt(x, z) !== null) return true;
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
   }
 
@@ -558,6 +587,11 @@ export class NavGrids {
   constructor(private readonly field: Battlefield) {
     this.land = new NavGrid(field, 'tracked');
     this.grids.set('tracked', this.land);
+    // A change to the map mid-battle re-reads those cells on every grid, and re-plans every route.
+    field.onChange((area) => {
+      for (const grid of this.grids.values()) grid.refresh(area);
+      this.land.obstacles.version++;
+    });
   }
 
   for(move: MoveClass): NavGrid {

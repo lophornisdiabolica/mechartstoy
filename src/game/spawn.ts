@@ -101,7 +101,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   // Face the middle of the map; the AI picks a real objective on its first think.
   const heading = Math.atan2(z, -x);
   const e = world.create();
-  world.add(e, Transform, makeTransform(x, ctx.field.surfaceAt(x, z), z, heading));
+  world.add(e, Transform, makeTransform(x, MOVE_RULES[def.move].minDepth > 0 ? ctx.field.waterSurfaceAt(x, z) : ctx.field.surfaceAt(x, z), z, heading));
   world.add(e, Faction, { id: faction });
   world.add(e, Unit, { def });
   world.add(e, Targetable, { kind: 'unit' });

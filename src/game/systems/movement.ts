@@ -211,8 +211,11 @@ export function movementSystem(ctx: SimContext): System {
         // Slow down while facing away so units arc rather than strafe.
         const throttle = Math.max(0, Math.cos(diff));
         const rules = MOVE_RULES[m.move];
-        // Wading and swimming are slower (or, for hovers, a little faster) than driving.
-        const speed = !rules.flies && ctx.field.isWater(t.x, t.z) ? m.speed * rules.waterSpeed : m.speed;
+        // Wading and swimming are slower (or, for hovers, a little faster) than driving, and the
+        // ground's kind (scrap, roads, dense forest) speeds or slows some classes. Bridges are dry land.
+        const field = ctx.field;
+        const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
+        const speed = rules.flies ? m.speed : wet ? m.speed * rules.waterSpeed : m.speed * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
         const stepLen = Math.min(dist, speed * throttle * dt);
         const nx = t.x + Math.cos(t.heading) * stepLen;
         const nz = t.z - Math.sin(t.heading) * stepLen;
@@ -336,7 +339,10 @@ export function groundFollowSystem(field: Battlefield): System {
         const t = world.req(e, Transform);
         t.x = field.clampX(t.x, 0.5);
         t.z = field.clampZ(t.z, 0.5);
-        t.y = field.surfaceAt(t.x, t.z) + world.req(e, GroundFollow).offset;
+        // Boats ride the water, under bridges; everything else stands on the ground or a deck.
+        const mover = world.get(e, Mover);
+        const floor = mover && MOVE_RULES[mover.move].minDepth > 0 ? field.waterSurfaceAt(t.x, t.z) : field.surfaceAt(t.x, t.z);
+        t.y = floor + world.req(e, GroundFollow).offset;
       }
     },
   };

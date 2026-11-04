@@ -101,7 +101,8 @@ battle, its exact map via `seed`).
   works out to (HP, damage per second, speed, range) under its box.
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
-  each other, attack the same enemy together, start next to each other and
+  each other, attack the same enemy together, start next to each other (unless
+  the base layout spreads them out) and
   come to help when a teammate's base is attacked. "Team boost" evens out
   uneven teams: sides on smaller teams get more production and a bigger
   unit cap, (largest team ÷ their team) to the power of the setting. The
@@ -109,6 +110,20 @@ battle, its exact map via `seed`).
   which came out roughly even in 1v3; uneven battles are never quite fair,
   so it's a slider. More sides
   make a bigger map.
+- **Map:** size and **shape** (wider or deeper, keeping the area), a
+  **biome** (temperate, desert, snow or forest: the ground's colours, the
+  trees and rocks, the water and sky, and the style towns are built in;
+  looks only, nothing moves differently), where the **bases** go (round the
+  edge with allies side by side, round the edge with allies spread out, or
+  teams in two lines facing each other), water and hills, and how many
+  **towns** (none to four) and how big. Towns have districts: a harbour of
+  warehouses on the waterfront, an industrial quarter, taller blocks in the
+  centre, houses round them, and a paved main street. **Waterways** (on by
+  default) dig channels joining the water near the bases, so boats can
+  sail from one to another; from 60% water every base gets water, with an
+  inlet dug to any that has none. Wherever water cuts the land, an
+  indestructible **bridge**, wide enough for the biggest walkers, carries
+  land units over while boats pass underneath.
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
@@ -146,7 +161,7 @@ battle, its exact map via `seed`).
     squad) and battle tanks from the factory; 1.35× vehicles, 0.8×
     infantry. A **dock** on the nearest shore launches missile boats, if
     there's open water within reach of the base (on the default maps
-    there usually isn't; from about 0.7 water up, usually there is).
+    there usually isn't; from 0.6 water up, waterways give every base some).
     Boats don't count against the vehicle cap: a side has six berths
     (times its team boost), and a dock with them all full builds
     skimmers.
@@ -220,8 +235,12 @@ src/
     events.ts    typed event bus for cross-system signals
     spatialGrid.ts   uniform grid for neighbour queries
   world/     battlefield data (no rendering)
-    battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites
-    props.ts         scenery placement (trees, rocks)
+    battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites; the ground layer,
+                     bridges, and changing the map mid-battle (paint, reshape, onChange)
+    ground.ts        kinds of ground (plain, road, scrap, dense forest) and what they cost each movement class
+    waterways.ts     channels joining the bases' water, and bridges wherever water cuts the land
+    biomes.ts        biomes: colours, scenery mix and town style
+    props.ts         scenery placement (the biome's trees, cacti, rocks...)
     settlements.ts   base and town layouts (building placements as data)
     moveClasses.ts   movement classes (foot, tracked, walker, climber, hover, amphibious, naval, air) and their terrain rules
     navGrid.ts       route-planning grid per movement class (terrain, slopes, towns, buildings) and A*
@@ -248,7 +267,7 @@ src/
     cameraRig.ts     isometric orthographic camera and controls
     fightWatch.ts    finds the fighting (from sim events) for the spectator camera
     tiltShift.ts     tilt-shift blur + colour grade passes
-    terrainMesh.ts   low-poly ground, soil skirt and water
+    terrainMesh.ts   low-poly ground, soil skirt, water and bridges; redraws cells the map changes
     propsMesh.ts     instanced scenery
     models.ts        model registry and rig (turret / animation hooks)
     models/          unit, building and projectile models
@@ -267,6 +286,20 @@ src/
     duel.ts          unit-against-unit duels on open ground (npm run sims -- --duel)
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
+
+### Changing the map mid-battle
+
+The map isn't fixed once generated. `Battlefield.paint(x, z, radius,
+ground)` lays a kind of ground over an area (scrap where wrecks pile up, a
+road), `reshape(x, z, radius, fn)` changes heights (a canal, a wall's
+footing) and `addBridge` adds a bridge. Each tells everything listening
+through `onChange` which cells changed: the route grids recompute those
+cells and their connected regions and bump their version (so routes
+re-plan, as they do when buildings go up or down), and the terrain mesh
+redraws them. Nothing in the battle uses this yet; it's there for scrap
+piles, dense forest with trees that can be knocked down, walls, canals,
+and towns that engineers grow. Lanes, outposts and the scenery are still
+placed once, at the start.
 
 ### Conventions
 
@@ -306,7 +339,11 @@ src/
   smoothing never shortcuts across ground the route went round, so the
   costs show up as routes. A goal a class can't get to at all (a boat
   sent inland, or across a lake with no way round) becomes the nearest spot it can
-  reach (`NavGrid.nearestInRegion`). Aircraft fly straight at `altitude`, only bump
+  reach (`NavGrid.nearestInRegion`). The **ground layer** (`world/ground.ts`)
+  adds a cost and a speed per class on top: roads are a little quicker for
+  wheels and tracks, scrap is a slog for tanks and hovers but easy for long
+  legs, dense forest slows vehicles. Bridge decks count as dry, level ground
+  for every class but boats, which see the water underneath. Aircraft fly straight at `altitude`, only bump
   into other aircraft, and can only be shot by weapons whose `targets` is
   `air` or `both`.
 - **Line of fire** (`game/lineOfFire.ts`). Direct-fire shots (bullets and
@@ -485,5 +522,10 @@ src/
 18. ~~Balancing tools: damage and time on the field per unit type,
     per-cap-slot numbers, map types in the doctrine array, margins of
     error, comparing runs, and duels.~~
-19. Next: maps. Biomes (snow, desert, forest) with a whole-town
-    architecture style each, more or larger towns, and new outpost types.
+19. ~~Maps: biomes with their own town styles, map shape, base layouts,
+    several towns with districts, waterways and bridges, and the ground
+    layer that lets the map change mid-battle.~~
+20. Next: outpost types (airstrip, hilltop gun, comms relay, fuel depot,
+    ruined factory), placing bases, towns and outposts by hand on the setup
+    screen, and the first mid-battle map changes (scrap piling up, dense
+    forest).
