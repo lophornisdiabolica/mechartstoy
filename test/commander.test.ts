@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest';
+import { PICTURE_INTERVAL } from '../src/game/commander/commander';
+import { Game } from '../src/game/game';
+import { defaultSettings } from '../src/game/settings';
+import { spawnUnit } from '../src/game/spawn';
+import { UNIT_DEFS } from '../src/game/units';
+
+const DT = 1 / 30;
+
+function run(game: Game, seconds: number): void {
+  for (let i = 0; i < seconds / DT; i++) game.step(DT);
+}
+
+describe('commander picture', () => {
+  it('knows every base, outpost and town, and finds them while the map loads', () => {
+    const game = new Game(7);
+    const kinds = (k: string) => game.ctx.commander.places.filter((p) => p.kind === k).length;
+    expect(kinds('base')).toBe(game.field.baseSites.length);
+    expect(kinds('outpost')).toBe(game.field.outpostSites.length);
+    expect(kinds('town')).toBe(game.field.townSites.length);
+    for (const p of game.ctx.commander.places) expect(game.field.contains(p.x, p.z)).toBe(true);
+  });
+
+  it('counts each side’s army and what it faces', () => {
+    const s = defaultSettings();
+    s.map.outposts = 0;
+    const game = new Game(3, { settings: s, populate: false, autoSpawn: false });
+    const b = game.field.baseSites[0];
+    for (let i = 0; i < 4; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x + i * 3, b.z);
+    spawnUnit(game.world, game.ctx, UNIT_DEFS.flakTank, 1, game.field.baseSites[1].x, game.field.baseSites[1].z);
+    run(game, PICTURE_INTERVAL + DT);
+    const [red, blue] = game.ctx.commander.sides;
+    expect(red.mix.vehicle).toBe(4);
+    expect(red.ground).toBeGreaterThan(0);
+    expect(red.air).toBe(0);
+    expect(red.enemyMix.antiAir).toBe(1);
+    expect(blue.antiAir).toBeGreaterThan(0);
+    expect(Math.abs(red.armyX! - b.x)).toBeLessThan(12);
+    const strength = game.ctx.commander.strength;
+    expect(strength.near(strength.ground, 0, b.x, b.z, 12)).toBeGreaterThan(0);
+    expect(strength.near(strength.ground, 1, b.x, b.z, 12)).toBe(0);
+  });
+
+  it('states today’s team plan: mass at the rally point, then push the enemy base', () => {
+    const game = new Game(11);
+    run(game, PICTURE_INTERVAL + DT);
+    const goals = game.ctx.commander.sides[0].goals;
+    const push = goals.find((g) => g.kind === 'push');
+    expect(push?.target).toBe(1);
+    expect(push && Math.hypot(push.x - game.field.baseSites[1].x, push.z - game.field.baseSites[1].z)).toBe(0);
+    expect(goals.every((g) => g.score >= 0 && g.score <= 1)).toBe(true);
+  });
+});

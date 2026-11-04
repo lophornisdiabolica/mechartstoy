@@ -170,7 +170,7 @@ export class Controls {
         }
         line(describeGoals(side.goals, (g) => this.factions[g].name.split(' ')[0]));
         const total = side.mix.infantry + side.mix.vehicle + side.mix.air + side.mix.super;
-        line(`Army: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
+        line(`Army, outpost guards aside: ${total} (${describeMix(side.mix)}). Strength ${Math.round(side.ground)} on the ground, ${Math.round(side.air)} in the air, ${Math.round(side.antiAir)} able to shoot aircraft`);
         line(`Faces ${describeMix(side.enemyMix)}`);
         return row;
       }),
