@@ -194,6 +194,7 @@ describe('outpost kinds', () => {
       (s) => {
         s.map.size = 'large';
         s.map.outposts = 6;
+        s.map.outpostKinds = [...OUTPOST_KIND_IDS];
       },
       true,
     );
@@ -219,6 +220,7 @@ describe('outpost kinds', () => {
       (s) => {
         s.map.size = 'large';
         s.map.outposts = 6;
+        s.map.outpostKinds = [...OUTPOST_KIND_IDS];
       },
       true,
     );

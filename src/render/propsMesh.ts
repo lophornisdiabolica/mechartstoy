@@ -55,8 +55,8 @@ export function pineGeometry(snow: boolean): THREE.BufferGeometry {
   return mergeNonIndexed(parts).scale(0.7, 0.7, 0.7);
 }
 
-/** A saguaro-ish cactus: a ribbed column with two arms. */
-function cactusGeometry(): THREE.BufferGeometry {
+/** A saguaro-ish cactus: a ribbed column with two arms. Coloured by its instance colour. */
+export function cactusGeometry(): THREE.BufferGeometry {
   const green = 0xffffff;
   const parts = [
     paint(new THREE.CylinderGeometry(0.16, 0.19, 1.5, 7).translate(0, 0.75, 0), green),

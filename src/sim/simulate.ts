@@ -3,6 +3,8 @@ import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
 import { DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
 import { TypeStats } from '../game/stats';
+import { Building, Faction, Producer, Unit } from '../game/components';
+import { outpostsHeldBy } from '../game/outposts';
 import { applyParams, settingsToParams } from '../ui/settingsUrl';
 
 /**
@@ -106,6 +108,14 @@ export interface BattleResult {
   sides: SideResult[];
   /** Average milliseconds per sim tick, on the machine that ran it. */
   msPerTick: number;
+  /** The slowest tick, in milliseconds, and the minute it came at. */
+  worstMs?: number;
+  worstAt?: number;
+  /** With the timeline option: each side's state every TIMELINE_EVERY seconds (and at the end). */
+  timeline?: TimelinePoint[];
+  /** With the profile option: milliseconds spent in each system over the whole battle, and the ticks played. */
+  profile?: Record<string, number>;
+  ticks?: number;
   /** Query string that replays this battle in the browser. */
   link: string;
 }
@@ -146,10 +156,71 @@ export function mapType(spec: string): { name: string; set: string } {
   throw new Error(`Unknown map type "${spec}": use one of ${Object.keys(MAP_TYPES).join(', ')}, or name:query, e.g. "flat:hills=0"`);
 }
 
+/** Seconds between timeline points. */
+export const TIMELINE_EVERY = 30;
+
+/** One moment of a battle's timeline. */
+export interface TimelinePoint {
+  minute: number;
+  sides: {
+    units: number;
+    buildings: number;
+    /** Production buildings (including the HQ) standing. */
+    producers: number;
+    outposts: number;
+    attacking: boolean;
+    out: boolean;
+    kills: number;
+    lost: number;
+  }[];
+}
+
+/** What a side looks like right now, for the timeline. */
+function timelinePoint(game: Game): TimelinePoint {
+  const { world, ctx, stats } = game;
+  const sides = ctx.sides;
+  const point: TimelinePoint = {
+    minute: world.time / 60,
+    sides: Array.from({ length: sides.count }, (_, f) => ({
+      units: 0,
+      buildings: 0,
+      producers: 0,
+      outposts: outpostsHeldBy(ctx, f),
+      attacking: !sides.eliminated[f] && ctx.offensive.attacking(f, world.time),
+      out: sides.eliminated[f],
+      kills: stats.sides[f].kills,
+      lost: stats.sides[f].lost,
+    })),
+  };
+  for (const e of world.query(Unit, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f >= 0) point.sides[f].units++;
+  }
+  for (const e of world.query(Building, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f < 0) continue;
+    point.sides[f].buildings++;
+    if (world.has(e, Producer)) point.sides[f].producers++;
+  }
+  return point;
+}
+
+export interface RunOptions {
+  /** Record a timeline (see TimelinePoint). */
+  timeline?: boolean;
+  /** Time each system (see World.profile). */
+  profile?: boolean;
+}
+
 /** Play one battle of a scenario to the end (or its time limit). `map` labels the map type the overrides set up. */
-export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now(), overrides = '', map = ''): BattleResult {
+export function runBattle(scenario: Scenario, battle: number, now: () => number = () => performance.now(), overrides = '', map = '', options: RunOptions = {}): BattleResult {
   const settings = scenarioSettings(scenario, battle, overrides);
   const game = new Game(hashSeed(settings.seed), { settings });
+  if (options.profile) game.world.profile = new Map();
+  const timeline: TimelinePoint[] = [];
+  if (options.timeline) timeline.push(timelinePoint(game));
+  let worstMs = 0;
+  let worstAt = 0;
   const { sides } = game.ctx;
   const teamOrder = [...new Set(settings.factions.map((f) => f.team))];
   const attacks = settings.factions.map(() => 0);
@@ -159,8 +230,15 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   const start = now();
   let ticks = 0;
   while (game.outcome === null && game.world.time < limit) {
+    const t0 = now();
     game.step(dt);
+    const took = now() - t0;
+    if (took > worstMs) {
+      worstMs = took;
+      worstAt = game.world.time / 60;
+    }
     ticks++;
+    if (options.timeline && ticks % (SIM_HZ * TIMELINE_EVERY) === 0) timeline.push(timelinePoint(game));
     if (ticks % SIM_HZ === 0) {
       game.stats.sample(game.world, 1);
       for (let f = 0; f < sides.count; f++) {
@@ -171,6 +249,7 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     }
   }
   const outcome = game.outcome;
+  if (options.timeline && ticks % (SIM_HZ * TIMELINE_EVERY) !== 0) timeline.push(timelinePoint(game));
   const names = factionDefs(settings).map((d) => d.name);
   return {
     scenario: scenario.id,
@@ -193,8 +272,72 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
       units: game.stats.sides[i].types,
     })),
     msPerTick: (now() - start) / Math.max(1, ticks),
+    worstMs,
+    worstAt,
+    ...(options.timeline ? { timeline } : {}),
+    ...(game.world.profile ? { profile: Object.fromEntries(game.world.profile), ticks } : {}),
     link: settingsToParams(settings).toString(),
   };
+}
+
+/**
+ * The scenario and battle number a seed names, e.g. "1v1-small-3" is battle 3
+ * of the 1v1-small scenario, or null if no scenario matches.
+ */
+export function parseSeed(seed: string): { scenario: Scenario; battle: number } | null {
+  const m = seed.trim().match(/^(.+)-(\d+)$/);
+  const scenario = m && SCENARIOS.find((s) => s.id === m[1]);
+  return scenario ? { scenario, battle: Number(m![2]) } : null;
+}
+
+/**
+ * Battle numbers from a list like "3,7-9,12", for `--seeds`. Throws on
+ * anything else.
+ */
+export function parseBattleNumbers(list: string): number[] {
+  const out = new Set<number>();
+  for (const part of list.split(',').map((p) => p.trim()).filter(Boolean)) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) throw new Error(`Can't read "${part}" in --seeds: use battle numbers and ranges, e.g. 3,7-9`);
+    const [a, b] = [Number(m[1]), Number(m[2] ?? m[1])];
+    for (let n = Math.min(a, b); n <= Math.max(a, b); n++) out.add(n);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+
+/**
+ * Where the sim's time goes, all battles together: milliseconds per tick
+ * and share of the total for each system, slowest first.
+ */
+export function formatProfile(results: BattleResult[]): string {
+  const totals = new Map<string, number>();
+  let ticks = 0;
+  for (const r of results) {
+    if (!r.profile || !r.ticks) continue;
+    ticks += r.ticks;
+    for (const [k, v] of Object.entries(r.profile)) totals.set(k, (totals.get(k) ?? 0) + v);
+  }
+  if (ticks === 0) return 'No profile recorded.';
+  const all = [...totals.values()].reduce((a, b) => a + b, 0);
+  const rows = [...totals].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, (v / ticks).toFixed(3), `${Math.round((v / all) * 100)}%`]);
+  rows.push(['total', (all / ticks).toFixed(3), '100%']);
+  const worst = results.filter((r) => r.worstMs !== undefined).sort((a, b) => b.worstMs! - a.worstMs!)[0];
+  return (
+    formatGrid(['System', 'ms/tick', 'Share'], rows) +
+    `\n${ticks.toLocaleString('en')} ticks.` +
+    (worst ? ` Slowest tick: ${worst.worstMs!.toFixed(1)} ms, ${worst.seed} at ${worst.worstAt!.toFixed(1)} min.` : '')
+  );
+}
+
+/** A battle's timeline as a table: per side, units / buildings (production) / outposts, and what it was doing. */
+export function formatTimeline(r: BattleResult): string {
+  if (!r.timeline) return 'No timeline recorded.';
+  const head = ['Min', ...r.sides.map((s) => `${s.name.split(' ')[0]} (${s.doctrine})`)];
+  const rows = r.timeline.map((p) => [
+    p.minute.toFixed(1),
+    ...p.sides.map((s) => (s.out ? 'out' : `${s.units}u ${s.buildings}b(${s.producers}) ${s.outposts}o ${s.kills}k${s.attacking ? ' ATTACK' : ''}`)),
+  ]);
+  return formatGrid(head, rows) + '\nu units, b buildings (production in brackets), o outposts held, k kills so far; ATTACK while its army is attacking.';
 }
 
 export interface ScenarioSummary {

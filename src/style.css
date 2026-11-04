@@ -247,6 +247,22 @@ body {
   opacity: 1;
 }
 
+#perf {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(16, 20, 28, 0.75);
+  color: #e6edf3;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: pre;
+  z-index: 5;
+}
+
+#perf[hidden],
 #hud[hidden] {
   display: none;
 }
@@ -684,6 +700,14 @@ body {
     grid-template-columns: 28px 1fr 76px 70px 26px;
     gap: 4px;
   }
+}
+
+#setup .range {
+  align-items: center;
+}
+
+#setup .range select {
+  flex: 1;
 }
 
 #setup .kinds {

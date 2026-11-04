@@ -4,6 +4,7 @@ import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
 import { defaultDoctrine, DoctrineId } from './doctrines';
+import { defaultVariety, VarietySettings } from './variety';
 
 /**
  * Everything a player can tune before a battle, in one plain object. The setup
@@ -147,7 +148,16 @@ export interface BattleSettings {
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
   factions: FactionSettings[];
+  /** What to re-roll between battles (see variety.ts). Not used by the battle itself. */
+  variety: VarietySettings;
 }
+
+/**
+ * Outpost kinds dealt out by default: all but the comms relay, whose bonus
+ * (attacks set out sooner) belongs to the readiness rule that Commander AI
+ * is going to replace.
+ */
+export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = OUTPOST_KIND_IDS.filter((k) => k !== 'relay');
 
 /** Town radius per size. */
 export const TOWN_SIZES: Record<TownSize, { radius: number; label: string }> = {
@@ -200,7 +210,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...OUTPOST_KIND_IDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -219,6 +229,7 @@ export function defaultSettings(): BattleSettings {
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],
+    variety: defaultVariety(),
   };
 }
 
@@ -404,5 +415,12 @@ export function tunedBuildings(s: BattleSettings): Record<BuildingId, BuildingDe
 
 /** Faction display definitions (names and colours) for these settings, one per side. */
 export function factionDefs(s: BattleSettings): FactionDef[] {
-  return s.factions.map((f, i) => ({ ...FACTIONS[i], name: f.name.trim() || FACTIONS[i].name, primary: f.color }));
+  // The trim colour goes with the hull colour when it's one of the standard ones
+  // (a side can wear another slot's colours after a re-roll), else with the slot.
+  return s.factions.map((f, i) => ({
+    ...FACTIONS[i],
+    name: f.name.trim() || FACTIONS[i].name,
+    primary: f.color,
+    secondary: (FACTIONS.find((d) => d.primary === f.color) ?? FACTIONS[i]).secondary,
+  }));
 }
