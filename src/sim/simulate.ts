@@ -5,7 +5,9 @@ import { DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
 import { TypeStats } from '../game/stats';
 import { Building, Faction, Producer, Unit } from '../game/components';
 import { outpostsHeldBy } from '../game/outposts';
-import { applyParams, settingsToParams } from '../ui/settingsUrl';
+import { applyParams, settingsToParams, UNIT_STATS } from '../ui/settingsUrl';
+import { fightingStrength } from '../game/offensive';
+import { UNIT_DEFS } from '../game/units';
 
 /**
  * Headless battles for balance checks (`npm run sims`, see scripts/sims.mjs).
@@ -88,6 +90,14 @@ export interface SideResult {
   razed: number;
   captured: number;
   attacks: number;
+  /** Its army's fighting strength at the end (see fightingStrength). */
+  strength?: number;
+  /**
+   * Its team's share of all the armies' fighting strength, averaged over the
+   * battle (sampled every TIMELINE_EVERY seconds): a score beyond win or
+   * loss, 1 over the number of teams being even.
+   */
+  share?: number;
   /** Per unit or building type: built, lost, kills, and who it killed and was killed by. */
   units: Record<string, TypeStats>;
 }
@@ -105,6 +115,10 @@ export interface BattleResult {
   decided: boolean;
   /** Winning team number (1, 2, ...), or null. */
   winner: number | null;
+  /** How decisively it was won: the winning team's share of the armies' strength at the end (0.5 to 1 in a two-team battle), or null. */
+  margin?: number | null;
+  /** With --sweep: the setting and value this battle was played with, e.g. "tforce=0.5". */
+  variant?: string;
   sides: SideResult[];
   /** Average milliseconds per sim tick, on the machine that ran it. */
   msPerTick: number;
@@ -205,6 +219,24 @@ function timelinePoint(game: Game): TimelinePoint {
   return point;
 }
 
+/** Each side's army strength right now (see fightingStrength). */
+function armyStrength(game: Game): number[] {
+  const { world } = game;
+  const out = game.settings.factions.map(() => 0);
+  for (const e of world.query(Unit, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f >= 0 && f < out.length) out[f] += fightingStrength(world, e);
+  }
+  return out;
+}
+
+/** Each side's team's share of all the armies' strength (an even share if nobody has an army). */
+function teamShares(strength: number[], teams: number[]): number[] {
+  const total = strength.reduce((a, b) => a + b, 0);
+  const count = new Set(teams).size;
+  return teams.map((t) => (total > 0 ? strength.reduce((a, x, g) => a + (teams[g] === t ? x : 0), 0) / total : 1 / count));
+}
+
 export interface RunOptions {
   /** Record a timeline (see TimelinePoint). */
   timeline?: boolean;
@@ -225,6 +257,9 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   const teamOrder = [...new Set(settings.factions.map((f) => f.team))];
   const attacks = settings.factions.map(() => 0);
   const attacking = settings.factions.map(() => false);
+  const teams = settings.factions.map((f) => f.team);
+  const shareSum = settings.factions.map(() => 0);
+  let samples = 0;
   const limit = (scenario.minutes ?? TIME_LIMIT) * 60;
   const dt = 1 / SIM_HZ;
   const start = now();
@@ -238,7 +273,11 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
       worstAt = game.world.time / 60;
     }
     ticks++;
-    if (options.timeline && ticks % (SIM_HZ * TIMELINE_EVERY) === 0) timeline.push(timelinePoint(game));
+    if (ticks % (SIM_HZ * TIMELINE_EVERY) === 0) {
+      if (options.timeline) timeline.push(timelinePoint(game));
+      teamShares(armyStrength(game), teams).forEach((x, f) => (shareSum[f] += x));
+      samples++;
+    }
     if (ticks % SIM_HZ === 0) {
       game.stats.sample(game.world, 1);
       for (let f = 0; f < sides.count; f++) {
@@ -251,6 +290,13 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   const outcome = game.outcome;
   if (options.timeline && ticks % (SIM_HZ * TIMELINE_EVERY) !== 0) timeline.push(timelinePoint(game));
   const names = factionDefs(settings).map((d) => d.name);
+  const endStrength = armyStrength(game);
+  const endShares = teamShares(endStrength, teams);
+  const winnerSide = outcome && outcome.team !== null ? teams.indexOf(outcome.team) : -1;
+  if (samples === 0) {
+    endShares.forEach((x, f) => (shareSum[f] = x));
+    samples = 1;
+  }
   return {
     scenario: scenario.id,
     seed: settings.seed,
@@ -259,6 +305,7 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     minutes: (outcome ? outcome.time : game.world.time) / 60,
     decided: outcome !== null && outcome.team !== null,
     winner: outcome && outcome.team !== null ? teamOrder.indexOf(outcome.team) + 1 : null,
+    margin: winnerSide >= 0 ? endShares[winnerSide] : null,
     sides: settings.factions.map((f, i) => ({
       name: names[i],
       doctrine: f.doctrine,
@@ -269,6 +316,8 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
       razed: game.stats.sides[i].razed,
       captured: game.stats.sides[i].captured,
       attacks: attacks[i],
+      strength: endStrength[i],
+      share: shareSum[i] / samples,
       units: game.stats.sides[i].types,
     })),
     msPerTick: (now() - start) / Math.max(1, ticks),
@@ -359,6 +408,8 @@ export interface ScenarioSummary {
   captured: number;
   attacks: number;
   msPerTick: number;
+  /** Won battles' average margin (see BattleResult.margin), or null if none recorded one. */
+  margin: number | null;
   /** Seeds of the shortest and longest battles, to replay. */
   shortestSeed: string;
   longestSeed: string;
@@ -396,9 +447,15 @@ export function summarize(scenario: Scenario, results: BattleResult[]): Scenario
     captured: per((s) => s.captured),
     attacks: per((s) => s.attacks),
     msPerTick: mean(results.map((r) => r.msPerTick)),
+    margin: margins(results),
     shortestSeed: byLength[0]?.seed ?? '',
     longestSeed: byLength[byLength.length - 1]?.seed ?? '',
   };
+}
+
+function margins(results: BattleResult[]): number | null {
+  const m = results.map((r) => r.margin).filter((x): x is number => typeof x === 'number');
+  return m.length ? mean(m) : null;
 }
 
 const pad = (s: string, n: number) => (s.length >= n ? s : s + ' '.repeat(n - s.length));
@@ -406,7 +463,7 @@ const min = (m: number) => `${m.toFixed(1)}m`;
 
 /** A plain-text table of summaries, one row per scenario. */
 export function formatTable(summaries: ScenarioSummary[], eternal: Set<string>): string {
-  const head = ['Scenario', 'Battles', 'Median', 'Mean', 'Range', 'Wins by team', 'Kills', 'Razed', 'Outposts', 'Attacks', 'ms/tick'];
+  const head = ['Scenario', 'Battles', 'Median', 'Mean', 'Range', 'Wins by team', 'Margin', 'Kills', 'Razed', 'Outposts', 'Attacks', 'ms/tick'];
   const rows = summaries.map((s) => {
     const forever = eternal.has(s.scenario);
     const wins = forever
@@ -421,6 +478,7 @@ export function formatTable(summaries: ScenarioSummary[], eternal: Set<string>):
       forever ? '-' : min(s.mean),
       forever ? '-' : `${min(s.shortest)}–${min(s.longest)}`,
       wins,
+      s.margin === null || s.margin === undefined ? '-' : pct(s.margin),
       s.kills.toFixed(0),
       s.razed.toFixed(0),
       s.captured.toFixed(1),
@@ -595,6 +653,16 @@ export interface DoctrineSummary {
   score: number;
   /** The score's margin of error, the same way as `margin`. */
   scoreMargin: number;
+  /**
+   * Strength share against par: its team's share of the armies' strength
+   * over each battle (SideResult.share) times the number of teams, averaged
+   * over every battle it played, won, lost or undecided. 1 is even. A
+   * steadier measure than wins, since a close loss and a rout differ. NaN
+   * if the runs didn't record it.
+   */
+  edge: number;
+  /** The edge's 95% margin of error. */
+  edgeMargin: number;
 }
 
 /** Half the width of a 95% interval for a rate measured as `won` out of `n`. Padded by a win and a loss, so 0 of 4 doesn't claim to be certain. */
@@ -623,7 +691,14 @@ export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
     const rate = played ? won / played : 0;
     const share = played ? par / played : 1;
     const m = margin(won, played);
-    return { doctrine, played, won, rate, margin: m, score: par ? won / par : 0, scoreMargin: m / share };
+    const edges: number[] = [];
+    for (const r of results) {
+      const teams = new Set(r.sides.map((x) => x.team)).size;
+      for (const x of r.sides) if (x.doctrine === doctrine && typeof x.share === 'number') edges.push(x.share * teams);
+    }
+    const edge = edges.length ? mean(edges) : NaN;
+    const sd = edges.length > 1 ? Math.sqrt(edges.reduce((a, x) => a + (x - edge) ** 2, 0) / (edges.length - 1)) : NaN;
+    return { doctrine, played, won, rate, margin: m, score: par ? won / par : 0, scoreMargin: m / share, edge, edgeMargin: (1.96 * sd) / Math.sqrt(Math.max(1, edges.length)) };
   });
 }
 
@@ -640,6 +715,7 @@ export function headToHead(results: BattleResult[]): Record<DoctrineId, Record<D
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+const edgeText = (d: DoctrineSummary) => (Number.isFinite(d.edge) ? `${d.edge.toFixed(2)}x ±${Number.isFinite(d.edgeMargin) ? d.edgeMargin.toFixed(2) : '?'}` : '-');
 const pm = (x: number) => `±${Math.round(x * 100)}`;
 
 /** Plain-text tables of doctrine results: overall, per map type when there are several, and head to head. */
@@ -647,11 +723,13 @@ export function formatDoctrines(results: BattleResult[]): string {
   const doctrines = summarizeDoctrines(results).filter((d) => d.played > 0);
   const lines = [
     formatGrid(
-      ['Doctrine', 'Played', 'Won', 'Win rate', 'vs par'],
-      doctrines.map((d) => [d.doctrine, String(d.played), String(d.won), `${pct(d.rate)} ${pm(d.margin)}`, `${d.score.toFixed(2)}x ±${d.scoreMargin.toFixed(2)}`]),
+      ['Doctrine', 'Played', 'Won', 'Win rate', 'vs par', 'Strength'],
+      doctrines.map((d) => [d.doctrine, String(d.played), String(d.won), `${pct(d.rate)} ${pm(d.margin)}`, `${d.score.toFixed(2)}x ±${d.scoreMargin.toFixed(2)}`, edgeText(d)]),
     ),
     '',
     'Win rates are ± a 95% margin of error. "vs par" is wins over a fair share (1 over the teams in the battle): 1.00x is even.',
+    '"Strength" is its team\'s share of all the armies\' strength through each battle, against an even share (1.00x),',
+    'over every battle it played: a score beyond win or loss, so a close loss counts for more than a rout.',
   ];
   const maps = mapsIn(results);
   if (maps.length > 1) {
@@ -869,12 +947,22 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
       '',
       'Doctrine win rates:',
       formatGrid(
-        ['Doctrine', 'Before', 'After', 'Change', ''],
+        ['Doctrine', 'Before', 'After', 'Change', '', 'Strength before', 'After', ''],
         rows.map(([a, b]) => {
           const change = b.rate - a.rate;
           // Bigger than the two margins together: probably a real change, not noise.
           const real = Math.abs(change) > Math.hypot(a.margin, b.margin);
-          return [a.doctrine, a.played ? `${pct(a.rate)} ${pm(a.margin)}` : '-', b.played ? `${pct(b.rate)} ${pm(b.margin)}` : '-', `${change >= 0 ? '+' : ''}${Math.round(change * 100)}`, real ? 'beyond noise' : ''];
+          const edgeReal = Number.isFinite(a.edge) && Number.isFinite(b.edge) && Math.abs(b.edge - a.edge) > Math.hypot(a.edgeMargin, b.edgeMargin);
+          return [
+            a.doctrine,
+            a.played ? `${pct(a.rate)} ${pm(a.margin)}` : '-',
+            b.played ? `${pct(b.rate)} ${pm(b.margin)}` : '-',
+            `${change >= 0 ? '+' : ''}${Math.round(change * 100)}`,
+            real ? 'beyond noise' : '',
+            edgeText(a),
+            edgeText(b),
+            edgeReal ? 'beyond noise' : '',
+          ];
         }),
       ),
     );
@@ -919,4 +1007,150 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
   }
   if ((before.set ?? '') !== (after.set ?? '')) out.push('', `Settings changed for every battle: before "${before.set ?? ''}", after "${after.set ?? ''}".`);
   return out.join('\n');
+}
+
+/** One value of a parameter sweep: its label and the settings it adds, in the URL's format. */
+export interface SweepVariant {
+  label: string;
+  set: string;
+}
+
+/**
+ * The variants of `--sweep`: `key=v1,v2,...`, where key is a setting as
+ * written in a battle's link (e.g. `tforce=0,0.35,0.7`), or a unit's stat
+ * multiplier written unit.stat (e.g. `skimmer.hp=0.9,1,1.1`; stats are hp,
+ * damage, speed and range).
+ */
+export function sweepVariants(spec: string): SweepVariant[] {
+  const m = spec.trim().match(/^([\w.]+)=(.+)$/);
+  if (!m) throw new Error(`--sweep "${spec}": write it as key=v1,v2,..., e.g. "tforce=0,0.35,0.7" or "skimmer.hp=0.9,1,1.1"`);
+  const [, key, list] = m;
+  const values = list.split(',').map((v) => v.trim()).filter(Boolean);
+  if (values.length < 2) throw new Error(`--sweep "${spec}" needs at least two values`);
+  const dot = key.indexOf('.');
+  if (dot < 0) return values.map((v) => ({ label: `${key}=${v}`, set: `${key}=${v}` }));
+  const unit = key.slice(0, dot);
+  const stat = key.slice(dot + 1) as (typeof UNIT_STATS)[number];
+  if (!(unit in UNIT_DEFS)) throw new Error(`--sweep: no unit "${unit}" (units: ${Object.keys(UNIT_DEFS).join(', ')})`);
+  const at = UNIT_STATS.indexOf(stat);
+  if (at < 0) throw new Error(`--sweep: no stat "${stat}" (stats: ${UNIT_STATS.join(', ')})`);
+  return values.map((v) => ({ label: `${key}=${v}`, set: `${unit}=${UNIT_STATS.map((_, i) => (i === at ? v : '1')).join(',')}` }));
+}
+
+/** Plain-text comparison of a sweep's variants: lengths, wins, margins, and doctrine win rates and strength. */
+export function formatSweep(results: BattleResult[], variants: SweepVariant[]): string {
+  const by = variants.map((v) => results.filter((r) => r.variant === v.label));
+  const lines = [
+    formatGrid(
+      ['Variant', 'Battles', 'Median', 'Mean', 'Undecided', 'Wins by team', 'Margin', 'Kills'],
+      variants.map((v, i) => {
+        const rs = by[i];
+        const wins: Record<number, number> = {};
+        for (const r of rs) if (r.winner !== null) wins[r.winner] = (wins[r.winner] ?? 0) + 1;
+        const m = margins(rs);
+        return [
+          v.label,
+          String(rs.length),
+          min(median(rs.map((r) => r.minutes))),
+          min(mean(rs.map((r) => r.minutes))),
+          String(rs.filter((r) => !r.decided).length),
+          Object.entries(wins).map(([t, n]) => `T${t}:${n}`).join(' '),
+          m === null ? '-' : pct(m),
+          mean(rs.map((r) => r.sides.reduce((a, x) => a + x.kills, 0))).toFixed(0),
+        ];
+      }),
+    ),
+  ];
+  const doctrines = new Set(results.flatMap((r) => r.sides.map((x) => x.doctrine)));
+  if (doctrines.size > 1) {
+    const sums = by.map((rs) => summarizeDoctrines(rs));
+    const ids = DOCTRINE_IDS.filter((d) => doctrines.has(d));
+    lines.push(
+      '',
+      'Doctrine win rates (strength against par below each):',
+      formatGrid(
+        ['Doctrine', ...variants.map((v) => v.label)],
+        ids.flatMap((d) => {
+          const i = DOCTRINE_IDS.indexOf(d);
+          return [
+            [d, ...sums.map((s) => (s[i].played ? `${pct(s[i].rate)} ${pm(s[i].margin)}` : '-'))],
+            ['', ...sums.map((s) => edgeText(s[i]))],
+          ];
+        }),
+      ),
+    );
+  }
+  lines.push('', 'Every variant plays the same battles (seeds, doctrines and map types), so differences come from the setting, give or take the noise.');
+  return lines.join('\n');
+}
+
+/**
+ * Matchups apart from maps (`--latin`): for two-sided scenarios, every
+ * pairing of two different doctrines meets every map type once per pass,
+ * so a head-to-head result can't be down to the maps it happened to land
+ * on. The sides take turns at which doctrine plays side 1, balanced over
+ * the map types (a Latin square of pairings by map type). Mirror matches
+ * are left out: they say nothing about doctrines. 28 pairings × the map
+ * types per pass, e.g. 112 battles on 4 map types.
+ */
+export function latinPlans(count: number, maps: string[], set = ''): BattlePlan[] {
+  const types = (maps.length ? maps : ['medium']).map(mapType);
+  const join = (...parts: string[]) => parts.filter(Boolean).join('&');
+  const n = DOCTRINE_IDS.length;
+  const pass: { a: number; b: number; m: number }[] = [];
+  for (let m = 0; m < types.length; m++) {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        // Alternate which doctrine is side 1, so each plays each side equally on each map type.
+        const swap = (i + j + m) % 2 === 1;
+        pass.push({ a: swap ? j : i, b: swap ? i : j, m });
+      }
+    }
+  }
+  const passes = Math.max(1, Math.round(count / pass.length));
+  const plans: BattlePlan[] = [];
+  for (let p = 0; p < passes; p++) {
+    for (const { a, b, m } of pass) {
+      plans.push({ battle: plans.length + 1, set: join(`doc1=${DOCTRINE_IDS[a]}&doc2=${DOCTRINE_IDS[b]}`, types[m].set, set), map: types[m].name });
+    }
+  }
+  return plans;
+}
+
+/** For a --latin run: each pairing's results, overall and on each map type, with the pairings whose winner depends on the map. */
+export function formatLatin(results: BattleResult[]): string {
+  const maps = mapsIn(results);
+  const two = results.filter((r) => r.sides.length === 2);
+  const rows: string[][] = [];
+  const mapDependent: string[] = [];
+  for (let i = 0; i < DOCTRINE_IDS.length; i++) {
+    for (let j = i + 1; j < DOCTRINE_IDS.length; j++) {
+      const a = DOCTRINE_IDS[i];
+      const b = DOCTRINE_IDS[j];
+      const games = two.filter((r) => r.sides.some((x) => x.doctrine === a) && r.sides.some((x) => x.doctrine === b));
+      if (games.length === 0) continue;
+      const winnerOf = (r: BattleResult) => (r.winner === null ? null : r.sides.find((x) => x.team === r.winner)!.doctrine);
+      const aw = games.filter((r) => winnerOf(r) === a).length;
+      const bw = games.filter((r) => winnerOf(r) === b).length;
+      const cells = maps.map((m) => {
+        const on = games.filter((r) => r.map === m);
+        const x = on.filter((r) => winnerOf(r) === a).length;
+        const y = on.filter((r) => winnerOf(r) === b).length;
+        return on.length === 0 ? '-' : `${x}-${y}`;
+      });
+      // Each wins somewhere: the map type decides this matchup.
+      const leads = maps.map((m) => {
+        const on = games.filter((r) => r.map === m);
+        return Math.sign(on.filter((r) => winnerOf(r) === a).length - on.filter((r) => winnerOf(r) === b).length);
+      });
+      if (leads.includes(1) && leads.includes(-1)) mapDependent.push(`${a} v ${b}`);
+      rows.push([`${a} v ${b}`, `${aw}-${bw}`, ...cells]);
+    }
+  }
+  return [
+    'Each pairing on every map type (wins of the first named, then the second):',
+    formatGrid(['Pairing', 'All', ...maps], rows),
+    '',
+    mapDependent.length ? `Won by each side on some map type (the map decides): ${mapDependent.join(', ')}.` : 'No pairing changed hands between map types.',
+  ].join('\n');
 }

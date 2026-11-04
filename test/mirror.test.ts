@@ -105,6 +105,38 @@ describe('sim mirror', () => {
   });
 });
 
+describe('fast-forward (the at URL option)', () => {
+  it('jumps the view to where the battle has got to, stats and all', () => {
+    const { host, view, sim } = pair('seed=mirror-2&size=small');
+    host.skip(150 * 30);
+    host.step(0, false);
+    const { frame } = host.frame();
+    expect(frame.skipped).toBeDefined();
+    expect(frame.events.length).toBe(0);
+    sim.apply(structuredClone(frame) as Frame);
+    sim.pose(frame.time);
+    expect(picture(view)).toEqual(picture(host.game));
+    // And carries on in step from there.
+    host.step(60, false);
+    const next = host.frame().frame;
+    expect(next.skipped).toBeUndefined();
+    sim.apply(structuredClone(next) as Frame);
+    sim.pose(next.time);
+    expect(picture(view)).toEqual(picture(host.game));
+  }, 60000);
+
+  it('sends units\' routes only when asked', () => {
+    const { host } = pair('seed=mirror-3&size=small');
+    host.step(300, false);
+    expect(host.frame().frame.routes).toBeUndefined();
+    host.routes = true;
+    host.step(30, false);
+    const routes = host.frame().frame.routes!;
+    expect(routes.length).toBeGreaterThan(0);
+    for (const r of routes) expect(r.length % 2).toBe(1);
+  }, 60000);
+});
+
 describe('draw clock', () => {
   /** The sim time drawn each frame at 4× speed, with answers arriving as `answers` says (ticks per answer, by frame). */
   function drawn(answers: (frame: number) => number, frames: number) {
@@ -131,6 +163,16 @@ describe('draw clock', () => {
     const mean = steps.reduce((a, b) => a + b) / steps.length;
     expect(Math.min(...steps)).toBeGreaterThan(mean * 0.4);
     expect(Math.max(...steps)).toBeLessThan(mean * 1.8);
+  });
+
+  it('jumps after a fast-forward instead of crawling up to it', () => {
+    const clock = new DrawClock();
+    clock.arrived(0.1);
+    clock.advance(0.05);
+    clock.jump(600);
+    clock.arrived(600);
+    clock.advance(1 / 60);
+    expect(clock.time).toBeGreaterThanOrEqual(599.9);
   });
 
   it('keeps up when answers come every frame', () => {

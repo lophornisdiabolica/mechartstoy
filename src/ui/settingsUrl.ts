@@ -42,7 +42,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'bhp', limit: 'buildingHp', get: (s) => s.armies.buildingHp, set: (s, v) => (s.armies.buildingHp = v) },
 ];
 
-const UNIT_STATS = ['hp', 'damage', 'speed', 'range'] as const;
+export const UNIT_STATS = ['hp', 'damage', 'speed', 'range'] as const;
 
 function clamp(v: number, limit: keyof typeof LIMITS): number {
   const { min, max } = LIMITS[limit];
@@ -210,4 +210,21 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+/**
+ * The `at` URL option: open the battle fast-forwarded to this point, in
+ * seconds. Written as minutes ("25" or "25m"), seconds ("90s") or
+ * minutes and seconds ("12:30"). Null if missing or unreadable.
+ */
+export function parseAt(value: string | null): number | null {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  let seconds: number;
+  const mmss = v.match(/^(\d+):(\d{1,2})$/);
+  if (mmss) seconds = Number(mmss[1]) * 60 + Number(mmss[2]);
+  else if (/^\d+(\.\d+)?s$/.test(v)) seconds = Number(v.slice(0, -1));
+  else if (/^\d+(\.\d+)?m?$/.test(v)) seconds = Number(v.replace('m', '')) * 60;
+  else return null;
+  return seconds > 0 && Number.isFinite(seconds) ? seconds : null;
 }
