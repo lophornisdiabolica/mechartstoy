@@ -32,8 +32,8 @@ export function countByCategory(world: World, sides: number): CategoryCounts[] {
     const f = world.req(e, Faction).id;
     if (f < 0 || world.has(e, Guard)) continue;
     const def = world.req(e, Unit).def;
-    // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army.
-    if (isBoat(def)) continue;
+    // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army; engineers aren't the army.
+    if (isBoat(def) || def.builds) continue;
     out[f][def.category]++;
   }
   return out;

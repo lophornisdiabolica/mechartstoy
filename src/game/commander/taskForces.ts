@@ -79,6 +79,8 @@ function squadsOf(world: World): Map<number, SquadInfo> {
     const squad = world.req(e, Ai).squad;
     const t = world.req(e, Transform);
     const def = world.req(e, Unit).def;
+    // Engineers stay out of task forces (see engineers.ts).
+    if (def.builds) continue;
     const move = world.get(e, Mover)?.move ?? def.move;
     let s = out.get(squad);
     if (!s) out.set(squad, (s = { side, strength: 0, x: 0, z: 0, units: 0, flak: false, free: true }));

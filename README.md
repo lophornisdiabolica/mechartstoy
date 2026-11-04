@@ -557,6 +557,19 @@ outposts and the light scenery are still placed once, at the start.
   attack, prefers near outposts); *aggressive* (1.3× the task forces,
   attacks with 0.8× the edge); or *raider* (1.7× the task forces, goes for
   far-off outposts, and leans production toward fast units).
+- **Engineers** (`game/commander/engineers.ts`). Every doctrine's HQ
+  trains engineers (one every 40 seconds, up to the *Engineers* setting
+  under Armies, 2 by default; 0 is off) when its Commander has work for
+  them. For now the work is fortifying where the army masses: a line of
+  three wall segments 7 units in front of the rally point, facing the
+  enemy base, for each of the two nearest enemies. A wall stops shots like
+  any building, so it's cover, and attackers have to go round it or knock
+  it down. Walls crumble over ten minutes and aren't rebuilt (no rubble),
+  and a side has at most six standing. Engineers don't build where an
+  enemy unit is within 14 units, take no cap, never join an attack or a
+  task force, and wait at home when there's nothing to build; the rally
+  flag and stances pause their work. Docks, hover pads, bridge repairs
+  and canals are still to come.
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan
@@ -671,5 +684,7 @@ outposts and the light scenery are still placed once, at the start.
 20. ~~Outpost kinds, placing bases, towns and outposts by hand, roads
     between towns, bridges fitted to their banks, and the first mid-battle
     map changes: scrap piling up, and dense forest that gets knocked down.~~
-21. Next: the Commander AI (and with it engineers, who could build walls,
-    dig canals and grow towns), then aircraft that fly like planes.
+21. The Commander AI: battle picture, task forces, jobs that suit the
+    unit, production advice and styles, shared routes, and engineers who
+    build walls. Next: engineers that repair bridges, put up docks and
+    hover pads and dig canals; then aircraft that fly like planes.

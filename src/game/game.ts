@@ -35,6 +35,7 @@ import { weaponSystem } from './systems/weapons';
 import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
+import { engineerSystem } from './commander/engineers';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -133,7 +134,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       movementSystem(ctx),

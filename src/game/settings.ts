@@ -159,6 +159,11 @@ export interface BattleSettings {
      * ±30%. 0 is off. See commander/advice.ts.
      */
     advice: number;
+    /**
+     * Most engineers each side's HQ trains to fortify where its army masses (see
+     * commander/engineers.ts). 0 is off.
+     */
+    engineers: number;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -216,6 +221,7 @@ export const LIMITS = {
   outpostHold: { min: 0, max: 1 },
   taskForces: { min: 0, max: 0.8 },
   advice: { min: 0, max: 0.6 },
+  engineers: { min: 0, max: 4 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -245,6 +251,7 @@ export function defaultSettings(): BattleSettings {
       outpostHold: 0,
       taskForces: 0.35,
       advice: 0.3,
+      engineers: 2,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],

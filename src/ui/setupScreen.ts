@@ -549,6 +549,8 @@ export class SetupScreen {
     armies.append(el('p', { class: 'hint' }, 'Share of squads sent down the other lanes instead of straight down the middle: through outposts and towns, or swinging wide where there are none.'));
     slider(armies, 'Build advice', 'advice', 0.05, (s) => s.armies.advice, (s, v) => (s.armies.advice = v), (v) => (v === 0 ? 'Off' : `±${percent(v)}`));
     armies.append(el('p', { class: 'hint' }, 'How far each side’s Commander leans production toward what the battle needs, within its doctrine: more flak against aircraft (fewer with none about), harder hitters against armour, more that sprays against infantry. Each side’s style (next to its doctrine under Sides) sets how it plays: cautious keeps together and waits for a clear edge, aggressive attacks sooner, a raider sends small forces far afield and builds fast units.'));
+    slider(armies, 'Engineers', 'engineers', 1, (s) => s.armies.engineers, (s, v) => (s.armies.engineers = v), (v) => (v === 0 ? 'Off' : `${v} per side`));
+    armies.append(el('p', { class: 'hint' }, 'Each side’s HQ trains up to this many engineers, who put up short walls in front of where its army masses. Walls stop shots like any building and crumble after ten minutes.'));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);

@@ -7,7 +7,7 @@ import '../src/render/models/projectiles';
 import '../src/render/models/units';
 
 /** Sprite models need a canvas, which tests don't have. */
-const SKIP = new Set(['trooper', 'atTrooper', 'mortar', 'flameTrooper']);
+const SKIP = new Set(['trooper', 'atTrooper', 'mortar', 'flameTrooper', 'engineer']);
 
 function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
