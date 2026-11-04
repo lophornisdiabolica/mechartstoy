@@ -1,8 +1,7 @@
 import { hashSeed, Rng } from '../core/rng';
 import { battlefieldConfig, BattleSettings, MapSpot } from '../game/settings';
 import { Battlefield, generateBattlefield, OUTPOST_RADIUS } from '../world/battlefield';
-import { BIOMES } from '../world/biomes';
-import { GROUND_IDS } from '../world/ground';
+import { groundPicture } from '../world/mapPicture';
 import { el, hex } from './dom';
 
 export type PlaceKind = 'bases' | 'towns' | 'outposts';
@@ -77,36 +76,14 @@ export class MapPreview {
     this.draw();
   }
 
-  /** The ground as an image: height-shaded land, water, dense forest, scrap and roads. */
+  /** The ground as an image (see groundPicture). */
   private paintGround(field: Battlefield): void {
-    const { cols, rows, cellSize } = field.config;
-    this.ground.width = cols;
-    this.ground.height = rows;
+    const picture = groundPicture(field);
+    this.ground.width = picture.width;
+    this.ground.height = picture.height;
     const g = this.ground.getContext('2d')!;
-    const image = g.createImageData(cols, rows);
-    const biome = BIOMES[field.config.biome];
-    const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-    const [low, high, water, shore, rock] = [biome.ground.low, biome.ground.high, biome.water, biome.ground.shore, biome.ground.rock].map(rgb);
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const x = field.bounds.minX + (i + 0.5) * cellSize;
-        const z = field.bounds.minZ + (j + 0.5) * cellSize;
-        const h = field.heightAt(x, z);
-        let c: number[];
-        if (h < field.seaLevel) c = water.map((v) => v * 0.85);
-        else if (h < field.seaLevel + 0.35) c = shore;
-        else {
-          const t = Math.min(1, (h - field.seaLevel) / (field.config.maxHeight * 0.8));
-          c = low.map((v, k) => v + (high[k] - v) * t);
-          if (field.slopeAt(x, z) > 0.7) c = c.map((v, k) => (v + rock[k]) / 2);
-        }
-        const ground = GROUND_IDS[field.ground[j * cols + i]];
-        if (ground === 'thicket') c = c.map((v) => v * 0.55);
-        else if (ground === 'road') c = [150, 144, 132];
-        if (field.deckAt(x, z) !== null) c = [170, 165, 155];
-        image.data.set([c[0], c[1], c[2], 255], (j * cols + i) * 4);
-      }
-    }
+    const image = g.createImageData(picture.width, picture.height);
+    image.data.set(picture.data);
     g.putImageData(image, 0, 0);
   }
 

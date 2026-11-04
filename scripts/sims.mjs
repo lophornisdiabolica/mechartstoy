@@ -53,6 +53,17 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      with ";". --rounds N plays each N times on different
                      ground (default 20), --gap D starts them D apart
                      (default 30), and --set changes settings as for battles
+  --seeds 3,7-9      play only these battle numbers of each scenario (with
+                     the same doctrines and map types they get in a full run)
+  --profile          time each part of the sim and print where the time
+                     goes, with the slowest tick and when it came
+  --timeline         save each battle's timeline (every side's units,
+                     buildings, outposts and attacks every 30 s) in the JSON
+  --battle SEED      play one battle, e.g. --battle 1v1-7, and print its
+                     timeline and profile instead of a stats table. --set
+                     applies as usual; --from FILE takes the doctrines, map
+                     type and settings that battle had in a saved run
+                     (--map NAME picks one when it was played on several)
   --list             list the scenarios and stop
   --help             this text
 
@@ -77,6 +88,12 @@ function parseArgs(argv) {
     duel: null,
     rounds: 20,
     gap: 30,
+    seeds: null,
+    profile: false,
+    timeline: false,
+    battle: null,
+    from: null,
+    map: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -95,6 +112,12 @@ function parseArgs(argv) {
     else if (a === '--duel') opts.duel = argv[++i];
     else if (a === '--rounds') opts.rounds = Math.max(1, Number(argv[++i]));
     else if (a === '--gap') opts.gap = Math.max(4, Number(argv[++i]));
+    else if (a === '--seeds') opts.seeds = argv[++i];
+    else if (a === '--profile') opts.profile = true;
+    else if (a === '--timeline') opts.timeline = true;
+    else if (a === '--battle') opts.battle = argv[++i];
+    else if (a === '--from') opts.from = argv[++i];
+    else if (a === '--map') opts.map = argv[++i];
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -112,6 +135,7 @@ async function main() {
     return console.log(sim.compareRuns(before, after));
   }
   if (opts.duel) return duels(opts);
+  if (opts.battle) return oneBattle(sim, opts);
   if (opts.list) {
     for (const s of sim.SCENARIOS) console.log(`${s.id.padEnd(16)} ${s.label} (${s.battles} battles, ${s.quick} quick)`);
     return;
@@ -122,12 +146,18 @@ async function main() {
   if (opts.doctrines && opts.maps.length > 0 && !opts.everyMap && 8 % opts.maps.length !== 0) {
     console.error(`Note: with ${opts.maps.length} map types, doctrines meet them only roughly equally often (exactly with 1, 2, 4 or 8).`);
   }
+  const picked = opts.seeds ? sim.parseBattleNumbers(opts.seeds) : null;
   const jobs = scenarios.flatMap((s) => {
-    const n = opts.battles ?? (opts.quick ? s.quick : s.battles);
+    // Enough battles in the plan to reach the highest number picked.
+    const normal = opts.battles ?? (opts.quick ? s.quick : s.battles);
+    const n = picked ? Math.max(normal, picked[picked.length - 1]) : normal;
     // With doctrines, each pass over the orthogonal array plays every row once, on fresh maps.
     const sides = sim.scenarioSettings(s, 1, opts.set).factions.length;
-    return sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap }).map((p) => ({ scenario: s.id, ...p }));
+    const plans = sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap });
+    const only = picked && new Set(picked);
+    return plans.filter((p) => !only || only.has(p.battle)).map((p) => ({ scenario: s.id, ...p, options: { profile: opts.profile, timeline: opts.timeline } }));
   });
+  if (jobs.length === 0) throw new Error('No battles to play: --seeds picked battle numbers past the end of the run (try --battles)');
   // Big battles first, so the run doesn't end waiting on one of them.
   const size = { small: 0.6, medium: 1, large: 2 };
   const cost = new Map(scenarios.map((s) => {
@@ -177,6 +207,11 @@ async function main() {
     console.log(sim.formatUnits(results));
     console.log('');
   }
+  if (opts.profile) {
+    console.log(`Where the sim's time goes (${workers} battles at a time, so each ran slower than it would alone):`);
+    console.log(sim.formatProfile(results));
+    console.log('');
+  }
   console.log('Lengths in minutes. Wins by team: T1 is the first side\'s team (the lone side in 1v3).');
   console.log('Kills, razed, outposts and attacks are per battle, all sides together.');
   if (opts.set) console.log(`Settings changed for every battle: ${opts.set}`);
@@ -201,6 +236,34 @@ async function main() {
   if (replay) console.log(`To watch one, run \`npm run dev\` and open its link, e.g. the longest (${replay.seed}): http://localhost:5173/?${replay.link}`);
 }
 
+/** --battle: one battle on this thread, with its timeline and profile. */
+async function oneBattle(sim, opts) {
+  const found = sim.parseSeed(opts.battle);
+  if (!found) throw new Error(`"${opts.battle}" isn't a battle seed: use a scenario and a battle number, e.g. 1v1-7 (see --list)`);
+  let set = opts.set;
+  let map = '';
+  if (opts.from) {
+    const saved = JSON.parse(readFileSync(resolve(opts.from), 'utf8'));
+    const matches = saved.battles.filter((r) => r.seed === found.scenario.id + '-' + found.battle && (!opts.map || r.map === opts.map));
+    if (matches.length === 0) throw new Error(`No battle ${opts.battle}${opts.map ? ` on ${opts.map}` : ''} in ${opts.from}`);
+    if (matches.length > 1) console.error(`Note: ${opts.battle} was played on ${matches.map((r) => r.map).join(', ')}; using ${matches[0].map} (pick with --map).`);
+    set = [matches[0].set, opts.set].filter(Boolean).join('&');
+    map = matches[0].map;
+  }
+  console.error(`Playing ${opts.battle}${map ? ` on ${map}` : ''}${set ? ` with ${set}` : ''}…`);
+  const r = sim.runBattle(found.scenario, found.battle, undefined, set, map, { profile: true, timeline: true });
+  const result = r.winner !== null ? `team ${r.winner} won` : r.decided ? 'a draw' : 'no winner';
+  console.log(`${r.seed}: ${result} after ${r.minutes.toFixed(1)} minutes.`);
+  for (const s of r.sides) console.log(`  ${s.name} (${s.doctrine}, team ${s.team}): ${s.kills} kills, ${s.lost} lost, ${s.razed} razed, ${s.captured} outposts taken, ${s.attacks} attacks${s.out !== null ? `, out at ${s.out.toFixed(1)} min` : ''}`);
+  console.log('');
+  console.log(sim.formatTimeline(r));
+  console.log('');
+  console.log(`Sim time: ${r.msPerTick.toFixed(2)} ms per tick on average.`);
+  console.log(sim.formatProfile([r]));
+  console.log('');
+  console.log(`To watch it, run \`npm run dev\` and open http://localhost:5173/?${r.link}`);
+}
+
 /** Duels run on this thread: each round takes well under a second. */
 async function duels(opts) {
   const duel = await loadDuels();
@@ -223,7 +286,7 @@ async function workerMain() {
   parentPort.on('message', (job) => {
     if (job === null) return process.exit(0);
     const scenario = sim.SCENARIOS.find((s) => s.id === job.scenario);
-    parentPort.postMessage({ result: sim.runBattle(scenario, job.battle, undefined, job.set, job.map) });
+    parentPort.postMessage({ result: sim.runBattle(scenario, job.battle, undefined, job.set, job.map, job.options) });
   });
   parentPort.postMessage({ ready: true });
 }

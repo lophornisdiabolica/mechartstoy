@@ -12,6 +12,8 @@ npm run dev      # local dev server with hot reload
 npm test         # unit tests (headless, no browser needed)
 npm run build    # typecheck + production build into dist/
 npm run sims     # balance runs: play many battles headlessly, print stats
+npm run bench    # sim speed on fixed battles, with a fingerprint of the result
+npm run map -- "seed=abc&biome=desert"   # the map a battle would get, as a PNG
 ```
 
 ### Balance runs
@@ -71,6 +73,31 @@ go in one run separated by `;`, `--gap` sets the starting distance and
 1.2× health). Duels take seconds and have no tide, AI timing or map
 luck in them, so they answer "does this unit beat that one" much more
 cheaply than battles. The code is in `src/sim/duel.ts`.
+
+To dig into particular battles: `--seeds 3,7-9` plays just those battle
+numbers of each scenario (with the doctrines and map types they get in a
+full run), and `--battle 1v1-7` plays one battle on its own and prints its
+**timeline** (every side's units, buildings, production, outposts, kills
+and attacks every 30 seconds) and where the sim's time went. `--from
+sims-results/x.json` takes that battle's doctrines, map type and settings
+from a saved run. `--timeline` saves timelines for every battle in the
+JSON, and `--profile` prints how long each part of the sim took (per
+system, see `World.profile`) and the slowest tick.
+
+### Performance
+
+`npm run bench` plays three fixed battles (1v1 medium, 2v2 large, an
+8-side free-for-all on a large map) for five minutes each, one at a time,
+and prints milliseconds per tick (mean, median, 95th percentile, slowest
+and when), the slowest systems, and a **fingerprint**: a hash of where
+every entity ended up. A change meant only to make the sim faster must
+keep every fingerprint; `--compare a.json b.json` shows the timing changes
+and whether the battles still played out the same. In the browser, **P**
+shows the same numbers live, with draw calls, triangles and meshes.
+
+`npm run map -- WHAT` draws the map a battle would get, top down, as a PNG
+in `maps-out/`: WHAT is a battle link or query string, or a sims seed such
+as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
 
 Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
@@ -254,6 +281,7 @@ src/
     battlefield.ts   heightmap generation, heightAt/isWater/slopeAt, base sites; the ground layer,
                      bridges, roads, and changing the map mid-battle (paint, setGround, reshape, onChange)
     roads.ts         roads between towns, along the easiest ground
+    mapPicture.ts    top-down map pictures as RGBA pixels (setup map, npm run map)
     woods.ts         dense forest: trees that stop shots, fall to them and get flattened by vehicles
     ground.ts        kinds of ground (plain, road, scrap, dense forest) and what they cost each movement class
     waterways.ts     channels joining the bases' water, and bridges (fitted to their banks) wherever water cuts the land
@@ -299,12 +327,15 @@ src/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
+    perfOverlay.ts   render and sim stats readout (P)
     settingsUrl.ts   settings <-> URL query string (only non-default values)
     viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
   sim/
     simulate.ts      headless balance scenarios and stats (npm run sims; scripts/sims.mjs runs them)
     duel.ts          unit-against-unit duels on open ground (npm run sims -- --duel)
+    bench.ts         fixed battles timed for npm run bench, with result fingerprints
+    mapTool.ts       settings and pictures for npm run map (scripts/map.mjs)
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
 

@@ -14,6 +14,7 @@ import { Controls, MatchControls } from './ui/controls';
 import { el, hex } from './ui/dom';
 import { settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
+import { PerfOverlay } from './ui/perfOverlay';
 
 /** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
 const VICTORY_PAUSE = 15;
@@ -89,6 +90,7 @@ export class App implements MatchControls {
   private bannerShownFor: Game | null = null;
   /** Unpaused seconds the banner has been up. */
   private bannerTime = 0;
+  private readonly perf: PerfOverlay;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
 
   constructor(container: HTMLElement, hud: HTMLElement) {
@@ -101,10 +103,16 @@ export class App implements MatchControls {
     this.stage.shadows = view.shadows;
     this.stage.followFights = view.follow;
     this.loop = new FixedLoop(1 / SIM_HZ, {
-      step: (dt) => this.battle.game.step(dt),
+      step: (dt) => this.perf.step(() => this.battle.game.step(dt)),
       render: (alpha, frameSeconds) => this.frame(alpha, frameSeconds),
     });
     document.body.append(this.banner);
+    this.perf = new PerfOverlay(this.stage);
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() !== 'p' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      this.perf.toggle();
+    });
     this.setup = new SetupScreen(this.settings, {
       start: (s) => this.startFromSetup(s),
       change: (s) => {
@@ -156,6 +164,7 @@ export class App implements MatchControls {
     const game = new Game(hashSeed(seed), { settings });
     const factions = factionDefs(settings);
     this.stage.load(game, factions);
+    this.perf.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
     this.battle = { game, seed, settings, label, factions, controls };
@@ -171,6 +180,7 @@ export class App implements MatchControls {
     this.stage.render(alpha, frameSeconds, frameSeconds * this.loop.timeScale);
     controls?.update(frameSeconds);
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
+    this.perf.frame(frameSeconds);
 
     // A battle that hasn't ended by the variety time limit gives way to the next.
     const after = this.battle.settings.variety.after;
@@ -308,7 +318,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats`
     );
   }
 

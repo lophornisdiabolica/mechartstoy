@@ -86,6 +86,8 @@ export class Stage {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    // Counted over the whole frame (shadow and post passes too) and reset in render, for the stats readout.
+    this.renderer.info.autoReset = false;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
 
@@ -215,6 +217,7 @@ export class Stage {
     this.effects.update(simSeconds);
     this.markers.update(frameSeconds, this.selected);
     this.outpostRings.update();
+    this.renderer.info.reset();
     this.composer.render(frameSeconds);
   }
 

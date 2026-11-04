@@ -104,12 +104,36 @@ export class World {
     this.systems.push(system);
   }
 
+  /**
+   * Milliseconds spent in each system (and in end-of-tick cleanup), summed over
+   * the ticks since it was set to an empty Map; null (the default) times nothing.
+   * For `npm run sims -- --profile`, `npm run bench` and the render stats readout.
+   */
+  profile: Map<string, number> | null = null;
+
   /** Advance the simulation by one fixed step. */
   step(dt: number): void {
-    for (const system of this.systems) system.update(this, dt);
-    this.flushDestroyed();
+    const profile = this.profile;
+    if (profile) {
+      for (const system of this.systems) {
+        const t0 = performance.now();
+        system.update(this, dt);
+        profile.set(system.name, (profile.get(system.name) ?? 0) + performance.now() - t0);
+      }
+      const t0 = performance.now();
+      this.flushDestroyed();
+      profile.set('cleanup', (profile.get('cleanup') ?? 0) + performance.now() - t0);
+    } else {
+      for (const system of this.systems) system.update(this, dt);
+      this.flushDestroyed();
+    }
     this.time += dt;
     this.tick++;
+  }
+
+  /** The systems' names, in the order they run. */
+  get systemNames(): string[] {
+    return this.systems.map((s) => s.name);
   }
 
   private flushDestroyed(): void {
