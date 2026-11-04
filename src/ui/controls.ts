@@ -31,6 +31,10 @@ export interface MatchControls {
   setupAfterBattle: boolean;
   /** The panel changed a battle setting (so the page link can follow). */
   settingsChanged(): void;
+  /** The battle ticker's feed: whether it shows. */
+  ticker: boolean;
+  /** Hide the interface for pictures (see PhotoMode). */
+  photoMode(): void;
 }
 
 /**
@@ -364,7 +368,23 @@ export class Controls {
     this.plans.append(el('summary', {}, 'What each side means to do'));
     this.plans.append(this.plansBody);
     this.plans.addEventListener('toggle', () => this.renderPlans());
-    plans.append(plansLabel, this.plans);
+    const frontsLabel = el('label', { class: 'check', title: 'Shade the ground in the colour of whoever holds it, from where each side’s strength is: the front is where the colours meet' });
+    const showFronts = el('input', { type: 'checkbox' });
+    showFronts.addEventListener('change', () => {
+      this.stage.showFronts = showFronts.checked;
+      this.saveView();
+    });
+    frontsLabel.append(showFronts, document.createTextNode(' Show front lines'));
+    this.sync.push(() => (showFronts.checked = this.stage.showFronts));
+    const tickerLabel = el('label', { class: 'check', title: 'A quiet feed of what’s happening: outposts taken, super units lost, bases razed, attacks setting out' });
+    const showTicker = el('input', { type: 'checkbox' });
+    showTicker.addEventListener('change', () => {
+      this.match.ticker = showTicker.checked;
+      this.saveView();
+    });
+    tickerLabel.append(showTicker, document.createTextNode(' Battle ticker'));
+    this.sync.push(() => (showTicker.checked = this.match.ticker));
+    plans.append(plansLabel, frontsLabel, tickerLabel, this.plans);
 
     // Camera
     const cam = section('Camera');
@@ -418,6 +438,9 @@ export class Controls {
     slider('Focus', 0.2, 0.8, 0.01, () => ts.settings.focus, (v) => (ts.settings.focus = v));
     slider('Colour', 0.6, 1.8, 0.05, () => ts.settings.saturation, (v) => (ts.settings.saturation = v));
     this.sync.push(() => (toggle.checked = ts.settings.enabled));
+    const photo = el('button', { type: 'button', class: 'wide', title: 'Hide the interface, free the camera and set the time of day, for pictures' }, 'Photo mode (H)');
+    photo.addEventListener('click', () => this.match.photoMode());
+    cam.append(photo);
 
     body.append(this.inspect);
   }
@@ -437,7 +460,7 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker });
   }
 
   private setSpeed(v: number): void {

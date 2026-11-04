@@ -255,8 +255,8 @@ battle, its exact map via `seed`).
   screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, F follows the fighting, T toggles tilt-shift, space pauses, 1-4 set
-speed, Esc cancels.
+rotate, F follows the fighting, T toggles tilt-shift, H opens photo mode,
+space pauses, 1-4 set speed, Esc cancels.
 
 The **Battle controls** panel (top right) sets speed and camera effects.
 **Follow the fighting** turns the camera into a spectator that glides to
@@ -267,6 +267,28 @@ in this browser rather than in the battle link. Pick a
 side to drop units anywhere on the map, place a rally flag, and override the
 AI with Attack / Hold (Auto follows the ebb and flow of the battle). Click any
 unit or building to inspect it.
+
+The **battle ticker** (top left, on by default) is a quiet feed of what's
+happening: outposts changing hands, super units falling and where ("at the
+fuel depot in the north", "on a bridge", "outside Crimson Host's base"),
+production buildings razed, attacks setting out, sides knocked out. **Show
+front lines** shades the ground in the colour of whoever holds it, from
+where each side's strength is (buildings hold the ground they stand on),
+greyer where it's contested; the front is where the colours meet. Both are
+remembered in this browser.
+
+**Photo mode** (H, or the button in the panel) hides the interface and puts
+a small bar at the bottom: tilt the camera from nearly flat to straight
+down, zoom in much closer, set the time of day (dawn to dusk: the sun
+moves and the light warms as it gets low), adjust the tilt-shift, pause,
+and save the picture as a PNG. H or Esc leaves it, putting the camera
+and light back.
+
+When a battle ends, the banner shows a **chart** of each side's army
+strength through the battle, the **turning point** (when the winners took
+the lead in strength for good, or that they led throughout, or won on the
+buildings without the bigger army) and the **unit of the battle**, the type
+with the most kills on any side.
 
 ## Architecture
 
@@ -348,11 +370,15 @@ src/
     markers.ts       rally flags and the selection ring
     outpostRings.ts  capture rings round outposts, filling as a side takes one
     commanderOverlay.ts  each side's plan as arrows on the map, and markers on crossings, bridges and high ground
+    frontLines.ts    front lines: who holds which ground, shaded from a strength map
   ui/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
     setupScreen.ts   pre-battle settings screen
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     perfOverlay.ts   render and sim stats readout (P)
+    ticker.ts        the battle ticker's feed
+    battleChart.ts   army strength through the battle, for the end-of-battle chart
+    photoMode.ts     photo mode (H): no interface, free camera, time of day, save a picture
     settingsUrl.ts   settings <-> URL query string (only non-default values)
     viewPrefs.ts     display preferences (shadows, follow) kept in this browser
     dom.ts           small DOM helpers
