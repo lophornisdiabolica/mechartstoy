@@ -11,12 +11,16 @@ export type Entity = number;
 
 export interface ComponentType<T> {
   readonly name: string;
+  /** Index of this component's store in every World. */
+  readonly id: number;
   /** Phantom field that carries T for type inference only. */
   readonly __type?: T;
 }
 
+let nextComponentId = 0;
+
 export function defineComponent<T>(name: string): ComponentType<T> {
-  return { name };
+  return { name, id: nextComponentId++ };
 }
 
 export interface System {
@@ -31,7 +35,8 @@ export class World {
 
   private nextId = 1;
   private readonly alive = new Set<Entity>();
-  private readonly stores = new Map<ComponentType<unknown>, Map<Entity, unknown>>();
+  /** One store per component type, indexed by its id. */
+  private readonly stores: (Map<Entity, unknown> | undefined)[] = [];
   private readonly pendingDestroy = new Set<Entity>();
   private readonly systems: System[] = [];
   private readonly destroyListeners: ((e: Entity) => void)[] = [];
@@ -79,17 +84,20 @@ export class World {
     this.store(type).delete(e);
   }
 
-  /** Entities that have every listed component. Iterates the smallest store. */
-  *query(...types: ComponentType<unknown>[]): IterableIterator<Entity> {
-    if (types.length === 0) return;
-    const stores = types.map((t) => this.store(t));
-    let smallest = stores[0];
-    for (const s of stores) if (s.size < smallest.size) smallest = s;
-    outer: for (const e of smallest.keys()) {
-      if (this.pendingDestroy.has(e)) continue;
-      for (const s of stores) if (!s.has(e)) continue outer;
-      yield e;
+  /**
+   * Entities that have every listed component. Iterates the smallest store,
+   * lazily, so entities added to it mid-loop are visited too and each is
+   * checked just before it's handed out.
+   */
+  query(...types: ComponentType<unknown>[]): IterableIterator<Entity> {
+    if (types.length === 0) return new Query([], [][Symbol.iterator](), this.pendingDestroy);
+    const stores: Map<Entity, unknown>[] = new Array(types.length);
+    let smallest = (stores[0] = this.store(types[0]));
+    for (let i = 1; i < types.length; i++) {
+      const s = (stores[i] = this.store(types[i]));
+      if (s.size < smallest.size) smallest = s;
     }
+    return new Query(stores, smallest.keys(), this.pendingDestroy);
   }
 
   count(type: ComponentType<unknown>): number {
@@ -140,18 +148,43 @@ export class World {
     if (this.pendingDestroy.size === 0) return;
     for (const e of this.pendingDestroy) {
       for (const listener of this.destroyListeners) listener(e);
-      for (const store of this.stores.values()) store.delete(e);
+      for (const store of this.stores) store?.delete(e);
       this.alive.delete(e);
     }
     this.pendingDestroy.clear();
   }
 
   private store<T>(type: ComponentType<T>): Map<Entity, T> {
-    let s = this.stores.get(type);
+    let s = this.stores[type.id];
     if (!s) {
       s = new Map();
-      this.stores.set(type, s);
+      this.stores[type.id] = s;
     }
     return s as Map<Entity, T>;
+  }
+}
+
+/** World.query's iterator: a plain object rather than a generator, which is slower to step through. */
+class Query implements IterableIterator<Entity> {
+  constructor(
+    private readonly stores: Map<Entity, unknown>[],
+    private readonly keys: Iterator<Entity>,
+    private readonly pending: Set<Entity>,
+  ) {}
+
+  next(): IteratorResult<Entity> {
+    const stores = this.stores;
+    outer: for (;;) {
+      const r = this.keys.next();
+      if (r.done) return r;
+      const e = r.value;
+      if (this.pending.has(e)) continue;
+      for (let i = 0; i < stores.length; i++) if (!stores[i].has(e)) continue outer;
+      return r;
+    }
+  }
+
+  [Symbol.iterator](): IterableIterator<Entity> {
+    return this;
   }
 }

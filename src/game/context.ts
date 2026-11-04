@@ -5,7 +5,7 @@ import { SpatialGrid } from '../core/spatialGrid';
 import { Battlefield } from '../world/battlefield';
 import { NavGrid, NavGrids } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
-import { Hit } from './components';
+import { Building, Collider, Faction, Hit, Mover, Transform } from './components';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -54,12 +54,25 @@ export interface Outcome {
   time: number;
 }
 
+/**
+ * A targetable entity's components that neighbour queries keep reading,
+ * looked up once when it's first indexed (none of them is added or removed
+ * after spawning). Handed to SpatialGrid.forEachNear's `visit`.
+ */
+export interface Body {
+  t: Transform;
+  collider: Collider | undefined;
+  faction: Faction | undefined;
+  mover: Mover | undefined;
+  building: Building | undefined;
+}
+
 /** Shared services handed to every system. */
 export interface SimContext {
   field: Battlefield;
   events: EventBus<GameEvents>;
   /** Targetable entities indexed by position, rebuilt at the start of every tick. */
-  grid: SpatialGrid;
+  grid: SpatialGrid<Body>;
   rng: Rng;
   /** The land route planning grid (tracked vehicles); buildings are kept marked on it as obstacles. Same as navs.land. */
   nav: NavGrid;

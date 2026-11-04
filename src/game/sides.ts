@@ -30,6 +30,8 @@ export class Sides {
   readonly eliminated: boolean[];
   /** When each side was knocked out, or null. */
   readonly eliminatedAt: (number | null)[];
+  /** `eliminated` as a string of 0s and 1s, part of each cached target's key. */
+  private eliminatedKey: string;
   /**
    * Production and unit cap multiplier per side. With uneven teams evened
    * out, a side on a smaller team gets more, so every team fields about the
@@ -66,6 +68,7 @@ export class Sides {
     this.phase = teams.map((team) => ((this.teamList.indexOf(team) + rotation) % t) / t);
     this.eliminated = teams.map(() => false);
     this.eliminatedAt = teams.map(() => null);
+    this.eliminatedKey = this.eliminated.map((e) => (e ? 1 : 0)).join('');
     const size = (team: number) => teams.filter((t) => t === team).length;
     const largest = Math.max(...this.teamList.map(size));
     this.strength = teams.map((team) => (largest / size(team)) ** evenness);
@@ -129,6 +132,7 @@ export class Sides {
   eliminate(faction: number, time: number): void {
     this.eliminated[faction] = true;
     this.eliminatedAt[faction] = time;
+    this.eliminatedKey = this.eliminated.map((e) => (e ? 1 : 0)).join('');
   }
 
   /**
@@ -167,7 +171,7 @@ export class Sides {
    */
   target(faction: number, attack: number): number | null {
     const team = this.teams[faction];
-    const key = `${team}:${attack}:${this.eliminated.map((e) => (e ? 1 : 0)).join('')}`;
+    const key = `${team}:${attack}:${this.eliminatedKey}`;
     let pick = this.targets.get(key);
     if (pick !== undefined) return pick;
     // Picks are deterministic, so forgetting old ones only costs a recompute.
