@@ -89,16 +89,15 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
   const flying = air.has(e);
   let ax = 0;
   let az = 0;
-  ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other) => {
+  ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other, _d2, body) => {
     if (other === e) return;
     // Aircraft only steer round other aircraft, and ground units don't dodge what's flying over them.
     if (air.size > 0 && air.has(other) !== flying) return;
-    const ot = world.req(other, Transform);
-    const or = world.get(other, Collider)?.radius ?? 0.5;
-    const isBuilding = world.has(other, Building);
-    if (!isBuilding && myFaction !== undefined && ctx.sides.allied(world.get(other, Faction)?.id ?? -1, myFaction)) {
+    const ot = body.t;
+    const or = body.collider?.radius ?? 0.5;
+    if (!body.building && myFaction !== undefined && ctx.sides.allied(body.faction?.id ?? -1, myFaction)) {
       // Friendlies on the move sort themselves out via separation; only steer around parked ones.
-      const om = world.get(other, Mover);
+      const om = body.mover;
       if (om && om.targetX !== null) return;
     }
     const vx = ot.x - t.x;
@@ -314,18 +313,18 @@ export function separationSystem(ctx: SimContext): System {
         const flying = air.has(e);
         const terrain = ctx.navs.for(move);
         const foot = move === 'foot';
-        ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2) => {
+        ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2, body) => {
           if (other === e || d2 < 1e-6) return;
           if (air.size > 0 && air.has(other) !== flying) return;
-          const ot = world.req(other, Transform);
+          const ot = body.t;
           // Infantry keep a little apart from each other, more so in a fight.
-          const spacing = foot && world.get(other, Mover)?.move === 'foot' ? (braced.has(e) || braced.has(other) ? INFANTRY_SPACING : MARCH_SPACING) : 0;
-          const minDist = r + world.req(other, Collider).radius + spacing;
+          const spacing = foot && body.mover?.move === 'foot' ? (braced.has(e) || braced.has(other) ? INFANTRY_SPACING : MARCH_SPACING) : 0;
+          const minDist = r + (body.collider ?? world.req(other, Collider)).radius + spacing;
           const d = Math.sqrt(d2);
           if (d >= minDist) return;
           // Buildings don't budge, so the unit takes the whole overlap. Between units each
           // moves part of it; enemies push a little harder so lines hold.
-          const share = world.has(other, Building) ? 1 : ctx.sides.allied(world.req(other, Faction).id, myFaction) ? 0.25 : 0.35;
+          const share = body.building ? 1 : ctx.sides.allied((body.faction ?? world.req(other, Faction)).id, myFaction) ? 0.25 : 0.35;
           const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;

@@ -17,3 +17,55 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  # Plays the bench battles on this PR and on the branch it targets, and
+  # says whether they played out the same (a speed-up should; a balance
+  # change won't) and how the tick times compare. Informational: a PR that
+  # changes battles on purpose gets a warning, not a failure.
+  same-battles:
+    name: Same battles as main
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pr
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pr/package-lock.json
+      - run: npm ci
+        working-directory: base
+      - run: npm ci
+        working-directory: pr
+      - name: Bench ${{ github.base_ref }}
+        working-directory: base
+        run: |
+          npm run bench -- --minutes 2 --no-profile
+          cp "$(ls -t bench-results/*.json | head -1)" ../base.json
+      - name: Bench this PR
+        working-directory: pr
+        run: npm run bench -- --minutes 2 --no-profile --out ../pr.json
+      - name: Compare
+        working-directory: pr
+        run: |
+          set +e
+          node scripts/bench.mjs --compare ../base.json ../pr.json --check > ../compare.txt 2>&1
+          status=$?
+          cat ../compare.txt
+          {
+            if [ $status -eq 0 ]; then echo "### Same battles as ${{ github.base_ref }}"; else echo "### Battles changed from ${{ github.base_ref }}"; fi
+            echo
+            echo "Fine for a balance change; a pure speed-up should play out exactly the same. Tick times are from one shared runner, so only big differences mean much."
+            echo
+            echo '```'
+            cat ../compare.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $status -ne 0 ]; then echo "::warning title=Battles changed::The bench battles played out differently from ${{ github.base_ref }} (see the job summary)."; fi
+          exit 0

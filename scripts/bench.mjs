@@ -20,14 +20,18 @@ change that only makes the sim faster keeps every fingerprint the same.
   --only a,b      just these cases (1v1, 2v2, ffa8)
   --no-profile    don't time each system (a little faster, slightly
                   steadier numbers)
+  --out FILE      save the results here instead of bench-results/<time>.json
   --compare A B   compare two saved runs (bench-results/*.json) instead
+  --check         with --compare: exit with an error if any battle played
+                  out differently (CI uses this to flag PRs that change
+                  battles; a balance change is expected to)
   --help          this text
 
 Timings depend on the machine and what else it's doing: compare runs
 made on the same machine, close together.`;
 
 function parseArgs(argv) {
-  const opts = { minutes: 5, only: null, profile: true, compare: null, help: false };
+  const opts = { minutes: 5, only: null, profile: true, compare: null, check: false, out: null, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') opts.help = true;
@@ -35,6 +39,8 @@ function parseArgs(argv) {
     else if (a === '--only') opts.only = argv[++i].split(',').map((s) => s.trim());
     else if (a === '--no-profile') opts.profile = false;
     else if (a === '--compare') opts.compare = [argv[++i], argv[++i]];
+    else if (a === '--check') opts.check = true;
+    else if (a === '--out') opts.out = argv[++i];
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -49,7 +55,13 @@ async function main() {
       if (!f) throw new Error('--compare needs two saved runs, e.g. --compare bench-results/a.json bench-results/b.json');
       return JSON.parse(readFileSync(resolve(f), 'utf8')).results;
     });
-    return console.log(bench.compareBench(a, b));
+    console.log(bench.compareBench(a, b));
+    const differ = a.filter((ra) => b.some((rb) => rb.id === ra.id && rb.fingerprint !== ra.fingerprint));
+    if (opts.check && differ.length > 0) {
+      console.error(`\nPlayed out differently: ${differ.map((r) => r.label).join(', ')}`);
+      process.exitCode = 1;
+    }
+    return;
   }
   const cases = opts.only ? bench.BENCH_CASES.filter((c) => opts.only.includes(c.id)) : bench.BENCH_CASES;
   if (opts.only && cases.length !== opts.only.length) throw new Error(`Unknown case in --only: use ${bench.BENCH_CASES.map((c) => c.id).join(', ')}`);
@@ -63,10 +75,10 @@ async function main() {
   console.log('');
   console.log(bench.formatBench(results));
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
-  const dir = join(root, 'bench-results');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ minutes: opts.minutes, profile: opts.profile, results }, null, 2));
-  console.log(`\nSaved bench-results/${stamp}.json. Compare two runs with --compare.`);
+  const file = opts.out ? resolve(opts.out) : join(root, 'bench-results', `${stamp}.json`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ minutes: opts.minutes, profile: opts.profile, results }, null, 2));
+  console.log(`\nSaved ${opts.out ?? `bench-results/${stamp}.json`}. Compare two runs with --compare.`);
 }
 
 main().catch((e) => {

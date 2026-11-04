@@ -92,8 +92,12 @@ and prints milliseconds per tick (mean, median, 95th percentile, slowest
 and when), the slowest systems, and a **fingerprint**: a hash of where
 every entity ended up. A change meant only to make the sim faster must
 keep every fingerprint; `--compare a.json b.json` shows the timing changes
-and whether the battles still played out the same. In the browser, **P**
-shows the same numbers live, with draw calls, triangles and meshes.
+and whether the battles still played out the same. CI does this on every
+pull request (two minutes per battle, on the PR and on the branch it
+targets) and puts the comparison in the **Same battles as main** job's
+summary, with a warning when the battles changed, which is expected for a
+balance change and a bug in a speed-up. In the browser, **P** shows the
+same numbers live, with draw calls, triangles and meshes.
 
 `npm run map -- WHAT` draws the map a battle would get, top down, as a PNG
 in `maps-out/`: WHAT is a battle link or query string, or a sims seed such

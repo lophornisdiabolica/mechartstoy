@@ -1,5 +1,5 @@
 import { Battlefield } from './battlefield';
-import { CellArea } from './ground';
+import { CellArea, GroundDef } from './ground';
 import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
 
 export interface Point {
@@ -28,6 +28,70 @@ const NEIGHBOURS: [number, number, number][] = [
   [-1, -1, SQRT2],
 ];
 
+/** NEIGHBOURS as flat arrays, for the search's inner loop. */
+const NEIGHBOUR_DI = Int8Array.from(NEIGHBOURS, (n) => n[0]);
+const NEIGHBOUR_DJ = Int8Array.from(NEIGHBOURS, (n) => n[1]);
+const NEIGHBOUR_STEP = Float64Array.from(NEIGHBOURS, (n) => n[2]);
+
+/**
+ * What every movement class's grid reads from the map at each cell centre:
+ * depth below sea level, slope, bridge deck, towns and outposts, and the
+ * ground's kind. Sampled once per map and shared, so making a grid for
+ * another class only applies that class's rules. Kept up to date by
+ * listening to the map's changes.
+ */
+class CellSamples {
+  readonly depth: Float64Array;
+  readonly slope: Float64Array;
+  readonly deck: Uint8Array;
+  readonly settled: Uint8Array;
+  readonly ground: GroundDef[];
+
+  constructor(
+    private readonly field: Battlefield,
+    readonly cols: number,
+    readonly rows: number,
+    readonly cellSize: number,
+  ) {
+    const n = cols * rows;
+    this.depth = new Float64Array(n);
+    this.slope = new Float64Array(n);
+    this.deck = new Uint8Array(n);
+    this.settled = new Uint8Array(n);
+    this.ground = new Array<GroundDef>(n);
+    this.sample(0, 0, cols - 1, rows - 1);
+    field.onChange((area) => this.sample(Math.max(0, area.i0 - 1), Math.max(0, area.j0 - 1), Math.min(cols - 1, area.i1 + 1), Math.min(rows - 1, area.j1 + 1)));
+  }
+
+  private sample(i0: number, j0: number, i1: number, j1: number): void {
+    const field = this.field;
+    const settled = [...field.townSites, ...field.outpostSites];
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const k = j * this.cols + i;
+        const x = field.bounds.minX + (i + 0.5) * this.cellSize;
+        const z = field.bounds.minZ + (j + 0.5) * this.cellSize;
+        this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
+        this.depth[k] = field.seaLevel - field.heightAt(x, z);
+        this.slope[k] = field.slopeAt(x, z);
+        this.settled[k] = settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
+        this.ground[k] = field.groundAt(x, z);
+      }
+    }
+  }
+
+  private static readonly cache = new WeakMap<Battlefield, CellSamples[]>();
+
+  /** The shared samples for this map at this cell size. */
+  static of(field: Battlefield, cols: number, rows: number, cellSize: number): CellSamples {
+    let list = CellSamples.cache.get(field);
+    if (!list) CellSamples.cache.set(field, (list = []));
+    let samples = list.find((s) => s.cellSize === cellSize);
+    if (!samples) list.push((samples = new CellSamples(field, cols, rows, cellSize)));
+    return samples;
+  }
+}
+
 /** Minimal binary min-heap of cell indices keyed by an external score array. */
 class Heap {
   private items: number[] = [];
@@ -44,7 +108,9 @@ class Heap {
     while (c > 0) {
       const p = (c - 1) >> 1;
       if (this.score[a[p]] <= this.score[a[c]]) break;
-      [a[p], a[c]] = [a[c], a[p]];
+      const tmp = a[p];
+      a[p] = a[c];
+      a[c] = tmp;
       c = p;
     }
   }
@@ -63,7 +129,9 @@ class Heap {
         if (l < a.length && this.score[a[l]] < this.score[a[m]]) m = l;
         if (r < a.length && this.score[a[r]] < this.score[a[m]]) m = r;
         if (m === p) break;
-        [a[p], a[m]] = [a[m], a[p]];
+        const tmp = a[p];
+        a[p] = a[m];
+        a[m] = tmp;
         p = m;
       }
     }
@@ -80,8 +148,10 @@ class Heap {
  * grid so one building going up or down updates them all.
  */
 export class NavObstacles {
-  /** Changes whenever obstacles change. */
+  /** Changes whenever obstacles change, or the map does (so routes get re-planned). */
   version = 0;
+  /** Changes only when a building is marked or unmarked: what clearance maps depend on, with each grid's terrain. */
+  blockVersion = 0;
   /** Number of obstacles covering each cell. */
   readonly occupied: Uint16Array;
 
@@ -111,15 +181,19 @@ export class NavGrid {
   readonly rules: MoveRules;
   readonly obstacles: NavObstacles;
 
-  /** Towns and outposts, whose ground costs what MoveRules.town says. */
-  private readonly settled: { x: number; z: number; radius: number }[];
+  /** What the map holds at each cell, shared by every class's grid on this map. */
+  private readonly samples: CellSamples;
   /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
   private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
   private readonly occupied: Uint16Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
-  private clearanceVersion = -1;
+  /** The obstacles' blockVersion and this grid's terrainVersion the clearance map was built for. */
+  private clearanceBlocks = -1;
+  private clearanceTerrain = -1;
+  /** Changes when a map change alters which cells this class can cross at all. */
+  private terrainVersion = 0;
   /** Which connected patch of passable terrain each cell is on (-1 for impassable); cells with different ids can't reach each other. */
   private region: Int32Array;
 
@@ -152,7 +226,7 @@ export class NavGrid {
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.occupied;
     this.clearance = new Float32Array(n);
-    this.settled = [...field.townSites, ...field.outpostSites];
+    this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
     this.g = new Float32Array(n);
@@ -170,20 +244,18 @@ export class NavGrid {
    * level ground; boats still see the water underneath.
    */
   private computeCell(k: number): void {
-    const field = this.field;
     const rules = this.rules;
-    const i = k % this.cols;
-    const { x, z } = this.center(i, (k - i) / this.cols);
-    const onDeck = !rules.flies && rules.minDepth === 0 && field.deckAt(x, z) !== null;
-    const depth = onDeck ? 0 : field.seaLevel - field.heightAt(x, z);
-    const slope = onDeck ? 0 : field.slopeAt(x, z);
+    const samples = this.samples;
+    const onDeck = !rules.flies && rules.minDepth === 0 && samples.deck[k] === 1;
+    const depth = onDeck ? 0 : samples.depth[k];
+    const slope = onDeck ? 0 : samples.slope[k];
     this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
-    if (rules.town !== 1 && this.settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius)) cost *= rules.town;
-    if (!rules.flies && depth <= 0) cost *= field.groundAt(x, z).cost[this.move] ?? 1;
+    if (rules.town !== 1 && samples.settled[k] === 1) cost *= rules.town;
+    if (!rules.flies && depth <= 0) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
   }
 
@@ -197,7 +269,19 @@ export class NavGrid {
     const j0 = Math.max(0, area.j0 - 1);
     const i1 = Math.min(this.cols - 1, area.i1 + 1);
     const j1 = Math.min(this.rows - 1, area.j1 + 1);
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.computeCell(j * this.cols + i);
+    let terrainChanged = false;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const k = j * this.cols + i;
+        const was = this.terrain[k];
+        this.computeCell(k);
+        if (this.terrain[k] !== was) terrainChanged = true;
+      }
+    }
+    // Most changes (scrap, felled trees) only change what ground costs. Regions and
+    // clearance depend only on where this class can go at all, so they stand.
+    if (!terrainChanged) return;
+    this.terrainVersion++;
     this.region = this.labelRegions();
     this.regionReach.clear();
   }
@@ -205,23 +289,36 @@ export class NavGrid {
   /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
   private labelRegions(): Int32Array {
     const { cols, rows } = this;
+    const terrain = this.terrain;
     const region = new Int32Array(cols * rows).fill(-1);
     let next = 0;
-    const stack: number[] = [];
+    // Each cell is pushed at most once, so the stack never needs more room than the grid.
+    const stack = new Int32Array(cols * rows);
     for (let start = 0; start < region.length; start++) {
-      if (this.terrain[start] || region[start] >= 0) continue;
+      if (terrain[start] || region[start] >= 0) continue;
       region[start] = next;
-      stack.push(start);
-      while (stack.length > 0) {
-        const k = stack.pop()!;
+      let top = 0;
+      stack[top++] = start;
+      while (top > 0) {
+        const k = stack[--top];
         const i = k % cols;
         const j = (k - i) / cols;
-        for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
-          if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
-          const nk = nj * cols + ni;
-          if (this.terrain[nk] || region[nk] >= 0) continue;
-          region[nk] = next;
-          stack.push(nk);
+        // Neighbours in the same order as always (east, west, south, north), so labels come out the same.
+        if (i + 1 < cols && !terrain[k + 1] && region[k + 1] < 0) {
+          region[k + 1] = next;
+          stack[top++] = k + 1;
+        }
+        if (i > 0 && !terrain[k - 1] && region[k - 1] < 0) {
+          region[k - 1] = next;
+          stack[top++] = k - 1;
+        }
+        if (j + 1 < rows && !terrain[k + cols] && region[k + cols] < 0) {
+          region[k + cols] = next;
+          stack[top++] = k + cols;
+        }
+        if (j > 0 && !terrain[k - cols] && region[k - cols] < 0) {
+          region[k - cols] = next;
+          stack[top++] = k - cols;
         }
       }
       next++;
@@ -331,41 +428,49 @@ export class NavGrid {
 
   /** Rebuild the clearance map after obstacles change (two-pass chamfer distance transform). */
   private updateClearance(): void {
-    if (this.clearanceVersion === this.version) return;
-    this.clearanceVersion = this.version;
+    const blocks = this.obstacles.blockVersion;
+    if (this.clearanceBlocks === blocks && this.clearanceTerrain === this.terrainVersion) return;
+    this.clearanceBlocks = blocks;
+    this.clearanceTerrain = this.terrainVersion;
     const { cols, rows, cellSize } = this;
     const c = this.clearance;
+    const terrain = this.terrain;
+    const occupied = this.occupied;
     const diag = cellSize * SQRT2;
     for (let j = 0; j < rows; j++) {
       for (let i = 0; i < cols; i++) {
         const k = j * cols + i;
         // The map edge counts as a wall just outside the outermost cells.
-        c[k] = this.blocked(i, j) ? 0 : Math.min(i + 1, cols - i, j + 1, rows - j) * cellSize;
+        c[k] = terrain[k] === 1 || occupied[k] > 0 ? 0 : Math.min(i + 1, cols - i, j + 1, rows - j) * cellSize;
       }
     }
-    const relax = (k: number, i: number, j: number, d: number) => {
-      if (i < 0 || j < 0 || i >= cols || j >= rows) return;
-      const v = c[j * cols + i] + d;
-      if (v < c[k]) c[k] = v;
-    };
+    // Two chamfer passes; each neighbour that's on the map offers its distance plus the step.
     for (let j = 0; j < rows; j++) {
       for (let i = 0; i < cols; i++) {
         const k = j * cols + i;
         if (c[k] === 0) continue;
-        relax(k, i - 1, j, cellSize);
-        relax(k, i, j - 1, cellSize);
-        relax(k, i - 1, j - 1, diag);
-        relax(k, i + 1, j - 1, diag);
+        let v = c[k];
+        if (i > 0 && c[k - 1] + cellSize < v) v = c[k - 1] + cellSize;
+        if (j > 0) {
+          if (c[k - cols] + cellSize < v) v = c[k - cols] + cellSize;
+          if (i > 0 && c[k - cols - 1] + diag < v) v = c[k - cols - 1] + diag;
+          if (i + 1 < cols && c[k - cols + 1] + diag < v) v = c[k - cols + 1] + diag;
+        }
+        c[k] = v;
       }
     }
     for (let j = rows - 1; j >= 0; j--) {
       for (let i = cols - 1; i >= 0; i--) {
         const k = j * cols + i;
         if (c[k] === 0) continue;
-        relax(k, i + 1, j, cellSize);
-        relax(k, i, j + 1, cellSize);
-        relax(k, i + 1, j + 1, diag);
-        relax(k, i - 1, j + 1, diag);
+        let v = c[k];
+        if (i + 1 < cols && c[k + 1] + cellSize < v) v = c[k + 1] + cellSize;
+        if (j + 1 < rows) {
+          if (c[k + cols] + cellSize < v) v = c[k + cols] + cellSize;
+          if (i + 1 < cols && c[k + cols + 1] + diag < v) v = c[k + cols + 1] + diag;
+          if (i > 0 && c[k + cols - 1] + diag < v) v = c[k + cols - 1] + diag;
+        }
+        c[k] = v;
       }
     }
   }
@@ -383,6 +488,7 @@ export class NavGrid {
       }
     }
     this.obstacles.version++;
+    this.obstacles.blockVersion++;
   }
 
   /** Route cost of the cell under a point (1 is plain open ground; see MoveRules). */
@@ -485,10 +591,16 @@ export class NavGrid {
     let expansions = 0;
     let closest = sk;
     let closestH = Infinity;
-    while (this.open.size > 0 && expansions++ < MAX_EXPANSIONS) {
-      const k = this.open.pop();
-      if (this.closed[k] === id) continue;
-      this.closed[k] = id;
+    // The search's inner loop, with fits() and blocked() written out over the raw arrays (same answers, far fewer calls).
+    const rows = this.rows;
+    const { terrain, occupied, clearance, cost, closed, stamp, g, f, parent, open } = this;
+    if (radius > 0) this.updateClearance();
+    const need = radius + CLEARANCE_MARGIN;
+    const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
+    while (open.size > 0 && expansions++ < MAX_EXPANSIONS) {
+      const k = open.pop();
+      if (closed[k] === id) continue;
+      closed[k] = id;
       if (k === gk) {
         found = true;
         break;
@@ -500,21 +612,24 @@ export class NavGrid {
         closestH = hk;
         closest = k;
       }
-      for (const [di, dj, step] of NEIGHBOURS) {
+      for (let n = 0; n < 8; n++) {
+        const di = NEIGHBOUR_DI[n];
+        const dj = NEIGHBOUR_DJ[n];
         const ni = i + di;
         const nj = j + dj;
-        if (!this.fits(ni, nj, radius)) continue;
-        // No squeezing diagonally between two blocked cells.
-        if (di !== 0 && dj !== 0 && (this.blocked(i + di, j) || this.blocked(i, j + dj))) continue;
+        if (isBlocked(ni, nj)) continue;
         const nk = nj * cols + ni;
-        if (this.closed[nk] === id) continue;
-        const ng = this.g[k] + step * this.cost[nk];
-        if (this.stamp[nk] === id && ng >= this.g[nk]) continue;
-        this.stamp[nk] = id;
-        this.g[nk] = ng;
-        this.f[nk] = ng + h(ni, nj);
-        this.parent[nk] = k;
-        this.open.push(nk);
+        if (radius > 0 && !(clearance[nk] >= need)) continue;
+        // No squeezing diagonally between two blocked cells.
+        if (di !== 0 && dj !== 0 && (isBlocked(i + di, j) || isBlocked(i, j + dj))) continue;
+        if (closed[nk] === id) continue;
+        const ng = g[k] + NEIGHBOUR_STEP[n] * cost[nk];
+        if (stamp[nk] === id && ng >= g[nk]) continue;
+        stamp[nk] = id;
+        g[nk] = ng;
+        f[nk] = ng + h(ni, nj);
+        parent[nk] = k;
+        open.push(nk);
       }
     }
 
