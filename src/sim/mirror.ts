@@ -3,6 +3,7 @@ import { Armed, Building, Collider, Construction, Faction, Guard, Health, Outpos
 import { GameEvents } from '../game/context';
 import { Command, Game, SIM_HZ } from '../game/game';
 import { BattleSettings } from '../game/settings';
+import { wrapAngle } from '../game/systems/movement';
 import { CellState } from '../world/battlefield';
 import { CellArea } from '../world/ground';
 
@@ -328,7 +329,14 @@ export class SimView {
     this.refs = new Refs(game);
   }
 
-  apply(frame: Frame): void {
+  /**
+   * Copy a frame in. Each Transform's previous position (px, py, pz,
+   * pheading) becomes where it was drawn at `alpha` before this frame, so
+   * drawing goes on smoothly from there to the new position however many
+   * ticks the frame covers (see RemoteSim). New entities move from their
+   * last tick's position.
+   */
+  apply(frame: Frame, alpha = 1): void {
     const { world, field, ctx, events } = this.game;
     world.time = frame.time;
     world.tick = frame.tick;
@@ -343,15 +351,18 @@ export class SimView {
     for (let k = 0; k < tf.length; k += T_FIELDS + 1) {
       const e = tf[k];
       let t = world.get(e, Transform);
-      if (!t) t = world.add(e, Transform, { x: 0, y: 0, z: 0, heading: 0, px: 0, py: 0, pz: 0, pheading: 0 });
+      if (t) {
+        t.px += (t.x - t.px) * alpha;
+        t.py += (t.y - t.py) * alpha;
+        t.pz += (t.z - t.pz) * alpha;
+        t.pheading += wrapAngle(t.heading - t.pheading) * alpha;
+      } else {
+        t = world.add(e, Transform, { x: 0, y: 0, z: 0, heading: 0, px: tf[k + 5], py: tf[k + 6], pz: tf[k + 7], pheading: tf[k + 8] });
+      }
       t.x = tf[k + 1];
       t.y = tf[k + 2];
       t.z = tf[k + 3];
       t.heading = tf[k + 4];
-      t.px = tf[k + 5];
-      t.py = tf[k + 6];
-      t.pz = tf[k + 7];
-      t.pheading = tf[k + 8];
     }
     for (const e of frame.untransformed) world.remove(e, Transform);
 

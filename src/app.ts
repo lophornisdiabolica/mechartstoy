@@ -108,7 +108,7 @@ export class App implements MatchControls {
     this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
-      render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(alpha) : alpha, frameSeconds),
+      render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha, frameSeconds),
     });
     document.body.append(this.banner);
     this.perf = new PerfOverlay(this.stage);
