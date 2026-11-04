@@ -4,6 +4,7 @@ import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { CAPTURE_RADIUS } from '../outposts';
 import { MAP_SIZES } from '../settings';
+import { STYLES } from './advice';
 import { ANTI_AIR } from './roles';
 
 /*
@@ -120,13 +121,16 @@ export class TaskForces {
 
   /** Re-plan every side's task forces. */
   update(world: World, ctx: SimContext): void {
-    const share = ctx.settings.armies.taskForces;
+    const base = ctx.settings.armies.taskForces;
     const time = world.time;
     const scale = Math.max(1, ctx.field.config.cols / MAP_SIZES.medium.cols);
-    const squads = share > 0 ? squadsOf(world) : new Map<number, SquadInfo>();
+    const squads = base > 0 ? squadsOf(world) : new Map<number, SquadInfo>();
     const kept: TaskForce[] = [];
     for (let side = 0; side < ctx.sides.count; side++) {
       const mine = this.forces.filter((tf) => tf.side === side);
+      // The side's style scales how much it sends out (see advice.ts).
+      const style = STYLES[ctx.settings.factions[side]?.style ?? 'balanced'];
+      const share = Math.min(0.8, base * style.forces);
       if (share <= 0 || !this.free(ctx, side, time)) continue;
       // Carry on with the forces still worth running.
       for (const tf of mine) {
@@ -154,7 +158,7 @@ export class TaskForces {
         tf.z = z / units;
         kept.push(tf);
       }
-      this.plan(world, ctx, side, share, squads, kept, time);
+      this.plan(world, ctx, side, share, style.distance, squads, kept, time);
     }
     this.forces = kept;
     this.bySquad.clear();
@@ -175,7 +179,7 @@ export class TaskForces {
   }
 
   /** Maybe send out a new force: to the cheapest outpost worth taking or holding that it can afford. */
-  private plan(world: World, ctx: SimContext, side: number, share: number, squads: Map<number, SquadInfo>, forces: TaskForce[], time: number): void {
+  private plan(world: World, ctx: SimContext, side: number, share: number, distanceWeight: number, squads: Map<number, SquadInfo>, forces: TaskForce[], time: number): void {
     const mine = forces.filter((tf) => tf.side === side);
     if (mine.length >= MOST_FORCES) return;
     const busy = new Set(forces.flatMap((tf) => tf.squads));
@@ -197,7 +201,7 @@ export class TaskForces {
       if (ours && (o.claimant < 0 || !ctx.sides.hostile(side, o.claimant))) continue;
       const need = Math.max(LEAST_FORCE, enemyNear(world, ctx, side, o.x, o.z) * TAKE_MARGIN);
       if (need > budget) continue;
-      const cost = need + Math.hypot(o.x - home.x, o.z - home.z) * DISTANCE_COST;
+      const cost = need + Math.hypot(o.x - home.x, o.z - home.z) * DISTANCE_COST * distanceWeight;
       if (!best || cost < best.cost) best = { outpost: o.index, kind: ours ? 'hold' : 'take', need, cost };
     }
     if (!best) return;

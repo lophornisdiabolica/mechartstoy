@@ -8,6 +8,7 @@ import { berthFree, canBuild, countBoats, countByCategory, isBoat } from '../cap
 import { recordSquad } from '../territory';
 import { UnitDef, UnitId } from '../units';
 import { MoveClass } from '../../world/moveClasses';
+import { adviceFactor, STYLES } from '../commander/advice';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius and
@@ -58,6 +59,14 @@ export function outnumbered(ctx: SimContext, alive: number[], faction: number): 
   return (theirs + 6) / (alive[faction] + 6);
 }
 
+/** The Commander's factor on a unit's production weight for a side. */
+function advice(ctx: SimContext, faction: number, unit: UnitId): number {
+  const side = ctx.commander.sides[faction];
+  const limit = ctx.settings.armies.advice;
+  if (!side || limit <= 0) return 1;
+  return adviceFactor(ctx.units[unit], side.needs, STYLES[ctx.settings.factions[faction]?.style ?? 'balanced'], limit);
+}
+
 /**
  * Production buildings turn out units on their own timers. Two things scale
  * the rate: the tide, which the ramp makes swing harder (see tide.ts), outposts held
@@ -88,9 +97,11 @@ export function productionSystem(ctx: SimContext): System {
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
 
-        const total = producer.table.reduce((s, p) => s + p.weight, 0);
+        // The Commander leans the doctrine's table toward what the battle needs (see commander/advice.ts).
+        const weights = producer.table.map((p) => p.weight * advice(ctx, faction, p.unit));
+        const total = weights.reduce((s, w) => s + w, 0);
         let roll = ctx.rng.range(0, total);
-        const entry = producer.table.find((p) => (roll -= p.weight) <= 0) ?? producer.table[0];
+        const entry = producer.table.find((_, i) => (roll -= weights[i]) <= 0) ?? producer.table[0];
         // Boats need a free berth rather than vehicle cap (see BOAT_BERTHS); their stand-in needs the cap.
         const first = ctx.units[entry.unit];
         const standIn = entry.ifDry ? ctx.units[entry.ifDry] : null;

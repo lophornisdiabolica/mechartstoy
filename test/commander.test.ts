@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PICTURE_INTERVAL } from '../src/game/commander/commander';
+import { adviceFactor, needsOf, STYLES } from '../src/game/commander/advice';
+import { PICTURE_INTERVAL, SidePicture } from '../src/game/commander/commander';
 import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
@@ -133,5 +134,59 @@ describe('jobs that suit the unit', () => {
     const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x + 4, b.z);
     run(game, PICTURE_INTERVAL + DT);
     expect(game.ctx.commander.roles.jobFor(tank)).toBeUndefined();
+  });
+});
+
+describe('production advice and styles', () => {
+  const picture = (enemy: Partial<SidePicture['enemyMix']>, enemyAir: number, antiAir: number): SidePicture => ({
+    armyX: 0,
+    armyZ: 0,
+    ground: 100,
+    air: 0,
+    antiAir,
+    mix: { infantry: 0, vehicle: 0, air: 0, super: 0, antiAir: 0, artillery: 0 },
+    enemyMix: { infantry: 0, vehicle: 0, air: 0, super: 0, antiAir: 0, artillery: 0, ...enemy },
+    enemyAir,
+    needs: { antiAir: 0, antiArmour: 0 },
+    goals: [],
+    jobs: { cover: 0, overwatch: 0, escort: 0 },
+  });
+
+  it('leans toward flak against aircraft it can’t answer, and away from it with none about', () => {
+    const balanced = STYLES.balanced;
+    const short = needsOf(picture({ air: 6 }, 400, 20));
+    const flak = adviceFactor(UNIT_DEFS.flakTank, short, balanced, 0.3);
+    expect(flak).toBeGreaterThan(1.15);
+    expect(flak).toBeLessThanOrEqual(1.3);
+    const none = needsOf(picture({ vehicle: 10 }, 0, 200));
+    expect(adviceFactor(UNIT_DEFS.flakTank, none, balanced, 0.3)).toBeLessThan(1);
+    expect(adviceFactor(UNIT_DEFS.flakTank, short, balanced, 0)).toBe(1);
+  });
+
+  it('leans toward hard hitters against armour and sprayers against infantry, within the limit', () => {
+    const armour = needsOf(picture({ vehicle: 20 }, 0, 0));
+    const infantry = needsOf(picture({ infantry: 90 }, 0, 0));
+    expect(adviceFactor(UNIT_DEFS.lancer, armour, STYLES.balanced, 0.3)).toBeGreaterThan(1);
+    expect(adviceFactor(UNIT_DEFS.lancer, infantry, STYLES.balanced, 0.3)).toBeLessThan(1);
+    expect(adviceFactor(UNIT_DEFS.flameTrooper, infantry, STYLES.balanced, 0.3)).toBeGreaterThan(1);
+    for (const def of Object.values(UNIT_DEFS)) {
+      const k = adviceFactor(def, armour, STYLES.raider, 0.3);
+      expect(k).toBeGreaterThanOrEqual(0.7 - 1e-9);
+      expect(k).toBeLessThanOrEqual(1.3 + 1e-9);
+    }
+  });
+
+  it('a cautious side sends out less than a raider', () => {
+    const sent = (style: 'cautious' | 'raider') => {
+      const s = defaultSettings();
+      s.map.outposts = 2;
+      s.factions[0].style = style;
+      const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
+      const b = game.field.baseSites[0];
+      for (let i = 0; i < 12; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x + (i % 4) * 3 - 4, b.z + Math.floor(i / 4) * 3);
+      run(game, PICTURE_INTERVAL * 2);
+      return game.ctx.commander.taskForces.forces.filter((tf) => tf.side === 0).reduce((n, tf) => n + tf.squads.length, 0);
+    };
+    expect(sent('raider')).toBeGreaterThan(sent('cautious'));
   });
 });
