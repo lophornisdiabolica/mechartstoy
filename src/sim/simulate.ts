@@ -912,6 +912,9 @@ export function unitsCsv(results: BattleResult[]): string {
   return lines.join('\n') + '\n';
 }
 
+/** Damage per cap-slot minute below which a unit's change isn't listed by compareRuns. */
+const MOVED_FLOOR = 10;
+
 /** A saved run (sims-results/*.json), as compareRuns reads it. */
 export interface SavedRun {
   set?: string;
@@ -985,6 +988,8 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
   const moved = unitReport(after.battles)
     .map((b) => ({ b, a: ua.get(`${b.doctrine}:${b.unit}`) }))
     .filter((x): x is { a: UnitReportRow; b: UnitReportRow } => !!x.a && x.a.alive > 0 && x.b.alive > 0 && x.a.dealt > 0)
+    // Units that barely fight (engineers, say) swing by huge percentages on next to nothing.
+    .filter(({ a, b }) => Math.max((a.dealt * 60) / a.alive, (b.dealt * 60) / b.alive) >= MOVED_FLOOR)
     .map(({ a, b }) => ({ a, b, ratio: b.dealt / b.alive / (a.dealt / a.alive) }))
     .filter((x) => Math.abs(Math.log(x.ratio)) > Math.log(1.2))
     .sort((x, y) => Math.abs(Math.log(y.ratio)) - Math.abs(Math.log(x.ratio)))
