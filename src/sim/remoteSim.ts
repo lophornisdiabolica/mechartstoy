@@ -1,3 +1,4 @@
+import { Entity } from '../core/ecs';
 import { Game } from '../game/game';
 import { BattleSettings } from '../game/settings';
 import { Frame, FromSim, SimView, ToSim } from './mirror';
@@ -16,11 +17,11 @@ const MAX_BATCH = 16;
  * frame, the due ticks wait for the next ask, so a busy worker answers
  * less often with more ticks at a time.
  *
- * Drawing follows its own clock rather than the ticks: each answer is
- * drawn moving from wherever things were on screen to the new state, over
- * about as long as answers are taking to come. So when the worker can't
- * keep up, the battle plays a little slower but stays smooth, instead of
- * standing still and then jumping several ticks.
+ * Drawing follows its own clock rather than the answers: answers carry
+ * every tick's positions (see mirror.ts), and the view is drawn at the
+ * clock's time along that path, a little behind the newest tick. When the
+ * worker can't keep up, the clock slows down, so the battle plays a little
+ * slower but stays smooth, instead of standing still and then jumping.
  */
 export class RemoteSim {
   private readonly worker: Worker;
@@ -30,6 +31,11 @@ export class RemoteSim {
   private due = 0;
   private inbox: Frame | null = null;
   private clock = new DrawClock();
+  /** Entities not to draw yet (see SimView.unborn). */
+  get hidden(): ReadonlySet<Entity> | null {
+    return this.view?.unborn ?? null;
+  }
+
   /** After a frame is shown: the ticks it covered, how long they took in all, the slowest, and the per-system profile if asked for. */
   onFrame: ((frame: Frame) => void) | null = null;
 
@@ -81,14 +87,15 @@ export class RemoteSim {
    */
   sync(simSeconds: number): number {
     if (!this.view) return 1;
-    let alpha = this.clock.advance(simSeconds);
+    this.clock.advance(simSeconds);
     if (this.inbox) {
       const frame = this.inbox;
       this.inbox = null;
-      this.view.apply(frame, alpha);
-      alpha = this.clock.arrived(frame.time);
+      this.view.apply(frame);
+      this.clock.arrived(frame.time);
       this.onFrame?.(frame);
     }
+    const alpha = this.view.pose(this.clock.time);
     if (!this.waiting) {
       this.post({ type: 'step', battle: this.battle, steps: this.due, profile: this.view.game.world.profile !== null });
       this.waiting = true;
@@ -103,39 +110,30 @@ export class RemoteSim {
 }
 
 /**
- * Where drawing is between two sim states (see RemoteSim): a clock that
- * runs at the battle's speed, but slows when the next state is late and
- * speeds up a little when states bunch up, staying about one answer behind
- * the newest.
+ * The sim time to draw (see RemoteSim): a clock that runs at the battle's
+ * speed, but slows when the next answer is late and speeds up a little
+ * when answers bunch up, staying about one answer behind the newest state.
  */
 export class DrawClock {
-  /** Sim time drawing has reached, and the sim times it's drawing between. */
-  private clock = 0;
-  private from = 0;
-  private to = 0;
+  /** The sim time to draw. */
+  time = 0;
+  /** The newest sim time there's a state for. */
+  private newest = 0;
   /** Sim seconds each answer moves on, on average. */
   private lead = 0;
 
-  /** A frame went by (`simSeconds` of battle time at the current speed). Returns the alpha to draw with. */
-  advance(simSeconds: number): number {
-    const gap = this.to - this.clock;
+  /** A frame went by (`simSeconds` of battle time at the current speed). */
+  advance(simSeconds: number): void {
+    const gap = this.newest - this.time;
     const pace = this.lead > 0 ? Math.min(1.5, Math.max(0.25, gap / this.lead)) : 1;
-    this.clock = Math.min(this.to, this.clock + simSeconds * pace);
-    return this.alpha;
+    this.time = Math.min(this.newest, this.time + simSeconds * pace);
   }
 
-  /** A new state arrived, at sim time `time`: draw from where things are now towards it. Returns the alpha to draw with. */
-  arrived(time: number): number {
-    if (time > this.to) {
-      const step = time - this.to;
-      this.lead = this.lead > 0 ? this.lead + (step - this.lead) * 0.2 : step;
-      this.from = this.clock;
-      this.to = time;
-    }
-    return this.alpha;
-  }
-
-  private get alpha(): number {
-    return this.to > this.from ? (this.clock - this.from) / (this.to - this.from) : 1;
+  /** A state for sim time `time` arrived. */
+  arrived(time: number): void {
+    if (time <= this.newest) return;
+    const step = time - this.newest;
+    this.lead = this.lead > 0 ? this.lead + (step - this.lead) * 0.2 : step;
+    this.newest = time;
   }
 }

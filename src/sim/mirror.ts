@@ -33,8 +33,14 @@ import { CellArea } from '../world/ground';
  * packed separately.
  */
 const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer];
-/** Transform's fields, in the order they're packed. */
-const T_FIELDS = 9;
+/** Numbers per entity in a Pose: id, x, y, z, heading, and Armed.aim (NaN if unarmed). */
+const P_FIELDS = 6;
+
+/** Where everything with a Transform was after one tick, packed P_FIELDS numbers per entity. */
+export interface Pose {
+  time: number;
+  data: Float64Array;
+}
 
 const EVENT_TYPES: Record<keyof GameEvents, true> = {
   spawned: true,
@@ -69,16 +75,18 @@ export interface Frame {
   changed: boolean;
   /** Entities new to the page. */
   created: Entity[];
-  /** Every Transform, packed: entity id then T_FIELDS numbers. */
-  transforms: Float64Array;
+  /** Where everything was after each tick this frame covers, so the page can draw the path between ticks. */
+  poses: Pose[];
   /** Entities that lost their Transform. */
   untransformed: Entity[];
   /** Components added or changed: entity, index in COPIED, and the fields that changed (all of them when added). */
   changes: [Entity, number, Record<string, unknown>][];
   /** Components removed: entity and index in COPIED. */
   removed: [Entity, number][];
-  events: [keyof GameEvents, unknown][];
-  destroyed: Entity[];
+  /** Events, each with the sim time of the end of the tick it happened in (when the page should show it). */
+  events: [number, keyof GameEvents, unknown][];
+  /** Entities destroyed, each with the time of the first pose without it. */
+  destroyed: [Entity, number][];
   cells: CellState[];
   /** Trees that fell, and which way. */
   fell: [number, number][];
@@ -153,8 +161,9 @@ export class SimHost {
   private readonly refs: Refs;
   /** Entities the page knows about. */
   private readonly known = new Set<Entity>();
-  private destroyed: Entity[] = [];
-  private events: [keyof GameEvents, unknown][] = [];
+  private destroyed: [Entity, number][] = [];
+  private events: [number, keyof GameEvents, unknown][] = [];
+  private poses: Pose[] = [];
   private areas: CellArea[] = [];
   private fell: [number, number][] = [];
   /** What the page has of each COPIED component: per type, a shallow copy of each entity's as last sent. */
@@ -173,10 +182,11 @@ export class SimHost {
     // The page's view made these too.
     for (const e of world.entities()) this.known.add(e);
     world.onDestroy((e) => {
-      if (this.known.delete(e)) this.destroyed.push(e);
+      // Destruction happens at the end of a step, before its time moves on.
+      if (this.known.delete(e)) this.destroyed.push([e, world.time + 1 / SIM_HZ]);
     });
     for (const type of Object.keys(EVENT_TYPES) as (keyof GameEvents)[]) {
-      events.on(type, (payload) => this.events.push([type, this.refs.encode(payload)]));
+      events.on(type, (payload) => this.events.push([world.time + 1 / SIM_HZ, type, this.refs.encode(payload)]));
     }
     field.onChange((area) => this.areas.push(area));
     field.woods.onFell((t) => this.fell.push([t, field.woods.trees[t].fell!]));
@@ -190,11 +200,30 @@ export class SimHost {
       const t0 = performance.now();
       this.game.step(1 / SIM_HZ);
       const took = performance.now() - t0;
+      this.poses.push(this.pose());
       this.ticks++;
       this.simMs += took;
       this.worstMs = Math.max(this.worstMs, took);
     }
     if (steps > 0) this.dirty = true;
+  }
+
+  /** Where everything with a Transform is now. */
+  private pose(): Pose {
+    const world = this.game.world;
+    const data = new Float64Array(world.count(Transform) * P_FIELDS);
+    let n = 0;
+    for (const e of world.query(Transform)) {
+      const t = world.req(e, Transform);
+      data[n] = e;
+      data[n + 1] = t.x;
+      data[n + 2] = t.y;
+      data[n + 3] = t.z;
+      data[n + 4] = t.heading;
+      data[n + 5] = world.get(e, Armed)?.aim ?? NaN;
+      n += P_FIELDS;
+    }
+    return { time: world.time, data: n === data.length ? data : data.subarray(0, n) };
   }
 
   command(c: Command): void {
@@ -216,35 +245,26 @@ export class SimHost {
     world.profile?.clear();
     this.ticks = this.simMs = this.worstMs = 0;
     if (!this.dirty) {
-      const empty: Frame = { ...base, changed: false, created: [], transforms: new Float64Array(0), untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], ctx: null, profile };
+      const empty: Frame = { ...base, changed: false, created: [], poses: [], untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], ctx: null, profile };
       return { frame: empty, transfer };
     }
     this.dirty = false;
 
+    // Always end on where things are now (after a command while paused, say).
+    if (this.poses.at(-1)?.time !== world.time) this.poses.push(this.pose());
+    const poses = this.poses;
+    this.poses = [];
+    for (const p of poses) transfer.push(p.data.buffer as ArrayBuffer);
+
     const created: Entity[] = [];
-    const count = world.count(Transform);
-    const transforms = new Float64Array(count * (T_FIELDS + 1));
     const transformed = new Set<Entity>();
-    let n = 0;
     for (const e of world.query(Transform)) {
       if (!this.known.has(e)) {
         this.known.add(e);
         created.push(e);
       }
       transformed.add(e);
-      const t = world.req(e, Transform);
-      transforms[n] = e;
-      transforms[n + 1] = t.x;
-      transforms[n + 2] = t.y;
-      transforms[n + 3] = t.z;
-      transforms[n + 4] = t.heading;
-      transforms[n + 5] = t.px;
-      transforms[n + 6] = t.py;
-      transforms[n + 7] = t.pz;
-      transforms[n + 8] = t.pheading;
-      n += T_FIELDS + 1;
     }
-    transfer.push(transforms.buffer);
     const untransformed: Entity[] = [];
     for (const e of this.transformed) if (!transformed.has(e)) untransformed.push(e);
     this.transformed = transformed;
@@ -287,7 +307,7 @@ export class SimHost {
       ...base,
       changed: true,
       created,
-      transforms,
+      poses,
       untransformed,
       changes,
       removed,
@@ -323,21 +343,42 @@ interface CtxState {
 }
 
 /** The page's side: copies Frames into a view Game (see GameOptions.view). */
+/** A pose with a lookup from entity to its place in the data, made when first needed. */
+interface BufferedPose extends Pose {
+  index: Map<Entity, number> | null;
+}
+
+function indexOf(p: BufferedPose): Map<Entity, number> {
+  if (!p.index) {
+    p.index = new Map();
+    for (let k = 0; k < p.data.length; k += P_FIELDS) p.index.set(p.data[k], k);
+  }
+  return p.index;
+}
+
+/**
+ * The page's side: copies Frames into a view Game (see GameOptions.view),
+ * and poses it for drawing at a sim time a little behind the newest frame
+ * (see RemoteSim's DrawClock), along the tick-by-tick path the frames
+ * carry. Events and deaths wait until drawing reaches the tick they
+ * happened in, so an explosion goes off when its shell lands.
+ */
 export class SimView {
   private readonly refs: Refs;
+  /** Poses not yet drawn past, oldest first. */
+  private poses: BufferedPose[] = [];
+  private events: [number, keyof GameEvents, unknown][] = [];
+  private dying: [Entity, number][] = [];
+  /** Entities that exist but that drawing hasn't reached the birth of yet: don't draw them. */
+  readonly unborn = new Set<Entity>();
+
   constructor(readonly game: Game) {
     this.refs = new Refs(game);
   }
 
-  /**
-   * Copy a frame in. Each Transform's previous position (px, py, pz,
-   * pheading) becomes where it was drawn at `alpha` before this frame, so
-   * drawing goes on smoothly from there to the new position however many
-   * ticks the frame covers (see RemoteSim). New entities move from their
-   * last tick's position.
-   */
-  apply(frame: Frame, alpha = 1): void {
-    const { world, field, ctx, events } = this.game;
+  /** Copy a frame in. Positions, events and deaths wait for pose(). */
+  apply(frame: Frame): void {
+    const { world, field, ctx } = this.game;
     world.time = frame.time;
     world.tick = frame.tick;
     if (!frame.changed) return;
@@ -345,24 +386,28 @@ export class SimView {
     for (const c of frame.cells) field.applyCells(c);
     for (const [t, angle] of frame.fell) field.woods.showFell(t, angle);
 
-    for (const e of frame.created) world.adopt(e);
-
-    const tf = frame.transforms;
-    for (let k = 0; k < tf.length; k += T_FIELDS + 1) {
-      const e = tf[k];
-      let t = world.get(e, Transform);
-      if (t) {
-        t.px += (t.x - t.px) * alpha;
-        t.py += (t.y - t.py) * alpha;
-        t.pz += (t.z - t.pz) * alpha;
-        t.pheading += wrapAngle(t.heading - t.pheading) * alpha;
-      } else {
-        t = world.add(e, Transform, { x: 0, y: 0, z: 0, heading: 0, px: tf[k + 5], py: tf[k + 6], pz: tf[k + 7], pheading: tf[k + 8] });
+    const last = frame.poses.at(-1);
+    for (const e of frame.created) {
+      world.adopt(e);
+      world.add(e, Transform, { x: 0, y: 0, z: 0, heading: 0, px: 0, py: 0, pz: 0, pheading: 0 });
+    }
+    for (const p of frame.poses) {
+      // A pose for a moment already buffered (a command while paused) replaces it.
+      while (this.poses.length > 0 && this.poses[this.poses.length - 1].time >= p.time) this.poses.pop();
+      this.poses.push({ ...p, index: null });
+    }
+    // Anything new starts where it is now, until pose() places it.
+    if (last) {
+      const index = indexOf(this.poses[this.poses.length - 1]);
+      for (const e of frame.created) {
+        const k = index.get(e);
+        if (k === undefined) continue;
+        const t = world.req(e, Transform);
+        t.x = t.px = last.data[k + 1];
+        t.y = t.py = last.data[k + 2];
+        t.z = t.pz = last.data[k + 3];
+        t.heading = t.pheading = last.data[k + 4];
       }
-      t.x = tf[k + 1];
-      t.y = tf[k + 2];
-      t.z = tf[k + 3];
-      t.heading = tf[k + 4];
     }
     for (const e of frame.untransformed) world.remove(e, Transform);
 
@@ -386,9 +431,70 @@ export class SimView {
     ctx.offensive.plansState = s.plans;
     ctx.outcome = s.outcome;
 
-    for (const [type, payload] of frame.events) events.emit(type, this.refs.decode(payload) as never);
+    this.events.push(...frame.events);
+    this.dying.push(...frame.destroyed);
+  }
 
-    for (const e of frame.destroyed) world.destroy(e);
-    world.flush();
+  /**
+   * Pose everything for drawing at sim time `time`: each Transform gets the
+   * two ticks either side (px.. and x..), turrets their aim between them,
+   * and events and deaths up to `time` happen. Returns the alpha between
+   * the two ticks.
+   */
+  pose(time: number): number {
+    const { world, events } = this.game;
+    let n = 0;
+    while (n < this.events.length && this.events[n][0] <= time) n++;
+    if (n > 0) {
+      const due = this.events.splice(0, n);
+      for (const [, type, payload] of due) events.emit(type, this.refs.decode(payload) as never);
+    }
+    n = 0;
+    while (n < this.dying.length && this.dying[n][1] <= time) n++;
+    if (n > 0) {
+      for (const [e] of this.dying.splice(0, n)) world.destroy(e);
+      world.flush();
+    }
+
+    const poses = this.poses;
+    if (poses.length === 0) return 1;
+    // Drop poses drawing is past, keeping the one at or just before `time`.
+    let k = 0;
+    while (k + 1 < poses.length && poses[k + 1].time <= time) k++;
+    if (k > 0) this.poses = poses.slice(k);
+    const a = this.poses[0];
+    const b = this.poses[1] ?? a;
+    const alpha = b.time > a.time ? Math.min(1, Math.max(0, (time - a.time) / (b.time - a.time))) : 1;
+    const ia = indexOf(a);
+    const ib = b === a ? ia : indexOf(b);
+    const da = a.data;
+    const db = b.data;
+    this.unborn.clear();
+    for (const e of world.query(Transform)) {
+      const ka = ia.get(e);
+      const kb = ib.get(e);
+      // Born after the earlier tick: not on the field yet. Gone by the later one: stays where it was.
+      if (ka === undefined) {
+        this.unborn.add(e);
+        continue;
+      }
+      const t = world.req(e, Transform);
+      const [d, k2] = kb === undefined ? [da, ka] : [db, kb];
+      t.px = da[ka + 1];
+      t.py = da[ka + 2];
+      t.pz = da[ka + 3];
+      t.pheading = da[ka + 4];
+      t.x = d[k2 + 1];
+      t.y = d[k2 + 2];
+      t.z = d[k2 + 3];
+      t.heading = d[k2 + 4];
+      const aim = d[k2 + 5];
+      if (aim === aim) {
+        const armed = world.get(e, Armed);
+        const from = da[ka + 5];
+        if (armed) armed.aim = from === from ? from + wrapAngle(aim - from) * alpha : aim;
+      }
+    }
+    return alpha;
   }
 }

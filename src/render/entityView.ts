@@ -51,6 +51,8 @@ export class EntityView {
   private readonly batcher = new Batcher();
   private readonly entries = new Map<Entity, ViewEntry>();
   private readonly owners = new WeakMap<THREE.Object3D, Entity>();
+  /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
+  hidden: ReadonlySet<Entity> | null = null;
 
   constructor(private readonly world: World) {
     this.root.name = 'entities';
@@ -79,6 +81,11 @@ export class EntityView {
     const w = this.world;
     for (const e of w.query(Transform, Renderable)) {
       let entry = this.entries.get(e);
+      if (this.hidden?.has(e)) {
+        if (entry) entry.obj.visible = false;
+        continue;
+      }
+      if (entry) entry.obj.visible = true;
       const t = w.req(e, Transform);
       const faction = w.get(e, Faction)?.id ?? 0;
       if (entry && entry.faction !== faction) {

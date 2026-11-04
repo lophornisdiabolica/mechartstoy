@@ -170,6 +170,7 @@ export class App implements MatchControls {
     const game = this.sim ? this.sim.start(hashSeed(seed), settings) : new Game(hashSeed(seed), { settings });
     const factions = factionDefs(settings);
     this.stage.load(game, factions);
+    if (this.sim) this.stage.entities.hidden = this.sim.hidden;
     this.perf.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);

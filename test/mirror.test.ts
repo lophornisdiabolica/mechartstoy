@@ -18,8 +18,9 @@ function pair(query: string) {
     host.step(steps, false);
     const { frame } = host.frame();
     sim.apply(structuredClone(frame) as Frame);
+    sim.pose(frame.time);
   };
-  return { host, view, exchange };
+  return { host, view, sim, exchange };
 }
 
 const COPIED: ComponentType<unknown>[] = [Transform, Faction, Renderable, Armed, Health, Construction, Wreck, Rubble, Producer, Unit, Building, Collider];
@@ -66,6 +67,29 @@ describe('sim mirror', () => {
     expect(picture(view)).toEqual(real);
   }, 60000);
 
+  it('draws between frames along the real tick-by-tick path', () => {
+    const query = 'seed=mirror-3&size=small';
+    const { host, view, sim, exchange } = pair(query);
+    exchange(600);
+    // A second copy of the battle, played to the middle of the next frame.
+    const settings = settingsFromParams(new URLSearchParams(query));
+    const half = new Game(hashSeed(settings.seed || 'mirror'), { settings });
+    for (let i = 0; i < 603; i++) half.step(1 / 30);
+    host.step(6, false);
+    sim.apply(structuredClone(host.frame().frame) as Frame);
+    const alpha = sim.pose(half.world.time);
+    expect(alpha).toBe(0);
+    let checked = 0;
+    for (const e of half.world.query(Transform)) {
+      const t = half.world.req(e, Transform);
+      const v = view.world.get(e, Transform);
+      if (!v || sim.unborn.has(e)) continue;
+      expect([v.px, v.pz]).toEqual([t.x, t.z]);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(50);
+  });
+
   it('forwards commands from the view to the real battle', () => {
     const { host, view, exchange } = pair('seed=mirror-2&size=small');
     const sent: Parameters<Game['command']>[0][] = [];
@@ -81,32 +105,27 @@ describe('sim mirror', () => {
 });
 
 describe('draw clock', () => {
-  /** Drawn position of something moving 1 unit per sim second, through irregular answers, as RemoteSim + SimView draw it. */
+  /** The sim time drawn each frame at 4× speed, with answers arriving as `answers` says (ticks per answer, by frame). */
   function drawn(answers: (frame: number) => number, frames: number) {
     const clock = new DrawClock();
-    let px = 0;
-    let x = 0;
     let simTime = 0;
     const out: number[] = [];
     for (let f = 0; f < frames; f++) {
-      let alpha = clock.advance((1 / 60) * 4);
+      clock.advance((1 / 60) * 4);
       const ticks = answers(f);
       if (ticks > 0) {
-        px += (x - px) * alpha;
         simTime += ticks / 30;
-        x = simTime;
-        alpha = clock.arrived(simTime);
+        clock.arrived(simTime);
       }
-      out.push(px + (x - px) * alpha);
+      out.push(clock.time);
     }
-    return out;
+    return { out, simTime };
   }
 
   it('moves smoothly when answers come late and in big batches', () => {
     // 4× speed: 2 ticks a frame due, but the worker answers every third frame with 6.
-    const pos = drawn((f) => (f % 3 === 0 ? 6 : 0), 600);
-    const steps = pos.slice(100).map((p, i, a) => (i > 0 ? p - a[i - 1] : 0)).slice(1);
-    expect(Math.min(...steps)).toBeGreaterThanOrEqual(0);
+    const { out } = drawn((f) => (f % 3 === 0 ? 6 : 0), 600);
+    const steps = out.slice(100).map((p, i, a) => (i > 0 ? p - a[i - 1] : 0)).slice(1);
     // No frame stands still, and none jumps much more than the average.
     const mean = steps.reduce((a, b) => a + b) / steps.length;
     expect(Math.min(...steps)).toBeGreaterThan(mean * 0.4);
@@ -114,8 +133,8 @@ describe('draw clock', () => {
   });
 
   it('keeps up when answers come every frame', () => {
-    const pos = drawn(() => 2, 300);
+    const { out, simTime } = drawn(() => 2, 300);
     // Drawing stays within about a frame of the newest state.
-    expect(300 * (2 / 30) - pos[299]).toBeLessThan(0.15);
+    expect(simTime - out[299]).toBeLessThan(0.15);
   });
 });
