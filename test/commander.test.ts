@@ -91,3 +91,47 @@ describe('task forces', () => {
     expect(flagged.ctx.commander.taskForces.forces).toEqual([]);
   });
 });
+
+describe('jobs that suit the unit', () => {
+  function empty(): Game {
+    const s = defaultSettings();
+    s.map.outposts = 2;
+    s.armies.taskForces = 0;
+    return new Game(5, { settings: s, populate: false, autoSpawn: false });
+  }
+
+  it('sends flak to cover an outpost of its side that enemy aircraft are over', () => {
+    const game = empty();
+    const o = game.ctx.outposts[0];
+    o.owner = 0;
+    const b = game.field.baseSites[0];
+    const flak = [0, 1].map((i) => spawnUnit(game.world, game.ctx, UNIT_DEFS.flakTank, 0, b.x + i * 3, b.z));
+    for (let i = 0; i < 3; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.gunship, 1, o.x + i * 2, o.z + 3);
+    run(game, PICTURE_INTERVAL + DT);
+    const jobs = flak.map((e) => game.ctx.commander.roles.jobFor(e));
+    expect(jobs.some((j) => j?.kind === 'cover' && Math.hypot(j.x - o.x, j.z - o.z) < 1)).toBe(true);
+    expect(game.ctx.commander.sides[0].jobs.cover).toBeGreaterThan(0);
+  });
+
+  it('keeps vehicles round the super unit on an attack', () => {
+    const game = empty();
+    game.ctx.offensive.attacking = () => true;
+    const b = game.field.baseSites[0];
+    const titan = spawnUnit(game.world, game.ctx, UNIT_DEFS.titan, 0, b.x, b.z);
+    const tanks = [0, 1, 2, 3, 4].map((i) => spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x + 4 + i * 3, b.z));
+    run(game, PICTURE_INTERVAL + DT);
+    const escorts = tanks.filter((e) => game.ctx.commander.roles.jobFor(e)?.lead === titan);
+    expect(escorts.length).toBe(3);
+  });
+
+  it('gives no jobs under a rally flag', () => {
+    const game = empty();
+    game.ctx.offensive.attacking = () => true;
+    game.setRally(0, game.field.baseSites[0]);
+    const b = game.field.baseSites[0];
+    spawnUnit(game.world, game.ctx, UNIT_DEFS.titan, 0, b.x, b.z);
+    const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, b.x + 4, b.z);
+    run(game, PICTURE_INTERVAL + DT);
+    expect(game.ctx.commander.roles.jobFor(tank)).toBeUndefined();
+  });
+});

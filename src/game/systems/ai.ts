@@ -149,6 +149,8 @@ export function aiSystem(ctx: SimContext): System {
         const ours = outpost !== null && ctx.sides.allied(outpost.owner, faction);
 
         // On auto, an attack is called off while the side's own base can't hold (Sides.recalling).
+        // The Commander's job for this unit, if any; the flag and stances override it.
+        const job = orders.stance === 'auto' && !orders.rally ? ctx.commander.roles.jobFor(e) : undefined;
         const recalled = ctx.sides.recalling[faction];
         const auto = orders.stance === 'auto' && !recalled && ctx.offensive.attacking(faction, world.time);
         const attacking = target >= 0 && (orders.stance === 'attack' || auto);
@@ -164,6 +166,12 @@ export function aiSystem(ctx: SimContext): System {
             const p = patrolPoint(o, ai.squad, world.time);
             const k = force.kind === 'take' ? 0.5 : 1;
             moveTo(mover, t, o.x + (p.x - o.x) * k + ai.rallyOffsetX * 0.3, o.z + (p.z - o.z) * k + ai.rallyOffsetZ * 0.3, force.kind === 'take' ? o.x : p.x * 2 - o.x, force.kind === 'take' ? o.z : p.z * 2 - o.z);
+            continue;
+          }
+          // Flak covering something of ours, or artillery waiting on high ground (see commander/roles.ts).
+          if (job && (job.kind === 'cover' || job.kind === 'overwatch')) {
+            const face = target >= 0 ? ctx.field.baseSites[target] : job;
+            moveTo(mover, t, job.x + ai.rallyOffsetX * 0.5, job.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
             continue;
           }
           const home = ctx.field.baseSites[faction];
@@ -183,6 +191,17 @@ export function aiSystem(ctx: SimContext): System {
           // Hold near the rally point facing the next enemy; small tolerance so units settle rather than jostle.
           const facing = defend?.face ?? (target >= 0 ? ctx.field.baseSites[target] : { x: 0, z: 0 });
           moveTo(mover, t, rx, rz, facing.x, facing.z);
+          continue;
+        }
+
+        // On an attack, flak keeps over whatever of ours the enemy's aircraft are after, and escorts stay round the super unit.
+        if (job?.kind === 'cover') {
+          moveTo(mover, t, job.x + ai.rallyOffsetX * 0.5, job.z + ai.rallyOffsetZ * 0.5, job.x, job.z);
+          continue;
+        }
+        if (job?.kind === 'escort' && job.lead !== null && world.isAlive(job.lead)) {
+          const lt = world.req(job.lead, Transform);
+          moveTo(mover, t, lt.x + job.x, lt.z + job.z, lt.x + Math.cos(lt.heading) * 10, lt.z - Math.sin(lt.heading) * 10);
           continue;
         }
 

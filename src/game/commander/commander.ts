@@ -5,13 +5,14 @@ import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { findPlaces, Place } from './places';
 import { StrengthMap } from './strength';
+import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
 
 /*
  * The Commander: a planner per side, above the squads (see the Commander
  * plan). It builds a picture of the battle, states the team plan as goals,
- * and between attacks sends task forces off on jobs of their own (see
- * taskForces.ts). The team attack itself is still decided in offensive.ts.
+ * between attacks sends task forces off on jobs of their own (see
+ * taskForces.ts), and gives some units jobs that suit them (roles.ts). The team attack itself is still decided in offensive.ts.
  */
 
 /** Seconds between refreshes of the picture and goals. */
@@ -58,6 +59,8 @@ export interface SidePicture {
   /** What its enemies field, together. */
   enemyMix: UnitMix;
   goals: Goal[];
+  /** How many of its units the Commander has given each kind of job (see roles.ts). */
+  jobs: Record<JobKind, number>;
 }
 
 function emptyMix(): UnitMix {
@@ -82,6 +85,8 @@ export class Commander {
   readonly strength: StrengthMap;
   /** Squads sent off on jobs of their own between attacks. */
   readonly taskForces = new TaskForces();
+  /** Jobs that suit particular units: flak covering, artillery on high ground, escorts (worker only: the page doesn't need them). */
+  readonly roles = new Roles();
   /** The land grid's passableVersion the places were found for (scrap and felled trees don't move them). */
   private placesVersion = -1;
 
@@ -90,7 +95,7 @@ export class Commander {
     this.strength = new StrengthMap(ctx.field, sides);
     this.places = findPlaces(ctx.field, ctx.navs.land);
     this.placesVersion = ctx.navs.land.passableVersion;
-    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), goals: [] }));
+    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), goals: [], jobs: { cover: 0, overwatch: 0, escort: 0 } }));
   }
 
   /** Rebuild the picture and the goals from the battle as it stands. Reads the battle only. */
@@ -144,7 +149,9 @@ export class Commander {
       }
     }
     this.taskForces.update(world, ctx);
+    this.roles.update(world, ctx, this.strength, this.taskForces);
     this.sides.forEach((side, f) => {
+      side.jobs = { ...this.roles.counts(f) };
       side.goals = this.goalsFor(world, ctx, f);
       for (const tf of this.taskForces.forces) {
         if (tf.side !== f) continue;
