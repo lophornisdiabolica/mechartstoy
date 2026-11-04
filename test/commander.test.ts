@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { adviceFactor, needsOf, STYLES } from '../src/game/commander/advice';
 import { PICTURE_INTERVAL, SidePicture } from '../src/game/commander/commander';
-import { WALLS_MOST } from '../src/game/commander/engineers';
+import { TOWERS_MOST, WALLS_MOST } from '../src/game/commander/engineers';
 import { countByCategory } from '../src/game/caps';
 import { Ai, Building, Faction, Guard, Health, Rubble, Transform, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
@@ -153,6 +153,7 @@ describe('production advice and styles', () => {
     needs: { antiAir: 0, antiArmour: 0 },
     goals: [],
     jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 },
+    detours: 0,
   });
 
   it('leans toward flak against aircraft it can’t answer, and away from it with none about', () => {
@@ -195,13 +196,18 @@ describe('production advice and styles', () => {
 });
 
 describe('engineers', () => {
-  const walls = (game: Game, side: number) => [...game.world.query(Building, Faction, Transform)].filter((e) => game.world.req(e, Building).def.lasts && game.world.req(e, Faction).id === side);
+  const built = (id: string) => (game: Game, side: number) => [...game.world.query(Building, Faction, Transform)].filter((e) => game.world.req(e, Building).def.id === id && game.world.req(e, Faction).id === side);
+  const walls = built('wall');
+  const towers = built('fieldTower');
   const engineers = (game: Game, side: number) => [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Unit).def.builds && game.world.req(e, Faction).id === side);
 
   it('the HQ trains engineers, who wall off the front of the rally point and stay out of the army', () => {
     const game = new Game(7);
-    run(game, 45);
+    run(game, 60);
     for (let side = 0; side < 2; side++) {
+      // A field tower behind the line, within its low cap.
+      expect(towers(game, side).length).toBeGreaterThan(0);
+      expect(towers(game, side).length).toBeLessThanOrEqual(TOWERS_MOST);
       const built = walls(game, side);
       expect(built.length).toBeGreaterThan(0);
       expect(built.length).toBeLessThanOrEqual(WALLS_MOST);
@@ -230,7 +236,7 @@ describe('engineers', () => {
     s.armies.engineers = 0;
     const game = new Game(7, { settings: s });
     run(game, 45);
-    expect(walls(game, 0).length + walls(game, 1).length).toBe(0);
+    expect(walls(game, 0).length + walls(game, 1).length + towers(game, 0).length + towers(game, 1).length).toBe(0);
     expect(engineers(game, 0).length + engineers(game, 1).length).toBe(0);
   });
 
@@ -248,5 +254,42 @@ describe('engineers', () => {
     game.step(DT);
     expect(world.isAlive(w)).toBe(false);
     expect([...world.query(Rubble)].length).toBe(0);
+  });
+});
+
+describe('keeping out of where they’re weak', () => {
+  function battery(avoidance = true) {
+    const s = defaultSettings();
+    s.armies.avoidance = avoidance;
+    // A large map, so the lanes are far enough apart for one to be out of the battery's reach.
+    s.map.size = 'large';
+    const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
+    const { world, ctx } = game;
+    // The enemy's tanks at home, and a mortar battery on the centre lane.
+    const home = game.field.baseSites[1];
+    for (let i = 0; i < 6; i++) spawnUnit(world, ctx, UNIT_DEFS.tank, 1, home.x + i * 2, home.z);
+    const mid = ctx.lanes.lanes(0, 1)[0][1];
+    for (let i = 0; i < 12; i++) spawnUnit(world, ctx, UNIT_DEFS.mortar, 1, mid.x + (i % 4) * 1.5, mid.z + Math.floor(i / 4) * 1.5);
+    ctx.commander.update(world, ctx);
+    return game;
+  }
+
+  it('maps artillery as a danger to infantry above the enemy’s usual mix, and not to vehicles', () => {
+    const { ctx } = battery();
+    const mid = ctx.lanes.lanes(0, 1)[0][1];
+    const map = ctx.commander.threats;
+    expect(map.excess(ctx, 0, 'infantry', map.usualShare(ctx, 0, 'infantry'), mid.x, mid.z)).toBeGreaterThan(50);
+    expect(map.excess(ctx, 0, 'vehicle', map.usualShare(ctx, 0, 'vehicle'), mid.x, mid.z)).toBeLessThan(0);
+  });
+
+  it('sends infantry down another lane than the one the artillery covers, and leaves vehicles on it', () => {
+    const game = battery();
+    const { ctx } = game;
+    expect(ctx.lanes.lanes(0, 1).length).toBeGreaterThan(1);
+    expect(ctx.commander.avoidance.lane(ctx, 0, 1, 0, 'infantry')).not.toBe(0);
+    expect(ctx.commander.avoidance.lane(ctx, 0, 1, 0, 'vehicle')).toBe(0);
+    // Off, nothing changes.
+    const off = battery(false);
+    expect(off.ctx.commander.avoidance.lane(off.ctx, 0, 1, 0, 'infantry')).toBe(0);
   });
 });

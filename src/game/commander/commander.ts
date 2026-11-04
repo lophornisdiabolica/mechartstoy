@@ -7,6 +7,7 @@ import { findPlaces, Place } from './places';
 import { StrengthMap } from './strength';
 import { Needs, needsOf } from './advice';
 import { Engineers } from './engineers';
+import { Avoidance, ThreatMap } from './threats';
 import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
 
@@ -67,6 +68,8 @@ export interface SidePicture {
   goals: Goal[];
   /** How many of its units the Commander has given each kind of job (see roles.ts). */
   jobs: Record<JobKind, number>;
+  /** Squads going round ground that's dangerous to them (see threats.ts). */
+  detours: number;
 }
 
 function emptyMix(): UnitMix {
@@ -95,15 +98,20 @@ export class Commander {
   readonly roles = new Roles();
   /** Engineers' building jobs (see engineers.ts). */
   readonly engineers = new Engineers();
+  /** How dangerous each part of the field is to each kind of unit, per side (worker only). */
+  readonly threats: ThreatMap;
+  /** Lane choices and detours that keep squads out of where they're weak (see threats.ts). */
+  readonly avoidance = new Avoidance();
   /** The land grid's passableVersion the places were found for (scrap and felled trees don't move them). */
   private placesVersion = -1;
 
   /** Finds the places now, while the battle loads, rather than on its first tick. */
   constructor(ctx: Pick<SimContext, 'field' | 'navs'>, sides: number) {
     this.strength = new StrengthMap(ctx.field, sides);
+    this.threats = new ThreatMap(ctx.field, sides);
     this.places = findPlaces(ctx.field, ctx.navs.land);
     this.placesVersion = ctx.navs.land.passableVersion;
-    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 } }));
+    this.sides = Array.from({ length: sides }, () => ({ armyX: null, armyZ: null, ground: 0, air: 0, antiAir: 0, mix: emptyMix(), enemyMix: emptyMix(), enemyAir: 0, needs: { antiAir: 0, antiArmour: 0 }, goals: [], jobs: { cover: 0, overwatch: 0, escort: 0, build: 0 }, detours: 0 }));
   }
 
   /** Rebuild the picture and the goals from the battle as it stands. Reads the battle only. */
@@ -114,6 +122,7 @@ export class Commander {
       this.placesVersion = ctx.navs.land.passableVersion;
     }
     this.strength.update(world);
+    if (ctx.settings.armies.avoidance) this.threats.update(world);
 
     const sumX = this.sides.map(() => 0);
     const sumZ = this.sides.map(() => 0);
@@ -164,8 +173,10 @@ export class Commander {
     this.taskForces.update(world, ctx);
     this.roles.update(world, ctx, this.strength, this.taskForces);
     this.engineers.update(world, ctx);
+    this.avoidance.update(world, ctx);
     this.sides.forEach((side, f) => {
       side.jobs = { ...this.roles.counts(f), build: this.engineers.count(f) };
+      side.detours = this.avoidance.detouring[f] ?? 0;
       side.goals = this.goalsFor(world, ctx, f);
       for (const tf of this.taskForces.forces) {
         if (tf.side !== f) continue;
