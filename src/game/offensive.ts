@@ -101,6 +101,16 @@ export class Offensive {
     }
   }
 
+  /** Every team's plan, to copy onto a mirror of the battle (see sim/mirror.ts). */
+  get plansState(): [number, TeamPlan][] {
+    return [...this.plans];
+  }
+
+  set plansState(plans: [number, TeamPlan][]) {
+    this.plans.clear();
+    for (const [team, plan] of plans) this.plans.set(team, plan);
+  }
+
   /** Whether a side is on the attack (before any player orders or a recall). */
   attacking(faction: number, time: number): boolean {
     if (this.timing() === 'tide') return isAttacking(time, this.sides.phase[faction], this.tide);

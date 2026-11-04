@@ -12,7 +12,7 @@ const EVERY = 0.5;
  * tick and its slowest systems, draw calls, triangles, meshes and entities.
  * For checking performance work in the browser, the way `npm run bench`
  * does headlessly. While it's showing, the sim times each system (see
- * World.profile).
+ * World.profile). With the sim in its worker, the times come from there.
  */
 export class PerfOverlay {
   readonly root = el('div', { id: 'perf', hidden: '' });
@@ -56,6 +56,16 @@ export class PerfOverlay {
     this.ticks++;
     this.tickTime += took;
     this.worstTick = Math.max(this.worstTick, took);
+  }
+
+  /** Ticks played in the sim worker (see RemoteSim), with their times and per-system profile. */
+  simFrame(ticks: number, ms: number, worst: number, profile: [string, number][] | null): void {
+    if (!this.visible || ticks === 0) return;
+    this.ticks += ticks;
+    this.tickTime += ms;
+    this.worstTick = Math.max(this.worstTick, worst);
+    const p = this.game?.world.profile;
+    if (p && profile) for (const [k, v] of profile) p.set(k, (p.get(k) ?? 0) + v);
   }
 
   /** After each rendered frame. */

@@ -42,6 +42,21 @@ export class World {
     return e;
   }
 
+  /**
+   * Bring an entity with a given id to life (a mirror of another World
+   * copying its entities, see sim/mirror.ts). Later create() calls carry on
+   * after the highest id seen.
+   */
+  adopt(e: Entity): void {
+    this.alive.add(e);
+    if (e >= this.nextId) this.nextId = e + 1;
+  }
+
+  /** Every live entity, including ones waiting to be destroyed at the end of the step. */
+  entities(): IterableIterator<Entity> {
+    return this.alive.values();
+  }
+
   isAlive(e: Entity): boolean {
     return this.alive.has(e);
   }
@@ -134,6 +149,11 @@ export class World {
   /** The systems' names, in the order they run. */
   get systemNames(): string[] {
     return this.systems.map((s) => s.name);
+  }
+
+  /** Remove the entities destroyed so far now, rather than at the end of the next step. */
+  flush(): void {
+    this.flushDestroyed();
   }
 
   private flushDestroyed(): void {

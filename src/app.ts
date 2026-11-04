@@ -15,6 +15,7 @@ import { el, hex } from './ui/dom';
 import { settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
+import { RemoteSim } from './sim/remoteSim';
 
 /** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
 const VICTORY_PAUSE = 15;
@@ -91,6 +92,8 @@ export class App implements MatchControls {
   /** Unpaused seconds the banner has been up. */
   private bannerTime = 0;
   private readonly perf: PerfOverlay;
+  /** Plays the battle in a worker thread; null plays it on the page (`?worker=0`, or no worker support). */
+  private readonly sim: RemoteSim | null;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
 
   constructor(container: HTMLElement, hud: HTMLElement) {
@@ -102,12 +105,14 @@ export class App implements MatchControls {
     const view = loadViewPrefs();
     this.stage.shadows = view.shadows;
     this.stage.followFights = view.follow;
+    this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
-      step: (dt) => this.perf.step(() => this.battle.game.step(dt)),
-      render: (alpha, frameSeconds) => this.frame(alpha, frameSeconds),
+      step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
+      render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(alpha) : alpha, frameSeconds),
     });
     document.body.append(this.banner);
     this.perf = new PerfOverlay(this.stage);
+    if (this.sim) this.sim.onFrame = (f) => this.perf.simFrame(f.ticks, f.simMs, f.worstMs, f.profile);
     window.addEventListener('keydown', (e) => {
       if (e.key.toLowerCase() !== 'p' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -142,6 +147,7 @@ export class App implements MatchControls {
   settingsChanged(): void {
     // The panel changes the live battle's settings; keep the setup's in step.
     if (this.battle.settings !== this.settings) this.settings.armies.ramp = structuredClone(this.battle.settings.armies.ramp);
+    this.sim?.settings(this.battle.settings);
     this.writeUrl({ ...this.battle.settings, seed: this.battle.seed });
   }
 
@@ -161,7 +167,7 @@ export class App implements MatchControls {
 
   private startBattle(settings: BattleSettings, seed: string, label = ''): void {
     this.dropControls();
-    const game = new Game(hashSeed(seed), { settings });
+    const game = this.sim ? this.sim.start(hashSeed(seed), settings) : new Game(hashSeed(seed), { settings });
     const factions = factionDefs(settings);
     this.stage.load(game, factions);
     this.perf.attach(game);

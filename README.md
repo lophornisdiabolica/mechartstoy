@@ -269,6 +269,18 @@ unit or building to inspect it.
 The simulation and the renderer are separate. The game can run headless
 (the tests do this), and the renderer only reads game state.
 
+In the browser the battle plays in a Web Worker (`src/sim/simWorker.ts`),
+so the sim and the drawing use separate CPU cores. The page builds its own
+copy of the battle from the same seed and settings, a view `Game` with no
+systems, and after each batch of ticks the worker sends what changed:
+positions, the components the page reads, events, map changes, fallen
+trees and the side, outpost and order state (`src/sim/mirror.ts`). The
+renderer and UI read the view exactly as they'd read the real game, and
+player commands (rally, stance, dropping units, live settings) go to the
+worker through `Game.command`. A page feature that reads something new
+from the battle adds it to what mirror.ts copies. `?worker=0` plays the
+battle on the page instead, as before.
+
 ```
 src/
   core/      engine-agnostic building blocks
@@ -337,6 +349,9 @@ src/
     duel.ts          unit-against-unit duels on open ground (npm run sims -- --duel)
     bench.ts         fixed battles timed for npm run bench, with result fingerprints
     mapTool.ts       settings and pictures for npm run map (scripts/map.mjs)
+    mirror.ts        the worker's battle copied onto the page's view of it, frame by frame
+    simWorker.ts     the Web Worker that plays the battle
+    remoteSim.ts     the page's end of the worker: asks for ticks, applies frames
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
 
