@@ -39,6 +39,12 @@ export type { GameEvents, Outcome } from './context';
 
 export const SIM_HZ = 30;
 
+/** Something the player does to a battle (see Game.command). */
+export type Command =
+  | { type: 'spawn'; unit: UnitId; faction: number; x: number; z: number }
+  | { type: 'rally'; faction: number; point: { x: number; z: number } | null }
+  | { type: 'stance'; faction: number; stance: Stance };
+
 export interface GameOptions {
   /** Place bases, the town and opening armies. Tests turn this off for controlled scenarios. */
   populate: boolean;
@@ -46,6 +52,12 @@ export interface GameOptions {
   autoSpawn: boolean;
   /** Map, army and unit tuning. The seed field is ignored here; pass the hashed seed separately. */
   settings: BattleSettings;
+  /**
+   * A copy to show a battle played elsewhere (in the sim worker, see
+   * sim/mirror.ts): the same map and opening, but no systems, so stepping
+   * it does nothing and its state comes from the real one.
+   */
+  view: boolean;
 }
 
 /**
@@ -66,7 +78,7 @@ export class Game {
     readonly seed: number,
     options: Partial<GameOptions> = {},
   ) {
-    const { populate = true, autoSpawn = true, settings = defaultSettings() } = options;
+    const { populate = true, autoSpawn = true, settings = defaultSettings(), view = false } = options;
     this.settings = settings;
     // Subscribe before anything spawns, so the opening armies count.
     this.stats = new BattleStats(this.events, settings.factions.length);
@@ -109,7 +121,10 @@ export class Game {
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
     const ctx = this.ctx;
     const navObstacles = navObstacleSystem(ctx);
-    const systems = [
+    // A view builds none: some systems (scrap) listen to events, which a view only replays.
+    const systems = view
+      ? []
+      : [
       snapshotSystem,
       escalationSystem(ctx),
       spatialIndexSystem(ctx),
@@ -152,24 +167,56 @@ export class Game {
 
   // Player commands. The UI calls these; they're the only way it changes the sim.
 
+  /**
+   * Where a view sends its commands (to the worker playing the real battle,
+   * see sim/mirror.ts) instead of applying them itself. Null applies them here.
+   */
+  forward: ((command: Command) => void) | null = null;
+
   /** Drop a unit at a point. Returns false if the spot is unusable for it or the side is at its cap. */
   spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
-    const def = this.ctx.units[unit];
-    // Boats only on water, land units only where they can go (hovers on either).
-    if (!this.field.contains(x, z, 1) || !this.ctx.navs.for(def.move).terrainAllowsAt(x, z)) return false;
-    // Dropped units obey the caps, but not the super unit's outpost rule: placing them is the player's call.
-    if (countByCategory(this.world, this.ctx.sides.count)[faction][def.category] >= capFor(this.ctx, faction, def.category)) return false;
-    spawnUnit(this.world, this.ctx, def, faction, x, z);
-    return true;
+    return this.command({ type: 'spawn', unit, faction, x, z });
   }
 
   /** Move a faction's rally point; null restores the default. */
   setRally(faction: number, point: { x: number; z: number } | null): void {
-    this.ctx.orders[faction].rally = point && { x: this.field.clampX(point.x, 2), z: this.field.clampZ(point.z, 2) };
+    this.command({ type: 'rally', faction, point });
   }
 
   setStance(faction: number, stance: Stance): void {
-    this.ctx.orders[faction].stance = stance;
+    this.command({ type: 'stance', faction, stance });
+  }
+
+  /** Apply a player command (or forward it, see `forward`). For a drop, whether it worked. */
+  command(c: Command): boolean {
+    if (!this.forward) return this.apply(c);
+    // A drop that can't work here can't work in the real battle either, so say so now.
+    if (c.type === 'spawn' && !this.canDrop(c.unit, c.faction, c.x, c.z)) return false;
+    this.forward(c);
+    return true;
+  }
+
+  private apply(c: Command): boolean {
+    switch (c.type) {
+      case 'spawn':
+        if (!this.canDrop(c.unit, c.faction, c.x, c.z)) return false;
+        spawnUnit(this.world, this.ctx, this.ctx.units[c.unit], c.faction, c.x, c.z);
+        return true;
+      case 'rally':
+        this.ctx.orders[c.faction].rally = c.point && { x: this.field.clampX(c.point.x, 2), z: this.field.clampZ(c.point.z, 2) };
+        return true;
+      case 'stance':
+        this.ctx.orders[c.faction].stance = c.stance;
+        return true;
+    }
+  }
+
+  private canDrop(unit: UnitId, faction: number, x: number, z: number): boolean {
+    const def = this.ctx.units[unit];
+    // Boats only on water, land units only where they can go (hovers on either).
+    if (!this.field.contains(x, z, 1) || !this.ctx.navs.for(def.move).terrainAllowsAt(x, z)) return false;
+    // Dropped units obey the caps, but not the super unit's outpost rule: placing them is the player's call.
+    return countByCategory(this.world, this.ctx.sides.count)[faction][def.category] < capFor(this.ctx, faction, def.category);
   }
 
   private populate(rng: Rng): void {

@@ -191,6 +191,18 @@ export interface Bounds {
   maxZ: number;
 }
 
+/** Some cells' contents, copied from one copy of a map to another (see Battlefield.cellState). */
+export interface CellState {
+  area: CellArea;
+  ground: Uint8Array;
+  roadCell: Uint8Array;
+  bridgeCell: Int16Array;
+  /** The area's vertex heights, (w + 1) * (h + 1). */
+  heights: Float32Array;
+  bridges: Bridge[];
+  roads: Road[];
+}
+
 /** Something that wants to know when the map changes (see Battlefield.onChange). */
 export type MapChangeListener = (area: CellArea) => void;
 
@@ -263,6 +275,52 @@ export class Battlefield {
   changed(area: CellArea): void {
     this.version++;
     for (const l of [...this.listeners]) l(area);
+  }
+
+  /**
+   * Everything a change to these cells can have touched (ground, roads,
+   * bridges and the heights of their corners), to copy onto another copy
+   * of this map with applyCells (see sim/mirror.ts).
+   */
+  cellState(area: CellArea): CellState {
+    const { cols } = this.config;
+    const w = area.i1 - area.i0 + 1;
+    const h = area.j1 - area.j0 + 1;
+    const ground = new Uint8Array(w * h);
+    const roadCell = new Uint8Array(w * h);
+    const bridgeCell = new Int16Array(w * h);
+    const heights = new Float32Array((w + 1) * (h + 1));
+    for (let j = 0; j < h; j++) {
+      const from = (area.j0 + j) * cols + area.i0;
+      ground.set(this.ground.subarray(from, from + w), j * w);
+      roadCell.set(this.roadCell.subarray(from, from + w), j * w);
+      bridgeCell.set(this.bridgeCell.subarray(from, from + w), j * w);
+    }
+    for (let j = 0; j <= h; j++) {
+      const from = (area.j0 + j) * (cols + 1) + area.i0;
+      heights.set(this.heights.subarray(from, from + w + 1), j * (w + 1));
+    }
+    return { area, ground, roadCell, bridgeCell, heights, bridges: this.bridges.slice(), roads: this.roads.slice() };
+  }
+
+  /** Copy cells from another copy of this map (see cellState) and tell the listeners. */
+  applyCells(state: CellState): void {
+    const { area } = state;
+    const { cols } = this.config;
+    const w = area.i1 - area.i0 + 1;
+    const h = area.j1 - area.j0 + 1;
+    for (let j = 0; j < h; j++) {
+      const to = (area.j0 + j) * cols + area.i0;
+      this.ground.set(state.ground.subarray(j * w, j * w + w), to);
+      this.roadCell.set(state.roadCell.subarray(j * w, j * w + w), to);
+      this.bridgeCell.set(state.bridgeCell.subarray(j * w, j * w + w), to);
+    }
+    for (let j = 0; j <= h; j++) {
+      this.heights.set(state.heights.subarray(j * (w + 1), (j + 1) * (w + 1)), (area.j0 + j) * (cols + 1) + area.i0);
+    }
+    this.bridges.splice(0, this.bridges.length, ...state.bridges);
+    this.roads.splice(0, this.roads.length, ...state.roads);
+    this.changed(area);
   }
 
   /** The cells within `radius` of a point, as a rectangle. */

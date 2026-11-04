@@ -125,6 +125,19 @@ export class Woods {
   }
 
   /**
+   * Show a tree as fallen the way another copy of this map saw it fall (see
+   * sim/mirror.ts). Only tells the listeners; the ground change comes with
+   * the map's own changes.
+   */
+  showFell(t: number, angle: number): void {
+    const tree = this.trees[t];
+    if (tree.fell !== null) return;
+    tree.hp = 0;
+    tree.fell = angle;
+    for (const l of [...this.listeners]) l(t);
+  }
+
+  /**
    * Flatten the trees a vehicle runs into (its footprint, `radius`, at a
    * point). Returns how many fell.
    */
