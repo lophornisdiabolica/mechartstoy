@@ -313,10 +313,11 @@ src/
     spawn.ts         assembles unit and building entities from definitions
     tide.ts          production tide, the tide's attack clock, and the ramps
     offensive.ts     when each team attacks: readiness, or the tide's clock
-    commander/       each side's planner above the squads (so far it only watches: see "The Commander" below)
+    commander/       each side's planner above the squads (see "The Commander" below)
       commander.ts     each side's picture of the battle (army, strength, make-up, enemies' make-up) and its goals
       strength.ts      strength map: each side's fighting strength per 6-unit cell, on the ground, in the air and against aircraft
       places.ts        the map's key places: bases, outposts, towns, bridges, narrow crossings and high ground
+      taskForces.ts    squads sent off between attacks to take outposts or save the side's own
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     scrap.ts         wreckage piling up into scrap, and being cleared
@@ -504,17 +505,30 @@ outposts and the light scenery are still placed once, at the start.
   timings stretch on bigger maps. With *tide* timing, attacks follow the
   tide's clock instead.
 - **The Commander** (`game/commander/`). A planner per side, being built
-  in steps above today's squad AI. So far it only watches: every two
-  seconds it rebuilds each side's picture of the battle (where its army
-  is, its fighting strength on the ground, in the air and against
-  aircraft, a strength map in 6-unit cells, what kinds of unit it and its
-  enemies field) and states the team plan above as goals: mass or regroup
-  at the rally point, push an enemy base, or defend home. It also knows the
-  map's key places, found once while the map loads. Nothing in the battle
-  reads it yet, so battles are the same with it as without. *Show plans
-  on the map* (Commanders section of the panel) draws each side's goals
-  as arrows, fainter the less ready it is, and the list under it says
-  each side's plan in words.
+  in steps above the squad AI. Every two seconds it rebuilds each side's
+  picture of the battle (where its army is, its fighting strength on the
+  ground, in the air and against aircraft, a strength map in 6-unit cells,
+  what kinds of unit it and its enemies field) and states the team plan
+  above as goals: mass or regroup at the rally point, push an enemy base,
+  or defend home. It also knows the map's key places, found once while the
+  map loads.
+- **Task forces** (`game/commander/taskForces.ts`). Between attacks, the
+  Commander can send up to 35% of a side's army (the *Task forces* setting
+  under Outposts; 0 turns them off) to take an outpost its team doesn't
+  hold, or to save one of its own that an enemy is taking. It picks the
+  cheapest outpost it can beat: a force needs 1.6× the enemy strength
+  there (garrison, guards and armies), and nearer outposts come first. Up
+  to two forces at once; the nearest free squads go. A force that's down
+  to 45% of its strength, or hasn't taken its outpost in 100 seconds,
+  comes back, and the side waits 45 seconds before trying there again.
+  Once taken, the force holds the outpost. When the team attacks, every
+  force joins the attack, and an attack on the side's base calls them all
+  home. Boats and super units stay with the main army. The rally flag and
+  any stance but auto override task forces.
+- *Show plans on the map* (Commanders section of the panel) draws each
+  side's goals as arrows (fainter the less ready it is) and each task
+  force's arrow to its outpost; the list under it says each side's plan
+  in words.
 - The **tide** (`game/tide.ts`) swings each side's production up and down,
   surging for one team while the others ebb. Teams are spread evenly round
   the cycle and allies share a phase. Which team surges first is rolled per

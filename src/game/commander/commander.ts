@@ -5,12 +5,13 @@ import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { findPlaces, Place } from './places';
 import { StrengthMap } from './strength';
+import { TaskForce, TaskForces } from './taskForces';
 
 /*
  * The Commander: a planner per side, above the squads (see the Commander
- * plan). This first step only builds its picture of the battle and states
- * today's team plan as goals; nothing in the battle reads it yet, so it
- * changes nothing. Later steps give task forces their own goals.
+ * plan). It builds a picture of the battle, states the team plan as goals,
+ * and between attacks sends task forces off on jobs of their own (see
+ * taskForces.ts). The team attack itself is still decided in offensive.ts.
  */
 
 /** Seconds between refreshes of the picture and goals. */
@@ -28,7 +29,8 @@ export interface UnitMix {
   artillery: number;
 }
 
-export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup';
+/** Team goals (push, defend, mass, regroup) and task force jobs (take or hold an outpost, see taskForces.ts). */
+export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup' | 'take' | 'hold';
 
 /** Something a side means to do, and where. */
 export interface Goal {
@@ -39,6 +41,8 @@ export interface Goal {
   target: number | null;
   /** How much the side wants it, 0 to 1 (for now: how ready it is to push). */
   score: number;
+  /** For a task force's job: the force. */
+  force?: number;
 }
 
 /** One side's picture of the battle. */
@@ -60,6 +64,14 @@ function emptyMix(): UnitMix {
   return { infantry: 0, vehicle: 0, air: 0, super: 0, antiAir: 0, artillery: 0 };
 }
 
+/** What the page gets a copy of. */
+export interface CommanderState {
+  sides: SidePicture[];
+  places: Place[];
+  forces: TaskForce[];
+  updatedAt: number;
+}
+
 /** Every side's picture, plus the map's key places. Lives in SimContext.commander. */
 export class Commander {
   readonly sides: SidePicture[];
@@ -68,6 +80,8 @@ export class Commander {
   updatedAt = -Infinity;
   /** The strength map (worker only: the page's copy isn't kept up to date). */
   readonly strength: StrengthMap;
+  /** Squads sent off on jobs of their own between attacks. */
+  readonly taskForces = new TaskForces();
   /** The land grid's passableVersion the places were found for (scrap and felled trees don't move them). */
   private placesVersion = -1;
 
@@ -128,8 +142,16 @@ export class Commander {
         const theirs = this.sides[g].mix;
         for (const k of Object.keys(mine) as (keyof UnitMix)[]) mine[k] += theirs[k];
       }
-      this.sides[f].goals = this.goalsFor(world, ctx, f);
     }
+    this.taskForces.update(world, ctx);
+    this.sides.forEach((side, f) => {
+      side.goals = this.goalsFor(world, ctx, f);
+      for (const tf of this.taskForces.forces) {
+        if (tf.side !== f) continue;
+        const o = ctx.outposts[tf.outpost];
+        side.goals.push({ kind: tf.kind, x: o.x, z: o.z, target: null, score: tf.launch > 0 ? tf.strength / tf.launch : 1, force: tf.id });
+      }
+    });
   }
 
   /** Today's team plan, as goals: push the target base, defend home, or mass (or regroup) at the rally point. */
@@ -158,13 +180,14 @@ export class Commander {
   }
 
   /** What the page shows (see sim/mirror.ts): everything but the strength map. */
-  get state(): { sides: SidePicture[]; places: Place[]; updatedAt: number } {
-    return { sides: this.sides, places: this.places, updatedAt: this.updatedAt };
+  get state(): CommanderState {
+    return { sides: this.sides, places: this.places, forces: this.taskForces.state, updatedAt: this.updatedAt };
   }
 
-  set state(s: { sides: SidePicture[]; places: Place[]; updatedAt: number }) {
+  set state(s: CommanderState) {
     this.sides.splice(0, this.sides.length, ...s.sides);
     this.places = s.places;
+    this.taskForces.state = s.forces;
     this.updatedAt = s.updatedAt;
   }
 }

@@ -588,11 +588,12 @@ export class SetupScreen {
     );
     slider(outposts, 'Bonus', 'outpostBonus', 0.05, (s) => s.armies.outpostBonus, (s, v) => (s.armies.outpostBonus = v), (v) => (v === 0 ? 'None' : times(v)));
     slider(outposts, 'Holding', 'outpostHold', 0.05, (s) => s.armies.outpostHold, (s, v) => (s.armies.outpostHold = v), (v) => (v === 0 ? 'Off' : percent(v)));
+    slider(outposts, 'Task forces', 'taskForces', 0.05, (s) => s.armies.taskForces, (s, v) => (s.armies.taskForces = v), (v) => (v === 0 ? 'Off' : `up to ${percent(v)}`));
     outposts.append(
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter. Task forces let each side’s Commander send up to that share of its army, between attacks, to take outposts it can beat the defence at, or to save its own outposts from capture.',
       ),
     );
 

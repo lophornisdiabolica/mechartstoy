@@ -144,6 +144,12 @@ export interface BattleSettings {
      * default: holding leaves bases thinner, which made Conquest battles about a minute shorter.
      */
     outpostHold: number;
+    /**
+     * Most of a side's army, by strength, that its Commander may send off as task forces
+     * between attacks, to take outposts or hold its own (see commander/taskForces.ts). 0 is
+     * off: the whole army masses and attacks together.
+     */
+    taskForces: number;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -199,6 +205,7 @@ export const LIMITS = {
   forest: { min: 0, max: 1 },
   outpostBonus: { min: 0, max: 3 },
   outpostHold: { min: 0, max: 1 },
+  taskForces: { min: 0, max: 0.8 },
   unitStat: { min: 0.25, max: 3 },
 } as const;
 
@@ -226,6 +233,7 @@ export function defaultSettings(): BattleSettings {
       ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } },
       outpostBonus: 1,
       outpostHold: 0,
+      taskForces: 0.35,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],
