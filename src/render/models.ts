@@ -71,6 +71,8 @@ export function glowMaterial(color: number): THREE.Material {
   let m = materialCache.get(key);
   if (!m) {
     m = markShared(new THREE.MeshBasicMaterial({ color }));
+    // The batcher draws every glow material as one, with the colour per instance (see batcher.ts).
+    m.userData.batch = 'glow';
     materialCache.set(key, m);
   }
   return m;
@@ -82,6 +84,7 @@ export function flatMaterial(color: number): THREE.Material {
   let m = materialCache.get(key);
   if (!m) {
     m = markShared(new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.7, metalness: 0.15 }));
+    m.userData.batch = 'flat';
     materialCache.set(key, m);
   }
   return m;
@@ -180,6 +183,8 @@ function boxGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
   let g = geometryCache.get(key);
   if (!g) {
     g = new THREE.BoxGeometry(w, h, d);
+    // The batcher draws every box as one unit box scaled to this (see batcher.ts).
+    g.userData.box = [w, h, d];
     geometryCache.set(key, markShared(g));
   }
   return g;

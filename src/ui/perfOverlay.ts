@@ -91,7 +91,7 @@ export class PerfOverlay {
     const lines = [
       `frame ${ms((this.frameTime / this.frames) * 1000)} ms (worst ${ms(this.worstFrame * 1000)}) · ${Math.round(this.frames / this.frameTime)} fps`,
       `draw calls ${info.render.calls} · triangles ${Math.round(info.render.triangles / 1000)}k · meshes ${meshes} (${instances} instanced)`,
-      `geometries ${info.memory.geometries} · textures ${info.memory.textures}`,
+      `entity batches ${this.stage.entities?.batches ?? 0} · geometries ${info.memory.geometries} · textures ${info.memory.textures}`,
     ];
     const w = this.game?.world;
     if (w) {

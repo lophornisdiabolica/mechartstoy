@@ -371,6 +371,8 @@ function infantry(faction: number, kit: Kit): THREE.Object3D {
   const tex = sheet.clone();
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5 }));
   sprite.center.set(0.5, 0);
+  // The batcher draws every sprite off one sheet together (see batcher.ts).
+  sprite.userData.sheet = sheet;
   sprite.scale.set(0.5, 0.75, 1);
   const root = new THREE.Group();
   root.add(sprite);

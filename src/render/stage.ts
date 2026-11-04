@@ -128,6 +128,7 @@ export class Stage {
       this.scene.remove(this.battle);
       this.stopTerrain?.();
       this.stopWoods?.();
+      this.entities.dispose();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -150,7 +151,7 @@ export class Stage {
     this.effects = new Effects(game.events, field);
     this.markers = new Markers(game, this.entities);
     this.outpostRings = new OutpostRings(game);
-    battle.add(this.entities.root, this.effects.root, this.markers.root, this.outpostRings.root);
+    battle.add(this.entities.root, this.entities.drawn, this.effects.root, this.markers.root, this.outpostRings.root);
     this.scene.add(battle);
     this.battle = battle;
 
