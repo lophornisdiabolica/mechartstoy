@@ -3,6 +3,7 @@ import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { Faction, GARRISON, Transform, Unit } from './components';
 import { SimContext } from './context';
+import * as D from '../core/dmath';
 
 /**
  * Who is fighting whom. Each side (faction) belongs to a team; sides on the
@@ -71,7 +72,7 @@ export class Sides {
     this.eliminatedKey = this.eliminated.map((e) => (e ? 1 : 0)).join('');
     const size = (team: number) => teams.filter((t) => t === team).length;
     const largest = Math.max(...this.teamList.map(size));
-    this.strength = teams.map((team) => (largest / size(team)) ** evenness);
+    this.strength = teams.map((team) => D.pow(largest / size(team), evenness));
     this.threat = teams.map(() => 0);
     this.threatAt = teams.map(() => ({ x: 0, z: 0 }));
     this.guard = teams.map(() => 0);
@@ -182,7 +183,7 @@ export class Sides {
     // Distance from the team's bases to each enemy base.
     const weights = enemies.map((e) => {
       const b = this.field.baseSites[e];
-      const d = from.reduce((s, f) => s + Math.hypot(this.field.baseSites[f].x - b.x, this.field.baseSites[f].z - b.z), 0) / from.length;
+      const d = from.reduce((s, f) => s + D.hypot(this.field.baseSites[f].x - b.x, this.field.baseSites[f].z - b.z), 0) / from.length;
       return 1 / (d * d);
     });
     const total = weights.reduce((s, w) => s + w, 0);

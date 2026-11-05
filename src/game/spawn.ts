@@ -24,6 +24,7 @@ import {
 import { SimContext } from './context';
 import { MOVE_RULES } from '../world/moveClasses';
 import { UnitDef, WeaponDef } from './units';
+import * as D from '../core/dmath';
 
 function armed(
   ctx: SimContext,
@@ -84,13 +85,13 @@ function rallyOffset(ctx: SimContext, def: UnitDef, squad: number): { x: number;
   const a = ctx.rng.range(0, Math.PI * 2);
   if (def.class !== 'infantry') {
     const r = Math.sqrt(ctx.rng.next()) * RALLY_SPREAD;
-    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+    return { x: D.cos(a) * r, z: D.sin(a) * r };
   }
   // The squad's spot: spread by the golden angle so squads don't pile onto each other.
   const sa = squad * 2.399963;
   const sr = Math.sqrt((squad * 0.618034) % 1) * RALLY_SPREAD;
   const r = Math.sqrt(ctx.rng.next()) * SQUAD_HUDDLE;
-  return { x: Math.cos(sa) * sr + Math.cos(a) * r, z: Math.sin(sa) * sr + Math.sin(a) * r };
+  return { x: D.cos(sa) * sr + D.cos(a) * r, z: D.sin(sa) * sr + D.sin(a) * r };
 }
 
 /**
@@ -99,7 +100,7 @@ function rallyOffset(ctx: SimContext, def: UnitDef, squad: number): { x: number;
  */
 export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: number, x: number, z: number, squad = newSquad(ctx)): Entity {
   // Face the middle of the map; the AI picks a real objective on its first think.
-  const heading = Math.atan2(z, -x);
+  const heading = D.atan2(z, -x);
   const e = world.create();
   world.add(e, Transform, makeTransform(x, MOVE_RULES[def.move].minDepth > 0 ? ctx.field.waterSurfaceAt(x, z) : ctx.field.surfaceAt(x, z), z, heading));
   world.add(e, Faction, { id: faction });

@@ -7,6 +7,7 @@ import { recordSquad } from '../territory';
 import { UnitId } from '../units';
 import { spawnSpot } from './production';
 import { MOVE_RULES } from '../../world/moveClasses';
+import * as D from '../../core/dmath';
 
 /** A loaded carrier drops its squad once an enemy it's after is this close. */
 export const DROP_RANGE = 16;
@@ -45,10 +46,10 @@ export function carrierSystem(ctx: SimContext): System {
         let drop = false;
         if (armed?.target != null && world.has(armed.target, Transform)) {
           const tt = world.req(armed.target, Transform);
-          drop = (tt.x - t.x) ** 2 + (tt.z - t.z) ** 2 <= DROP_RANGE ** 2;
+          drop = D.sq(tt.x - t.x) + D.sq(tt.z - t.z) <= D.sq(DROP_RANGE);
         }
         const ai = world.get(e, Ai);
-        if (!drop && ai && ai.target >= 0) drop = (ai.objectiveX - t.x) ** 2 + (ai.objectiveZ - t.z) ** 2 <= DROP_AT_OBJECTIVE ** 2;
+        if (!drop && ai && ai.target >= 0) drop = D.sq(ai.objectiveX - t.x) + D.sq(ai.objectiveZ - t.z) <= D.sq(DROP_AT_OBJECTIVE);
         if (!drop) continue;
 
         const faction = world.req(e, Faction).id;
@@ -63,8 +64,8 @@ export function carrierSystem(ctx: SimContext): System {
           if (!canBuild(ctx, counts, faction, def)) break;
           const side = ctx.rng.range(-1.2, 1.2);
           const r = world.req(e, Unit).def.radius + 0.8;
-          const x = t.x + Math.cos(back) * r - Math.sin(back) * side;
-          const z = t.z - Math.sin(back) * r - Math.cos(back) * side;
+          const x = t.x + D.cos(back) * r - D.sin(back) * side;
+          const z = t.z - D.sin(back) * r - D.cos(back) * side;
           // Aircraft (drones off an airship) take off from where they are; soldiers need ground with room.
           const spot = MOVE_RULES[def.move].flies ? (ctx.field.contains(x, z, 1) ? { x, z } : null) : spawnSpot(ctx, x, z, def.radius);
           if (!spot) continue;

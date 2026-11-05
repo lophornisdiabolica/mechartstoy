@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import { BUILDING_DEFS, BuildingDef, BuildingId, DECORATIVE_BUILDINGS } from '../game/buildings';
 import { Battlefield, BaseSite, TownSite } from './battlefield';
+import * as D from '../core/dmath';
 
 /** Radius of the clear ground kept in front of a production building's door. */
 const APRON_RADIUS = 3.5;
@@ -35,7 +36,7 @@ class Layout {
     if (!this.tryPlace(p)) return false;
     const r = BUILDING_DEFS[p.building].radius;
     const ahead = r + APRON_RADIUS;
-    this.reserve(p.x + Math.cos(p.heading) * ahead, p.z - Math.sin(p.heading) * ahead, APRON_RADIUS);
+    this.reserve(p.x + D.cos(p.heading) * ahead, p.z - D.sin(p.heading) * ahead, APRON_RADIUS);
     return true;
   }
 
@@ -56,10 +57,10 @@ class Layout {
     if (this.field.nearBridge(x, z, r + 1)) return false;
     for (const o of this.placements) {
       const or = BUILDING_DEFS[o.building].radius;
-      if (Math.hypot(o.x - x, o.z - z) < r + or + gap) return false;
+      if (D.hypot(o.x - x, o.z - z) < r + or + gap) return false;
     }
     for (const o of this.reserved) {
-      if (Math.hypot(o.x - x, o.z - z) < r + o.r) return false;
+      if (D.hypot(o.x - x, o.z - z) < r + o.r) return false;
     }
     return true;
   }
@@ -87,8 +88,8 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras:
   const f = site.faction;
   // Position in base-local polar coordinates: angle relative to forward, distance from centre.
   const at = (angle: number, dist: number) => ({
-    x: site.x + Math.cos(forward + angle) * dist,
-    z: site.z - Math.sin(forward + angle) * dist,
+    x: site.x + D.cos(forward + angle) * dist,
+    z: site.z - D.sin(forward + angle) * dist,
   });
 
   layout.tryPlaceProducer({ building: 'hq', faction: f, ...at(Math.PI, 5), heading: forward });
@@ -138,9 +139,9 @@ export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): Buildi
       if (j === 0 || rng.chance(0.2)) continue;
       const lx = i * spacing + rng.range(-0.4, 0.4);
       const lz = j * spacing + rng.range(-0.4, 0.4);
-      if (Math.hypot(lx, lz) > site.radius) continue;
-      const x = site.x + lx * Math.cos(angle) - lz * Math.sin(angle);
-      const z = site.z + lx * Math.sin(angle) + lz * Math.cos(angle);
+      if (D.hypot(lx, lz) > site.radius) continue;
+      const x = site.x + lx * D.cos(angle) - lz * D.sin(angle);
+      const z = site.z + lx * D.sin(angle) + lz * D.cos(angle);
       const building = townBuilding(field, site, rng, x, z, industry);
       layout.tryPlace({ building, faction: -1, x, z, heading: -angle + rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) }, 0.6);
     }
@@ -154,12 +155,12 @@ export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): Buildi
  * and the spire in the centre, houses everywhere else.
  */
 function townBuilding(field: Battlefield, site: TownSite, rng: Rng, x: number, z: number, industry: number | null): BuildingId {
-  const harbour = [0, 1, 2, 3, 4, 5, 6, 7].some((a) => field.isWater(x + Math.cos((a * Math.PI) / 4) * 4.5, z + Math.sin((a * Math.PI) / 4) * 4.5));
+  const harbour = [0, 1, 2, 3, 4, 5, 6, 7].some((a) => field.isWater(x + D.cos((a * Math.PI) / 4) * 4.5, z + D.sin((a * Math.PI) / 4) * 4.5));
   if (harbour) return rng.pick(['warehouse', 'warehouse', 'silo', 'house']);
-  const d = Math.hypot(x - site.x, z - site.z);
+  const d = D.hypot(x - site.x, z - site.z);
   if (industry !== null && d > site.radius * 0.35) {
-    const off = Math.atan2(z - site.z, x - site.x) - industry;
-    if (Math.abs(Math.atan2(Math.sin(off), Math.cos(off))) < Math.PI / 3.5) return rng.pick(['warehouse', 'silo', 'silo', 'block']);
+    const off = D.atan2(z - site.z, x - site.x) - industry;
+    if (Math.abs(D.atan2(D.sin(off), D.cos(off))) < Math.PI / 3.5) return rng.pick(['warehouse', 'silo', 'silo', 'block']);
   }
   // Taller buildings toward the centre.
   return d < site.radius * 0.45 ? rng.pick(['block', 'block', 'spire', 'house']) : rng.pick(['house', 'house', 'silo', 'block']);
@@ -183,12 +184,12 @@ function findShore(field: Battlefield, site: BaseSite, radius: number, layout: L
   for (let dist = site.radius * 0.5; dist <= site.radius + SHORE_SEARCH; dist += 1.5) {
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
-      const x = site.x + Math.cos(a) * dist;
-      const z = site.z - Math.sin(a) * dist;
+      const x = site.x + D.cos(a) * dist;
+      const z = site.z - D.sin(a) * dist;
       if (!layout.fits(x, z, radius)) continue;
       for (let h = 0; h < 16; h++) {
         const heading = (h / 16) * Math.PI * 2;
-        const door = { x: x + Math.cos(heading) * (radius + 2.5), z: z - Math.sin(heading) * (radius + 2.5) };
+        const door = { x: x + D.cos(heading) * (radius + 2.5), z: z - D.sin(heading) * (radius + 2.5) };
         // Boats leave through open water, not under a bridge.
         if (field.nearBridge(door.x, door.z, 3)) continue;
         if (deepWaterArea(field, door.x, door.z, OPEN_WATER, sizes) >= OPEN_WATER) return { x, z, heading };

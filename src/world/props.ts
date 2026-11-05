@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import { Battlefield } from './battlefield';
 import { BIOMES, PropKind } from './biomes';
+import * as D from '../core/dmath';
 
 export type { PropKind } from './biomes';
 
@@ -41,7 +42,7 @@ export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
     const z = rng.range(b.minZ + 1, b.maxZ - 1);
     const y = field.heightAt(x, z);
     if (y < field.seaLevel + 0.3) continue;
-    if ([...field.baseSites, ...field.townSites, ...field.outpostSites].some((s) => Math.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
+    if ([...field.baseSites, ...field.townSites, ...field.outpostSites].some((s) => D.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
     // Roads stay clear, and dense forest has trees of its own (see woods.ts).
     if (field.deckAt(x, z) !== null || field.groundAt(x, z).id !== 'plain') continue;
     const slope = field.slopeAt(x, z);

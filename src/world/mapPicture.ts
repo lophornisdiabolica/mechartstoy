@@ -1,6 +1,7 @@
 import { Battlefield } from './battlefield';
 import { BIOMES } from './biomes';
 import { GROUND_IDS } from './ground';
+import * as D from '../core/dmath';
 
 /**
  * Top-down pictures of a battlefield as plain RGBA pixels, so the setup
@@ -96,7 +97,7 @@ export function mapPicture(field: Battlefield, sideColors: number[], scale = 4):
     const r = radius * px;
     for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) {
       for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
-        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+        const d = D.hypot(x + 0.5 - cx, y + 0.5 - cy);
         if (d <= r - 1.5) blend(x, y, color, alpha);
         else if (d <= r) blend(x, y, 0x1a1d24, 0.9);
       }

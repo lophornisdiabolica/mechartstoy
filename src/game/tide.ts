@@ -1,6 +1,7 @@
 import { System } from '../core/ecs';
 import { SimContext } from './context';
 import { MAP_SIZES, rampFor } from './settings';
+import * as D from '../core/dmath';
 
 /**
  * The tide of battle. Each side alternates between building up (defending,
@@ -76,7 +77,7 @@ const TIDE_FLOOR = 0.1;
 /** Production multiplier for a side at a given time, around 1. `level` is the tide ramp's level. */
 export function tide(time: number, phase: number, t: TideSettings = DEFAULT_TIDE, level = 0): number {
   const strength = t.tideStrength * (1 + level) * Math.min(1, time / (t.tidePeriod * TIDE_FADE_IN));
-  return Math.max(TIDE_FLOOR, 1 + strength * Math.sin((time / t.tidePeriod + phase) * Math.PI * 2));
+  return Math.max(TIDE_FLOOR, 1 + strength * D.sin((time / t.tidePeriod + phase) * Math.PI * 2));
 }
 
 /**

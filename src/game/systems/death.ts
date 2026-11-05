@@ -22,6 +22,7 @@ import {
 } from '../components';
 import { SimContext } from '../context';
 import { applyDamage } from './projectiles';
+import * as D from '../../core/dmath';
 
 /** Seconds a wreck spends sinking into the ground before it's removed. */
 const SINK_TIME = 3;
@@ -86,7 +87,7 @@ function explode(world: World, ctx: SimContext, at: Transform, blast: { damage: 
   ctx.grid.forEachNear(at.x, at.z, blast.radius + 3, (other, d2) => {
     if (!world.has(other, Targetable) || world.req(other, Health).hp <= 0) return;
     // Aircraft overhead are out of reach, as with any ground burst.
-    const edge = Math.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), Math.max(0, world.req(other, Transform).y - at.y));
+    const edge = D.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), Math.max(0, world.req(other, Transform).y - at.y));
     if (edge > blast.radius) return;
     applyDamage(world, ctx, other, blast.damage * (1 - 0.6 * (edge / blast.radius)), killer);
   });

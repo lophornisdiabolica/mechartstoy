@@ -6,6 +6,7 @@ import { CAPTURE_RADIUS } from '../outposts';
 import { MAP_SIZES } from '../settings';
 import { STYLES } from './advice';
 import { ANTI_AIR } from './roles';
+import * as D from '../../core/dmath';
 
 /*
  * Task forces (Commander step 2): between attacks, a side can send a few
@@ -203,7 +204,7 @@ export class TaskForces {
       if (ours && (o.claimant < 0 || !ctx.sides.hostile(side, o.claimant))) continue;
       const need = Math.max(LEAST_FORCE, enemyNear(world, ctx, side, o.x, o.z) * TAKE_MARGIN);
       if (need > budget) continue;
-      const cost = need + Math.hypot(o.x - home.x, o.z - home.z) * DISTANCE_COST * distanceWeight;
+      const cost = need + D.hypot(o.x - home.x, o.z - home.z) * DISTANCE_COST * distanceWeight;
       if (!best || cost < best.cost) best = { outpost: o.index, kind: ours ? 'hold' : 'take', need, cost };
     }
     if (!best) return;
@@ -211,7 +212,7 @@ export class TaskForces {
     const o = ctx.outposts[best.outpost];
     const air = ctx.sides.enemiesOf(side).reduce((sum, g) => sum + ctx.commander.strength.near(ctx.commander.strength.air, g, o.x, o.z, DEFENCE_RADIUS), 0) > 0;
     const first = (s: SquadInfo) => (air && s.flak ? 0 : 1);
-    free.sort((a, b) => first(a[1]) - first(b[1]) || Math.hypot(a[1].x - o.x, a[1].z - o.z) - Math.hypot(b[1].x - o.x, b[1].z - o.z) || a[0] - b[0]);
+    free.sort((a, b) => first(a[1]) - first(b[1]) || D.hypot(a[1].x - o.x, a[1].z - o.z) - D.hypot(b[1].x - o.x, b[1].z - o.z) || a[0] - b[0]);
     const picked: number[] = [];
     let strength = 0;
     let x = 0;

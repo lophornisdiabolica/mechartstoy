@@ -1,5 +1,6 @@
 import { Battlefield, STREET_WIDTH } from './battlefield';
 import { Heap } from './waterways';
+import * as D from '../core/dmath';
 
 /**
  * Roads between towns. Each town's main street is paved when the town is
@@ -25,8 +26,8 @@ export function connectTowns(field: Battlefield): number {
   if (towns.length < 2) return 0;
   // Each town's street ends.
   const ends = towns.map((t) => {
-    const ux = Math.cos(t.angle) * t.radius;
-    const uz = Math.sin(t.angle) * t.radius;
+    const ux = D.cos(t.angle) * t.radius;
+    const uz = D.sin(t.angle) * t.radius;
     return [
       { x: t.x - ux, z: t.z - uz },
       { x: t.x + ux, z: t.z + uz },
@@ -42,7 +43,7 @@ export function connectTowns(field: Battlefield): number {
       for (const l of linked) {
         for (const a of ends[l]) {
           for (const b of ends[t]) {
-            const d = Math.hypot(a.x - b.x, a.z - b.z);
+            const d = D.hypot(a.x - b.x, a.z - b.z);
             if (!best || d < best.d) best = { from: a, to: b, town: t, d };
           }
         }
@@ -81,10 +82,10 @@ export function planRoad(field: Battlefield, from: Point, to: Point): Point[] | 
     const z = cz((k - i) / cols);
     if (!field.contains(x, z, 2)) return true;
     if (field.isWater(x, z) && field.deckAt(x, z) === null) return true;
-    if (field.baseSites.some((b) => Math.hypot(b.x - x, b.z - z) < b.radius + 2)) return true;
+    if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + 2)) return true;
     // Into a town only near the street ends it's heading for or leaving.
     for (const t of field.townSites) {
-      if (Math.hypot(t.x - x, t.z - z) < t.radius - 0.5 && Math.hypot(from.x - x, from.z - z) > 2.5 && Math.hypot(to.x - x, to.z - z) > 2.5) return true;
+      if (D.hypot(t.x - x, t.z - z) < t.radius - 0.5 && D.hypot(from.x - x, from.z - z) > 2.5 && D.hypot(to.x - x, to.z - z) > 2.5) return true;
     }
     return false;
   };
@@ -102,7 +103,7 @@ export function planRoad(field: Battlefield, from: Point, to: Point): Point[] | 
   const closed = new Uint8Array(n);
   const h = (k: number) => {
     const i = k % cols;
-    return Math.hypot(i - ti, (k - i) / cols - tj) * ON_ROAD;
+    return D.hypot(i - ti, (k - i) / cols - tj) * ON_ROAD;
   };
   g[start] = 0;
   f[start] = h(start);
@@ -125,7 +126,7 @@ export function planRoad(field: Battlefield, from: Point, to: Point): Point[] | 
         if (closed[nk] || blocked(nk)) continue;
         // No cutting corners past blocked cells.
         if (di && dj && (blocked(j * cols + ni) || blocked(nj * cols + i))) continue;
-        const ng = g[k] + Math.hypot(di, dj) * stepCost(nk);
+        const ng = g[k] + D.hypot(di, dj) * stepCost(nk);
         if (ng < g[nk]) {
           g[nk] = ng;
           f[nk] = ng + h(nk);

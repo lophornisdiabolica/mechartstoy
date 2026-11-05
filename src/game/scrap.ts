@@ -1,6 +1,7 @@
 import { System } from '../core/ecs';
 import { SimContext } from './context';
 import { groundCode } from '../world/ground';
+import * as D from '../core/dmath';
 
 /**
  * Scrap: where vehicles are wrecked, the wreckage piles up, and once enough
@@ -51,7 +52,7 @@ export function scrapSystem(ctx: SimContext): System {
       const [i1, j1] = field.cellAt(ev.x + REACH, ev.z + REACH);
       for (let j = j0; j <= j1; j++) {
         for (let i = i0; i <= i1; i++) {
-          const d = Math.hypot(field.bounds.minX + (i + 0.5) * cellSize - ev.x, field.bounds.minZ + (j + 0.5) * cellSize - ev.z);
+          const d = D.hypot(field.bounds.minX + (i + 0.5) * cellSize - ev.x, field.bounds.minZ + (j + 0.5) * cellSize - ev.z);
           if (d <= REACH) pile(j * cols + i, w * (1 - 0.7 * (d / REACH)));
         }
       }
@@ -65,7 +66,7 @@ export function scrapSystem(ctx: SimContext): System {
       acc += dt;
       if (acc < TICK) return;
       time += acc;
-      const fade = Math.exp(-acc / FADE);
+      const fade = D.exp(-acc / FADE);
       acc = 0;
       // New scrap, flattening any trees there.
       if (pending.size > 0) {

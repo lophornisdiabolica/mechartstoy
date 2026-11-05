@@ -8,6 +8,7 @@ import { outpostsHeldBy } from '../game/outposts';
 import { applyParams, settingsToParams, UNIT_STATS } from '../ui/settingsUrl';
 import { fightingStrength } from '../game/offensive';
 import { UNIT_DEFS } from '../game/units';
+import * as D from '../core/dmath';
 
 /**
  * Headless battles for balance checks (`npm run sims`, see scripts/sims.mjs).
@@ -519,8 +520,8 @@ export function finiteField(q: number): Field | null {
     if (n % p !== 0) return null;
     m++;
   }
-  const digits = (n: number) => Array.from({ length: m }, (_, i) => Math.floor(n / p ** i) % p);
-  const number = (d: number[]) => d.reduce((s, x, i) => s + x * p ** i, 0);
+  const digits = (n: number) => Array.from({ length: m }, (_, i) => Math.floor(n / D.pow(p, i)) % p);
+  const number = (d: number[]) => d.reduce((s, x, i) => s + x * D.pow(p, i), 0);
   const add = (a: number, b: number) => number(digits(a).map((x, i) => (x + digits(b)[i]) % p));
   // Multiply as polynomials, then reduce with the monic irreducible x^m = -(lower terms).
   const mulBy = (low: number[]) => (a: number, b: number) => {
@@ -570,16 +571,16 @@ export function orthogonalArray(levels: number, factors: number): number[][] {
   const field = finiteField(p);
   if (!field) throw new Error(`orthogonalArray needs a prime power number of levels, not ${p}`);
   let k = 2;
-  while ((p ** k - 1) / (p - 1) < factors) k++;
-  const vec = (n: number) => Array.from({ length: k }, (_, i) => Math.floor(n / p ** i) % p);
+  while ((D.pow(p, k) - 1) / (p - 1) < factors) k++;
+  const vec = (n: number) => Array.from({ length: k }, (_, i) => Math.floor(n / D.pow(p, i)) % p);
   const columns: number[][] = [];
-  for (let n = 1; n < p ** k && columns.length < factors; n++) {
+  for (let n = 1; n < D.pow(p, k) && columns.length < factors; n++) {
     const v = vec(n);
     let lead = 0;
     for (const x of v) if (x !== 0) lead = x;
     if (lead === 1) columns.push(v);
   }
-  return Array.from({ length: p ** k }, (_, r) => {
+  return Array.from({ length: D.pow(p, k) }, (_, r) => {
     const row = vec(r);
     return columns.map((c) => c.reduce((s, x, i) => field.add(s, field.mul(x, row[i])), 0));
   });
@@ -697,7 +698,7 @@ export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
       for (const x of r.sides) if (x.doctrine === doctrine && typeof x.share === 'number') edges.push(x.share * teams);
     }
     const edge = edges.length ? mean(edges) : NaN;
-    const sd = edges.length > 1 ? Math.sqrt(edges.reduce((a, x) => a + (x - edge) ** 2, 0) / (edges.length - 1)) : NaN;
+    const sd = edges.length > 1 ? Math.sqrt(edges.reduce((a, x) => a + D.sq(x - edge), 0) / (edges.length - 1)) : NaN;
     return { doctrine, played, won, rate, margin: m, score: par ? won / par : 0, scoreMargin: m / share, edge, edgeMargin: (1.96 * sd) / Math.sqrt(Math.max(1, edges.length)) };
   });
 }
@@ -954,8 +955,8 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
         rows.map(([a, b]) => {
           const change = b.rate - a.rate;
           // Bigger than the two margins together: probably a real change, not noise.
-          const real = Math.abs(change) > Math.hypot(a.margin, b.margin);
-          const edgeReal = Number.isFinite(a.edge) && Number.isFinite(b.edge) && Math.abs(b.edge - a.edge) > Math.hypot(a.edgeMargin, b.edgeMargin);
+          const real = Math.abs(change) > D.hypot(a.margin, b.margin);
+          const edgeReal = Number.isFinite(a.edge) && Number.isFinite(b.edge) && Math.abs(b.edge - a.edge) > D.hypot(a.edgeMargin, b.edgeMargin);
           return [
             a.doctrine,
             a.played ? `${pct(a.rate)} ${pm(a.margin)}` : '-',
@@ -991,8 +992,8 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
     // Units that barely fight (engineers, say) swing by huge percentages on next to nothing.
     .filter(({ a, b }) => Math.max((a.dealt * 60) / a.alive, (b.dealt * 60) / b.alive) >= MOVED_FLOOR)
     .map(({ a, b }) => ({ a, b, ratio: b.dealt / b.alive / (a.dealt / a.alive) }))
-    .filter((x) => Math.abs(Math.log(x.ratio)) > Math.log(1.2))
-    .sort((x, y) => Math.abs(Math.log(y.ratio)) - Math.abs(Math.log(x.ratio)))
+    .filter((x) => Math.abs(D.log(x.ratio)) > D.log(1.2))
+    .sort((x, y) => Math.abs(D.log(y.ratio)) - Math.abs(D.log(x.ratio)))
     .slice(0, 20);
   if (moved.length > 0) {
     out.push(

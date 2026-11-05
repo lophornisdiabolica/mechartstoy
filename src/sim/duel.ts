@@ -7,6 +7,7 @@ import { spawnSpot } from '../game/systems/production';
 import { UNIT_DEFS, UnitId } from '../game/units';
 import { applyParams } from '../ui/settingsUrl';
 import { margin } from './simulate';
+import * as D from '../core/dmath';
 
 /**
  * Duels: two groups of units set loose on each other on an empty map, with
@@ -89,7 +90,7 @@ export function runDuel(duel: { a: Group; b: Group; label: string }, round: numb
   const angle = rng.range(0, Math.PI * 2);
   const at = (side: number) => {
     const d = (side === 0 ? -gap : gap) / 2;
-    return { x: Math.cos(angle) * d, z: Math.sin(angle) * d };
+    return { x: D.cos(angle) * d, z: D.sin(angle) * d };
   };
   const units: number[] = [0, 0];
   [duel.a, duel.b].forEach((group, side) => {
@@ -103,8 +104,8 @@ export function runDuel(duel: { a: Group; b: Group; label: string }, round: numb
         const across = ((i % 6) - 2.5) * 2.2 + rng.range(-0.5, 0.5);
         const back = Math.floor(i / 6) * 2.4 + rng.range(-0.5, 0.5);
         const away = side === 0 ? -1 : 1;
-        const x = home.x + Math.cos(angle) * back * away - Math.sin(angle) * across;
-        const z = home.z + Math.sin(angle) * back * away + Math.cos(angle) * across;
+        const x = home.x + D.cos(angle) * back * away - D.sin(angle) * across;
+        const z = home.z + D.sin(angle) * back * away + D.cos(angle) * across;
         const spot = spawnSpot(ctx, x, z, def.radius, def.move);
         if (!spot) continue;
         spawnUnit(world, ctx, def, side, spot.x, spot.z, squad);

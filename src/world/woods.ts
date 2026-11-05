@@ -2,6 +2,7 @@ import { createNoise2D } from 'simplex-noise';
 import { Rng } from '../core/rng';
 import type { Battlefield } from './battlefield';
 import { groundCode } from './ground';
+import * as D from '../core/dmath';
 
 /**
  * Dense forest: patches of big trees, on dense-forest ground (see ground.ts,
@@ -104,7 +105,7 @@ export class Woods {
   damage(x: number, z: number, y: number, radius: number, amount: number, fallFrom: { x: number; z: number } | null = null): void {
     for (const t of [...this.standingNear(x, z, radius)]) {
       const tree = this.trees[t];
-      const d = Math.hypot(tree.x - x, tree.z - z) - TREE_RADIUS;
+      const d = D.hypot(tree.x - x, tree.z - z) - TREE_RADIUS;
       if (d > radius || y > tree.y + TREE_HEIGHT * tree.size + 0.5) continue;
       tree.hp -= amount * (1 - 0.6 * Math.max(0, d) / Math.max(0.01, radius));
       if (tree.hp <= 0) this.fell(t, fallFrom ?? { x, z });
@@ -116,7 +117,7 @@ export class Woods {
     const tree = this.trees[t];
     if (tree.fell !== null) return;
     tree.hp = 0;
-    const away = Math.atan2(tree.z - from.z, tree.x - from.x);
+    const away = D.atan2(tree.z - from.z, tree.x - from.x);
     tree.fell = Number.isFinite(away) ? away : 0;
     for (const l of [...this.listeners]) l(t);
     // A cell with no trees left standing is open ground again.
@@ -145,7 +146,7 @@ export class Woods {
     let n = 0;
     for (const t of [...this.standingNear(x, z, radius)]) {
       const tree = this.trees[t];
-      if (Math.hypot(tree.x - x, tree.z - z) > radius + TREE_RADIUS) continue;
+      if (D.hypot(tree.x - x, tree.z - z) > radius + TREE_RADIUS) continue;
       this.fell(t, from);
       n++;
     }
@@ -208,9 +209,9 @@ export function growWoods(field: Battlefield, rng: Rng, amount: number): void {
       if (n < threshold) continue;
       if (field.heightAt(x, z) < field.seaLevel + 0.3 || field.slopeAt(x, z) > 0.6) continue;
       if (field.roadCell[j * cols + i] || field.nearBridge(x, z, 3)) continue;
-      if (field.baseSites.some((s) => Math.hypot(s.x - x, s.z - z) < s.radius + 6)) continue;
-      if (field.townSites.some((s) => Math.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
-      if (field.outpostSites.some((s) => Math.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
+      if (field.baseSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 6)) continue;
+      if (field.townSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
+      if (field.outpostSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
       cells.push(j * cols + i);
       for (let k = 0; k < PER_CELL; k++) {
         // Spread round the cell, kept off its edges a little.

@@ -4,6 +4,7 @@ import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
 import { BuildingDef } from '../buildings';
+import * as D from '../../core/dmath';
 
 /*
  * Engineers (Commander step 6). Every doctrine's HQ trains a few engineers
@@ -128,7 +129,7 @@ export class Engineers {
         if (spots.length === 0) break;
         const t = world.req(e, Transform);
         let best = 0;
-        for (let i = 1; i < spots.length; i++) if (Math.hypot(spots[i].standX - t.x, spots[i].standZ - t.z) < Math.hypot(spots[best].standX - t.x, spots[best].standZ - t.z)) best = i;
+        for (let i = 1; i < spots.length; i++) if (D.hypot(spots[i].standX - t.x, spots[i].standZ - t.z) < D.hypot(spots[best].standX - t.x, spots[best].standZ - t.z)) best = i;
         this.jobs.set(e, spots[best]);
         this.sideOf.set(e, side);
         spots.splice(best, 1);
@@ -143,7 +144,7 @@ export class Engineers {
     const fronts = sides
       .enemiesOf(side)
       .filter((g) => !sides.eliminated[g])
-      .sort((a, b) => Math.hypot(field.baseSites[a].x - home.x, field.baseSites[a].z - home.z) - Math.hypot(field.baseSites[b].x - home.x, field.baseSites[b].z - home.z) || a - b)
+      .sort((a, b) => D.hypot(field.baseSites[a].x - home.x, field.baseSites[a].z - home.z) - D.hypot(field.baseSites[b].x - home.x, field.baseSites[b].z - home.z) || a - b)
       .slice(0, FRONTS);
     const nav = ctx.navs.land;
     const out: BuildJob[] = [];
@@ -154,11 +155,11 @@ export class Engineers {
     for (const enemy of fronts) {
       const rally = ctx.lanes.rally(side, enemy, 0);
       const base = field.baseSites[enemy];
-      const d = Math.max(1, Math.hypot(base.x - rally.x, base.z - rally.z));
+      const d = Math.max(1, D.hypot(base.x - rally.x, base.z - rally.z));
       const dx = (base.x - rally.x) / d;
       const dz = (base.z - rally.z) / d;
       // Forward is (cos h, -sin h) (see Transform.heading).
-      const heading = Math.atan2(-dz, dx);
+      const heading = D.atan2(-dz, dx);
       // A field tower just behind the middle of the line, then the wall segments.
       add(ctx.buildings.fieldTower, rally.x + dx * (AHEAD - TOWER_BACK), rally.z + dz * (AHEAD - TOWER_BACK), heading, dx, dz, STAND_BACK);
       for (let k = 0; k < SEGMENTS; k++) {
@@ -190,7 +191,7 @@ export class Engineers {
         continue;
       }
       const t = world.req(e, Transform);
-      if (Math.hypot(job.standX - t.x, job.standZ - t.z) > REACH) continue;
+      if (D.hypot(job.standX - t.x, job.standZ - t.z) > REACH) continue;
       this.jobs.delete(e);
       const tower = job.def.id === 'fieldTower';
       if ((tower ? this.towers[side] >= TOWERS_MOST : this.walls[side] >= WALLS_MOST) || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
@@ -214,7 +215,7 @@ export class Engineers {
         this.trainAt[side] = world.time + TRAIN_EVERY;
         const t = world.req(hq, Transform);
         const r = def.radius + 1.2;
-        const spot = spawnSpot(ctx, t.x + Math.cos(t.heading) * r, t.z - Math.sin(t.heading) * r, ctx.units.engineer.radius, 'foot');
+        const spot = spawnSpot(ctx, t.x + D.cos(t.heading) * r, t.z - D.sin(t.heading) * r, ctx.units.engineer.radius, 'foot');
         if (!spot) continue;
         spawnUnit(world, ctx, ctx.units.engineer, side, spot.x, spot.z);
         this.engineers[side]++;

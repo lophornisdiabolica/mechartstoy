@@ -9,6 +9,7 @@ import { recordSquad } from '../territory';
 import { UnitDef, UnitId } from '../units';
 import { MoveClass } from '../../world/moveClasses';
 import { adviceFactor, STYLES } from '../commander/advice';
+import * as D from '../../core/dmath';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius and
@@ -23,8 +24,8 @@ export function spawnSpot(ctx: SimContext, x: number, z: number, radius: number,
   for (let ring = 1; ring <= (naval ? 8 : 4); ring++) {
     const d = ring * 1.5;
     for (let a = 0; a < 8; a++) {
-      const px = x + Math.cos((a / 8) * Math.PI * 2) * d;
-      const pz = z + Math.sin((a / 8) * Math.PI * 2) * d;
+      const px = x + D.cos((a / 8) * Math.PI * 2) * d;
+      const pz = z + D.sin((a / 8) * Math.PI * 2) * d;
       if (ok(px, pz)) return { x: px, z: pz };
     }
   }
@@ -124,8 +125,8 @@ export function productionSystem(ctx: SimContext): System {
         // Units roll out of the front door.
         const t = world.req(e, Transform);
         const r = world.req(e, Building).def.radius + 1.2;
-        const doorX = t.x + Math.cos(t.heading) * r;
-        const doorZ = t.z - Math.sin(t.heading) * r;
+        const doorX = t.x + D.cos(t.heading) * r;
+        const doorZ = t.z - D.sin(t.heading) * r;
         // A batch is a squad: it takes the same lane.
         const squad = newSquad(ctx);
         const lineUp = squadLineUp(entry);

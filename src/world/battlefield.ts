@@ -5,6 +5,7 @@ import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } fr
 import { connectTowns } from './roads';
 import { growWoods, Woods } from './woods';
 import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
+import * as D from '../core/dmath';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -99,8 +100,8 @@ export function seatPoint(k: number, n: number, width: number, depth: number, ba
   const rz = depth / 2 - baseRadius - 6;
   const angle = Math.PI / 2 + Math.PI / n + (2 * Math.PI * k) / n + jitter * (Math.PI / n) * 0.2;
   // A squircle rather than an ellipse, so corner seats sit out in the corners.
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
+  const c = D.cos(angle);
+  const s = D.sin(angle);
   return { x: rx * Math.sign(c) * Math.sqrt(Math.abs(c)), z: rz * Math.sign(s) * Math.sqrt(Math.abs(s)) };
 }
 
@@ -110,7 +111,7 @@ export function seatsFit(n: number, width: number, depth: number, baseRadius: nu
     for (const [ja, jb] of [[1, -1], [0, 0]]) {
       const a = seatPoint(k, n, width, depth, baseRadius, ja);
       const b = seatPoint((k + 1) % n, n, width, depth, baseRadius, jb);
-      if (n > 1 && Math.hypot(a.x - b.x, a.z - b.z) < baseRadius * 2 + BASE_GAP) return false;
+      if (n > 1 && D.hypot(a.x - b.x, a.z - b.z) < baseRadius * 2 + BASE_GAP) return false;
     }
   }
   return true;
@@ -345,7 +346,7 @@ export class Battlefield {
         const cx = this.bounds.minX + (i + 0.5) * cellSize;
         const cz = this.bounds.minZ + (j + 0.5) * cellSize;
         const k = j * cols + i;
-        if (this.ground[k] === code || Math.hypot(cx - x, cz - z) > radius) continue;
+        if (this.ground[k] === code || D.hypot(cx - x, cz - z) > radius) continue;
         if (where && !where(GROUND_IDS[this.ground[k]], cx, cz)) continue;
         this.ground[k] = code;
         n++;
@@ -384,7 +385,7 @@ export class Battlefield {
     let n = 0;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
-        const d = Math.hypot(this.vertexX(i) - x, this.vertexZ(j) - z);
+        const d = D.hypot(this.vertexX(i) - x, this.vertexZ(j) - z);
         if (d > radius) continue;
         const k = j * (cols + 1) + i;
         const h = shape(this.heights[k], d);
@@ -404,7 +405,7 @@ export class Battlefield {
     this.bridges.push(bridge);
     const { cols, cellSize } = this.config;
     const pad = bridge.width / 2;
-    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, Math.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + pad);
+    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + pad);
     for (let j = area.j0; j <= area.j1; j++) {
       for (let i = area.i0; i <= area.i1; i++) {
         const cx = this.bounds.minX + (i + 0.5) * cellSize;
@@ -419,7 +420,7 @@ export class Battlefield {
   private deckOf(b: Bridge, x: number, z: number): number | null {
     const dx = b.bx - b.ax;
     const dz = b.bz - b.az;
-    const length = Math.hypot(dx, dz);
+    const length = D.hypot(dx, dz);
     const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
     if (t < 0 || t > 1) return null;
     const off = Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length;
@@ -528,7 +529,7 @@ export class Battlefield {
     const d = this.config.cellSize * 0.5;
     const dx = this.heightAt(x + d, z) - this.heightAt(x - d, z);
     const dz = this.heightAt(x, z + d) - this.heightAt(x, z - d);
-    return Math.hypot(dx, dz) / (2 * d);
+    return D.hypot(dx, dz) / (2 * d);
   }
 
   contains(x: number, z: number, margin = 0): boolean {
@@ -551,7 +552,7 @@ export function distanceToSegment(x: number, z: number, ax: number, az: number, 
   const dz = bz - az;
   const l2 = dx * dx + dz * dz;
   const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
-  return Math.hypot(x - ax - dx * t, z - az - dz * t);
+  return D.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -600,7 +601,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       const z = -depth / 2 + j * cellSize;
       const rolling = fbm(x, z) * 0.5 + 0.5;
       const ridge = 1 - Math.abs(ridgeNoise(x / 55, z / 55));
-      let h = Math.pow(rolling, 1.5) * maxHeight * 0.75 + Math.pow(ridge, 4) * maxHeight * 0.35;
+      let h = D.pow(rolling, 1.5) * maxHeight * 0.75 + D.pow(ridge, 4) * maxHeight * 0.35;
       // Taper the outermost cells down a little so the board reads as a diorama.
       const edge = Math.min(i, cols - i, j, rows - j);
       h *= 0.55 + 0.45 * smoothstep(0, 4, edge);
@@ -614,7 +615,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   const flatten = (cx: number, cz: number, radius: number, height: number) => {
     for (let j = 0; j <= rows; j++) {
       for (let i = 0; i <= cols; i++) {
-        const d = Math.hypot(field.vertexX(i) - cx, field.vertexZ(j) - cz);
+        const d = D.hypot(field.vertexX(i) - cx, field.vertexZ(j) - cz);
         const t = 1 - smoothstep(radius * 0.8, radius * 1.35, d);
         if (t <= 0) continue;
         const k = j * (cols + 1) + i;
@@ -639,14 +640,14 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   const townSpot = (x: number, z: number) => {
     let score = 0;
     for (let a = 0; a < 8; a++) {
-      const px = x + Math.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
-      const pz = z + Math.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
+      const px = x + D.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
+      const pz = z + D.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
       score += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0) + (field.deckAt(px, pz) !== null ? 50 : 0);
     }
     // Levelling the town's ground would bury a bridge's end.
     if (field.nearBridge(x, z, townRadius * 1.35)) score += 50;
     // With bases along the long edges too, keep the town off their pads.
-    for (const site of baseSites) if (Math.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
+    for (const site of baseSites) if (D.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
     return score;
   };
   let best: { x: number; z: number; score: number } | null = null;
@@ -681,10 +682,10 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     for (let n = 0; n < 60; n++) {
       const x = townRng.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
       const z = townRng.range(-depth / 2 + townRadius + 3, depth / 2 - townRadius - 3);
-      const gap = townSites.reduce((m, s) => Math.min(m, Math.hypot(s.x - x, s.z - z) - s.radius - townRadius), Infinity);
+      const gap = townSites.reduce((m, s) => Math.min(m, D.hypot(s.x - x, s.z - z) - s.radius - townRadius), Infinity);
       if (gap < 6) continue;
       // Contested ground: about as far from the nearest base as the next.
-      const near = baseSites.map((b) => Math.hypot(b.x - x, b.z - z)).sort((a, b) => a - b);
+      const near = baseSites.map((b) => D.hypot(b.x - x, b.z - z)).sort((a, b) => a - b);
       const contest = near.length > 1 ? (near[1] - near[0]) / (near[0] + 1) : 0;
       const score = townSpot(x, z) * 2 + contest * 20 - Math.min(gap, 40) * 0.3;
       if (!pick || score < pick.score) pick = { x, z, score };
@@ -696,8 +697,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   }
   // Each town's main street is paved, and roads join the towns.
   for (const t of townSites) {
-    const ux = Math.cos(t.angle) * t.radius;
-    const uz = Math.sin(t.angle) * t.radius;
+    const ux = D.cos(t.angle) * t.radius;
+    const uz = D.sin(t.angle) * t.radius;
     field.addRoad([{ x: t.x - ux, z: t.z - uz }, { x: t.x + ux, z: t.z + uz }], STREET_WIDTH);
   }
   connectTowns(field);
@@ -759,12 +760,12 @@ function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number
     const x = rng.range(field.bounds.minX + r + 4, field.bounds.maxX - r - 4);
     const z = rng.range(field.bounds.minZ + r + 4, field.bounds.maxZ - r - 4);
     if (!reach[index(x, z)] || field.nearBridge(x, z, r * 1.35)) continue;
-    const near = field.baseSites.map((b) => Math.hypot(b.x - x, b.z - z) - b.radius).sort((a, b) => a - b);
+    const near = field.baseSites.map((b) => D.hypot(b.x - x, b.z - z) - b.radius).sort((a, b) => a - b);
     if (near[0] < r + 8) continue;
     let flat = 0;
     for (let a = 0; a < 8; a++) {
-      const px = x + Math.cos((a / 8) * Math.PI * 2) * r * 0.8;
-      const pz = z + Math.sin((a / 8) * Math.PI * 2) * r * 0.8;
+      const px = x + D.cos((a / 8) * Math.PI * 2) * r * 0.8;
+      const pz = z + D.sin((a / 8) * Math.PI * 2) * r * 0.8;
       flat += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
     }
     // 0 when exactly between two bases, growing as one base gets the closer claim.
@@ -780,7 +781,7 @@ function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number
     let best: (typeof candidates)[number] | null = null;
     let bestScore = -Infinity;
     for (const c of candidates) {
-      const gap = placed.reduce((m, p) => Math.min(m, Math.hypot(p.x - c.x, p.z - c.z) - p.r - r), cap);
+      const gap = placed.reduce((m, p) => Math.min(m, D.hypot(p.x - c.x, p.z - c.z) - p.r - r), cap);
       if (gap < 6) continue;
       // As far from the town and other outposts as possible (so they spread over the
       // map), on contested ground, and flat.

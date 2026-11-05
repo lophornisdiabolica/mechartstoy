@@ -1,5 +1,6 @@
 import { Battlefield } from '../../world/battlefield';
 import { NavGrid } from '../../world/navGrid';
+import * as D from '../../core/dmath';
 
 /**
  * Places that matter to a commander: each base and outpost, the towns, the
@@ -53,7 +54,7 @@ function reach(nav: NavGrid, x: number, z: number, dx: number, dz: number, max: 
 /** Keep places at least SAME_PLACE apart, preferring earlier ones in `found`. */
 function spread(found: Place[]): Place[] {
   const kept: Place[] = [];
-  for (const p of found) if (kept.every((k) => Math.hypot(k.x - p.x, k.z - p.z) >= SAME_PLACE)) kept.push(p);
+  for (const p of found) if (kept.every((k) => D.hypot(k.x - p.x, k.z - p.z) >= SAME_PLACE)) kept.push(p);
   return kept;
 }
 
@@ -65,7 +66,7 @@ export function findPlaces(field: Battlefield, nav: NavGrid): Place[] {
   for (const t of field.townSites) places.push({ kind: 'town', x: t.x, z: t.z, id: -1, size: t.radius });
   for (const b of field.bridges) places.push({ kind: 'bridge', x: (b.ax + b.bx) / 2, z: (b.az + b.bz) / 2, id: -1, size: b.width });
 
-  const nearBase = (x: number, z: number) => field.baseSites.some((b) => Math.hypot(b.x - x, b.z - z) < BASE_CLEAR);
+  const nearBase = (x: number, z: number) => field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < BASE_CLEAR);
   const { minX, maxX, minZ, maxZ } = field.bounds;
 
   // Crossings: passable points where some direction across is narrow and the perpendicular way through is long.
@@ -100,7 +101,7 @@ export function findPlaces(field: Battlefield, nav: NavGrid): Place[] {
       let rise = Infinity;
       for (let a = 0; a < 8; a++) {
         const angle = (a / 8) * Math.PI * 2;
-        rise = Math.min(rise, h - field.heightAt(x + Math.cos(angle) * HIGH_STEP, z + Math.sin(angle) * HIGH_STEP));
+        rise = Math.min(rise, h - field.heightAt(x + D.cos(angle) * HIGH_STEP, z + D.sin(angle) * HIGH_STEP));
       }
       if (rise >= HIGH_RISE) hills.push({ kind: 'high', x, z, id: -1, size: rise });
     }

@@ -6,6 +6,7 @@ import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
 import { defaultDoctrine, DoctrineId } from './doctrines';
 import { defaultVariety, VarietySettings } from './variety';
+import * as D from '../core/dmath';
 
 /**
  * Everything a player can tune before a battle, in one plain object. The setup
@@ -386,7 +387,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     const depth = Math.round(rows * scale) * cellSize;
     if (!places) return seatsFit(n, width, depth, baseRadius);
     // Placed by hand: every pair of bases has room between them.
-    if (placed.bases) return places.every((a, i) => places.every((b, j) => j <= i || Math.hypot(((a.x - b.x) * width) / 2, ((a.z - b.z) * depth) / 2) >= baseRadius * 2 + 4));
+    if (placed.bases) return places.every((a, i) => places.every((b, j) => j <= i || D.hypot(((a.x - b.x) * width) / 2, ((a.z - b.z) * depth) / 2) >= baseRadius * 2 + 4));
     const perSide = Math.max(...[-1, 1].map((sign) => places.filter((p) => Math.sign(p.x) === sign).length));
     return perSide <= 1 || (1.2 * depth) / 2 / (perSide - 1) >= baseRadius * 2 + 8;
   };
