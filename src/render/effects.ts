@@ -45,6 +45,8 @@ class ParticlePool {
     material: THREE.Material,
     private readonly capacity: number,
     private readonly field: Battlefield,
+    /** Tumble each particle (blobs, debris); off for shapes that must stay level, like shock rings. */
+    private readonly tumble = true,
   ) {
     this.mesh = new THREE.InstancedMesh(geometry, material, capacity);
     this.mesh.count = 0;
@@ -108,7 +110,7 @@ class ParticlePool {
       const size = this.data[d + 2] + (this.data[d + 3] - this.data[d + 2]) * k;
       this.dummy.position.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2]);
       this.dummy.scale.setScalar(Math.max(0.0001, size));
-      this.dummy.rotation.set(i * 1.3, i * 0.7, 0);
+      if (this.tumble) this.dummy.rotation.set(i * 1.3, i * 0.7, 0);
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(i, this.dummy.matrix);
       const c = d;
@@ -148,21 +150,31 @@ interface Burner {
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
+/** Splash from which a shell's landing gets the full blast (fireball, shock ring, embers): howitzers, siege mortars, bombs, mortars, the Titan's missiles. */
+const BIG_SPLASH = 1.8;
+/** Size from which a unit going up gets the full blast too (heavy tanks, walkers, super units). */
+const BIG_WRECK = 1.6;
+
 export class Effects {
   readonly root = new THREE.Group();
   private readonly flashes: ParticlePool;
   private readonly smoke: ParticlePool;
   private readonly debris: ParticlePool;
+  /** Flat rings that race out along the ground from big blasts. */
+  private readonly shocks: ParticlePool;
   private readonly burners: Burner[] = [];
   private time = 0;
 
-  constructor(events: EventBus<GameEvents>, field: Battlefield) {
+  constructor(
+    events: EventBus<GameEvents>,
+    private readonly field: Battlefield,
+  ) {
     this.root.name = 'effects';
     const blob = new THREE.IcosahedronGeometry(1, 0);
     this.flashes = new ParticlePool(
       blob,
       new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }),
-      600,
+      1200,
       field,
     );
     this.smoke = new ParticlePool(
@@ -173,7 +185,14 @@ export class Effects {
     );
     this.debris = new ParticlePool(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ flatShading: true }), 600, field);
     this.debris.mesh.castShadow = true;
-    this.root.add(this.smoke.mesh, this.debris.mesh, this.flashes.mesh);
+    this.shocks = new ParticlePool(
+      new THREE.RingGeometry(0.75, 1, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, side: THREE.DoubleSide }),
+      80,
+      field,
+      false,
+    );
+    this.root.add(this.smoke.mesh, this.debris.mesh, this.shocks.mesh, this.flashes.mesh);
 
     events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.kind));
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
@@ -218,6 +237,7 @@ export class Effects {
       }
     }
     this.flashes.update(dt);
+    this.shocks.update(dt);
     this.smoke.update(dt);
     this.debris.update(dt);
   }
@@ -253,6 +273,8 @@ export class Effects {
       return;
     }
     const s = Math.max(0.8, splash);
+    // Kept a little smaller than the splash: shells land often, and units dying rarely.
+    if (splash >= BIG_SPLASH) this.blast(x, y + 0.2, z, s * 0.55);
     this.flashes.spawn({ x, y: y + 0.2, z, life: 0.25, size: 0.4 * s, endSize: 1.1 * s, color: 0xfff0c0, endColor: 0x000000 });
     for (let i = 0; i < 4; i++) {
       this.flashes.spawn({
@@ -334,8 +356,69 @@ export class Effects {
     }
   }
 
+  /**
+   * The bang of the biggest explosions, so they outshine the smoke they
+   * leave: a white-hot flash, a rolling fireball that swells, cools from
+   * yellow to deep red and lifts, a shock ring racing out along the ground,
+   * and embers arcing out and falling. `s` is about the blast's radius.
+   */
+  private blast(x: number, y: number, z: number, s: number): void {
+    // White-hot core, lasting long enough to register.
+    this.flashes.spawn({ x, y: y + 0.3 * s, z, life: 0.3, size: 0.6 * s, endSize: 1.5 * s, color: 0xfffbe8, endColor: 0x000000 });
+    // The fireball: overlapping blobs that swell, rise and cool.
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = rand(0, 0.45) * s;
+      this.flashes.spawn({
+        x: x + Math.cos(a) * r,
+        y: y + rand(0.1, 0.6) * s,
+        z: z + Math.sin(a) * r,
+        vx: Math.cos(a) * rand(0.6, 1.6) * s,
+        vy: rand(1.2, 2.6) * s,
+        vz: Math.sin(a) * rand(0.6, 1.6) * s,
+        life: rand(0.55, 0.95),
+        size: rand(0.45, 0.7) * s,
+        endSize: rand(0.9, 1.3) * s,
+        color: Math.random() < 0.5 ? 0xffd27a : 0xffa53a,
+        endColor: 0x2a0600,
+        drag: 2.5,
+      });
+    }
+    // Shock ring, hugging the ground.
+    const ground = this.groundAt(x, z, y);
+    this.shocks.spawn({ x, y: ground + 0.15, z, life: 0.32, size: 0.4 * s, endSize: 3.2 * s, color: 0xfff0c8, endColor: 0x000000 });
+    this.shocks.spawn({ x, y: ground + 0.12, z, life: 0.55, size: 0.3 * s, endSize: 2.4 * s, color: 0x9a5a20, endColor: 0x000000 });
+    // Embers thrown out in arcs.
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = rand(3, 7) * Math.sqrt(s);
+      this.flashes.spawn({
+        x,
+        y: y + 0.3 * s,
+        z,
+        vx: Math.cos(a) * v,
+        vy: rand(3, 8) * Math.sqrt(s),
+        vz: Math.sin(a) * v,
+        life: rand(0.6, 1.2),
+        size: rand(0.08, 0.14) * Math.sqrt(s),
+        endSize: 0.03,
+        color: 0xffe6a0,
+        endColor: 0x401000,
+        gravity: 14,
+        drag: 0.6,
+      });
+    }
+  }
+
+  /** Ground height near (x, z); `fallback` if off the map. */
+  private groundAt(x: number, z: number, fallback: number): number {
+    const h = this.field.surfaceAt(x, z);
+    return Number.isFinite(h) ? h : fallback;
+  }
+
   private explosion(x: number, y: number, z: number, size: number, burnTime: number): void {
     const s = Math.max(0.6, size * 1.6);
+    if (size >= BIG_WRECK) this.blast(x, y, z, size * 0.9);
     this.flashes.spawn({ x, y, z, life: 0.35, size: 0.6 * s, endSize: 1.8 * s, color: 0xfff4d0, endColor: 0x000000 });
     for (let i = 0; i < 10; i++) {
       this.flashes.spawn({
