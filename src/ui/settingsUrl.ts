@@ -3,6 +3,7 @@ import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
 import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
+import { isWeatherSetting } from '../game/weather';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
 /**
@@ -69,6 +70,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.armies.avoidance !== d.armies.avoidance) p.set('avoid', s.armies.avoidance ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
+  if (s.map.weather !== d.map.weather) p.set('wx', s.map.weather);
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
@@ -135,6 +137,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (town === '0' || town === '1') s.map.towns = Number(town);
   const biome = p.get('biome');
   if (biome && isBiome(biome)) s.map.biome = biome;
+  const wx = p.get('wx');
+  if (wx && isWeatherSetting(wx)) s.map.weather = wx;
   const layout = p.get('layout');
   if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
   const tsize = p.get('tsize');

@@ -16,6 +16,7 @@ import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
 import { TideSettings } from './tide';
 import { ProjectileKind, UnitDef, UnitId } from './units';
+import type { Weather } from './weather';
 
 /** Events systems publish for other layers (effects, audio, UI) to react to. */
 export type GameEvents = {
@@ -104,6 +105,8 @@ export interface SimContext {
   rosters: Map<number, SquadRoster>;
   /** How far the battle has escalated, per effect (see tide.escalate); 0 at the start. */
   escalation: { tide: number; siege: number };
+  /** The battle's weather over time (see weather.ts). Nothing reads it yet: it's there for rules that will. */
+  weather: Weather;
   /** Set once a conquest battle is decided. */
   outcome: Outcome | null;
 }

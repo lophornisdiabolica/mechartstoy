@@ -36,6 +36,7 @@ import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
 import { engineerSystem } from './commander/engineers';
+import { Weather } from './weather';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -73,6 +74,10 @@ export class Game {
   readonly props: Prop[];
   readonly ctx: SimContext;
   readonly settings: BattleSettings;
+  /** The battle's weather over time (see weather.ts). */
+  get weather(): Weather {
+    return this.ctx.weather;
+  }
   /** Running score for the end-of-battle summary. */
   readonly stats: BattleStats;
 
@@ -118,6 +123,7 @@ export class Game {
       rosters: new Map(),
       escalation: { tide: 0, siege: 0 },
       outcome: null,
+      weather: new Weather(seed, settings.map.weather, settings.map.biome),
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
     };
 

@@ -9,6 +9,7 @@ import { DOCTRINE_IDS, DOCTRINES, doctrineUnits, isDoctrine } from '../game/doct
 import { isStyle, STYLE_IDS, STYLES } from '../game/commander/advice';
 import { dropdown, el, hex, segmented } from './dom';
 import { Rng } from '../core/rng';
+import { WEATHER_LABELS, WEATHER_SETTINGS, WeatherSetting } from '../game/weather';
 import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, VarietyTeams } from '../game/variety';
 
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
@@ -17,6 +18,16 @@ const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   style: { label: 'Map style', title: 'Water, hills, dense forest and towns together, from one of the map styles' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
+  weather: { label: 'Weather', title: 'Clear, changing, rain, thunderstorm, snow or fog, to suit the biome' },
+};
+
+const WEATHER_TITLES: Record<WeatherSetting, string> = {
+  clear: 'Sunshine all battle',
+  changing: 'Spells of rain, storms, snow and fog that come and go, as suits the biome (no snow in the desert)',
+  rain: 'Rain all battle',
+  storm: 'Heavy rain and lightning all battle',
+  snow: 'Snowfall all battle',
+  fog: 'Fog all battle',
 };
 
 const MODE_HINTS: Record<BattleMode, string> = {
@@ -453,6 +464,16 @@ export class SetupScreen {
     row(map, 'Biome', biome.row);
     this.sync.push(() => biome.set(this.settings.map.biome));
     map.append(el('p', { class: 'hint' }, 'The look of the land, its trees and its towns. It doesn’t change how anything moves.'));
+    const weather = segmented<WeatherSetting>(
+      WEATHER_SETTINGS.map((w) => ({ label: WEATHER_LABELS[w], value: w, title: WEATHER_TITLES[w] })),
+      (v) => {
+        this.settings.map.weather = v;
+        this.changed();
+      },
+    );
+    row(map, 'Weather', weather.row);
+    this.sync.push(() => weather.set(this.settings.map.weather));
+    map.append(el('p', { class: 'hint' }, 'Rain, thunderstorms, snow and fog, all battle or coming and going. Looks only for now: weather doesn’t slow anything down or hide anyone. Photo mode can pick its own.'));
     const layout = segmented<BaseLayout>(
       [
         { label: 'Ring', value: 'ring', title: 'Round the edge of the map, allies side by side' },

@@ -1,7 +1,8 @@
 import { Rng } from '../core/rng';
-import { BIOME_IDS, BIOMES } from '../world/biomes';
+import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
+import { WEATHER_LABELS, WeatherSetting } from './weather';
 import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
 import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
 
@@ -13,8 +14,8 @@ import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from '
  */
 
 /** The things that can be re-rolled. */
-export type VarietyKey = 'size' | 'biome' | 'style' | 'sides' | 'doctrines';
-export const VARIETY_KEYS: VarietyKey[] = ['size', 'biome', 'style', 'sides', 'doctrines'];
+export type VarietyKey = 'size' | 'biome' | 'style' | 'sides' | 'doctrines' | 'weather';
+export const VARIETY_KEYS: VarietyKey[] = ['size', 'biome', 'style', 'sides', 'doctrines', 'weather'];
 
 /** How re-rolled sides are split into teams: every side for itself, two even teams, two uneven teams (1v3, 2v4...), or any of those. */
 export type VarietyTeams = 'ffa' | 'two' | 'uneven' | 'either';
@@ -41,7 +42,7 @@ export const VARIETY_AFTER = [0, 5, 10, 15, 20, 30, 45, 60];
 
 export function defaultVariety(): VarietySettings {
   return {
-    roll: { size: false, biome: false, style: false, sides: false, doctrines: false },
+    roll: { size: false, biome: false, style: false, sides: false, doctrines: false, weather: false },
     sidesMin: 2,
     sidesMax: 4,
     teams: 'either',
@@ -164,6 +165,11 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     });
     if (!v.roll.sides) label.push(s.factions.map((f) => DOCTRINES[f.doctrine].name).join(' v '));
   }
+  // Last, so adding it didn't change what the other re-rolls draw.
+  if (v.roll.weather) {
+    s.map.weather = rollWeather(s.map.biome, rng);
+    label.push(WEATHER_LABELS[s.map.weather]);
+  }
   return { settings: s, label: label.join(' · ') };
 }
 
@@ -211,4 +217,12 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+/** Weather for a re-rolled battle: changing spells as often as not, otherwise one kind that suits the biome. */
+function rollWeather(biome: BiomeId, rng: Rng): WeatherSetting {
+  const w = rng.pick<WeatherSetting>(['changing', 'changing', 'changing', 'clear', 'rain', 'storm', 'snow', 'fog']);
+  if (biome === 'snow' && (w === 'rain' || w === 'storm')) return 'snow';
+  if (biome === 'desert' && w === 'snow') return 'clear';
+  return w;
 }
