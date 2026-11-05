@@ -6,6 +6,7 @@ import { fightingStrength } from '../offensive';
 import { UnitId } from '../units';
 import { StrengthMap } from './strength';
 import type { TaskForces } from './taskForces';
+import * as D from '../../core/dmath';
 
 /*
  * Using units for what they're for (Commander step 3). On top of the team
@@ -143,7 +144,7 @@ export class Roles {
           near.forEach((e, i) => {
             free.delete(e);
             const angle = (i / ESCORTS) * Math.PI * 2;
-            this.give(side, e, { kind: 'escort', x: Math.cos(angle) * ESCORT_RING, z: Math.sin(angle) * ESCORT_RING, lead });
+            this.give(side, e, { kind: 'escort', x: D.cos(angle) * ESCORT_RING, z: D.sin(angle) * ESCORT_RING, lead });
           });
         }
       }
@@ -167,7 +168,7 @@ export class Roles {
     if (known !== undefined) return known;
     const { field } = ctx;
     const enemy = field.baseSites[target];
-    const ahead = Math.hypot(rally.x - enemy.x, rally.z - enemy.z) - OVERWATCH_AHEAD;
+    const ahead = D.hypot(rally.x - enemy.x, rally.z - enemy.z) - OVERWATCH_AHEAD;
     const nav = ctx.navs.land;
     let best: { x: number; z: number } | null = null;
     let bestH = field.heightAt(rally.x, rally.z) + OVERWATCH_RISE;
@@ -176,7 +177,7 @@ export class Roles {
         if (dx * dx + dz * dz > OVERWATCH_RANGE * OVERWATCH_RANGE) continue;
         const x = rally.x + dx;
         const z = rally.z + dz;
-        if (!field.contains(x, z, 2) || nav.terrainBlocksCell(x, z) || Math.hypot(x - enemy.x, z - enemy.z) < ahead) continue;
+        if (!field.contains(x, z, 2) || nav.terrainBlocksCell(x, z) || D.hypot(x - enemy.x, z - enemy.z) < ahead) continue;
         const h = field.heightAt(x, z);
         if (h > bestH) {
           bestH = h;
@@ -203,5 +204,5 @@ export class Roles {
 
 function dist(world: World, e: Entity, t: { x: number; z: number }): number {
   const et = world.req(e, Transform);
-  return Math.hypot(et.x - t.x, et.z - t.z);
+  return D.hypot(et.x - t.x, et.z - t.z);
 }

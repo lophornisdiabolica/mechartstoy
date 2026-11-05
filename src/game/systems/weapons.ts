@@ -5,6 +5,7 @@ import { turnToward, wrapAngle } from './movement';
 import { aimPoint, clearShot, muzzlePoint, traceShot } from '../lineOfFire';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
+import * as D from '../../core/dmath';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -22,12 +23,12 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   const { x: sx, y: sy, z: sz } = muzzle;
 
   const targetRadius = world.get(target, Collider)?.radius ?? 0.5;
-  const dist = Math.hypot(tt.x - sx, tt.z - sz);
+  const dist = D.hypot(tt.x - sx, tt.z - sz);
   // Miss distance grows with range; sqrt keeps the scatter evenly spread over the disc.
   const missR = w.spread * dist * Math.sqrt(ctx.rng.next());
   const missA = ctx.rng.range(0, Math.PI * 2);
-  let ex = tt.x + Math.cos(missA) * missR;
-  let ez = tt.z + Math.sin(missA) * missR;
+  let ex = tt.x + D.cos(missA) * missR;
+  let ez = tt.z + D.sin(missA) * missR;
   let ey: number;
   let struck: Entity | null = target;
   if (w.arc || w.projectile === 'flame') {
@@ -43,7 +44,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     ez = trace.z;
     struck = trace.hit;
   }
-  const flight = Math.hypot(ex - sx, ez - sz);
+  const flight = D.hypot(ex - sx, ez - sz);
   // Bombs dropped from aircraft just fall; everything else lobbed goes up and over.
   const shooterMover = world.get(e, Mover);
   const dropped = shooterMover !== undefined && MOVE_RULES[shooterMover.move].flies;
@@ -90,7 +91,7 @@ export function weaponSystem(ctx: SimContext): System {
         }
 
         const tt = world.req(target, Transform);
-        const desired = Math.atan2(-(tt.z - t.z), tt.x - t.x);
+        const desired = D.atan2(-(tt.z - t.z), tt.x - t.x);
         if (armed.turret) {
           armed.aim = turnToward(armed.aim, desired, armed.turnRate * dt);
         } else {

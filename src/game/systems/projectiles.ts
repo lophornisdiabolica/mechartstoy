@@ -2,6 +2,7 @@ import { Entity, System, World } from '../../core/ecs';
 import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { entityHeight, UNIT_HIT_SLACK } from '../lineOfFire';
+import * as D from '../../core/dmath';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -52,7 +53,7 @@ export function projectileSystem(ctx: SimContext): System {
         t.x = p.sx + (p.ex - p.sx) * k;
         t.z = p.sz + (p.ez - p.sz) * k;
         t.y = p.sy + (p.ey - p.sy) * k + p.arcHeight * 4 * k * (1 - k);
-        t.heading = Math.atan2(-(p.ez - p.sz), p.ex - p.sx);
+        t.heading = D.atan2(-(p.ez - p.sz), p.ex - p.sx);
         if (k < 1) continue;
 
         const hit = new Set<Entity>();
@@ -65,7 +66,7 @@ export function projectileSystem(ctx: SimContext): System {
           // Direct fire stops at the edge of what it hits, so it gets a little more room.
           const r = world.req(p.target, Collider).radius + (w.arc ? 0.4 : UNIT_HIT_SLACK + 0.5);
           const friendly = ctx.sides.allied(world.req(p.target, Faction).id, p.faction);
-          if (!friendly && (tt.x - p.ex) ** 2 + (tt.z - p.ez) ** 2 <= r * r) {
+          if (!friendly && D.sq(tt.x - p.ex) + D.sq(tt.z - p.ez) <= r * r) {
             applyDamage(world, ctx, p.target, w.damage, by);
             hit.add(p.target);
           }
@@ -80,7 +81,7 @@ export function projectileSystem(ctx: SimContext): System {
             const ot = world.req(other, Transform);
             const top = ot.y + entityHeight(world, other);
             const dy = p.ey < ot.y ? ot.y - p.ey : p.ey > top ? p.ey - top : 0;
-            const edge = Math.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), dy);
+            const edge = D.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), dy);
             if (edge > w.splash) return;
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);
           });

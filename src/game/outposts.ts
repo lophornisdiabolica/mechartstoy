@@ -7,6 +7,7 @@ import { productionFor } from './doctrines';
 import { SimContext } from './context';
 import { spawnSpot } from './systems/production';
 import { spawnBuilding, spawnUnit } from './spawn';
+import * as D from '../core/dmath';
 
 /**
  * Outposts: small forts in no-man's land that any side can capture. Each
@@ -110,7 +111,7 @@ export function createOutposts(sites: OutpostSite[]): Outpost[] {
 /** An outpost's post, two towers and a bunker, laid out round the site, and its kind's own building opposite the bunker. */
 export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rng: Rng): void {
   const a = rng.range(0, Math.PI * 2);
-  const at = (angle: number, dist: number) => ({ x: outpost.x + Math.cos(a + angle) * dist, z: outpost.z + Math.sin(a + angle) * dist });
+  const at = (angle: number, dist: number) => ({ x: outpost.x + D.cos(a + angle) * dist, z: outpost.z + D.sin(a + angle) * dist });
   const post = spawnOutpostPart(world, ctx, ctx.buildings.outpost, outpost, outpost.x, outpost.z, -a, false);
   // The post can't be shot or destroyed: outposts change hands, they don't go away.
   world.remove(post, Health);
@@ -279,7 +280,7 @@ export function garrisonSystem(ctx: SimContext): System {
         g.timer = GUARD_INTERVAL * ctx.rng.range(0.9, 1.1);
         const t = world.req(e, Transform);
         const def = ctx.units.trooper;
-        const spot = spawnSpot(ctx, t.x + Math.cos(t.heading) * 2.6, t.z - Math.sin(t.heading) * 2.6, def.radius);
+        const spot = spawnSpot(ctx, t.x + D.cos(t.heading) * 2.6, t.z - D.sin(t.heading) * 2.6, def.radius);
         if (!spot) continue;
         const unit = spawnUnit(world, ctx, def, faction, spot.x, spot.z);
         world.add(unit, Guard, { outpost });

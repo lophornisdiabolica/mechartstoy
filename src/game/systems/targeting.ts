@@ -4,6 +4,7 @@ import { Armed, Building, Collider, Construction, Faction, Health, Mover, Target
 import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
+import * as D from '../../core/dmath';
 
 const RETARGET_INTERVAL = 0.5;
 /** Buildings count as this much further away, so units shoot units first. Siege units invert it. */
@@ -55,7 +56,7 @@ const SIGHT_CHECKS = 3;
 function muzzleToward(world: World, e: Entity, armed: Armed, target: Entity): Point3 {
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
-  return muzzlePoint(world, e, Math.atan2(-(tt.z - t.z), tt.x - t.x), armed.muzzleOffset, armed.weapon.muzzleHeight);
+  return muzzlePoint(world, e, D.atan2(-(tt.z - t.z), tt.x - t.x), armed.muzzleOffset, armed.weapon.muzzleHeight);
 }
 
 /**
@@ -69,7 +70,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   const faction = world.req(e, Faction).id;
   const candidates: { e: Entity; score: number }[] = [];
   // A weapon that outranges its own sight can use an allied spotter's eyes for the difference.
-  const ours = armed.weapon.range > armed.sight ? spotters.filter((s) => ctx.sides.allied(s.faction, faction) && Math.hypot(s.x - t.x, s.z - t.z) < s.radius + armed.weapon.range) : [];
+  const ours = armed.weapon.range > armed.sight ? spotters.filter((s) => ctx.sides.allied(s.faction, faction) && D.hypot(s.x - t.x, s.z - t.z) < s.radius + armed.weapon.range) : [];
   const reach = ours.length > 0 ? armed.weapon.range : armed.sight;
   ctx.grid.forEachNear(t.x, t.z, reach, (other, d2) => {
     const otherFaction = world.req(other, Faction).id;
@@ -80,7 +81,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
     if (d < armed.weapon.minRange) return;
     if (d > armed.sight) {
       const ot = world.req(other, Transform);
-      if (!ours.some((s) => (s.x - ot.x) ** 2 + (s.z - ot.z) ** 2 <= s.radius * s.radius)) return;
+      if (!ours.some((s) => D.sq(s.x - ot.x) + D.sq(s.z - ot.z) <= s.radius * s.radius)) return;
     }
     const isBuilding = world.req(other, Targetable).kind === 'building';
     const waste = WASTE_PENALTY * (1 - hitWorth(world, armed, other));
@@ -115,13 +116,13 @@ export function firingSpot(world: World, ctx: SimContext, e: Entity, armed: Arme
   const faction = world.req(e, Faction).id;
   const grid = ctx.navs.for(mover.move);
   const radius = world.get(e, Collider)?.radius ?? 0.5;
-  const dist = Math.hypot(t.x - tt.x, t.z - tt.z);
+  const dist = D.hypot(t.x - tt.x, t.z - tt.z);
   const ring = Math.max(armed.weapon.minRange + 1, Math.min(dist, armed.weapon.range * 0.7));
-  const base = Math.atan2(t.z - tt.z, t.x - tt.x);
+  const base = D.atan2(t.z - tt.z, t.x - tt.x);
   for (const da of SPOT_ANGLES) {
     const a = base + da;
-    const x = tt.x + Math.cos(a) * ring;
-    const z = tt.z + Math.sin(a) * ring;
+    const x = tt.x + D.cos(a) * ring;
+    const z = tt.z + D.sin(a) * ring;
     if (!grid.terrainAllowsAt(x, z) || !grid.fitsAt(x, z, radius)) continue;
     const ground = grid.rules.flies ? t.y : ctx.field.surfaceAt(x, z);
     const from = { x, y: ground + armed.weapon.muzzleHeight, z };
@@ -190,5 +191,5 @@ export function distanceToTarget(world: World, e: Entity, target: Entity): numbe
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
   const r = world.get(target, Collider)?.radius ?? 0;
-  return Math.max(0, Math.hypot(tt.x - t.x, tt.z - t.z) - r);
+  return Math.max(0, D.hypot(tt.x - t.x, tt.z - t.z) - r);
 }

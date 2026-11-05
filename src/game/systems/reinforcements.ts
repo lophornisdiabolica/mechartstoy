@@ -7,6 +7,7 @@ import { doctrineOf } from '../doctrines';
 import { countUnits, outnumbered, squadLineUp } from './production';
 import { recordSquad } from '../territory';
 import { armyCap, canBuild, CategoryCounts, countByCategory } from '../caps';
+import * as D from '../../core/dmath';
 
 export interface ReinforcementConfig {
   /** Seconds between waves, per faction. */
@@ -43,7 +44,7 @@ export function musterPoint(ctx: SimContext, faction: number, time: number, forw
   const target = ctx.sides.target(faction, ctx.offensive.attack(faction, time));
   const rally = target !== null ? ctx.lanes.rally(faction, target, 0) : { x: 0, z: 0 };
   // Never further out than the edge of the base pad (an attack on a far enemy rallies further out).
-  const d = Math.hypot(rally.x - base.x, rally.z - base.z);
+  const d = D.hypot(rally.x - base.x, rally.z - base.z);
   const k = d > 0 ? Math.min(d * forward, base.radius) / d : 0;
   return { x: base.x + (rally.x - base.x) * k, z: base.z + (rally.z - base.z) * k };
 }
@@ -58,8 +59,8 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
     // Each pick forms up as a group at a random spot on the base pad.
     const a = ctx.rng.range(0, Math.PI * 2);
     const r = ctx.rng.range(0, base.radius * 0.6);
-    const gx = cx + Math.cos(a) * r;
-    const gz = cz + Math.sin(a) * r;
+    const gx = cx + D.cos(a) * r;
+    const gz = cz + D.sin(a) * r;
     const squad = newSquad(ctx);
     const lineUp = squadLineUp(entry);
     recordSquad(ctx, squad, faction, lineUp);

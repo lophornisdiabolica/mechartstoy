@@ -2,6 +2,7 @@ import { Entity, World } from '../core/ecs';
 import { Building, Collider, Faction, Targetable, Transform, Unit } from './components';
 import { SimContext } from './context';
 import { UnitDef } from './units';
+import * as D from '../core/dmath';
 
 /**
  * Line of fire: direct-fire shots (bullets and shells) travel in a straight
@@ -64,7 +65,7 @@ export function aimPoint(world: World, e: Entity): Point3 {
 export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point3, reach: number, shooter: Entity, faction: number, target: Entity | null, pad = 0): Trace {
   const dx = to.x - from.x;
   const dz = to.z - from.z;
-  const flat = Math.hypot(dx, dz);
+  const flat = D.hypot(dx, dz);
   if (flat < 1e-4) return { ...to, hit: target, stoppedBy: target !== null ? 'unit' : 'nothing' };
   // Direction per unit of ground distance, with height changing at the aimed slope.
   const ux = dx / flat;
@@ -137,7 +138,7 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
 /** Where a weapon's shots leave from. */
 export function muzzlePoint(world: World, e: Entity, aim: number, muzzleOffset: number, muzzleHeight: number): Point3 {
   const t = world.req(e, Transform);
-  return { x: t.x + Math.cos(aim) * muzzleOffset, y: t.y + muzzleHeight, z: t.z - Math.sin(aim) * muzzleOffset };
+  return { x: t.x + D.cos(aim) * muzzleOffset, y: t.y + muzzleHeight, z: t.z - D.sin(aim) * muzzleOffset };
 }
 
 /**
@@ -149,7 +150,7 @@ export function muzzlePoint(world: World, e: Entity, aim: number, muzzleOffset: 
  */
 export function clearShot(world: World, ctx: SimContext, from: Point3, target: Entity, shooter: Entity, faction: number, pad = 0): boolean {
   const to = aimPoint(world, target);
-  const flat = Math.hypot(to.x - from.x, to.z - from.z);
+  const flat = D.hypot(to.x - from.x, to.z - from.z);
   const trace = traceShot(world, ctx, from, to, flat, shooter, faction, target, pad);
   return trace.hit === target || trace.stoppedBy === 'unit' || trace.stoppedBy === 'nothing';
 }

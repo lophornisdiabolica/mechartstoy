@@ -1,6 +1,7 @@
 import { Battlefield } from './battlefield';
 import { CellArea, GroundDef } from './ground';
 import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
+import * as D from '../core/dmath';
 
 export interface Point {
   x: number;
@@ -74,7 +75,7 @@ class CellSamples {
         this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
-        this.settled[k] = settled.some((t) => Math.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
+        this.settled[k] = settled.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
         this.ground[k] = field.groundAt(x, z);
       }
     }
@@ -377,7 +378,7 @@ export class NavGrid {
       for (let k = 0; k < this.region.length; k++) {
         if (this.region[k] !== region) continue;
         const i = k % this.cols;
-        const d = (i - gi) ** 2 + ((k - i) / this.cols - gj) ** 2;
+        const d = D.sq(i - gi) + D.sq((k - i) / this.cols - gj);
         if (d < bestD) {
           bestD = d;
           bestK = k;
@@ -522,7 +523,7 @@ export class NavGrid {
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
         const c = this.center(i, j);
-        if (Math.hypot(c.x - x, c.z - z) > radius) continue;
+        if (D.hypot(c.x - x, c.z - z) > radius) continue;
         const k = j * this.cols + i;
         this.occupied[k] = Math.max(0, this.occupied[k] + delta);
       }
@@ -544,7 +545,7 @@ export class NavGrid {
    * clear line doesn't shortcut ground the unit would rather go round.
    */
   lineClear(a: Point, b: Point, radius = 0, maxCost = Infinity): boolean {
-    const dist = Math.hypot(b.x - a.x, b.z - a.z);
+    const dist = D.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.ceil(dist / (this.cellSize * 0.5));
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
@@ -688,7 +689,7 @@ export class NavGrid {
    * ground crossed), or Infinity if a unit of this radius can't.
    */
   private lineCost(a: Point, b: Point, radius: number): number {
-    const dist = Math.hypot(b.x - a.x, b.z - a.z);
+    const dist = D.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.max(1, Math.ceil(dist / (this.cellSize * 0.5)));
     let cost = 0;
     for (let s = 1; s <= steps; s++) {
@@ -712,7 +713,7 @@ export class NavGrid {
     const cum = [0];
     let prev = from;
     for (const p of points) {
-      cum.push(cum[cum.length - 1] + Math.hypot(p.x - prev.x, p.z - prev.z) * this.costAt(p.x, p.z));
+      cum.push(cum[cum.length - 1] + D.hypot(p.x - prev.x, p.z - prev.z) * this.costAt(p.x, p.z));
       prev = p;
     }
     let anchor = from;

@@ -1,4 +1,5 @@
 import { Battlefield, Bridge, BRIDGE_CLEARANCE, DECK_GRADE } from './battlefield';
+import * as D from '../core/dmath';
 
 /**
  * Water that links up, and bridges that cross it.
@@ -162,7 +163,7 @@ export function carveWaterways(field: Battlefield, options: WaterwayOptions): Ch
     for (let k = 0; k < g.count; k++) {
       const b = body[k];
       if (b < 0 || size[b] < MIN_BODY || (best >= 0 && size[b] <= size[best])) continue;
-      if (Math.hypot(vx(k) - site.x, vz(k) - site.z) <= site.radius + BASE_REACH) best = b;
+      if (D.hypot(vx(k) - site.x, vz(k) - site.z) <= site.radius + BASE_REACH) best = b;
     }
     return best;
   });
@@ -172,7 +173,7 @@ export function carveWaterways(field: Battlefield, options: WaterwayOptions): Ch
   // Ground near base pads (and their aprons) is off limits: channels go round.
   const blocked = new Uint8Array(g.count);
   for (let k = 0; k < g.count; k++) {
-    for (const s of sites) if (Math.hypot(vx(k) - s.x, vz(k) - s.z) < s.radius + PAD_MARGIN) blocked[k] = 1;
+    for (const s of sites) if (D.hypot(vx(k) - s.x, vz(k) - s.z) < s.radius + PAD_MARGIN) blocked[k] = 1;
   }
   // What it costs to take a channel through a vertex: water is nearly free, dry land costs by how much has to be dug.
   const stepCost = (k: number) => {
@@ -200,7 +201,7 @@ export function carveWaterways(field: Battlefield, options: WaterwayOptions): Ch
     for (const i of pending) {
       const s = sites[i];
       for (let k = 0; k < g.count; k++) {
-        if (baseBody[i] >= 0 ? body[k] === baseBody[i] : !blocked[k] && Math.hypot(vx(k) - s.x, vz(k) - s.z) < s.radius + PAD_MARGIN + 3) target[k] = i;
+        if (baseBody[i] >= 0 ? body[k] === baseBody[i] : !blocked[k] && D.hypot(vx(k) - s.x, vz(k) - s.z) < s.radius + PAD_MARGIN + 3) target[k] = i;
       }
     }
     score.fill(Infinity);
@@ -258,7 +259,7 @@ function dig(field: Battlefield, points: { x: number; z: number }[]): void {
     const span = Math.ceil(r / field.config.cellSize);
     for (let j = Math.max(0, cj - span); j <= Math.min(rows, cj + span); j++) {
       for (let i = Math.max(0, ci - span); i <= Math.min(cols, ci + span); i++) {
-        const d = Math.hypot(field.vertexX(i) - p.x, field.vertexZ(j) - p.z);
+        const d = D.hypot(field.vertexX(i) - p.x, field.vertexZ(j) - p.z);
         if (d > r) continue;
         // Full depth inside the channel, easing up to the bank over the last stretch.
         const t = Math.min(1, Math.max(0, (d - CHANNEL_RADIUS * 0.6) / (r - CHANNEL_RADIUS * 0.6)));
@@ -273,7 +274,7 @@ function dig(field: Battlefield, points: { x: number; z: number }[]): void {
 /** A small round harbour at the end of an inlet. */
 function basin(field: Battlefield, at: { x: number; z: number }): void {
   const ring: { x: number; z: number }[] = [];
-  for (let a = 0; a < 12; a++) ring.push({ x: at.x + Math.cos((a / 12) * Math.PI * 2) * 3, z: at.z + Math.sin((a / 12) * Math.PI * 2) * 3 });
+  for (let a = 0; a < 12; a++) ring.push({ x: at.x + D.cos((a / 12) * Math.PI * 2) * 3, z: at.z + D.sin((a / 12) * Math.PI * 2) * 3 });
   dig(field, [at, ...ring]);
 }
 
@@ -298,7 +299,7 @@ export function bridgeChannels(field: Battlefield, channels: Channel[]): number 
         const mid = Math.floor((start + k - 1) / 2);
         const a = points[Math.max(0, mid - 2)];
         const b = points[Math.min(points.length - 1, mid + 2)];
-        const len = Math.max(0.1, Math.hypot(b.x - a.x, b.z - a.z));
+        const len = Math.max(0.1, D.hypot(b.x - a.x, b.z - a.z));
         // Square across the channel's direction.
         const nx = -(b.z - a.z) / len;
         const nz = (b.x - a.x) / len;
@@ -398,7 +399,7 @@ export function bridgeLand(field: Battlefield): number {
       for (const nk of neighbours(g, k)) {
         if (reach[nk]) continue;
         // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
-        const d = Math.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
+        const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
         if (d < dist[nk]) {
           dist[nk] = d;
           origin[nk] = origin[k];
@@ -409,7 +410,7 @@ export function bridgeLand(field: Battlefield): number {
     if (landing < 0) return built;
     const a = { x: vx(origin[landing]), z: vz(origin[landing]) };
     const b = { x: vx(landing), z: vz(landing) };
-    const len = Math.max(0.1, Math.hypot(b.x - a.x, b.z - a.z));
+    const len = Math.max(0.1, D.hypot(b.x - a.x, b.z - a.z));
     const ux = (b.x - a.x) / len;
     const uz = (b.z - a.z) / len;
     if (!placeBridge(field, { x: a.x - ux * BRIDGE_LANDING, z: a.z - uz * BRIDGE_LANDING }, { x: b.x + ux * BRIDGE_LANDING, z: b.z + uz * BRIDGE_LANDING }, true)) return built;
@@ -434,7 +435,7 @@ export function bridgeLand(field: Battlefield): number {
  * unless `force` (a base would otherwise be cut off).
  */
 export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, force = false): boolean {
-  const len0 = Math.hypot(b.x - a.x, b.z - a.z);
+  const len0 = D.hypot(b.x - a.x, b.z - a.z);
   if (len0 < 0.1) return false;
   const ux = (b.x - a.x) / len0;
   const uz = (b.z - a.z) / len0;
@@ -476,7 +477,7 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
  */
 export function cutBanks(field: Battlefield, bridge: Bridge): void {
   const { ax, az, bx, bz, level } = bridge;
-  const len = Math.hypot(bx - ax, bz - az);
+  const len = D.hypot(bx - ax, bz - az);
   const ux = (bx - ax) / len;
   const uz = (bz - az) / len;
   const half = bridge.width / 2;
@@ -503,7 +504,7 @@ export function cutBanks(field: Battlefield, bridge: Bridge): void {
       target = Math.max(target + BANK_GRADE * side, sea + 0.1);
       const k = j * (cols + 1) + i;
       if (field.heights[k] <= target) continue;
-      if (field.baseSites.some((site) => Math.hypot(site.x - x, site.z - z) < site.radius)) continue;
+      if (field.baseSites.some((site) => D.hypot(site.x - x, site.z - z) < site.radius)) continue;
       field.heights[k] = target;
       cut = true;
     }

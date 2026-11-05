@@ -1,6 +1,7 @@
 import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { NavGrid, Point } from '../world/navGrid';
+import * as D from '../core/dmath';
 
 /**
  * Lanes are the routes armies attack along: one straight from base to base,
@@ -84,7 +85,7 @@ export class Lanes {
   private build(from: number, to: number): Route[] {
     const a = this.field.baseSites[from];
     const b = this.field.baseSites[to];
-    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    const length = D.hypot(b.x - a.x, b.z - a.z);
     // Unit normal to the line between the bases; swing lane 1 goes to its left (north, for west to east).
     const nx = -(b.z - a.z) / length;
     const nz = (b.x - a.x) / length;
@@ -94,7 +95,7 @@ export class Lanes {
     const sites: (Via & { x: number; z: number; detour: number; side: number })[] = [];
     const consider = (kind: Via['kind'], index: number, x: number, z: number) => {
       const t = ((x - a.x) * (b.x - a.x) + (z - a.z) * (b.z - a.z)) / (length * length);
-      const detour = (Math.hypot(x - a.x, z - a.z) + Math.hypot(b.x - x, b.z - z)) / length;
+      const detour = (D.hypot(x - a.x, z - a.z) + D.hypot(b.x - x, b.z - z)) / length;
       if (t > 0.12 && t < 0.88 && detour <= MAX_DETOUR) sites.push({ kind, index, x, z, detour, side: (x - a.x) * nx + (z - a.z) * nz });
     };
     this.field.outpostSites.forEach((o) => consider('outpost', o.index, o.x, o.z));

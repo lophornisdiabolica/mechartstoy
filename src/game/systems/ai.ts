@@ -7,6 +7,7 @@ import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
 import { threatKindOf } from '../commander/threats';
+import * as D from '../../core/dmath';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -75,7 +76,7 @@ export function aiSystem(ctx: SimContext): System {
           const threat = ai.threat !== null && world.isAlive(ai.threat) ? ai.threat : null;
           if (threat) {
             const tt = world.req(threat, Transform);
-            const d = Math.max(0.1, Math.hypot(t.x - tt.x, t.z - tt.z));
+            const d = Math.max(0.1, D.hypot(t.x - tt.x, t.z - tt.z));
             const away = { x: t.x + ((t.x - tt.x) / d) * 6, z: t.z + ((t.z - tt.z) / d) * 6 };
             if (ctx.navs.for(mover.move).terrainAllowsAt(away.x, away.z)) {
               mover.targetX = away.x;
@@ -106,10 +107,10 @@ export function aiSystem(ctx: SimContext): System {
               mover.targetZ = tt.z;
             } else if (MOVE_RULES[mover.move].flies) {
               // Aircraft don't park over a fight: they circle it, guns on the target.
-              const a = Math.atan2(t.z - tt.z, t.x - tt.x) + ORBIT_STEP;
+              const a = D.atan2(t.z - tt.z, t.x - tt.x) + ORBIT_STEP;
               const r = Math.max(2, reach * 0.6);
-              mover.targetX = tt.x + Math.cos(a) * r;
-              mover.targetZ = tt.z + Math.sin(a) * r;
+              mover.targetX = tt.x + D.cos(a) * r;
+              mover.targetZ = tt.z + D.sin(a) * r;
             } else {
               mover.targetX = mover.targetZ = null;
             }
@@ -123,9 +124,9 @@ export function aiSystem(ctx: SimContext): System {
           const lead = ai.escort !== null && world.isAlive(ai.escort) ? ai.escort : null;
           if (lead !== null) {
             const lt = world.req(lead, Transform);
-            const bx = lt.x - Math.cos(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetX * 0.3;
-            const bz = lt.z + Math.sin(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetZ * 0.3;
-            moveTo(mover, t, bx, bz, lt.x + Math.cos(lt.heading) * 10, lt.z - Math.sin(lt.heading) * 10);
+            const bx = lt.x - D.cos(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetX * 0.3;
+            const bz = lt.z + D.sin(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetZ * 0.3;
+            moveTo(mover, t, bx, bz, lt.x + D.cos(lt.heading) * 10, lt.z - D.sin(lt.heading) * 10);
             continue;
           }
         }
@@ -215,7 +216,7 @@ export function aiSystem(ctx: SimContext): System {
         }
         if (job?.kind === 'escort' && job.lead !== null && world.isAlive(job.lead)) {
           const lt = world.req(job.lead, Transform);
-          moveTo(mover, t, lt.x + job.x, lt.z + job.z, lt.x + Math.cos(lt.heading) * 10, lt.z - Math.sin(lt.heading) * 10);
+          moveTo(mover, t, lt.x + job.x, lt.z + job.z, lt.x + D.cos(lt.heading) * 10, lt.z - D.sin(lt.heading) * 10);
           continue;
         }
 
@@ -250,7 +251,7 @@ export function aiSystem(ctx: SimContext): System {
           mover.faceZ = mover.targetZ;
           continue;
         }
-        if (Math.hypot(ai.objectiveX - t.x, ai.objectiveZ - t.z) < 3) {
+        if (D.hypot(ai.objectiveX - t.x, ai.objectiveZ - t.z) < 3) {
           // Reached the objective: pick another spot in the enemy base.
           const next = objectiveIn(ctx, target);
           ai.objectiveX = next.x;
@@ -302,20 +303,20 @@ function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: num
 /** Whether an entity is within `range` of an outpost's post. */
 function near(world: World, e: Entity, post: Outpost, range: number): boolean {
   const t = world.req(e, Transform);
-  return Math.hypot(t.x - post.x, t.z - post.z) <= range;
+  return D.hypot(t.x - post.x, t.z - post.z) <= range;
 }
 
 /** A squad's current spot on its walk round an outpost; squads are spread round the ring. */
 function patrolPoint(outpost: Outpost, squad: number, time: number): { x: number; z: number } {
   const angle = squad * 2.399 + time * PATROL_SPEED;
-  return { x: outpost.x + Math.cos(angle) * PATROL_RADIUS, z: outpost.z + Math.sin(angle) * PATROL_RADIUS };
+  return { x: outpost.x + D.cos(angle) * PATROL_RADIUS, z: outpost.z + D.sin(angle) * PATROL_RADIUS };
 }
 
 /** Head for a spot and face a point; stop when close so units settle rather than jostle. */
 function moveTo(mover: Mover, t: Transform, x: number, z: number, faceX: number, faceZ: number): void {
   mover.faceX = faceX;
   mover.faceZ = faceZ;
-  const close = Math.hypot(x - t.x, z - t.z) < 2.5;
+  const close = D.hypot(x - t.x, z - t.z) < 2.5;
   mover.targetX = close ? null : x;
   mover.targetZ = close ? null : z;
 }

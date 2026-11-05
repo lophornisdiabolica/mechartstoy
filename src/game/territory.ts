@@ -5,6 +5,7 @@ import { canBuild, countByCategory } from './caps';
 import { spawnSpot } from './systems/production';
 import { spawnUnit } from './spawn';
 import { UnitId } from './units';
+import * as D from '../core/dmath';
 
 /**
  * Territory and healing. A side's territory is its base and the ground round
@@ -48,11 +49,11 @@ export function inTerritory(ctx: SimContext, faction: number, x: number, z: numb
   for (const site of ctx.field.baseSites) {
     if (sides.eliminated[site.faction] || !sides.allied(site.faction, faction)) continue;
     const r = site.radius * BASE_TERRITORY;
-    if ((x - site.x) ** 2 + (z - site.z) ** 2 <= r * r) return true;
+    if (D.sq(x - site.x) + D.sq(z - site.z) <= r * r) return true;
   }
   for (const o of ctx.outposts) {
     if (o.owner < 0 || !sides.allied(o.owner, faction)) continue;
-    if ((x - o.x) ** 2 + (z - o.z) ** 2 <= OUTPOST_TERRITORY ** 2) return true;
+    if (D.sq(x - o.x) + D.sq(z - o.z) <= D.sq(OUTPOST_TERRITORY)) return true;
   }
   return false;
 }

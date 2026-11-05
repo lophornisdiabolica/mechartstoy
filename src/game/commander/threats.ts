@@ -8,6 +8,7 @@ import { fightingStrength } from '../offensive';
 import { UnitDef, WeaponDef } from '../units';
 import { ANTI_AIR } from './roles';
 import { STRENGTH_CELL } from './strength';
+import * as D from '../../core/dmath';
 
 /*
  * Keeping units out of where they're weak. Each side's Commander keeps a
@@ -169,7 +170,7 @@ export class ThreatMap {
 
   /** The worst excess danger (see excess) along the way from one point to another, looking every SAMPLE_STEP. */
   along(ctx: SimContext, side: number, kind: ThreatKind, ax: number, az: number, bx: number, bz: number, share = this.usualShare(ctx, side, kind)): number {
-    const len = Math.hypot(bx - ax, bz - az);
+    const len = D.hypot(bx - ax, bz - az);
     const steps = Math.max(1, Math.ceil(len / SAMPLE_STEP));
     let worst = 0;
     for (let n = 1; n <= steps; n++) {
@@ -291,7 +292,7 @@ export class Avoidance {
       const x = s.x / s.units;
       const z = s.z / s.units;
       // Look ahead at most LOOK_AHEAD along the way.
-      const len = Math.hypot(s.toX - x, s.toZ - z);
+      const len = D.hypot(s.toX - x, s.toZ - z);
       if (len < REACHED) continue;
       const k = Math.min(1, LOOK_AHEAD / len);
       const ax = x + (s.toX - x) * k;
@@ -302,7 +303,7 @@ export class Avoidance {
       // Keep a detour it's still on its way to, if it's still worth it.
       const kept = previous.get(squad);
       const cost = (px: number, pz: number) => Math.max(map.along(ctx, s.side, s.kind, x, z, px, pz), map.along(ctx, s.side, s.kind, px, pz, ax, az));
-      if (kept && Math.hypot(kept.x - x, kept.z - z) > REACHED && cost(kept.x, kept.z) < straight * BETTER) {
+      if (kept && D.hypot(kept.x - x, kept.z - z) > REACHED && cost(kept.x, kept.z) < straight * BETTER) {
         this.detours.set(squad, kept);
         this.detouring[s.side]++;
         this.paths[s.side].push({ fromX: x, fromZ: z, x: kept.x, z: kept.z });

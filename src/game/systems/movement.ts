@@ -5,6 +5,7 @@ import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, Na
 import { NavGrid } from '../../world/navGrid';
 import { CellArea } from '../../world/ground';
 import { SimContext } from '../context';
+import * as D from '../../core/dmath';
 
 export function wrapAngle(a: number): number {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -119,7 +120,7 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
     return goal;
   }
 
-  const drifted = Math.hypot(goal.x - nav.pathGoalX, goal.z - nav.pathGoalZ) > GOAL_DRIFT;
+  const drifted = D.hypot(goal.x - nav.pathGoalX, goal.z - nav.pathGoalZ) > GOAL_DRIFT;
   // A change to the map or its buildings only spoils routes through the cells it touched.
   if (nav.path !== null && nav.pathVersion !== grid.version) {
     if (grid.obstacles.changedSince(nav.pathVersion, { i0: nav.pathI0, j0: nav.pathJ0, i1: nav.pathI1, j1: nav.pathJ1 })) nav.path = null;
@@ -142,7 +143,7 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
   const path = nav.path;
   if (!path || path.length === 0) return goal;
 
-  while (nav.pathIndex < path.length - 1 && Math.hypot(path[nav.pathIndex].x - t.x, path[nav.pathIndex].z - t.z) < WAYPOINT_RADIUS) {
+  while (nav.pathIndex < path.length - 1 && D.hypot(path[nav.pathIndex].x - t.x, path[nav.pathIndex].z - t.z) < WAYPOINT_RADIUS) {
     nav.pathIndex++;
   }
   // Skip ahead when a later waypoint is already in clear view (e.g. after being pushed aside).
@@ -199,7 +200,7 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: M
   const nav = m.nav;
   if (world.time < nav.checkAt) return;
   nav.checkAt = world.time + STUCK_CHECK;
-  const moved = Math.hypot(t.x - nav.checkX, t.z - nav.checkZ);
+  const moved = D.hypot(t.x - nav.checkX, t.z - nav.checkZ);
   nav.checkX = t.x;
   nav.checkZ = t.z;
   nav.stuckFor = moved < 0.35 && !turning ? nav.stuckFor + 1 : 0;
@@ -251,11 +252,11 @@ export function movementSystem(ctx: SimContext): System {
           m.nav.path = null;
           m.nav.stuckFor = 0;
           if (m.faceX !== null && m.faceZ !== null) {
-            t.heading = turnToward(t.heading, Math.atan2(-(m.faceZ - t.z), m.faceX - t.x), m.turnRate * 0.5 * dt);
+            t.heading = turnToward(t.heading, D.atan2(-(m.faceZ - t.z), m.faceX - t.x), m.turnRate * 0.5 * dt);
           }
           continue;
         }
-        if (Math.hypot(m.targetX - t.x, m.targetZ - t.z) < 0.3) {
+        if (D.hypot(m.targetX - t.x, m.targetZ - t.z) < 0.3) {
           m.targetX = m.targetZ = null;
           continue;
         }
@@ -263,25 +264,25 @@ export function movementSystem(ctx: SimContext): System {
         const wp = nextWaypoint(ctx, world, t, m, world.get(e, Collider)?.radius ?? 0, budget);
         const dx = wp.x - t.x;
         const dz = wp.z - t.z;
-        const dist = Math.hypot(dx, dz);
+        const dist = D.hypot(dx, dz);
         if (dist < 1e-4) continue;
         let dirX = dx / dist;
         let dirZ = dz / dist;
         const avoid = avoidance(ctx, world, e, t, dirX, dirZ, air);
         const sx = dirX + avoid.x;
         const sz = dirZ + avoid.z;
-        const sl = Math.hypot(sx, sz);
+        const sl = D.hypot(sx, sz);
         if (sl > 1e-4) {
           dirX = sx / sl;
           dirZ = sz / sl;
         }
-        const desired = Math.atan2(-dirZ, dirX);
+        const desired = D.atan2(-dirZ, dirX);
         const diff = wrapAngle(desired - t.heading);
         checkStuck(ctx, world, e, t, m, dirX, dirZ, Math.abs(diff) > TURNING);
 
         t.heading = turnToward(t.heading, desired, m.turnRate * dt);
         // Slow down while facing away so units arc rather than strafe.
-        const throttle = Math.max(0, Math.cos(diff));
+        const throttle = Math.max(0, D.cos(diff));
         const rules = MOVE_RULES[m.move];
         // Wading and swimming are slower (or, for hovers, a little faster) than driving, and the
         // ground's kind (scrap, roads, dense forest) speeds or slows some classes. Bridges are dry land.
@@ -289,15 +290,15 @@ export function movementSystem(ctx: SimContext): System {
         const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
         const speed = rules.flies ? m.speed : wet ? m.speed * rules.waterSpeed : m.speed * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
         const stepLen = Math.min(dist, speed * throttle * dt);
-        const nx = t.x + Math.cos(t.heading) * stepLen;
-        const nz = t.z - Math.sin(t.heading) * stepLen;
+        const nx = t.x + D.cos(t.heading) * stepLen;
+        const nz = t.z - D.sin(t.heading) * stepLen;
         if (rules.flies || ctx.navs.for(m.move).terrainAllowsAt(nx, nz)) {
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.
           if (CRUSHERS.has(m.move) && stepLen > 0) {
             const r = world.get(e, Collider)?.radius ?? 0.5;
-            if (m.move !== 'walker' || r >= 1.2) field.woods.crush(nx, nz, r * 0.8, { x: t.x - Math.cos(t.heading), z: t.z + Math.sin(t.heading) });
+            if (m.move !== 'walker' || r >= 1.2) field.woods.crush(nx, nz, r * 0.8, { x: t.x - D.cos(t.heading), z: t.z + D.sin(t.heading) });
           }
         }
       }
