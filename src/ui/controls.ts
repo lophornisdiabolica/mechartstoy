@@ -424,6 +424,16 @@ export class Controls {
     });
     toggleLabel.append(toggle, document.createTextNode(' Tilt-shift (T)'));
     cam.append(toggleLabel);
+    const turnLabel = el('label', { class: 'check', title: 'Hold Q / E to turn the camera to any angle, instead of a quarter turn per press' });
+    const turn = el('input', { type: 'checkbox' });
+    turn.addEventListener('change', () => {
+      this.stage.rig.smoothTurn = turn.checked;
+      if (!turn.checked) this.stage.rig.snapRotation();
+      this.saveView();
+    });
+    turnLabel.append(turn, document.createTextNode(' Smooth rotation (Q/E)'));
+    cam.append(turnLabel);
+    this.sync.push(() => (turn.checked = this.stage.rig.smoothTurn));
     const slider = (label: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void) => {
       const wrap = el('label', { class: 'slider' });
       const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step) });
@@ -461,7 +471,7 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, smoothTurn: this.stage.rig.smoothTurn });
   }
 
   private setSpeed(v: number): void {

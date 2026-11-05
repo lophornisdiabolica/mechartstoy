@@ -273,7 +273,8 @@ export class Effects {
       return;
     }
     const s = Math.max(0.8, splash);
-    if (splash >= BIG_SPLASH) this.blast(x, y + 0.2, z, s * 0.75);
+    // Kept a little smaller than the splash: shells land often, and units dying rarely.
+    if (splash >= BIG_SPLASH) this.blast(x, y + 0.2, z, s * 0.55);
     this.flashes.spawn({ x, y: y + 0.2, z, life: 0.25, size: 0.4 * s, endSize: 1.1 * s, color: 0xfff0c0, endColor: 0x000000 });
     for (let i = 0; i < 4; i++) {
       this.flashes.spawn({
@@ -385,7 +386,7 @@ export class Effects {
     }
     // Shock ring, hugging the ground.
     const ground = this.groundAt(x, z, y);
-    this.shocks.spawn({ x, y: ground + 0.15, z, life: 0.32, size: 0.4 * s, endSize: 3.6 * s, color: 0xfff0c8, endColor: 0x000000 });
+    this.shocks.spawn({ x, y: ground + 0.15, z, life: 0.32, size: 0.4 * s, endSize: 3.2 * s, color: 0xfff0c8, endColor: 0x000000 });
     this.shocks.spawn({ x, y: ground + 0.12, z, life: 0.55, size: 0.3 * s, endSize: 2.4 * s, color: 0x9a5a20, endColor: 0x000000 });
     // Embers thrown out in arcs.
     for (let i = 0; i < 14; i++) {

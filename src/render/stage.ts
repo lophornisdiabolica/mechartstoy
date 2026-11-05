@@ -126,12 +126,12 @@ export class Stage {
     this.sun.shadow.mapSize.set(SHADOW_MAP.high, SHADOW_MAP.high);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 300;
-    // No depth bias. It's a fraction of the shadow camera's depth (300 units), so the old
-    // -0.0005 slid every shadow 0.15 units off its caster and left a sunlit sliver under
-    // each object, as if it floated. Shadows are drawn from back faces (three's default),
-    // which keeps lit faces clear of acne; a small normal bias does the rest.
+    // No bias at all. The depth bias is a fraction of the shadow camera's depth (300 units),
+    // so the old -0.0005 slid every shadow 0.15 units off its caster and left a sunlit sliver
+    // under each object, as if it floated; any normal bias still leaves a hairline. Shadows
+    // are drawn from back faces (three's default), so lit faces don't shadow themselves.
     this.sun.shadow.bias = 0;
-    this.sun.shadow.normalBias = 0.015;
+    this.sun.shadow.normalBias = 0;
     this.scene.add(this.sun, this.sun.target);
     // Infantry sprites are lit like flat ground (see batcher.ts): scaled so this usual light shows them as painted.
     const lit = this.sky.color.clone().multiplyScalar(this.sky.intensity).add(this.sun.color.clone().multiplyScalar(this.sun.intensity * SUN_OFFSET.clone().normalize().y));

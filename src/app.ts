@@ -117,6 +117,7 @@ export class App implements MatchControls {
     this.stage.followFights = view.follow;
     this.stage.showPlans = view.plans;
     this.stage.showFronts = view.fronts;
+    this.stage.rig.smoothTurn = view.smoothTurn;
     this.tickerFeed.on = view.ticker;
     this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {

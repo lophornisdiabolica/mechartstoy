@@ -19,9 +19,9 @@ const CLICK_SLOP = 4;
  * Q / E rotate in 90 degree steps. Left mouse is left free for game
  * interaction (step 4). Touch: one-finger drag pans.
  *
- * With `freeRotation` on (photo mode), holding Q / E turns the view
- * smoothly to any angle, and a left-drag orbits: sideways turns, up and
- * down tilts.
+ * With `smoothTurn` on (a view preference), holding Q / E turns the view
+ * smoothly to any angle. `freeRotation` (photo mode) does that too, and
+ * adds a left-drag orbit: sideways turns, up and down tilts.
  */
 export class CameraRig {
   readonly camera: THREE.OrthographicCamera;
@@ -44,6 +44,8 @@ export class CameraRig {
   onOrbit: (() => void) | null = null;
   /** Turn smoothly to any angle instead of in 90 degree steps, and orbit with a left-drag (photo mode). */
   freeRotation = false;
+  /** Held Q / E turn smoothly to any angle instead of in 90 degree steps (the player's preference). */
+  smoothTurn = false;
   /** Tilt range a left-drag orbit keeps to (radians above the horizon). */
   orbitTilt = { min: 0.2, max: 1.48 };
 
@@ -92,7 +94,7 @@ export class CameraRig {
       this.panScreen(fx * this.panSpeed * dt / this.zoom, fy * this.panSpeed * dt / this.zoom);
     }
 
-    if (this.freeRotation) {
+    if (this.freeRotation || this.smoothTurn) {
       // Held Q / E turn the view smoothly, about a quarter turn a second.
       const turn = (this.keys.has('e') ? 1 : 0) - (this.keys.has('q') ? 1 : 0);
       this.targetAzimuth += turn * ROTATE_SPEED * dt;
@@ -172,7 +174,7 @@ export class CameraRig {
       if (e.target instanceof HTMLElement && e.target.matches('input:not([type=range]):not([type=checkbox]), textarea')) return;
       const key = e.key.toLowerCase();
       this.keys.add(key);
-      if (this.freeRotation) return;
+      if (this.freeRotation || this.smoothTurn) return;
       if (key === 'q') this.targetAzimuth -= Math.PI / 2;
       if (key === 'e') this.targetAzimuth += Math.PI / 2;
     });

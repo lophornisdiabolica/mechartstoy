@@ -15,7 +15,8 @@ const PHOTO_ZOOM = 9;
  * bar at the bottom with the tilt, the time of day, the tilt-shift blur,
  * focus and colour, pause, and a button that saves the picture as a PNG.
  * Leaving (H or Esc) puts the camera's tilt, zoom limit, the light and the
- * rings back, and turns the camera to the nearest of its four usual angles;
+ * rings back, and (unless smooth rotation is on) turns the camera to the
+ * nearest of its four usual angles;
  * the tilt-shift settings stay as set, like the panel's.
  */
 export class PhotoMode {
@@ -65,7 +66,7 @@ export class PhotoMode {
     rig.maxZoom = this.saved.maxZoom;
     rig.freeRotation = false;
     rig.onOrbit = null;
-    rig.snapRotation();
+    if (!rig.smoothTurn) rig.snapRotation();
     this.stage.showOutpostRings = true;
     rig.jumpTo(rig.target.x, rig.target.z, Math.min(rig.zoom, this.saved.maxZoom));
     this.stage.daylight = null;
