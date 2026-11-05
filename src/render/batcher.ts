@@ -36,32 +36,48 @@ interface SpriteBatch {
   idle: number;
 }
 
-const SPRITE_VERTEX = /* glsl */ `
-  attribute vec2 uvOffset;
-  uniform vec2 uvRepeat;
-  varying vec2 vUv;
-  void main() {
-    vUv = uv * uvRepeat + uvOffset;
-    // A camera-facing quad, like THREE.Sprite: the instance gives the anchor and the size.
-    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-    vec2 size = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
-    // Anchored at the bottom middle (Sprite.center 0.5, 0).
-    mvPosition.xy += (position.xy + vec2(0.0, 0.5)) * size;
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`;
+/** How high above a trooper's feet its light is measured, in its sprite's heights: about the knee. */
+const SPRITE_LIGHT_HEIGHT = 0.3;
 
-const SPRITE_FRAGMENT = /* glsl */ `
-  uniform sampler2D map;
-  varying vec2 vUv;
-  void main() {
-    vec4 texel = texture2D(map, vUv);
-    if (texel.a < 0.5) discard;
-    gl_FragColor = texel;
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`;
+/**
+ * Multiplies the light on infantry sprites so that in the usual daylight,
+ * out of shadow, they look exactly as painted (see Stage, which sets it).
+ */
+export const SPRITE_GAIN = { value: new THREE.Vector3(1, 1, 1) };
+
+/**
+ * Infantry sprites are lit like the ground they stand on: a Lambert
+ * material whose vertex shader turns each instance into a camera-facing
+ * quad (like THREE.Sprite), lit as if it were a patch of flat ground at the
+ * trooper's knee. So a trooper in a building's shadow, or out at dusk,
+ * darkens just as the ground under them does, the whole sprite evenly, and
+ * fog (when there is some) fades them like everything else. Costs one
+ * shadow-map lookup per sprite pixel, as the ground pays per ground pixel.
+ */
+function spriteShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.uniforms.spriteGain = SPRITE_GAIN;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec2 uvOffset;')
+    // The frame this trooper is on: an offset into the sheet.
+    .replace('#include <uv_vertex>', '#include <uv_vertex>\nvMapUv += uvOffset;')
+    // Lit as flat ground: the normal points straight up.
+    .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( 0.0, 1.0, 0.0 );')
+    .replace(
+      '#include <project_vertex>',
+      /* glsl */ `
+      // A camera-facing quad: the instance gives the anchor (the feet) and the size.
+      vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
+      vec2 spriteSize = vec2( length( instanceMatrix[ 0 ].xyz ), length( instanceMatrix[ 1 ].xyz ) );
+      // Anchored at the bottom middle (Sprite.center 0.5, 0).
+      mvPosition.xy += ( position.xy + vec2( 0.0, 0.5 ) ) * spriteSize;
+      gl_Position = projectionMatrix * mvPosition;`,
+    )
+    // Shadows are looked up at one point, by the knee, so the whole trooper is lit alike.
+    .replace('#include <worldpos_vertex>', `vec4 worldPosition = modelMatrix * instanceMatrix * vec4( 0.0, ${SPRITE_LIGHT_HEIGHT.toFixed(2)}, 0.0, 1.0 );`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 spriteGain;')
+    .replace('#include <opaque_fragment>', 'outgoingLight *= spriteGain;\n#include <opaque_fragment>');
+}
 
 const _m = new THREE.Matrix4();
 const _scale = new THREE.Matrix4();
@@ -131,11 +147,8 @@ export class Batcher {
       const offsets = new THREE.InstancedBufferAttribute(new Float32Array(32), 2).setUsage(THREE.DynamicDrawUsage);
       const geometry = this.spriteGeometry.clone();
       geometry.setAttribute('uvOffset', offsets);
-      const material = new THREE.ShaderMaterial({
-        uniforms: { map: { value: sheet }, uvRepeat: { value: map.repeat.clone() } },
-        vertexShader: SPRITE_VERTEX,
-        fragmentShader: SPRITE_FRAGMENT,
-      });
+      const material = new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5 });
+      material.onBeforeCompile = spriteShader;
       const mesh = new THREE.InstancedMesh(geometry, material, 16);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;

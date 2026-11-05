@@ -5,6 +5,12 @@ import { Bounds } from '../world/battlefield';
 const MIN_ZOOM = 0.6;
 /** Width of the medium map, in world units. */
 const MEDIUM_SPAN = 126;
+/** How fast held Q / E turn the view with free rotation, radians a second. */
+const ROTATE_SPEED = 1.4;
+/** Radians of turn per pixel of left-drag orbit. */
+const ORBIT_PER_PIXEL = 0.006;
+/** Pixels a left press can wander and still count as a click (picking a unit), not an orbit. */
+const CLICK_SLOP = 4;
 
 /**
  * Isometric orthographic camera that orbits a ground target.
@@ -12,6 +18,10 @@ const MEDIUM_SPAN = 126;
  * Controls: WASD / arrows pan, right- or middle-drag pans, wheel zooms,
  * Q / E rotate in 90 degree steps. Left mouse is left free for game
  * interaction (step 4). Touch: one-finger drag pans.
+ *
+ * With `freeRotation` on (photo mode), holding Q / E turns the view
+ * smoothly to any angle, and a left-drag orbits: sideways turns, up and
+ * down tilts.
  */
 export class CameraRig {
   readonly camera: THREE.OrthographicCamera;
@@ -30,11 +40,19 @@ export class CameraRig {
 
   /** Called when the player pans the camera themselves (keys, drag), e.g. to stop following fights. */
   onManualPan: (() => void) | null = null;
+  /** Called when a left-drag orbit changes the tilt (free rotation), so sliders can follow. */
+  onOrbit: (() => void) | null = null;
+  /** Turn smoothly to any angle instead of in 90 degree steps, and orbit with a left-drag (photo mode). */
+  freeRotation = false;
+  /** Tilt range a left-drag orbit keeps to (radians above the horizon). */
+  orbitTilt = { min: 0.2, max: 1.48 };
 
   private targetAzimuth = this.azimuth;
   private targetZoom = this.zoom;
   private readonly keys = new Set<string>();
   private drag: { x: number; y: number } | null = null;
+  /** A left-drag orbit in progress (free rotation); `moved` once it's gone past a click's wobble. */
+  private orbit: { x: number; y: number; moved: boolean } | null = null;
   private aspect = 1;
 
   constructor(
@@ -74,6 +92,12 @@ export class CameraRig {
       this.panScreen(fx * this.panSpeed * dt / this.zoom, fy * this.panSpeed * dt / this.zoom);
     }
 
+    if (this.freeRotation) {
+      // Held Q / E turn the view smoothly, about a quarter turn a second.
+      const turn = (this.keys.has('e') ? 1 : 0) - (this.keys.has('q') ? 1 : 0);
+      this.targetAzimuth += turn * ROTATE_SPEED * dt;
+    }
+
     const k = 1 - Math.exp(-dt * 10);
     this.azimuth += (this.targetAzimuth - this.azimuth) * k;
     this.zoom += (this.targetZoom - this.zoom) * k;
@@ -101,6 +125,12 @@ export class CameraRig {
     this.target.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, x));
     this.target.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, z));
     this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+  }
+
+  /** Settle on the nearest of the four usual views (the classic isometric angles), e.g. when leaving free rotation. */
+  snapRotation(): void {
+    const quarter = Math.PI / 2;
+    this.targetAzimuth = Math.PI / 4 + Math.round((this.targetAzimuth - Math.PI / 4) / quarter) * quarter;
   }
 
   /** Ground distance from the view's centre to its farthest visible corner, roughly. */
@@ -142,6 +172,7 @@ export class CameraRig {
       if (e.target instanceof HTMLElement && e.target.matches('input:not([type=range]):not([type=checkbox]), textarea')) return;
       const key = e.key.toLowerCase();
       this.keys.add(key);
+      if (this.freeRotation) return;
       if (key === 'q') this.targetAzimuth -= Math.PI / 2;
       if (key === 'e') this.targetAzimuth += Math.PI / 2;
     });
@@ -150,19 +181,40 @@ export class CameraRig {
 
     this.dom.addEventListener('contextmenu', (e) => e.preventDefault());
     this.dom.addEventListener('pointerdown', (e) => {
+      if (this.freeRotation && e.button === 0 && e.pointerType !== 'touch') {
+        this.orbit = { x: e.clientX, y: e.clientY, moved: false };
+        this.dom.setPointerCapture(e.pointerId);
+        return;
+      }
       if (e.button === 1 || e.button === 2 || e.pointerType === 'touch') {
         this.drag = { x: e.clientX, y: e.clientY };
         this.dom.setPointerCapture(e.pointerId);
       }
     });
     this.dom.addEventListener('pointermove', (e) => {
+      if (this.orbit) {
+        const o = this.orbit;
+        if (!o.moved && Math.hypot(e.clientX - o.x, e.clientY - o.y) < CLICK_SLOP) return;
+        o.moved = true;
+        // Dragging right swings the camera round to the left, so the ground follows the pointer.
+        this.targetAzimuth += (e.clientX - o.x) * ORBIT_PER_PIXEL;
+        this.azimuth = this.targetAzimuth;
+        this.elevation = Math.max(this.orbitTilt.min, Math.min(this.orbitTilt.max, this.elevation + (e.clientY - o.y) * ORBIT_PER_PIXEL));
+        o.x = e.clientX;
+        o.y = e.clientY;
+        this.onOrbit?.();
+        return;
+      }
       if (!this.drag) return;
       if (e.clientX !== this.drag.x || e.clientY !== this.drag.y) this.onManualPan?.();
       const worldPerPixel = this.viewHeight / this.zoom / this.dom.clientHeight;
       this.panScreen(-(e.clientX - this.drag.x) * worldPerPixel, (e.clientY - this.drag.y) * worldPerPixel);
       this.drag = { x: e.clientX, y: e.clientY };
     });
-    const endDrag = () => (this.drag = null);
+    const endDrag = () => {
+      this.drag = null;
+      this.orbit = null;
+    };
     this.dom.addEventListener('pointerup', endDrag);
     this.dom.addEventListener('pointercancel', endDrag);
 

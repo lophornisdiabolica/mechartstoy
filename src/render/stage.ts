@@ -6,6 +6,7 @@ import { Entity } from '../core/ecs';
 import { Rng } from '../core/rng';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
+import { SPRITE_GAIN } from './batcher';
 import { CameraRig } from './cameraRig';
 import { disposeTree } from './dispose';
 import { Effects } from './effects';
@@ -69,6 +70,7 @@ export class Stage {
   commanderOverlay!: CommanderOverlay;
   frontLines!: FrontLines;
   private frontsShown = false;
+  private ringsShown = true;
   /** Where the sun sits relative to what it lights (see daylight). */
   private readonly sunOffset = SUN_OFFSET.clone();
   private readonly sky: THREE.HemisphereLight;
@@ -124,9 +126,16 @@ export class Stage {
     this.sun.shadow.mapSize.set(SHADOW_MAP.high, SHADOW_MAP.high);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 300;
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.03;
+    // No depth bias. It's a fraction of the shadow camera's depth (300 units), so the old
+    // -0.0005 slid every shadow 0.15 units off its caster and left a sunlit sliver under
+    // each object, as if it floated. Shadows are drawn from back faces (three's default),
+    // which keeps lit faces clear of acne; a small normal bias does the rest.
+    this.sun.shadow.bias = 0;
+    this.sun.shadow.normalBias = 0.015;
     this.scene.add(this.sun, this.sun.target);
+    // Infantry sprites are lit like flat ground (see batcher.ts): scaled so this usual light shows them as painted.
+    const lit = this.sky.color.clone().multiplyScalar(this.sky.intensity).add(this.sun.color.clone().multiplyScalar(this.sun.intensity * SUN_OFFSET.clone().normalize().y));
+    SPRITE_GAIN.value.set(Math.PI / lit.r, Math.PI / lit.g, Math.PI / lit.b);
 
     // Multisampled HDR target so edges stay clean through the post chain.
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -171,6 +180,7 @@ export class Stage {
     this.effects = new Effects(game.events, field);
     this.markers = new Markers(game, this.entities);
     this.outpostRings = new OutpostRings(game);
+    this.outpostRings.root.visible = this.ringsShown;
     this.commanderOverlay = new CommanderOverlay(game);
     this.commanderOverlay.visible = this.plansShown;
     this.frontLines = new FrontLines(game);
@@ -200,6 +210,16 @@ export class Stage {
   set showFronts(on: boolean) {
     this.frontsShown = on;
     if (this.frontLines) this.frontLines.visible = on;
+  }
+
+  /** The capture rings round outposts (photo mode hides them). */
+  get showOutpostRings(): boolean {
+    return this.ringsShown;
+  }
+
+  set showOutpostRings(on: boolean) {
+    this.ringsShown = on;
+    if (this.outpostRings) this.outpostRings.root.visible = on;
   }
 
   /** The time of day the light is set for (photo mode), or null for the usual light. */
@@ -293,7 +313,7 @@ export class Stage {
       sc.updateProjectionMatrix();
     }
     const texel = (2 * half) / this.sun.shadow.mapSize.x;
-    const dir = _dir.copy(SUN_OFFSET).negate().normalize();
+    const dir = _dir.copy(this.sunOffset).negate().normalize();
     const right = _right.crossVectors(dir, _up).normalize();
     const up = _up2.crossVectors(right, dir);
     const t = this.rig.target;

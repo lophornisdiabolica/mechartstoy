@@ -55,19 +55,29 @@ export function pineGeometry(snow: boolean): THREE.BufferGeometry {
   return mergeNonIndexed(parts).scale(0.7, 0.7, 0.7);
 }
 
-/** A saguaro-ish cactus: a ribbed column with two arms. Coloured by its instance colour. */
+/**
+ * A saguaro-ish cactus: a ribbed column with two arms, each a short
+ * horizontal branch out of the trunk, a rounded elbow, and an upright limb.
+ * Coloured by its instance colour.
+ */
 export function cactusGeometry(): THREE.BufferGeometry {
   const green = 0xffffff;
-  const parts = [
-    paint(new THREE.CylinderGeometry(0.16, 0.19, 1.5, 7).translate(0, 0.75, 0), green),
-    paint(new THREE.CylinderGeometry(0.1, 0.11, 0.45, 6).translate(0.3, 0.75, 0), green),
-    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.5, 6).translate(0.38, 1.05, 0), green),
-    paint(new THREE.CylinderGeometry(0.09, 0.1, 0.35, 6).translate(-0.27, 0.95, 0), green),
-    paint(new THREE.CylinderGeometry(0.09, 0.09, 0.4, 6).translate(-0.33, 1.2, 0), green),
+  /** An arm on side `dir` (1 right, -1 left): out of the trunk at `y`, turning up at `reach` from its middle. */
+  const arm = (dir: number, y: number, reach: number, rise: number, r: number) => [
+    // The branch, from inside the trunk out to the elbow.
+    paint(new THREE.CylinderGeometry(r, r * 1.1, reach, 6).rotateZ(Math.PI / 2).translate((dir * reach) / 2, y, 0), green),
+    paint(new THREE.SphereGeometry(r, 6, 4).translate(dir * reach, y, 0), green),
+    // The limb, standing on the elbow.
+    paint(new THREE.CylinderGeometry(r * 0.95, r, rise, 6).translate(dir * reach, y + rise / 2, 0), green),
+    paint(new THREE.SphereGeometry(r * 0.95, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2).translate(dir * reach, y + rise, 0), green),
   ];
-  parts[1].rotateZ(Math.PI / 2).translate(0.75, 0.45, 0);
-  parts[3].rotateZ(-Math.PI / 2).translate(-0.95, 0.68, 0);
-  return mergeNonIndexed(parts).scale(0.8, 0.8, 0.8);
+  return mergeNonIndexed([
+    // The trunk and its rounded top, 1.5 tall as before (woodsMesh's CACTUS_HEIGHT).
+    paint(new THREE.CylinderGeometry(0.16, 0.19, 1.34, 7).translate(0, 0.67, 0), green),
+    paint(new THREE.SphereGeometry(0.16, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 1.34, 0), green),
+    ...arm(1, 0.72, 0.38, 0.5, 0.1),
+    ...arm(-1, 0.95, 0.33, 0.38, 0.09),
+  ]).scale(0.8, 0.8, 0.8);
 }
 
 /** A low scrubby bush. */

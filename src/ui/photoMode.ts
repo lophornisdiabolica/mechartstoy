@@ -9,11 +9,13 @@ const TILT_MAX = (85 * Math.PI) / 180;
 const PHOTO_ZOOM = 9;
 
 /**
- * Photo mode (H): hides the interface, frees the camera (tilt it from
- * nearly flat to straight down, and zoom in much closer), and puts a small
+ * Photo mode (H): hides the interface and the outposts' capture rings,
+ * frees the camera (turn it to any angle with a left-drag or held Q / E,
+ * tilt it from nearly flat to straight down, and zoom in much closer), and puts a small
  * bar at the bottom with the tilt, the time of day, the tilt-shift blur,
  * focus and colour, pause, and a button that saves the picture as a PNG.
- * Leaving (H or Esc) puts the camera's tilt, zoom limit and the light back;
+ * Leaving (H or Esc) puts the camera's tilt, zoom limit, the light and the
+ * rings back, and turns the camera to the nearest of its four usual angles;
  * the tilt-shift settings stay as set, like the panel's.
  */
 export class PhotoMode {
@@ -43,8 +45,16 @@ export class PhotoMode {
     const rig = this.stage.rig;
     this.saved = { elevation: rig.elevation, maxZoom: rig.maxZoom };
     rig.maxZoom = PHOTO_ZOOM;
+    rig.freeRotation = true;
+    rig.orbitTilt = { min: TILT_MIN, max: TILT_MAX };
+    rig.onOrbit = () => this.syncAll();
+    this.stage.showOutpostRings = false;
     document.body.classList.add('photo');
     this.bar.hidden = false;
+    this.syncAll();
+  }
+
+  private syncAll(): void {
     for (const s of this.sync) s();
   }
 
@@ -53,6 +63,10 @@ export class PhotoMode {
     const rig = this.stage.rig;
     rig.elevation = this.saved.elevation;
     rig.maxZoom = this.saved.maxZoom;
+    rig.freeRotation = false;
+    rig.onOrbit = null;
+    rig.snapRotation();
+    this.stage.showOutpostRings = true;
     rig.jumpTo(rig.target.x, rig.target.z, Math.min(rig.zoom, this.saved.maxZoom));
     this.stage.daylight = null;
     this.saved = null;
@@ -105,5 +119,6 @@ export class PhotoMode {
     const buttons = el('div', { class: 'buttons' });
     buttons.append(pause, save, done);
     this.bar.append(buttons);
+    this.bar.append(el('span', { class: 'hint' }, 'Drag to turn and tilt · hold Q / E to turn · wheel zooms'));
   }
 }
