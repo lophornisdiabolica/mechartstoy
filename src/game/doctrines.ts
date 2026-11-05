@@ -143,6 +143,8 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
           { unit: 'flakTank', weight: 1.2, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
+        // Bastion has no second production building, so its factory works faster.
+        interval: 16,
       },
       mechbay: { table: [{ unit: 'fortress', weight: 1, count: 1 }] },
     },
