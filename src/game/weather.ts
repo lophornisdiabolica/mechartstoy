@@ -117,6 +117,29 @@ function amounts(kind: WeatherKind, s: number): Omit<WeatherState, 'kind' | 'win
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
+/**
+ * This file is sim code (src/game), so it keeps to the operations every
+ * engine rounds the same (see core/dmath.ts): no Math.sin or Math.cos.
+ */
+
+/** A random direction, scaled to length `w`: a point picked in the unit disc, then normalised. */
+function windFrom(rng: Rng, w: number): { windX: number; windZ: number } {
+  for (;;) {
+    const x = rng.range(-1, 1);
+    const z = rng.range(-1, 1);
+    const d = Math.sqrt(x * x + z * z);
+    if (d > 0.05 && d <= 1) return { windX: (x / d) * w, windZ: (z / d) * w };
+  }
+}
+
+/** A smooth wave between -1 and 1 with period 2 pi, like sin but built from exact operations. */
+function wave(x: number): number {
+  const p = x / (Math.PI * 2);
+  const f = p - Math.floor(p);
+  const tri = f < 0.5 ? f * 2 : 2 - f * 2;
+  return 2 * smooth(tri) - 1;
+}
+
 export class Weather {
   private readonly spells: Spell[] = [];
   private readonly rng: Rng;
@@ -132,9 +155,7 @@ export class Weather {
     if (setting !== 'changing') {
       // One spell all battle, heavy enough to see, with its own wind.
       const [w0, w1] = WIND[setting];
-      const a = this.rng.range(0, Math.PI * 2);
-      const w = (w0 + w1) / 2;
-      this.spells.push({ kind: setting, start: 0, strength: 0.85, windX: Math.cos(a) * w, windZ: Math.sin(a) * w });
+      this.spells.push({ kind: setting, start: 0, strength: 0.85, ...windFrom(this.rng, (w0 + w1) / 2) });
       this.until = Infinity;
     }
   }
@@ -170,15 +191,15 @@ export class Weather {
     const kind = kinds[k];
     const [l0, l1] = SPELL_LENGTH[kind];
     const [w0, w1] = WIND[kind];
-    const a = this.rng.range(0, Math.PI * 2);
     const w = this.rng.range(w0, w1);
-    this.spells.push({ kind, start: this.until, strength: this.rng.range(0.5, 1), windX: Math.cos(a) * w, windZ: Math.sin(a) * w });
+    const strength = this.rng.range(0.5, 1);
+    this.spells.push({ kind, start: this.until, strength, ...windFrom(this.rng, w) });
     this.until += this.rng.range(l0, l1);
   }
 
   private state(from: Spell, to: Spell, k: number, t: number): WeatherState {
     // A slow swell, so even a steady spell comes in heavier and lighter bursts.
-    const swell = (s: Spell) => Math.min(1, s.strength * (0.88 + 0.12 * Math.sin(t / 23 + s.start)));
+    const swell = (s: Spell) => Math.min(1, s.strength * (0.88 + 0.12 * wave(t / 23 + s.start)));
     const a = amounts(from.kind, swell(from));
     const b = amounts(to.kind, swell(to));
     const mix = (x: number, y: number) => x + (y - x) * k;
