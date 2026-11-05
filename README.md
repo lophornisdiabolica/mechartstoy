@@ -330,9 +330,22 @@ remembered in this browser.
 **Photo mode** (H, or the button in the panel) hides the interface and puts
 a small bar at the bottom: tilt the camera from nearly flat to straight
 down, zoom in much closer, set the time of day (dawn to dusk: the sun
-moves and the light warms as it gets low), adjust the tilt-shift, pause,
-and save the picture as a PNG. H or Esc leaves it, putting the camera
-and light back.
+moves and the light warms as it gets low), pick the weather, adjust the
+tilt-shift, pause, and save the picture as a PNG. H or Esc leaves it,
+putting the camera, light and weather back. Pausing freezes the rain and
+snow mid-fall (and a lightning bolt, if you catch one).
+
+**Weather** (Map, on the setup screen, `wx=` in the link): clear, rain,
+thunderstorms, snow or fog all battle, or *changing*, spells of each that
+come and go every few minutes and suit the biome (no snow in the desert,
+snow instead of rain on snow maps). Cloud dims the sun and softens the
+shadows, fog thickens toward the far side of the view, and storms light
+the board up with lightning. It can be re-rolled between battles too. It's
+looks only for now: `game/weather.ts` works out the weather at any moment
+from the seed and settings, on its own random stream, and sits on the sim
+context (`ctx.weather.at(world.time)`) so that rules (sight in fog, going
+in a blizzard, lightning strikes) can read it later; nothing does yet, so
+it changes no battle.
 
 When a battle ends, the banner shows a **chart** of each side's army
 strength through the battle, the **turning point** (when the winners took
@@ -400,6 +413,7 @@ src/
     orders.ts        per-faction player orders (stance, rally point)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
+    weather.ts       the weather over a battle: spells, and rain, snow, fog, lightning and cloud at any moment
     settings.ts      BattleSettings: everything the setup screen tunes, and what it derives
     systems/         one file per system (ai, movement, weapons, ...)
     game.ts          wires world + battlefield + systems together
@@ -417,6 +431,7 @@ src/
     entityView.ts    mirrors ECS entities into the scene each frame (posed models, drawn through the batcher)
     batcher.ts       draws every model part as instanced batches: boxes as one scaled unit box, flat colours per instance
     effects.ts       particles for flashes, explosions, smoke, debris
+    weather.ts       rain and snow (on the GPU, in a box following the view), mist, and lightning
     markers.ts       rally flags and the selection ring
     outpostRings.ts  capture rings round outposts, filling as a side takes one
     commanderOverlay.ts  each side's plan as arrows on the map, and markers on crossings, bridges and high ground

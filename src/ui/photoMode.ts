@@ -1,6 +1,7 @@
 import { FixedLoop } from '../core/loop';
 import { Stage } from '../render/stage';
 import { el } from './dom';
+import { WEATHER_KINDS, WEATHER_LABELS, WeatherKind } from '../game/weather';
 
 /** The camera's usual tilt, and the range photo mode allows (radians above the horizon). */
 const TILT_MIN = (12 * Math.PI) / 180;
@@ -55,6 +56,7 @@ export class PhotoMode {
     rig.maxZoom = this.saved.maxZoom;
     rig.jumpTo(rig.target.x, rig.target.z, Math.min(rig.zoom, this.saved.maxZoom));
     this.stage.daylight = null;
+    this.stage.weatherOverride = null;
     this.saved = null;
     document.body.classList.remove('photo');
     this.bar.hidden = true;
@@ -72,6 +74,14 @@ export class PhotoMode {
     };
     slider('Tilt', TILT_MIN, TILT_MAX, 0.01, () => this.stage.rig.elevation, (v) => (this.stage.rig.elevation = v), 'How steeply the camera looks down');
     slider('Time of day', 5, 19, 0.25, () => this.stage.daylight ?? 13, (v) => (this.stage.daylight = v), 'Where the sun is: dawn on the left, dusk on the right');
+    // The weather: the battle's as it comes, or one kind, steady, for the picture.
+    const weatherWrap = el('label', { class: 'slider', title: 'The battle’s own weather, or pick one for the picture' });
+    const weather = el('select', {});
+    weather.append(el('option', { value: '' }, 'Battle’s'), ...WEATHER_KINDS.map((k) => el('option', { value: k }, WEATHER_LABELS[k])));
+    weather.addEventListener('change', () => (this.stage.weatherOverride = (weather.value || null) as WeatherKind | null));
+    weatherWrap.append(el('span', {}, 'Weather'), weather);
+    this.bar.append(weatherWrap);
+    this.sync.push(() => (weather.value = this.stage.weatherOverride ?? ''));
     slider('Blur', 0, 14, 0.5, () => ts.settings.maxBlur, (v) => {
       ts.settings.maxBlur = v;
       ts.settings.enabled = v > 0;

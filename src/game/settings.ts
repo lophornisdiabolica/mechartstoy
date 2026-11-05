@@ -1,6 +1,7 @@
 import type { Style } from './commander/advice';
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
+import type { WeatherSetting } from './weather';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
@@ -82,6 +83,8 @@ export interface BattleSettings {
     shape: number;
     /** Ground, water, scenery and town style (see biomes.ts). Looks only. */
     biome: BiomeId;
+    /** Rain, thunderstorms, snow and fog, all battle or in changing spells (see weather.ts). Looks only, for now. */
+    weather: WeatherSetting;
     /** Where the bases go. */
     layout: BaseLayout;
     /** Civilian towns in no-man's land, and how big they are. */
@@ -238,7 +241,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', weather: 'clear', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',

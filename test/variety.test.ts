@@ -139,8 +139,8 @@ describe('variety between battles', () => {
   });
 
   it('round-trips through the URL', () => {
-    const s = settingsFromParams(new URLSearchParams('vary=biome,doctrines,junk&vsides=7-3&vteams=ffa&vdocs=raiders,nope,legion&vafter=15'));
-    expect(s.variety.roll).toEqual({ size: false, biome: true, style: false, sides: false, doctrines: true });
+    const s = settingsFromParams(new URLSearchParams('vary=biome,doctrines,weather,junk&vsides=7-3&vteams=ffa&vdocs=raiders,nope,legion&vafter=15'));
+    expect(s.variety.roll).toEqual({ size: false, biome: true, style: false, sides: false, doctrines: true, weather: true });
     expect([s.variety.sidesMin, s.variety.sidesMax]).toEqual([3, 7]);
     expect(s.variety.teams).toBe('ffa');
     expect(s.variety.doctrines).toEqual(['raiders', 'legion']);

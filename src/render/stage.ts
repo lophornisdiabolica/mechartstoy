@@ -26,6 +26,8 @@ import { buildWoods } from './woodsMesh';
 import { BIOMES } from '../world/biomes';
 import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
+import { WeatherView } from './weather';
+import { steadyWeather, WeatherKind, WeatherState } from '../game/weather';
 
 const DEBUG_IDS = DEBUG_LAYERS.map((l) => l.id);
 
@@ -48,6 +50,18 @@ const SHADOW_MAP: Record<Exclude<ShadowQuality, 'off'>, number> = { high: 4096, 
 const SUN_OFFSET = new THREE.Vector3(-60, 90, 40);
 /** Extra shadow coverage past the view's edge, for tall things and long shadows just off screen. */
 const SHADOW_MARGIN = 14;
+
+/** The usual light (see daylight): sun colour and strength, and the sky's. */
+const SUN_COLOR = 0xfff1dc;
+const SUN_INTENSITY = 2.6;
+const SKY_INTENSITY = 1.3;
+/** Cloud's grey, the sky it fades the background toward, and the colour of fog. */
+const OVERCAST_SUN = new THREE.Color(0xdfe4ea);
+const OVERCAST_SKY = new THREE.Color(0x9aa3ab);
+const FOG_COLOR = new THREE.Color(0xc3cad0);
+/** The camera's distance from what it looks at (see CameraRig.update), which fog distances are measured from. */
+const CAMERA_DIST = 200;
+const _c = new THREE.Color();
 
 /**
  * Everything visual: renderer, scene, lights, camera and post-processing.
@@ -73,6 +87,15 @@ export class Stage {
   private readonly sunOffset = SUN_OFFSET.clone();
   private readonly sky: THREE.HemisphereLight;
   private hour: number | null = null;
+  /** The light the time of day sets, before the weather dims it. */
+  private readonly baseSun = { color: new THREE.Color(SUN_COLOR), intensity: SUN_INTENSITY, sky: SKY_INTENSITY };
+  /** The biome's sky colour, before the weather greys it. */
+  private readonly skyColor = new THREE.Color(0x9fb4c4);
+  /** Rain, snow, mist and lightning (see WeatherView), replaced with each battle. */
+  weather!: WeatherView;
+  /** Photo mode's pick of weather, shown instead of the battle's; null shows the battle's. */
+  weatherOverride: WeatherKind | null = null;
+  private game: Game | null = null;
   /** The debug overlays (see DebugOverlay), replaced with each battle; the layers shown carry over. */
   debugOverlay!: DebugOverlay;
   /** Draw each side's plan on the map (see CommanderOverlay). */
@@ -108,6 +131,8 @@ export class Stage {
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x9fb4c4);
+    // Always there (so weather coming and going doesn't recompile every material), and out of sight until there's fog.
+    this.scene.fog = new THREE.Fog(0x9fb4c4, 1e5, 1e5 + 1);
 
     this.rig = new CameraRig(this.renderer.domElement, { minX: 0, maxX: 0, minZ: 0, maxZ: 0 });
     this.rig.onManualPan = () => {
@@ -149,6 +174,7 @@ export class Stage {
       this.commanderOverlay.dispose();
       this.frontLines.dispose();
       this.debugOverlay.dispose();
+      this.weather.dispose();
       disposeTree(this.battle);
     }
     this.selected = null;
@@ -162,7 +188,11 @@ export class Stage {
     this.stopTerrain = terrain.userData.dispose;
     this.ground = terrain.getObjectByName('ground')!;
     const biome = BIOMES[field.config.biome];
+    this.skyColor.set(biome.sky);
     (this.scene.background as THREE.Color).set(biome.sky);
+    this.game = game;
+    this.weather = new WeatherView(field);
+    battle.add(this.weather.root);
     setTownStyle(biome.town);
     const woods = buildWoods(field, visualRng.fork(0x77));
     this.stopWoods = woods.userData.dispose;
@@ -216,9 +246,9 @@ export class Stage {
     this.hour = hour;
     if (hour === null) {
       this.sunOffset.copy(SUN_OFFSET);
-      this.sun.color.set(0xfff1dc);
-      this.sun.intensity = 2.6;
-      this.sky.intensity = 1.3;
+      this.baseSun.color.set(SUN_COLOR);
+      this.baseSun.intensity = SUN_INTENSITY;
+      this.baseSun.sky = SKY_INTENSITY;
       return;
     }
     const day = Math.max(0, Math.min(1, (hour - 5) / 14));
@@ -229,9 +259,51 @@ export class Stage {
     const azimuth = day * Math.PI;
     const d = 110;
     this.sunOffset.set(Math.cos(azimuth) * Math.cos(elevation) * d, Math.sin(elevation) * d, Math.sin(azimuth) * Math.cos(elevation) * d);
-    this.sun.color.set(0xffa25c).lerp(new THREE.Color(0xfff1dc), Math.min(1, up * 1.6));
-    this.sun.intensity = 0.9 + 1.7 * up;
-    this.sky.intensity = 0.55 + 0.75 * up;
+    this.baseSun.color.set(0xffa25c).lerp(_c.set(SUN_COLOR), Math.min(1, up * 1.6));
+    this.baseSun.intensity = 0.9 + 1.7 * up;
+    this.baseSun.sky = 0.55 + 0.75 * up;
+  }
+
+  /** The weather showing now: photo mode's pick, or the battle's at this moment. */
+  get weatherNow(): WeatherState {
+    if (this.weatherOverride) return steadyWeather(this.weatherOverride);
+    return this.game ? this.game.weather.at(this.game.world.time) : steadyWeather('clear');
+  }
+
+  /**
+   * Dim and grey the light for cloud, add lightning's flash, and set the fog
+   * and the sky behind the board to match. Returns how bright the scene is
+   * overall (1 at a clear noon), for dimming the rain and snow with it.
+   */
+  private applyWeather(w: WeatherState): number {
+    const b = this.baseSun;
+    const cloud = w.cloud;
+    const flash = this.weather.flash;
+    this.sun.color.copy(b.color).lerp(OVERCAST_SUN, cloud * 0.6);
+    // Cloud dims the sun far more than the sky, so shadows go soft and faint.
+    this.sun.intensity = b.intensity * (1 - 0.72 * cloud) + flash * 0.6;
+    this.sky.intensity = b.sky * (1 - 0.12 * cloud) + flash * 2.4;
+    const day = (b.intensity + b.sky) / (SUN_INTENSITY + SKY_INTENSITY);
+    const light = Math.min(1, day * (1 - 0.35 * cloud));
+    // The sky behind the board: the biome's, greyed by cloud, paled by fog, darker toward dusk, lit by lightning.
+    const bg = this.scene.background as THREE.Color;
+    bg.copy(this.skyColor).lerp(OVERCAST_SKY, cloud * 0.75).lerp(FOG_COLOR, w.fog * 0.7);
+    bg.multiplyScalar(0.55 + 0.45 * Math.min(1, day * (1 - 0.3 * cloud)));
+    bg.lerp(_c.set(0xe8eeff), flash * 0.35);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.copy(bg);
+    if (w.fog < 0.01) {
+      fog.near = 1e5;
+      fog.far = 1e5 + 1;
+    } else {
+      // Measured from the camera along its view, scaled to the view so fog looks the same at any zoom:
+      // the far side of the view fades first, and thick fog reaches the near side too.
+      const r = this.rig.viewRadius;
+      const span = r * (4.5 - 2 * w.fog);
+      fog.near = CAMERA_DIST - span * 0.35 * w.fog;
+      fog.far = fog.near + span;
+    }
+    return light;
   }
 
   /** The picture on screen now, as a PNG data URL (drawn again first, so the canvas still holds it). */
@@ -319,6 +391,9 @@ export class Stage {
     this.commanderOverlay.update();
     this.frontLines.update(frameSeconds);
     this.debugOverlay.update(frameSeconds);
+    const w = this.weatherNow;
+    // Weather moves in real time (at any sim speed), but stops while the battle is paused, so a paused photo freezes the rain.
+    this.weather.update(w, simSeconds > 0 ? frameSeconds : 0, { target: this.rig.target, radius: this.rig.viewRadius, pxPerUnit: this.renderer.domElement.height / (this.rig.viewHeight / this.rig.zoom), camera: this.rig.camera }, this.applyWeather(w));
     this.renderer.info.reset();
     this.composer.render(frameSeconds);
   }
