@@ -9,7 +9,7 @@ import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
 import { rollBattle, varietyOn } from './game/variety';
 import { Stage } from './render/stage';
-import { loadViewPrefs } from './ui/viewPrefs';
+import { loadViewPrefs, saveViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
 import { el, hex } from './ui/dom';
 import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl';
@@ -51,6 +51,16 @@ function plan(game: Game, faction: number, factions: FactionDef[]): string {
   if (p.state === 'regrouping') return ' · regrouping';
   if (p.state === 'defending') return ' · defending';
   return p.state === 'massing' ? ` · massing ${Math.min(99, Math.round(p.ready * 100))}%` : '';
+}
+
+/** A side's blessings and curses (god powers), for the HUD: " · healing 42s". */
+function blessed(game: Game, faction: number): string {
+  const now = game.world.time;
+  const words = { production: 'blessed production', healing: 'blessed healing', curse: 'cursed' };
+  return game.ctx.god.blessings
+    .filter((b) => b.faction === faction && b.until > now)
+    .map((b) => ` · ${words[b.kind]} ${Math.ceil(b.until - now)}s`)
+    .join('');
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -184,6 +194,17 @@ export class App implements MatchControls {
   photoMode(): void {
     this.photo.enter();
   }
+
+  /** The god powers tab: open or not, remembered in this browser like the view settings. */
+  get godOpen(): boolean {
+    return this.godShown;
+  }
+
+  set godOpen(open: boolean) {
+    this.godShown = open;
+    saveViewPrefs({ ...loadViewPrefs(), god: open });
+  }
+  private godShown = loadViewPrefs().god;
 
   settingsChanged(): void {
     // The panel changes the live battle's settings; keep the setup's in step.
@@ -385,13 +406,13 @@ export class App implements MatchControls {
       const out = game.ctx.sides.eliminated[f.id] ? ' · out' : '';
       const held = outpostsHeldBy(game.ctx, f.id);
       const outposts = game.ctx.outposts.length > 0 ? `, ${held} ${held === 1 ? 'outpost' : 'outposts'}` : '';
-      const doing = out ? '' : plan(game, f.id, factions);
+      const doing = out ? '' : plan(game, f.id, factions) + blessed(game, f.id);
       return `${f.name}${team}: ${alive[f.id]} units, ${conquest ? `${producers[f.id]} production left` : `${buildings[f.id]} buildings`}${outposts}, ${losses[f.id]} lost${out}${doing}`;
     });
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · 1-4 speed · space pause · P stats · O overlays · H photo mode`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · G god powers · 1-4 speed · space pause · P stats · O overlays · H photo mode`
     );
   }
 

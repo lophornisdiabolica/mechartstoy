@@ -6,17 +6,15 @@ import { STYLES } from '../game/commander/advice';
 import { describeBonus } from '../game/outposts';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
-import { Stance } from '../game/orders';
-import { LIMITS, RampSettings, UNIT_IDS } from '../game/settings';
+import { LIMITS, RampSettings } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
-import { Role, UnitId } from '../game/units';
+import { Role } from '../game/units';
 import { MoveClass } from '../world/moveClasses';
 import { factionColors } from '../render/models';
 import { ShadowQuality, Stage } from '../render/stage';
-import { dropdown, el, hex, segmented } from './dom';
+import { el, hex, segmented } from './dom';
 import { saveViewPrefs } from './viewPrefs';
-
-type Tool = { kind: 'spawn'; unit: UnitId } | { kind: 'rally' } | null;
+import { GodPanel } from './godPanel';
 
 const SPEEDS = [0, 1, 2, 4];
 /** A press that moves less than this (px) and is shorter than CLICK_MS counts as a click, not a pan. */
@@ -35,6 +33,8 @@ export interface MatchControls {
   ticker: boolean;
   /** Hide the interface for pictures (see PhotoMode). */
   photoMode(): void;
+  /** Whether the god powers tab is open (remembered between battles). */
+  godOpen: boolean;
 }
 
 /**
@@ -99,8 +99,6 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 
 export class Controls {
-  private playerFaction: number | null = null;
-  private tool: Tool = null;
   private selected: Entity | null = null;
   private lastSpeed = 1;
   private readonly panel = el('div', { id: 'panel' });
@@ -115,6 +113,8 @@ export class Controls {
   private inspectTimer = 0;
   /** Removes every listener this panel added outside itself. */
   private readonly listeners = new AbortController();
+  /** The god powers tab: drops, orders, airstrikes and the rest (see GodPanel). */
+  readonly god: GodPanel;
 
   constructor(
     private readonly game: Game,
@@ -126,6 +126,7 @@ export class Controls {
   ) {
     this.build();
     document.body.append(this.panel, this.toast);
+    this.god = new GodPanel(game, stage, factions, (t) => this.showToast(t), match.godOpen, (open) => (this.match.godOpen = open), this.listeners.signal);
     if (collapsed) this.panel.querySelector<HTMLButtonElement>('.collapse')?.click();
     this.bindCanvas(stage.renderer.domElement);
     this.bindKeys();
@@ -138,6 +139,7 @@ export class Controls {
 
   dispose(): void {
     this.listeners.abort();
+    this.god.dispose();
     this.panel.remove();
     this.toast.remove();
     this.stage.onFollowStopped = null;
@@ -147,6 +149,7 @@ export class Controls {
 
   /** Called every frame. */
   update(frameSeconds: number): void {
+    this.god.update(frameSeconds);
     // Drop the selection when the thing is gone (destroyed, or a wreck sank).
     if (this.selected !== null && !this.game.world.isAlive(this.selected)) this.select(null);
     this.inspectTimer -= frameSeconds;
@@ -292,70 +295,6 @@ export class Controls {
     section('Speed').append(speed.row);
     this.sync.push(() => speed.set(this.loop.timeScale));
 
-    // Side
-    // Buttons for a few sides (short names fit; the full name is in the tooltip), a list for more.
-    const side =
-      this.factions.length <= 3
-        ? segmented<number | null>(
-            [
-              { label: 'Watch', value: null, title: 'Just watch' },
-              ...this.factions.map((f) => ({ label: f.name.split(' ')[0], value: f.id as number | null, title: `Play as ${f.name}` })),
-            ],
-            (v) => this.setSide(v),
-          )
-        : dropdown<number | null>(
-            [{ label: 'Just watch', value: null }, ...this.factions.map((f) => ({ label: f.name, value: f.id as number | null }))],
-            (v) => this.setSide(v),
-            'Your side',
-          );
-    section('Your side').append(side.row);
-    this.sync.push(() => side.set(this.playerFaction));
-
-    // Spawn palette
-    const spawn = section('Drop units', 'needs-side');
-    const grid = el('div', { class: 'grid' });
-    const units = this.game.ctx.units;
-    const spawnButtons = UNIT_IDS.map((id) => {
-      const b = el('button', { type: 'button', title: `Drop a ${units[id].name}` }, units[id].name);
-      b.addEventListener('click', () => this.setTool(this.tool?.kind === 'spawn' && this.tool.unit === id ? null : { kind: 'spawn', unit: id }));
-      grid.append(b);
-      return { b, id };
-    });
-    spawn.append(grid, el('p', { class: 'hint' }, 'Pick a unit, then click the map. Esc to stop.'));
-    this.sync.push(() => {
-      for (const { b, id } of spawnButtons) b.classList.toggle('on', this.tool?.kind === 'spawn' && this.tool.unit === id);
-    });
-
-    // Orders
-    const orders = section('Orders', 'needs-side');
-    const stance = segmented<Stance>(
-      [
-        { label: 'Auto', value: 'auto', title: 'Attack and regroup with the ebb and flow of battle' },
-        { label: 'Attack', value: 'attack', title: 'Everyone push into the enemy base' },
-        { label: 'Hold', value: 'hold', title: 'Everyone gather at the rally point' },
-      ],
-      (v) => {
-        if (this.playerFaction !== null) this.game.setStance(this.playerFaction, v);
-        this.refresh();
-      },
-    );
-    const rallyRow = el('div', { class: 'row' });
-    const setRally = el('button', { type: 'button', title: 'Click the map to place the rally flag' }, 'Set rally point');
-    setRally.addEventListener('click', () => this.setTool(this.tool?.kind === 'rally' ? null : { kind: 'rally' }));
-    const clearRally = el('button', { type: 'button' }, 'Clear');
-    clearRally.addEventListener('click', () => {
-      if (this.playerFaction !== null) this.game.setRally(this.playerFaction, null);
-      this.refresh();
-    });
-    rallyRow.append(setRally, clearRally);
-    orders.append(stance.row, rallyRow);
-    this.sync.push(() => {
-      const o = this.playerFaction !== null ? this.game.ctx.orders[this.playerFaction] : null;
-      stance.set(o?.stance ?? 'auto');
-      setRally.classList.toggle('on', this.tool?.kind === 'rally');
-      clearRally.disabled = !o?.rally;
-    });
-
     // Commanders: each side's picture of the battle and what it means to do (see game/commander).
     const plans = section('Commanders');
     const plansLabel = el('label', { class: 'check', title: "Draw each side's plan: arrows to where it's massing and what it means to push, fainter the less ready it is" });
@@ -458,9 +397,7 @@ export class Controls {
 
   /** Re-sync every control with current state. */
   private refresh(): void {
-    this.panel.classList.toggle('has-side', this.playerFaction !== null);
     for (const s of this.sync) s();
-    this.stage.renderer.domElement.style.cursor = this.tool ? 'crosshair' : '';
   }
 
   private setFollow(on: boolean): void {
@@ -471,28 +408,12 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, smoothTurn: this.stage.rig.smoothTurn });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
   }
 
   private setSpeed(v: number): void {
     if (v > 0) this.lastSpeed = v;
     this.loop.timeScale = v;
-    this.refresh();
-  }
-
-  private setSide(f: number | null): void {
-    // Hand the old side back to the AI.
-    if (this.playerFaction !== null && this.playerFaction !== f) {
-      this.game.setStance(this.playerFaction, 'auto');
-      this.game.setRally(this.playerFaction, null);
-    }
-    this.playerFaction = f;
-    if (f === null) this.tool = null;
-    this.refresh();
-  }
-
-  private setTool(tool: Tool): void {
-    this.tool = this.playerFaction === null ? null : tool;
     this.refresh();
   }
 
@@ -503,18 +424,8 @@ export class Controls {
   }
 
   private click(x: number, y: number): void {
-    const tool = this.tool;
-    if (tool && this.playerFaction !== null) {
-      const p = this.stage.pickGround(x, y);
-      if (!p) return;
-      if (tool.kind === 'spawn') {
-        if (!this.game.spawnUnitAt(tool.unit, this.playerFaction, p.x, p.z)) this.showToast("Can't drop a unit there");
-      } else {
-        this.game.setRally(this.playerFaction, p);
-        this.setTool(null);
-      }
-      return;
-    }
+    // A click with a god power picked is the power's.
+    if (this.god.busy) return;
     const e = this.stage.pickEntity(x, y);
     const w = this.game.world;
     const inspectable = e !== null && (w.has(e, Unit) || w.has(e, Building) || w.has(e, Wreck) || w.has(e, Rubble));
@@ -623,8 +534,10 @@ export class Controls {
       } else if (key === 'f') {
         this.setFollow(!this.stage.followFights);
       } else if (key === 'escape') {
-        if (this.tool) this.setTool(null);
+        if (this.god.tool) this.god.setTool(null);
         else this.select(null);
+      } else if (key === 'g') {
+        this.god.setOpen(!this.god.open);
       } else if (['1', '2', '3', '4'].includes(key)) {
         this.setSpeed(SPEEDS[Number(key) - 1]);
       }

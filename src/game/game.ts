@@ -15,14 +15,14 @@ import { scrapSystem } from './scrap';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
-import { spawnBuilding, spawnUnit } from './spawn';
+import { newSquad, spawnBuilding, spawnUnit } from './spawn';
+import * as D from '../core/dmath';
 import { aiSystem } from './systems/ai';
 import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
-import { capFor, countByCategory } from './caps';
 import { territorySystem } from './territory';
 import { carrierSystem } from './systems/carriers';
 import { doctrineOf } from './doctrines';
@@ -36,14 +36,20 @@ import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
 import { engineerSystem } from './commander/engineers';
+import { Divine, godSystem, Power } from './god';
 
 export type { GameEvents, Outcome } from './context';
 
 export const SIM_HZ = 30;
 
+/** Most units one drop puts down. */
+export const MAX_DROP = 50;
+
 /** Something the player does to a battle (see Game.command). */
 export type Command =
-  | { type: 'spawn'; unit: UnitId; faction: number; x: number; z: number }
+  /** Drop `count` (default 1) of a unit round a point, whatever the side's caps. */
+  | { type: 'spawn'; unit: UnitId; faction: number; x: number; z: number; count?: number }
+  | { type: 'power'; power: Power }
   | { type: 'rally'; faction: number; point: { x: number; z: number } | null }
   | { type: 'stance'; faction: number; stance: Stance };
 
@@ -119,6 +125,7 @@ export class Game {
       escalation: { tide: 0, siege: 0 },
       outcome: null,
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
+      god: new Divine(),
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -141,6 +148,8 @@ export class Game {
       separationSystem(ctx),
       groundFollowSystem(this.field),
       weaponSystem(ctx),
+      // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
+      godSystem(ctx),
       projectileSystem(ctx),
       deathSystem(ctx),
       wreckSystem(),
@@ -178,9 +187,14 @@ export class Game {
    */
   forward: ((command: Command) => void) | null = null;
 
-  /** Drop a unit at a point. Returns false if the spot is unusable for it or the side is at its cap. */
-  spawnUnitAt(unit: UnitId, faction: number, x: number, z: number): boolean {
-    return this.command({ type: 'spawn', unit, faction, x, z });
+  /** Drop `count` of a unit round a point (caps don't apply). Returns false if there's nowhere there it can stand. */
+  spawnUnitAt(unit: UnitId, faction: number, x: number, z: number, count = 1): boolean {
+    return this.command({ type: 'spawn', unit, faction, x, z, count });
+  }
+
+  /** Use a god power (see god.ts). Returns false if it can't be used there. */
+  usePower(power: Power): boolean {
+    return this.command({ type: 'power', power });
   }
 
   /** Move a faction's rally point; null restores the default. */
@@ -196,17 +210,24 @@ export class Game {
   command(c: Command): boolean {
     if (!this.forward) return this.apply(c);
     // A drop that can't work here can't work in the real battle either, so say so now.
-    if (c.type === 'spawn' && !this.canDrop(c.unit, c.faction, c.x, c.z)) return false;
+    if (c.type === 'spawn' && this.dropSpots(c.unit, c.x, c.z, c.count ?? 1).length === 0) return false;
+    if (c.type === 'power' && !Divine.possible(this.ctx, c.power)) return false;
     this.forward(c);
     return true;
   }
 
   private apply(c: Command): boolean {
     switch (c.type) {
-      case 'spawn':
-        if (!this.canDrop(c.unit, c.faction, c.x, c.z)) return false;
-        spawnUnit(this.world, this.ctx, this.ctx.units[c.unit], c.faction, c.x, c.z);
+      case 'spawn': {
+        const spots = this.dropSpots(c.unit, c.x, c.z, c.count ?? 1);
+        if (spots.length === 0 || c.faction < 0 || c.faction >= this.ctx.sides.count) return false;
+        // Dropped together, they move together.
+        const squad = newSquad(this.ctx);
+        for (const p of spots) spawnUnit(this.world, this.ctx, this.ctx.units[c.unit], c.faction, p.x, p.z, squad);
         return true;
+      }
+      case 'power':
+        return this.ctx.god.use(this.world, this.ctx, c.power);
       case 'rally':
         this.ctx.orders[c.faction].rally = c.point && { x: this.field.clampX(c.point.x, 2), z: this.field.clampZ(c.point.z, 2) };
         return true;
@@ -216,12 +237,34 @@ export class Game {
     }
   }
 
-  private canDrop(unit: UnitId, faction: number, x: number, z: number): boolean {
+  /**
+   * Where `count` of a unit dropped round a point go: the point, then rings
+   * round it, each spot somewhere the unit can be (boats only on water, land
+   * units only where they can go, hovers on either). Empty if none is.
+   * Caps don't apply: dropping a dozen Titans is the player's call.
+   */
+  dropSpots(unit: UnitId, x: number, z: number, count: number): { x: number; z: number }[] {
     const def = this.ctx.units[unit];
-    // Boats only on water, land units only where they can go (hovers on either).
-    if (!this.field.contains(x, z, 1) || !this.ctx.navs.for(def.move).terrainAllowsAt(x, z)) return false;
-    // Dropped units obey the caps, but not the super unit's outpost rule: placing them is the player's call.
-    return countByCategory(this.world, this.ctx.sides.count)[faction][def.category] < capFor(this.ctx, faction, def.category);
+    const nav = this.ctx.navs.for(def.move);
+    const ok = (px: number, pz: number) => this.field.contains(px, pz, 1) && nav.terrainAllowsAt(px, pz);
+    const out: { x: number; z: number }[] = [];
+    const want = Math.max(1, Math.min(MAX_DROP, Math.floor(count)));
+    // The point itself has to suit the unit (no tanks dropped by clicking the sea).
+    if (!ok(x, z)) return out;
+    out.push({ x, z });
+    // Infantry stand close; big units need room.
+    const gap = Math.max(1.2, def.radius * 2.3);
+    for (let ring = 1; out.length < want && ring <= 8; ring++) {
+      const r = ring * gap;
+      const n = Math.max(6, Math.floor((2 * Math.PI * r) / gap));
+      for (let k = 0; k < n && out.length < want; k++) {
+        const a = (k / n) * Math.PI * 2 + ring * 0.5;
+        const px = x + D.cos(a) * r;
+        const pz = z + D.sin(a) * r;
+        if (ok(px, pz)) out.push({ x: px, z: pz });
+      }
+    }
+    return out;
   }
 
   private populate(rng: Rng): void {

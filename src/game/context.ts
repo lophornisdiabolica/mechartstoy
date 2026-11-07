@@ -7,6 +7,7 @@ import { NavGrid, NavGrids } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Building, Collider, Faction, Hit, Mover, Transform } from './components';
 import type { Commander } from './commander/commander';
+import type { Divine } from './god';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -43,6 +44,12 @@ export type GameEvents = {
   sideEliminated: { faction: number; time: number };
   /** Conquest only: one team is left standing (or nobody is). */
   battleOver: Outcome;
+  /**
+   * A god power did something worth showing beyond what its shells and map
+   * changes show: a quake's heave (`strength` is how hard), the big bomb, a
+   * blessing or curse on a side, a bridge, a forest springing up.
+   */
+  power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
 };
 
 /** How a conquest battle ended. */
@@ -106,4 +113,6 @@ export interface SimContext {
   escalation: { tide: number; siege: number };
   /** Set once a conquest battle is decided. */
   outcome: Outcome | null;
+  /** God powers in play: bomb runs, quakes and blessings (see god.ts). */
+  god: Divine;
 }

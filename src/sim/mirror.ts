@@ -7,6 +7,7 @@ import { SideStats } from '../game/stats';
 import { wrapAngle } from '../game/systems/movement';
 import { CellState } from '../world/battlefield';
 import { CellArea } from '../world/ground';
+import { GodState } from '../game/god';
 
 /**
  * Playing a battle in one place (the sim worker) and showing it in another
@@ -56,6 +57,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,
+  power: true,
 };
 
 /** Page to worker. */
@@ -98,6 +100,8 @@ export interface Frame {
   cells: CellState[];
   /** Trees that fell, and which way. */
   fell: [number, number][];
+  /** Trees planted (a god power), in order: x, z and size. */
+  grown: [number, number, number][];
   ctx: unknown;
   /** Ticks played for this frame, how long they took in all, and the slowest. */
   ticks: number;
@@ -198,6 +202,7 @@ export class SimHost {
   private poses: Pose[] = [];
   private areas: CellArea[] = [];
   private fell: [number, number][] = [];
+  private grown: [number, number, number][] = [];
   /** What the page has of each COPIED component: per type, a shallow copy of each entity's as last sent. */
   private readonly sent = COPIED.map(() => new Map<Entity, Record<string, unknown>>());
   /** Entities whose Transform the page has. */
@@ -236,6 +241,10 @@ export class SimHost {
     }
     field.onChange((area) => this.areas.push(area));
     field.woods.onFell((t) => this.fell.push([t, field.woods.trees[t].fell!]));
+    field.woods.onGrow((t) => {
+      const tree = field.woods.trees[t];
+      this.grown.push([tree.x, tree.z, tree.size]);
+    });
   }
 
   step(steps: number, profile: boolean): void {
@@ -305,7 +314,7 @@ export class SimHost {
     world.profile?.clear();
     this.ticks = this.simMs = this.worstMs = 0;
     if (!this.dirty) {
-      const empty: Frame = { ...base, changed: false, created: [], poses: [], untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], ctx: null, profile };
+      const empty: Frame = { ...base, changed: false, created: [], poses: [], untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], grown: [], ctx: null, profile };
       return { frame: empty, transfer };
     }
     this.dirty = false;
@@ -375,6 +384,7 @@ export class SimHost {
       destroyed: this.destroyed,
       cells,
       fell: this.fell,
+      grown: this.grown,
       ctx: this.refs.encode({
         escalation: ctx.escalation,
         orders: ctx.orders,
@@ -383,6 +393,7 @@ export class SimHost {
         plans: ctx.offensive.plansState,
         outcome: ctx.outcome,
         commander: ctx.commander.updatedAt !== this.commanderSent ? ctx.commander.state : null,
+        god: ctx.god.blessings,
       }),
       profile,
       ...(this.skipped ? { skipped: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
@@ -395,6 +406,7 @@ export class SimHost {
     this.events = [];
     this.areas = [];
     this.fell = [];
+    this.grown = [];
     return { frame, transfer };
   }
 }
@@ -407,6 +419,7 @@ interface CtxState {
   plans: Game['ctx']['offensive']['plansState'];
   outcome: Game['ctx']['outcome'];
   commander: Game['ctx']['commander']['state'] | null;
+  god: GodState;
 }
 
 /** The page's side: copies Frames into a view Game (see GameOptions.view). */
@@ -452,6 +465,8 @@ export class SimView {
     world.tick = frame.tick;
     if (!frame.changed) return;
 
+    // Trees first: the cells they stand in turn to forest with the map changes.
+    for (const [x, z, size] of frame.grown) field.woods.grow(x, z, size);
     for (const c of frame.cells) field.applyCells(c);
     for (const [t, angle] of frame.fell) field.woods.showFell(t, angle);
 
@@ -500,6 +515,7 @@ export class SimView {
     ctx.offensive.plansState = s.plans;
     ctx.outcome = s.outcome;
     if (s.commander) ctx.commander.state = s.commander;
+    ctx.god.blessings = s.god;
     if (frame.routes) this.routes = frame.routes;
     if (frame.skipped) {
       const stats = this.game.stats;

@@ -1,3 +1,4 @@
+import { capFor } from '../src/game/caps';
 import { describe, expect, it } from 'vitest';
 import { Building, Faction, Health, Producer, Rubble, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
@@ -55,7 +56,7 @@ describe('battle settings', () => {
     }
   });
 
-  it('the infantry cap from settings, leaned by the doctrine, limits dropped units', () => {
+  it('the infantry cap from settings is leaned by the doctrine, and dropped units ignore it', () => {
     const s = defaultSettings();
     s.armies.caps.infantry = 10;
     s.factions[0].doctrine = 'legion'; // 1.7× infantry
@@ -63,7 +64,9 @@ describe('battle settings', () => {
     const base = game.field.baseSites[0];
     let placed = 0;
     for (let i = 0; i < 25; i++) if (game.spawnUnitAt('trooper', 0, base.x + (i % 5), base.z + Math.floor(i / 5))) placed++;
-    expect(placed).toBe(17);
+    expect(capFor(game.ctx, 0, 'infantry')).toBe(17);
+    // Drops are the player's call (a god power), so the cap doesn't hold them back.
+    expect(placed).toBe(25);
   });
 });
 

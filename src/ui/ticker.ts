@@ -1,4 +1,4 @@
-import { NEUTRAL } from '../game/components';
+import { GOD, NEUTRAL } from '../game/components';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { el, hex } from './dom';
@@ -108,6 +108,7 @@ export class Ticker {
 
   /** " to Crimson Host's Lancer", from the killing blow, if a side landed it. */
   private by(killer: { source: string; faction: number } | null): (string | HTMLElement)[] {
+    if (killer?.faction === GOD) return [killer.source === 'airstrike' ? ' to an airstrike' : killer.source === 'earthquake' ? ' in the earthquake' : ' to a curse'];
     if (!killer || killer.faction < 0 || killer.faction >= this.factions.length) return [];
     const ctx = this.game!.ctx;
     const def = (ctx.units as Record<string, { name: string }>)[killer.source] ?? (ctx.buildings as Record<string, { name: string }>)[killer.source];

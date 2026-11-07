@@ -24,6 +24,9 @@ import './models/units';
 import { buildProps } from './propsMesh';
 import { buildTerrain } from './terrainMesh';
 import { buildWoods } from './woodsMesh';
+import { GodCursor } from './godCursor';
+import { GodEffects } from './godEffects';
+import './models/god';
 import { BIOMES } from '../world/biomes';
 import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
@@ -69,6 +72,9 @@ export class Stage {
   outpostRings!: OutpostRings;
   commanderOverlay!: CommanderOverlay;
   frontLines!: FrontLines;
+  /** Where a god power will land (see GodPanel). */
+  readonly godCursor = new GodCursor();
+  private godEffects!: GodEffects;
   private frontsShown = false;
   private ringsShown = true;
   /** Where the sun sits relative to what it lights (see daylight). */
@@ -132,7 +138,7 @@ export class Stage {
     // are drawn from back faces (three's default), so lit faces don't shadow themselves.
     this.sun.shadow.bias = 0;
     this.sun.shadow.normalBias = 0;
-    this.scene.add(this.sun, this.sun.target);
+    this.scene.add(this.sun, this.sun.target, this.godCursor.root);
     // Infantry sprites are lit like flat ground (see batcher.ts): scaled so this usual light shows them as painted.
     const lit = this.sky.color.clone().multiplyScalar(this.sky.intensity).add(this.sun.color.clone().multiplyScalar(this.sun.intensity * SUN_OFFSET.clone().normalize().y));
     SPRITE_GAIN.value.set(Math.PI / lit.r, Math.PI / lit.g, Math.PI / lit.b);
@@ -178,6 +184,8 @@ export class Stage {
     battle.add(terrain, buildProps(game.props, visualRng), woods);
     this.entities = new EntityView(game.world);
     this.effects = new Effects(game.events, field);
+    this.godEffects = new GodEffects(game, this.effects);
+    this.godCursor.attach(field);
     this.markers = new Markers(game, this.entities);
     this.outpostRings = new OutpostRings(game);
     this.outpostRings.root.visible = this.ringsShown;
@@ -331,9 +339,11 @@ export class Stage {
     this.fights.update(simSeconds);
     if (this.followFights && this.fights.focus) this.rig.glideTo(this.fights.focus.x, this.fights.focus.z, frameSeconds);
     this.rig.update(frameSeconds);
+    this.shakeCamera();
     this.fitShadow();
     this.entities.sync(alpha, simSeconds);
     this.effects.update(simSeconds);
+    this.godEffects.update(simSeconds);
     this.markers.update(frameSeconds, this.selected);
     this.outpostRings.update();
     this.commanderOverlay.update();
@@ -341,6 +351,16 @@ export class Stage {
     this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();
     this.composer.render(frameSeconds);
+  }
+
+  /** Quakes and the big bomb judder the camera (see Effects.shake); the rig puts it back each frame. */
+  private shakeCamera(): void {
+    const s = this.effects.shake;
+    if (s <= 0) return;
+    const k = s * s * 0.35;
+    this.rig.camera.position.x += (Math.random() - 0.5) * k;
+    this.rig.camera.position.y += (Math.random() - 0.5) * k;
+    this.rig.camera.position.z += (Math.random() - 0.5) * k;
   }
 
   /** Ground point under a screen position, or null if off the map. */

@@ -1,6 +1,6 @@
 import { EventBus } from '../core/events';
 import { World } from '../core/ecs';
-import { Armed, Faction, Guard, NEUTRAL, Unit } from './components';
+import { Armed, Faction, GOD, Guard, NEUTRAL, Unit } from './components';
 import { GameEvents } from './context';
 
 /** One unit (or building) type's tally on one side. */
@@ -73,7 +73,7 @@ export class BattleStats {
         const t = this.type(e.faction, e.def.id);
         t.lost++;
         // Outpost garrisons aren't a side: their kills show as e.g. "outpost tower".
-        if (k && k.faction !== e.faction) bump(t.killers, this.side(k.faction) ? k.source : `outpost ${k.source}`);
+        if (k && k.faction !== e.faction) bump(t.killers, this.side(k.faction) ? k.source : k.faction === GOD ? `god ${k.source}` : `outpost ${k.source}`);
       }
       if (k && this.side(k.faction) && k.faction !== e.faction) {
         this.sides[k.faction].kills++;
