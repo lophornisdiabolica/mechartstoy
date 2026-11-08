@@ -56,6 +56,8 @@ export type GameEvents = {
    */
   godUsed: { power: Power | { kind: 'drop'; unit: UnitId; count: number; faction: number }; x: number; z: number };
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
+  /** Engineers finished digging (or heaping up) a stretch of canal, trench or berm (see commander/engineers.ts). */
+  earthwork: { kind: 'canal' | 'trench' | 'berm'; faction: number; x: number; z: number };
 };
 
 /** How a conquest battle ended. */

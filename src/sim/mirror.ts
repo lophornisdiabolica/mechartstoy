@@ -59,6 +59,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   battleOver: true,
   power: true,
   godUsed: true,
+  earthwork: true,
 };
 
 /** Page to worker. */
@@ -111,10 +112,13 @@ export interface Frame {
   /** Milliseconds per system over those ticks, when asked for. */
   profile: [string, number][] | null;
   /**
-   * After a fast-forward: the battle's stats so far (the events that built
-   * them weren't sent), and a sign for the page to jump its drawing clock.
+   * The battle's stats so far, with the first frame (the opening armies
+   * spawned before the page was listening) and after a fast-forward (the
+   * events that built them weren't sent).
    */
-  skipped?: { sides: SideStats[]; townRazed: number };
+  stats?: { sides: SideStats[]; townRazed: number };
+  /** After a fast-forward: a sign for the page to jump its drawing clock. */
+  skipped?: true;
   /** When asked for (see SimHost.routes): each moving unit's route, as [entity, goal x, goal z, then x, z of each waypoint left]. */
   routes?: number[][];
 }
@@ -216,6 +220,8 @@ export class SimHost {
   private commanderSent = -Infinity;
   /** Fast-forwarded since the last frame (see skip). */
   private skipped = false;
+  /** The stats need sending (see Frame.stats). */
+  private statsDue = true;
   /** Send units' routes with frames, for the debug overlays; and when they were last sent. */
   routes = false;
   private routesAt = -Infinity;
@@ -226,6 +232,8 @@ export class SimHost {
     const { world, events, field } = this.game;
     // The page's view made these too.
     for (const e of world.entities()) {
+      // Not the opening armies, which the view doesn't make: the first frame sends them.
+      if (world.has(e, Unit)) continue;
       this.known.add(e);
       // Its copies may not match until the first frame, which sends every
       // field, and takes away any of these the entity has lost by then (all
@@ -275,6 +283,7 @@ export class SimHost {
     this.events = [];
     this.poses = [];
     this.skipped = true;
+    this.statsDue = true;
     this.dirty = true;
   }
 
@@ -397,11 +406,13 @@ export class SimHost {
         god: ctx.god.blessings,
       }),
       profile,
-      ...(this.skipped ? { skipped: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
+      ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
+      ...(this.skipped ? { skipped: true as const } : {}),
       ...(this.routes && world.time - this.routesAt >= ROUTES_EVERY ? { routes: unitRoutes(world) } : {}),
     };
     if (frame.routes) this.routesAt = world.time;
     this.skipped = false;
+    this.statsDue = false;
     this.commanderSent = ctx.commander.updatedAt;
     this.destroyed = [];
     this.events = [];
@@ -518,10 +529,12 @@ export class SimView {
     if (s.commander) ctx.commander.state = s.commander;
     ctx.god.blessings = s.god;
     if (frame.routes) this.routes = frame.routes;
-    if (frame.skipped) {
+    if (frame.stats) {
       const stats = this.game.stats;
-      frame.skipped.sides.forEach((side, f) => Object.assign(stats.sides[f], side));
-      stats.townRazed = frame.skipped.townRazed;
+      frame.stats.sides.forEach((side, f) => Object.assign(stats.sides[f], side));
+      stats.townRazed = frame.stats.townRazed;
+    }
+    if (frame.skipped) {
       // Nothing from before the jump is left to show.
       this.events = [];
       this.dying = this.dying.filter(([, t]) => t > frame.time);

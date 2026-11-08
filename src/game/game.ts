@@ -62,8 +62,10 @@ export interface GameOptions {
   settings: BattleSettings;
   /**
    * A copy to show a battle played elsewhere (in the sim worker, see
-   * sim/mirror.ts): the same map and opening, but no systems, so stepping
-   * it does nothing and its state comes from the real one.
+   * sim/mirror.ts): the same map and buildings, but no systems and no
+   * opening armies (they're rolled on the battle's stream, which the
+   * systems already draw on), so stepping it does nothing and its state,
+   * units and all, comes from the real one.
    */
   view: boolean;
 }
@@ -166,7 +168,7 @@ export class Game {
       this.populate(root.fork(5));
       // Mark the new buildings on the nav grid now, so the opening armies form up around them.
       navObstacles.update(this.world, 0);
-      this.spawnOpeningArmies();
+      if (!view) this.spawnOpeningArmies();
     }
   }
 

@@ -340,6 +340,29 @@ registerModel('bld:relayMast', (faction) => {
   });
 });
 
+/** Bastion's comms array: a lattice mast on a skid, a big dish facing the front and a blinking light, put up by its engineers. */
+registerModel('bld:commsArray', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(1.8, 0.2, 1.4, METAL, 0, 0.1, 0)); // skid
+  g.add(box(0.7, 0.6, 0.6, primary, -0.45, 0.5, 0.35)); // generator
+  for (const x of [-0.18, 0.18]) for (const z of [-0.18, 0.18]) g.add(box(0.07, 4.6, 0.07, DARK, x + 0.3, 2.5, z - 0.2));
+  for (const y of [1.2, 2.4, 3.6]) g.add(box(0.44, 0.06, 0.44, secondary, 0.3, y, -0.2));
+  const dish = cylinder(0.75, 0.25, 0.22, 12, 0xd8d6d0, 0.75, 3.9, -0.2);
+  dish.rotation.set(0, 0, Math.PI / 2 - 0.35);
+  g.add(dish);
+  g.add(cylinder(0.05, 0.05, 0.6, 5, DARK, 0.95, 3.95, -0.2));
+  const beacon = glowBox(0.14, 0.14, 0.14, 0x60c0ff);
+  beacon.position.set(0.3, 4.9, -0.2);
+  g.add(beacon);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beacon.userData.t = (beacon.userData.t ?? Math.random() * 2) + dt;
+      beacon.visible = beacon.userData.t % 0.9 < 0.45;
+    },
+  });
+});
+
 /** An outpost's fuel tanks: three round tanks in a bund, with pipework. They go up when destroyed. */
 registerModel('bld:fuelTanks', (faction) => {
   const { primary } = factionColors(faction);

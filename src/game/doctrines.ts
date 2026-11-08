@@ -86,7 +86,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   legion: {
     id: 'legion',
     name: 'Legion',
-    blurb: 'Infantry masses. Bigger squads, mortar teams, squad carriers and light tanks, with a barracks block. Super unit: the Siege Crawler, which drops off squads as it goes.',
+    blurb: 'Infantry masses. Bigger squads, mortar teams, squad carriers and light tanks, with a barracks block. Its engineers dig trenches behind earth berms for the squads to hold. Super unit: the Siege Crawler, which drops off squads as it goes.',
     caps: { infantry: 1.7, vehicle: 0.8 },
     production: {
       // Big squads with two AT troopers each: the Legion's answer to armour is many rockets.
@@ -132,7 +132,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   bastion: {
     id: 'bastion',
     name: 'Bastion',
-    blurb: 'Artillery and fortresses. Howitzers and railgun batteries that outrange everything else, a sensor mast that spots for them, and extra guard towers. Super unit: the Fortress Walker, which spots for the guns round it.',
+    blurb: 'Artillery and fortresses. Howitzers and railgun batteries that outrange everything else, a sensor mast that spots for them, comms arrays its engineers put up at the front, and extra guard towers. Super unit: the Fortress Walker, which spots for the guns round it.',
     caps: { vehicle: 1.1 },
     production: {
       factory: {
@@ -180,7 +180,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   tidewater: {
     id: 'tidewater',
     name: 'Tidewater',
-    blurb: 'Hovers and boats. Skimmer hover tanks and amphibious transports, missile boats from a dock on the coast (a hover pad if its base has none). Weaker on dry maps. Super unit: the Hover Fortress.',
+    blurb: 'Hovers and boats. Skimmer hover tanks and amphibious transports, missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super unit: the Hover Fortress.',
     caps: { infantry: 0.8, vehicle: 1.35 },
     production: {
       factory: {
@@ -191,14 +191,9 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
-      // Boats launch from the dock's door into the water; a dock with no water at its door builds skimmers.
-      dock: {
-        table: [
-          { unit: 'missileBoat', weight: 2, count: 2, ifDry: 'skimmer' },
-          { unit: 'skimmer', weight: 1, count: 2 },
-        ],
-        interval: 28,
-      },
+      // Boats launch from the dock's door into the water, and only boats: skimmers come from a hover pad,
+      // which engineers put up in a base that has a dock (see commander/engineers.ts).
+      dock: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 28 },
       hoverPad: { table: [{ unit: 'skimmer', weight: 1, count: 2 }], interval: 30 },
       mechbay: { table: [{ unit: 'hoverFortress', weight: 1, count: 1 }] },
     },

@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth';
 
 export interface GroundDef {
   id: GroundId;
@@ -54,10 +54,32 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x3c5a2c,
     tint: 0.5,
   },
+  /**
+   * A trench Legion's engineers dug (see commander/engineers.ts): a narrow
+   * cut that infantry stand in, firing over the berm in front, and that
+   * wheels and tracks lurch across.
+   */
+  trench: {
+    id: 'trench',
+    label: 'Trench',
+    cost: { tracked: 2.5, amphibious: 2.5, hover: 2.5, walker: 1.2 },
+    speed: { tracked: 0.6, amphibious: 0.6, hover: 0.6, walker: 0.9 },
+    color: 0x463224,
+    tint: 0.85,
+  },
+  /** Fresh-heaped earth: a berm in front of a trench. Loose going for wheels and tracks. */
+  earth: {
+    id: 'earth',
+    label: 'Earth berm',
+    cost: { tracked: 1.4, amphibious: 1.4, hover: 1.4 },
+    speed: { tracked: 0.85, amphibious: 0.85, hover: 0.85 },
+    color: 0x8f6c45,
+    tint: 0.75,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

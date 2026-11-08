@@ -65,8 +65,8 @@ export function deathSystem(ctx: SimContext): System {
           ctx.events.emit('buildingDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def, faction, killer });
           world.destroy(e);
           if (def.explodes) explode(world, ctx, t, def.explodes, killer);
-          // Engineers' fortifications are gone for good (see BuildingDef.lasts).
-          if (def.lasts) continue;
+          // What engineers put up is gone for good (see BuildingDef.field).
+          if (def.field) continue;
           const r = world.create();
           world.add(r, Transform, makeTransform(t.x, t.y, t.z, t.heading));
           world.add(r, Renderable, { model: 'rubble', scale: def.radius });
