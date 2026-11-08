@@ -180,6 +180,8 @@ export function spawnBuilding(
       interval: production.interval,
       // Stagger first batches so buildings don't all fire on the same tick.
       timer: ctx.rng.range(0.3, 1) * production.interval,
+      // The first one takes the full build, like the mech bay's after a loss.
+      ...(production.flagship ? { flagship: production.flagship.unit, flagshipInterval: production.flagship.interval, flagshipTimer: production.flagship.interval } : {}),
     });
   }
   if (construct) {

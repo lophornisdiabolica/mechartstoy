@@ -4,7 +4,7 @@ import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
-import { berthFree, canBuild, countBoats, countByCategory, isBoat } from '../caps';
+import { berthFree, canBuild, countBoats, countByCategory, countFlagships, flagshipFree, isBoat, isFlagship } from '../caps';
 import { recordSquad } from '../territory';
 import { UnitDef, UnitId } from '../units';
 import { MoveClass } from '../../world/moveClasses';
@@ -61,16 +61,44 @@ export function outnumbered(ctx: SimContext, alive: number[], faction: number): 
 }
 
 /**
- * When a side loses a super unit, every building of its that builds them
- * starts over: the next one takes the full build time from now, with no
- * head start from time spent waiting while the side was at its super cap.
+ * When a side loses a super unit, every building of its that builds that
+ * kind starts over: the next one takes the full build time from now, with no
+ * head start from time spent waiting while the side was at its cap. A lost
+ * flagship restarts the docks' flagship builds, and any other super unit the
+ * mech bay's (see isFlagship): they're capped apart, so they wait apart.
  */
-export function restartSuperBuilds(world: World, ctx: SimContext, faction: number): void {
+export function restartSuperBuilds(world: World, ctx: SimContext, faction: number, lost?: UnitDef): void {
+  const flagship = lost !== undefined && isFlagship(lost);
   for (const e of world.query(Producer, Faction)) {
     if (world.req(e, Faction).id !== faction) continue;
     const p = world.req(e, Producer);
-    if (p.table.some((entry) => ctx.units[entry.unit].category === 'super')) p.timer = Math.max(p.timer, p.interval);
+    if (flagship) {
+      if (p.flagship !== undefined && p.flagshipInterval !== undefined) p.flagshipTimer = Math.max(p.flagshipTimer ?? 0, p.flagshipInterval);
+    } else if (p.table.some((entry) => ctx.units[entry.unit].category === 'super')) p.timer = Math.max(p.timer, p.interval);
   }
+}
+
+/** Seconds a flagship build waits to try again when there's no berth or no water at the door to launch it into. */
+const FLAGSHIP_RETRY = 8;
+
+/**
+ * A dock's flagship (see Producer.flagship), off its slipway into open water
+ * by the door, if the side has a berth for it. It sails alone, as its own squad.
+ */
+function launchFlagship(world: World, ctx: SimContext, e: number, producer: Producer, faction: number, flagships: number[]): void {
+  const def = ctx.units[producer.flagship!];
+  const t = world.req(e, Transform);
+  const r = world.req(e, Building).def.radius + def.radius;
+  const spot = flagshipFree(ctx, flagships, faction) ? spawnSpot(ctx, t.x + D.cos(t.heading) * r, t.z - D.sin(t.heading) * r, def.radius, def.move) : null;
+  if (!spot) {
+    producer.flagshipTimer = FLAGSHIP_RETRY;
+    return;
+  }
+  const squad = newSquad(ctx);
+  recordSquad(ctx, squad, faction, [def.id as UnitId]);
+  spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
+  flagships[faction]++;
+  producer.flagshipTimer = producer.flagshipInterval!;
 }
 
 /** The Commander's factor on a unit's production weight for a side. */
@@ -96,6 +124,7 @@ export function productionSystem(ctx: SimContext): System {
       const alive = countUnits(world, ctx.sides.count);
       const counts = countByCategory(world, ctx.sides.count);
       const boats = countBoats(world, ctx.sides.count);
+      const flagships = countFlagships(world, ctx.sides.count);
       const { armies } = ctx.settings;
       for (const e of world.query(Producer, Building, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
@@ -107,7 +136,12 @@ export function productionSystem(ctx: SimContext): System {
         const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
         // An outpost adds the same to every side, not a share of a big side's boosted rate.
         const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
-        producer.timer -= dt * armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
+        const rate = armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
+        producer.timer -= dt * rate;
+        if (producer.flagship !== undefined && producer.flagshipTimer !== undefined) {
+          producer.flagshipTimer -= dt * rate;
+          if (producer.flagshipTimer <= 0) launchFlagship(world, ctx, e, producer, faction, flagships);
+        }
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
 

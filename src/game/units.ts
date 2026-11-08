@@ -1152,6 +1152,30 @@ export const UNIT_DEFS = {
     wreckTime: 30,
     siege: true,
   },
+  // Tidewater's second super unit: a battleship from the dock that shells the coast from far out.
+  // It's too broad in the beam for the canals, so it keeps to open water and leaves those to the missile boats.
+  dreadnought: {
+    id: 'dreadnought',
+    name: 'Dreadnought',
+    class: 'vehicle',
+    category: 'super',
+    move: 'naval',
+    role: 'artillery',
+    model: 'dreadnought',
+    hp: 1300,
+    armor: 20,
+    speed: 1.5,
+    turnRate: 0.5,
+    radius: 2.0,
+    sight: 28,
+    turret: true,
+    turretTurnRate: 0.9,
+    weapon: weapon({ name: 'Twin deck guns', range: 32, minRange: 6, damage: 70, cooldown: 5.5, burst: 2, burstGap: 0.35, projectile: 'shell', speed: 34, splash: 2.2, spread: 0.07, arc: true, muzzleHeight: 1.6 }),
+    wreckTime: 30,
+    siege: true,
+    // From its fighting top it sees for its own guns.
+    spots: 30,
+  },
   // Firestorm: flamethrowers.
   flameTrooper: {
     id: 'flameTrooper',

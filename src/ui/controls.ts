@@ -485,7 +485,9 @@ export class Controls {
     if (construction) lines.push(`Under construction: ${Math.round((construction.elapsed / construction.duration) * 100)}%`);
     const producer = w.get(e, Producer);
     if (producer && !construction) {
-      const names = [...new Set(producer.table.map((p) => this.game.ctx.units[p.unit].name))].join(', ');
+      const ids = producer.table.map((p) => p.unit);
+      if (producer.flagship) ids.push(producer.flagship);
+      const names = [...new Set(ids.map((id) => this.game.ctx.units[id].name))].join(', ');
       lines.push(`Builds ${names}`);
     }
     if (rubble) {

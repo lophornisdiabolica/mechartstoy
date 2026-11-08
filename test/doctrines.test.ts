@@ -9,7 +9,8 @@ import { applyDamage } from '../src/game/systems/projectiles';
 import { UNIT_DEFS } from '../src/game/units';
 import { layoutBase } from '../src/world/settlements';
 import { Rng } from '../src/core/rng';
-import { BOAT_BERTHS, berthFree, countBoats, countByCategory } from '../src/game/caps';
+import { BOAT_BERTHS, berthFree, countBoats, countByCategory, countFlagships } from '../src/game/caps';
+import { Producer } from '../src/game/components';
 
 const DT = 1 / 30;
 
@@ -114,6 +115,38 @@ describe('Tidewater', () => {
     expect(boats[0]).toBe(BOAT_BERTHS);
     expect(berthFree(game.ctx, boats, 0)).toBe(false);
     expect(berthFree(game.ctx, boats, 1)).toBe(true);
+  });
+
+  it('its dock launches a Dreadnought beside the Hover Fortress, each with a super slot of its own', () => {
+    const game = battle(4, 1, ['tidewater', 'armour']);
+    game.settings.armies.caps.super = 1;
+    game.settings.armies.superGrowth = 'none';
+    const of = (id: string) => [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Faction).id === 0 && game.world.req(e, Unit).def.id === id);
+    run(game, DOCTRINES.tidewater.production.dock!.flagship!.interval + 30);
+    const ships = of('dreadnought');
+    expect(ships.length).toBe(1);
+    const t = game.world.req(ships[0], Transform);
+    expect(game.field.isWater(t.x, t.z)).toBe(true);
+    // It doesn't use up the super cap, so the mech bay still builds its Hover Fortress.
+    expect(countFlagships(game.world, game.ctx.sides.count)[0]).toBe(1);
+    expect(of('hoverFortress').length).toBe(1);
+    expect(countByCategory(game.world, game.ctx.sides.count)[0].super).toBe(1);
+  }, 60000);
+
+  it("losing the Dreadnought restarts the dock's build, not the mech bay's", () => {
+    const game = battle(4, 1, ['tidewater', 'armour']);
+    const producers = [...game.world.query(Producer, Building, Faction)].filter((e) => game.world.req(e, Faction).id === 0);
+    const dock = producers.find((e) => game.world.req(e, Building).def.id === 'dock')!;
+    const bay = producers.find((e) => game.world.req(e, Building).def.id === 'mechbay')!;
+    const d = game.world.req(dock, Producer);
+    const b = game.world.req(bay, Producer);
+    d.flagshipTimer = 1;
+    b.timer = 1;
+    const ship = spawnUnit(game.world, game.ctx, UNIT_DEFS.dreadnought, 0, 0, 0);
+    game.world.req(ship, Health).hp = 0;
+    game.step(DT);
+    expect(d.flagshipTimer).toBeGreaterThan(DOCTRINES.tidewater.production.dock!.flagship!.interval - 1);
+    expect(b.timer).toBeLessThan(1);
   });
 
   it('builds a hover pad instead when its base has no coast', () => {
