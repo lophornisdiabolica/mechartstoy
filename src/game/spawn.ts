@@ -54,6 +54,7 @@ function armed(
     burstLeft: 0,
     burstTimer: 0,
     firedAt: -Infinity,
+    firedOn: null,
   };
 }
 

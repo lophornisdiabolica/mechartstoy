@@ -61,6 +61,8 @@ export interface BuildingDef {
   buildTime: number;
   /** Low enough for walkers to step over (see MoveRules.over): walls. */
   low?: boolean;
+  /** Aircraft out of ammunition fly to the nearest of these of their side to rearm (see Ammo): airpads and forward helipads. */
+  rearms?: boolean;
 }
 
 /**
@@ -203,6 +205,7 @@ export const BUILDING_DEFS = {
     radius: 2.8,
     height: 1.6,
     production: { table: [{ unit: 'scout', weight: 1, count: 1 }], interval: 24 },
+    rearms: true,
     rebuildDelay: 40,
     buildTime: 10,
   },
@@ -355,6 +358,20 @@ export const BUILDING_DEFS = {
     field: true,
     rebuildDelay: 0,
     buildTime: 12,
+  },
+  // Skyline's engineers: a pad at an outpost its side holds, where aircraft rearm without flying all the way home.
+  helipad: {
+    id: 'helipad',
+    name: 'Forward Helipad',
+    model: 'bld:helipad',
+    hp: 450,
+    armor: 6,
+    radius: 1.7,
+    height: 0.4,
+    rearms: true,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 10,
   },
   outpost: {
     id: 'outpost',

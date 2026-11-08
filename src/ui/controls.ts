@@ -61,6 +61,10 @@ function describeGoals(goals: readonly Goal[], name: (side: number) => string, f
         return `${force(g)} taking an outpost`;
       case 'hold':
         return `${force(g)} holding an outpost`;
+      case 'hunt': {
+        const n = g.hunt?.squads ?? 0;
+        return `${n} ${n === 1 ? 'squad' : 'squads'} hunting a long-range gun${g.hunt?.flankX != null ? ' round its flank' : ''}`;
+      }
       case 'defend':
         return 'Defending home';
       case 'mass':

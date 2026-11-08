@@ -127,6 +127,7 @@ export function weaponSystem(ctx: SimContext): System {
           const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
           fire(world, ctx, e, armed, target, w);
           armed.firedAt = world.time;
+          armed.firedOn = world.get(target, Faction)?.id ?? null;
           // Aircraft that carry only so much go home to rearm once it's spent (see Ammo).
           const ammo = world.get(e, Ammo);
           if (ammo && --ammo.left <= 0) ammo.rearming = true;

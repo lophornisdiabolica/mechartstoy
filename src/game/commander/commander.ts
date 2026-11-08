@@ -10,6 +10,7 @@ import { Engineers } from './engineers';
 import { Avoidance, ThreatMap } from './threats';
 import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
+import { Hunt, Hunts } from './hunts';
 
 /*
  * The Commander: a planner per side, above the squads (see the Commander
@@ -34,7 +35,7 @@ export interface UnitMix {
 }
 
 /** Team goals (push, defend, mass, regroup) and task force jobs (take or hold an outpost, see taskForces.ts). */
-export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup' | 'take' | 'hold';
+export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup' | 'take' | 'hold' | 'hunt';
 
 /** Something a side means to do, and where. */
 export interface Goal {
@@ -47,6 +48,8 @@ export interface Goal {
   score: number;
   /** For a task force's job: the force. */
   force?: number;
+  /** For a hunt (see hunts.ts): where the hunters are, how many squads, the gun's unit type and the flank point they're swinging round by, if any. */
+  hunt?: { fromX: number; fromZ: number; squads: number; unit: string; flankX: number | null; flankZ: number | null };
 }
 
 /** One side's picture of the battle. */
@@ -83,6 +86,7 @@ export interface CommanderState {
   sides: SidePicture[];
   places: Place[];
   forces: TaskForce[];
+  hunts: Hunt[];
   updatedAt: number;
 }
 
@@ -96,6 +100,8 @@ export class Commander {
   readonly strength: StrengthMap;
   /** Squads sent off on jobs of their own between attacks. */
   readonly taskForces = new TaskForces();
+  /** Squads sent to kill long-range guns shelling their side (see hunts.ts). */
+  readonly hunts = new Hunts();
   /** Jobs that suit particular units: flak covering, artillery on high ground, escorts (worker only: the page doesn't need them). */
   readonly roles = new Roles();
   /** Engineers' building jobs (see engineers.ts). */
@@ -173,6 +179,7 @@ export class Commander {
       this.sides[f].needs = needsOf(this.sides[f]);
     }
     this.taskForces.update(world, ctx);
+    this.hunts.update(world, ctx, (q) => this.taskForces.forSquad(q) !== undefined);
     this.roles.update(world, ctx, this.strength, this.taskForces);
     this.engineers.update(world, ctx);
     this.avoidance.update(world, ctx);
@@ -185,6 +192,18 @@ export class Commander {
         if (tf.side !== f) continue;
         const o = ctx.outposts[tf.outpost];
         side.goals.push({ kind: tf.kind, x: o.x, z: o.z, target: null, score: tf.launch > 0 ? tf.strength / tf.launch : 1, force: tf.id });
+      }
+      for (const h of this.hunts.hunts) {
+        if (h.side !== f) continue;
+        const flank = h.stage === 'flank' && h.flankX !== null && h.flankZ !== null;
+        side.goals.push({
+          kind: 'hunt',
+          x: h.x,
+          z: h.z,
+          target: null,
+          score: h.launch > 0 ? h.strength / h.launch : 1,
+          hunt: { fromX: h.fromX, fromZ: h.fromZ, squads: h.squads.length, unit: h.gunId, flankX: flank ? h.flankX : null, flankZ: flank ? h.flankZ : null },
+        });
       }
     });
   }
@@ -216,13 +235,14 @@ export class Commander {
 
   /** What the page shows (see sim/mirror.ts): everything but the strength map. */
   get state(): CommanderState {
-    return { sides: this.sides, places: this.places, forces: this.taskForces.state, updatedAt: this.updatedAt };
+    return { sides: this.sides, places: this.places, forces: this.taskForces.state, hunts: this.hunts.state, updatedAt: this.updatedAt };
   }
 
   set state(s: CommanderState) {
     this.sides.splice(0, this.sides.length, ...s.sides);
     this.places = s.places;
     this.taskForces.state = s.forces;
+    this.hunts.state = s.hunts ?? [];
     this.updatedAt = s.updatedAt;
   }
 }

@@ -99,7 +99,7 @@ export class Roles {
         continue;
       }
       // Squads on a task force do its job.
-      if (forces.forSquad(world.req(e, Ai).squad)?.side === side) continue;
+      if (forces.forSquad(world.req(e, Ai).squad)?.side === side || ctx.commander.hunts.forSquad(world.req(e, Ai).squad)?.side === side) continue;
       if (ANTI_AIR.has(def.id)) flak[side].push(e);
       else if (def.role === 'artillery') artillery[side].push(e);
       else if (def.category === 'vehicle' && !flies && world.req(e, Mover).move !== 'naval') vehicles[side].push(e);
