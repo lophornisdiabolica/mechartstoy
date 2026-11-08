@@ -503,7 +503,8 @@ export function groundFollowSystem(field: Battlefield, ctx?: SimContext): System
           const want = g.landing ? LANDED : rules.altitude;
           g.offset = g.offset < want ? Math.min(want, g.offset + CLIMB_RATE * dt) : Math.max(want, g.offset - CLIMB_RATE * dt);
         }
-        if (ctx && rules && rules.over !== 'none') {
+        // Only near a building is there anything to climb (the nav grid knows where they stand).
+        if (ctx && rules && rules.over !== 'none' && (g.lift || ctx.nav.builtAt(t.x, t.z))) {
           const roof = Math.max(0, roofUnder(ctx, t.x, t.z, rules.over, world.get(e, Collider)?.radius ?? 0.5) - floor);
           const lift = g.lift ?? 0;
           g.lift = roof > lift ? Math.min(roof, lift + CLIMB_SPEED * dt) : Math.max(roof, lift - DROP_SPEED * dt);

@@ -452,6 +452,12 @@ export class NavGrid {
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
   }
 
+  /** Whether any building stands on a point's cell (whatever this class goes over). */
+  builtAt(x: number, z: number): boolean {
+    const [i, j] = this.cellOf(x, z);
+    return this.obstacles.occupied[j * this.cols + i] > 0;
+  }
+
   blockedAt(x: number, z: number): boolean {
     const [i, j] = this.cellOf(x, z);
     return this.blocked(i, j);
