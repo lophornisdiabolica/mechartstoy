@@ -1,10 +1,12 @@
 import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
+import { Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
 import * as D from '../../core/dmath';
+import { doctrineOf } from '../doctrines';
+import { UnitId } from '../units';
 
 const RETARGET_INTERVAL = 0.5;
 /** Buildings count as this much further away, so units shoot units first. Siege units invert it. */
@@ -72,7 +74,10 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   // A weapon that outranges its own sight can use an allied spotter's eyes for the difference.
   const ours = armed.weapon.range > armed.sight ? spotters.filter((s) => ctx.sides.allied(s.faction, faction) && D.hypot(s.x - t.x, s.z - t.z) < s.radius + armed.weapon.range) : [];
   const reach = ours.length > 0 ? armed.weapon.range : armed.sight;
-  ctx.grid.forEachNear(t.x, t.z, reach, (other, d2) => {
+  // Walkers step over walls and spiders climb them, so they don't waste shots on them (see MoveRules.over).
+  const over = MOVE_RULES[world.get(e, Mover)?.move ?? 'tracked'].over;
+  ctx.grid.forEachNear(t.x, t.z, reach, (other, d2, body) => {
+    if (over !== 'none' && body.building?.def.low) return;
     const otherFaction = world.req(other, Faction).id;
     // Only enemies; nobody aims at the civilian town (it only suffers stray fire).
     if (!ctx.sides.hostile(faction, otherFaction)) return;
@@ -140,15 +145,18 @@ interface Spotter {
 }
 
 /** Every spotter on the field this tick: finished buildings and live units with a spotting radius. */
-function spotters(world: World): Spotter[] {
+function spotters(world: World, ctx: SimContext): Spotter[] {
   const out: Spotter[] = [];
   for (const e of world.query(Building, Transform, Faction)) {
     const radius = world.req(e, Building).def.spots;
     if (radius && !world.has(e, Construction)) out.push({ ...xz(world, e), radius, faction: world.req(e, Faction).id });
   }
   for (const e of world.query(Unit, Transform, Faction)) {
-    const radius = world.req(e, Unit).def.spots;
-    if (radius) out.push({ ...xz(world, e), radius, faction: world.req(e, Faction).id });
+    const def = world.req(e, Unit).def;
+    const faction = world.req(e, Faction).id;
+    // Some doctrines have units spot that don't for anyone else (Bastion's scout copters).
+    const radius = def.spots ?? (faction >= 0 ? doctrineOf(ctx, faction).spotters?.[def.id as UnitId] : undefined);
+    if (radius) out.push({ ...xz(world, e), radius, faction });
   }
   return out;
 }
@@ -166,7 +174,7 @@ export function targetingSystem(ctx: SimContext): System {
   return {
     name: 'targeting',
     update(world) {
-      const spotting = spotters(world);
+      const spotting = spotters(world, ctx);
       for (const e of world.query(Armed, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
         const armed = world.req(e, Armed);
@@ -177,6 +185,11 @@ export function targetingSystem(ctx: SimContext): System {
         }
         if (world.time < armed.nextTargetAt) continue;
         armed.nextTargetAt = world.time + RETARGET_INTERVAL;
+        // Flying home to rearm: nothing to shoot with (see Ammo).
+        if (world.get(e, Ammo)?.rearming && armed.burstLeft === 0) {
+          armed.target = null;
+          continue;
+        }
         armed.target = findTarget(world, ctx, e, armed, spotting);
         const spot = armed.blocked && armed.target !== null ? firingSpot(world, ctx, e, armed, armed.target) : null;
         armed.spotX = spot?.x ?? null;

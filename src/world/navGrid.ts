@@ -157,12 +157,23 @@ export class NavObstacles {
   blockVersion = 0;
   /** Number of obstacles covering each cell. */
   readonly occupied: Uint16Array;
+  /** The same, leaving out low buildings (walls), which walkers step over (see MoveRules.over). */
+  readonly tall: Uint16Array;
+  /** Always empty: what climbers see, since they go over every building. */
+  readonly none: Uint16Array;
 
   constructor(
     readonly cols: number,
     readonly rows: number,
   ) {
     this.occupied = new Uint16Array(cols * rows);
+    this.tall = new Uint16Array(cols * rows);
+    this.none = new Uint16Array(cols * rows);
+  }
+
+  /** The obstacle counts a class with these rules is kept out by. */
+  for(over: 'none' | 'low' | 'all'): Uint16Array {
+    return over === 'all' ? this.none : over === 'low' ? this.tall : this.occupied;
   }
 
   /** Something changed in these cells: bump the version and remember where. */
@@ -256,7 +267,7 @@ export class NavGrid {
     const n = this.cols * this.rows;
     this.terrain = new Uint8Array(n);
     this.cost = new Float32Array(n);
-    this.occupied = this.obstacles.occupied;
+    this.occupied = this.obstacles.for(this.rules.over);
     this.clearance = new Float32Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
@@ -516,8 +527,14 @@ export class NavGrid {
     }
   }
 
-  /** Mark (or with delta -1, unmark) the cells a circular obstacle covers. */
-  markObstacle(x: number, z: number, radius: number, delta: 1 | -1): void {
+  /**
+   * Mark (or with delta -1, unmark) the cells a circular obstacle covers, on
+   * every grid sharing these obstacles. A `low` one (a wall) doesn't keep out
+   * classes that step over walls (see MoveRules.over).
+   */
+  markObstacle(x: number, z: number, radius: number, delta: 1 | -1, low = false): void {
+    const all = this.obstacles.occupied;
+    const tall = this.obstacles.tall;
     const [i0, j0] = this.cellOf(x - radius, z - radius);
     const [i1, j1] = this.cellOf(x + radius, z + radius);
     for (let j = j0; j <= j1; j++) {
@@ -525,7 +542,8 @@ export class NavGrid {
         const c = this.center(i, j);
         if (D.hypot(c.x - x, c.z - z) > radius) continue;
         const k = j * this.cols + i;
-        this.occupied[k] = Math.max(0, this.occupied[k] + delta);
+        all[k] = Math.max(0, all[k] + delta);
+        if (!low) tall[k] = Math.max(0, tall[k] + delta);
       }
     }
     this.obstacles.record({ i0, j0, i1, j1 });

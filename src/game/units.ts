@@ -93,6 +93,20 @@ export interface UnitDef {
   spots?: number;
   /** A builder (see commander/engineers.ts): it isn't part of the army, takes no cap and never joins an attack. */
   builds?: boolean;
+  /**
+   * Carries enough fuel to blow up when it's destroyed: hurts everything
+   * round it, friend or foe, like a fuel depot, and leaves the ground burning (Firestorm).
+   */
+  explodes?: { damage: number; radius: number };
+  /** A plane: it can't hover, so it never stops (see Mover.cruise), and attacks in runs over its target. */
+  fixedWing?: boolean;
+  /** Trigger pulls before it flies home to rearm (see the Ammo component). */
+  ammo?: number;
+  /**
+   * Below this share of its health it breaks off from its squad and drives
+   * straight at the nearest enemy, to take some of them with it when it goes up.
+   */
+  desperate?: number;
 }
 
 /** A weapon with the usual defaults filled in, for the units below that only change a few things. */
@@ -750,6 +764,7 @@ export const UNIT_DEFS = {
     },
     wreckTime: 10,
     siege: false,
+    ammo: 6,
   },
   bomber: {
     id: 'bomber',
@@ -762,7 +777,7 @@ export const UNIT_DEFS = {
     hp: 240,
     armor: 3,
     speed: 4.5,
-    turnRate: 1.4,
+    turnRate: 0.95,
     radius: 1.3,
     sight: 20,
     turret: true,
@@ -785,6 +800,32 @@ export const UNIT_DEFS = {
     },
     wreckTime: 10,
     siege: true,
+    fixedWing: true,
+    ammo: 4,
+  },
+  // Skyline's fighter: fast, never stops, and strafes whatever it lines up on, in the air or on the ground.
+  jet: {
+    id: 'jet',
+    name: 'Strike Jet',
+    class: 'aircraft',
+    category: 'air',
+    move: 'air',
+    role: 'frontline',
+    model: 'jet',
+    hp: 130,
+    armor: 2,
+    speed: 7.5,
+    turnRate: 1.1,
+    radius: 0.9,
+    sight: 22,
+    // Its guns point where it flies: it has to line up on what it shoots.
+    turret: false,
+    turretTurnRate: 1.1,
+    weapon: weapon({ name: 'Nose cannons', range: 11, damage: 9, cooldown: 1.4, burst: 6, burstGap: 0.06, projectile: 'bullet', speed: 70, splash: 0.4, spread: 0.06, muzzleHeight: 0, targets: 'both' }),
+    wreckTime: 8,
+    siege: false,
+    fixedWing: true,
+    ammo: 10,
   },
   drone: {
     id: 'drone',
@@ -935,6 +976,29 @@ export const UNIT_DEFS = {
     siege: true,
     // A walking sensor mast: Bastion's guns reach their full range round it.
     spots: 26,
+  },
+  // Bastion's test variant (see DOCTRINES.bastionSpider): a giant spider carrying a siege howitzer.
+  siegeSpider: {
+    id: 'siegeSpider',
+    name: 'Siege Spider',
+    class: 'mech',
+    category: 'super',
+    move: 'climber',
+    role: 'artillery',
+    model: 'siegeSpider',
+    hp: 1000,
+    armor: 18,
+    speed: 1.3,
+    turnRate: 0.8,
+    radius: 2.1,
+    sight: 26,
+    turret: true,
+    turretTurnRate: 0.8,
+    weapon: weapon({ name: 'Siege howitzer', range: 38, minRange: 9, damage: 95, cooldown: 7, burst: 2, burstGap: 0.7, projectile: 'artillery', speed: 17, splash: 3.6, spread: 0.08, arc: true, muzzleHeight: 3.6 }),
+    wreckTime: 35,
+    siege: true,
+    // Up on its legs it sees for its own gun, and for the howitzers round it.
+    spots: 30,
   },
   // Talon: walkers.
   spider: {
@@ -1099,6 +1163,8 @@ export const UNIT_DEFS = {
     weapon: flamer('Flamethrower', 6.5, 6, 5, 1.1, 0.4, 1.2),
     wreckTime: 0,
     siege: false,
+    explodes: { damage: 30, radius: 2 },
+    desperate: 0.35,
   },
   scorchBuggy: {
     id: 'scorchBuggy',
@@ -1119,6 +1185,8 @@ export const UNIT_DEFS = {
     weapon: flamer('Flame projector', 7, 8, 5, 1.1, 0.9),
     wreckTime: 15,
     siege: false,
+    explodes: { damage: 60, radius: 3 },
+    desperate: 0.35,
   },
   cinderWalker: {
     id: 'cinderWalker',
@@ -1139,6 +1207,8 @@ export const UNIT_DEFS = {
     weapon: flamer('Twin flame lances', 9, 14.7, 6, 1.2, 1.8, 2),
     wreckTime: 25,
     siege: false,
+    explodes: { damage: 100, radius: 3.5 },
+    desperate: 0.3,
   },
   inferno: {
     id: 'inferno',
@@ -1159,6 +1229,8 @@ export const UNIT_DEFS = {
     weapon: flamer('Inferno projectors', 10, 22, 8, 1.6, 3, 3.5),
     wreckTime: 35,
     siege: true,
+    explodes: { damage: 220, radius: 5 },
+    desperate: 0.25,
   },
   // Every doctrine's builder (see commander/engineers.ts): its base's HQ trains one when the Commander has work for it.
   engineer: {

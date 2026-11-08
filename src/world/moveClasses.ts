@@ -23,12 +23,18 @@ export interface MoveRules {
   flies: boolean;
   /** Height above the ground or water surface it moves at. */
   altitude: number;
+  /**
+   * Which buildings it goes over rather than round: none, low ones (walls,
+   * which long legs step over), or all of them (spiders climb up one side and
+   * down the other).
+   */
+  over: 'none' | 'low' | 'all';
 }
 
 /** Slope above which ground counts as steep (see MoveRules.steep). */
 export const STEEP_SLOPE = 0.7;
 
-const land: MoveRules = { maxDepth: 0, minDepth: 0, steep: 3, town: 1, bridge: 1, waterCost: 1, waterSpeed: 1, flies: false, altitude: 0 };
+const land: MoveRules = { maxDepth: 0, minDepth: 0, steep: 3, town: 1, bridge: 1, waterCost: 1, waterSpeed: 1, flies: false, altitude: 0, over: 'none' };
 
 export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   /** Infantry: happy on slopes, and prefer moving through towns and outposts, where there's cover. */
@@ -39,10 +45,14 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
    * Mechs: long legs take slopes in stride and wade through shallow water,
    * but big ones keep out of towns, and take a bridge only when going round
    * by land is a long way further (a bridge is a tight squeeze for a Titan).
+   * They step straight over walls.
    */
-  walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, bridge: 3, waterCost: 2, waterSpeed: 0.6 },
-  /** Spider walkers: many legs take any slope as easily as flat ground, and they're small enough for town streets. */
-  climber: { ...land, maxDepth: 0.6, steep: 1, town: 1, waterCost: 2, waterSpeed: 0.6 },
+  walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, bridge: 3, waterCost: 2, waterSpeed: 0.6, over: 'low' },
+  /**
+   * Spider walkers: many legs take any slope as easily as flat ground, they're
+   * small enough for town streets, and they climb straight over buildings and walls.
+   */
+  climber: { ...land, maxDepth: 0.6, steep: 1, town: 1, waterCost: 2, waterSpeed: 0.6, over: 'all' },
   /** Hovercraft: skim water as easily as land, but steep ground is the worst going of any class. */
   hover: { ...land, maxDepth: Infinity, steep: 6, town: 1.5, waterSpeed: 1.1 },
   /** Amphibious vehicles: drive on land, swim slowly. */

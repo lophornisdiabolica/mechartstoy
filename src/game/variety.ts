@@ -1,6 +1,6 @@
 import { Rng } from '../core/rng';
 import { BIOME_IDS, BIOMES } from '../world/biomes';
-import { DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
+import { canonicalDoctrine, DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
 import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
 import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
@@ -197,7 +197,7 @@ export const SECOND_IDENTITIES: readonly { name: string; primary: number }[] = [
  */
 function identityFor(doctrine: DoctrineId, used: Set<number>, sides: FactionSettings[], self: number): Pick<FactionSettings, 'name' | 'color'> {
   const taken = (c: number) => used.has(c) || sides.some((f, j) => j > self && f.color === c && !isPlainIdentity(f, j));
-  const home = FACTIONS[DOCTRINE_IDS.indexOf(doctrine)];
+  const home = FACTIONS[DOCTRINE_IDS.indexOf(canonicalDoctrine(doctrine))];
   if (home && !taken(home.primary)) return { name: home.name, color: home.primary };
   const second = SECOND_IDENTITIES.find((d) => !taken(d.primary));
   if (second) return { name: second.name, color: second.primary };

@@ -28,6 +28,8 @@ export interface ModelRig {
   turret?: THREE.Object3D;
   /** Orient the whole model along its velocity (projectiles). Build these facing +z. */
   faceVelocity?: boolean;
+  /** Aircraft: lean into turns, this many radians of roll per radian a second of turning (planes most). */
+  bank?: number;
   animate?(state: AnimState): void;
 }
 

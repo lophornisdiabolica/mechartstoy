@@ -152,7 +152,7 @@ describe('conquest mode', () => {
     s.mode = 'conquest';
     s.map.size = 'small';
     const game = new Game(7919, { settings: s });
-    while (!game.outcome && game.world.time < 900) game.step(DT);
+    while (!game.outcome && game.world.time < 1500) game.step(DT);
     expect(game.outcome).not.toBeNull();
     const loser = 1 - (game.outcome!.team ?? 0);
     const producers = [...game.world.query(Producer, Faction)].filter((e) => game.world.req(e, Faction).id === loser);

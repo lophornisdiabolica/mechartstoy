@@ -53,6 +53,8 @@ export interface BuildingDef {
   lasts?: number;
   /** Seconds the construction animation takes. */
   buildTime: number;
+  /** Low enough for walkers to step over (see MoveRules.over): walls. */
+  low?: boolean;
 }
 
 const towerCannon: WeaponDef = {
@@ -300,6 +302,7 @@ export const BUILDING_DEFS = {
     armor: 10,
     radius: 1.2,
     height: 1.2,
+    low: true,
     lasts: 600,
     rebuildDelay: 0,
     buildTime: 8,

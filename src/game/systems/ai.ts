@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Ai, Armed, Faction, Guard, Mover, Targetable, Transform, Unit } from '../components';
+import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
@@ -21,6 +21,8 @@ const ESCORT_RANGE = 24;
 const SUPPORT_TRAIL = 4;
 /** How far ahead round its circle an aircraft fighting something aims, radians. */
 const ORBIT_STEP = 0.7;
+/** How far a desperate unit looks for an enemy to drive at (see UnitDef.desperate). */
+const CHARGE_RANGE = 30;
 /** Seconds between an artillery or support unit's looks around (see Ai.roleCheckAt). */
 const ROLE_CHECK = 0.5;
 /**
@@ -66,6 +68,31 @@ export function aiSystem(ctx: SimContext): System {
           else moveTo(mover, t, home.x + ai.rallyOffsetX * 0.5, home.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
           continue;
         }
+        // Out of ammunition: home to the airpad, set down, and wait to be loaded again (see Ammo).
+        const ammo = world.get(e, Ammo);
+        if (ammo?.rearming && armed.burstLeft === 0) {
+          rearm(world, ctx, e, ammo, mover, t, faction);
+          continue;
+        }
+        // Low on health, a unit carrying fuel breaks off and drives at the nearest enemy (see UnitDef.desperate).
+        if (def?.desperate && !post) {
+          const h = world.get(e, Health);
+          if (h && h.hp < h.max * def.desperate) {
+            if (world.time >= ai.roleCheckAt) {
+              ai.roleCheckAt = world.time + ROLE_CHECK;
+              ai.threat = nearestEnemyUnit(world, ctx, e, faction, CHARGE_RANGE, true);
+            }
+            const prey = ai.threat !== null && world.isAlive(ai.threat) && world.has(ai.threat, Targetable) ? ai.threat : null;
+            if (prey !== null) {
+              const pt = world.req(prey, Transform);
+              mover.targetX = pt.x;
+              mover.targetZ = pt.z;
+              mover.faceX = pt.x;
+              mover.faceZ = pt.z;
+              continue;
+            }
+          }
+        }
         const role: Role = def?.role ?? 'frontline';
         const lookAround = role !== 'frontline' && world.time >= ai.roleCheckAt;
         if (lookAround) ai.roleCheckAt = world.time + ROLE_CHECK;
@@ -105,6 +132,8 @@ export function aiSystem(ctx: SimContext): System {
             } else if (outOfRange) {
               mover.targetX = tt.x;
               mover.targetZ = tt.z;
+            } else if (def?.fixedWing) {
+              attackRun(ai, mover, t, tt, world.time);
             } else if (MOVE_RULES[mover.move].flies) {
               // Aircraft don't park over a fight: they circle it, guns on the target.
               const a = D.atan2(t.z - tt.z, t.x - tt.x) + ORBIT_STEP;
@@ -266,8 +295,77 @@ export function aiSystem(ctx: SimContext): System {
   };
 }
 
-/** The closest enemy unit (not building) within `range`, if any. */
-function nearestEnemyUnit(world: World, ctx: SimContext, e: Entity, faction: number, range: number): Entity | null {
+/** How close a plane gets to its target before it pulls through, and how far past it it flies before coming round. */
+const RUN_CLOSE = 3;
+const RUN_EXTEND = 10;
+
+/**
+ * A plane's attack run (see UnitDef.fixedWing): straight at the target,
+ * guns or bombs on it as it lines up, on over it and out the other side,
+ * then round for another pass. The turn is the plane's own (see cruise in movement.ts).
+ */
+function attackRun(ai: Ai, mover: Mover, t: Transform, tt: Transform, time: number): void {
+  if (ai.runUntil !== undefined && time < ai.runUntil) {
+    mover.targetX = ai.runX!;
+    mover.targetZ = ai.runZ!;
+    return;
+  }
+  if (D.hypot(tt.x - t.x, tt.z - t.z) < RUN_CLOSE) {
+    ai.runX = t.x + D.cos(t.heading) * RUN_EXTEND;
+    ai.runZ = t.z - D.sin(t.heading) * RUN_EXTEND;
+    ai.runUntil = time + RUN_EXTEND / Math.max(1, mover.speed);
+    mover.targetX = ai.runX;
+    mover.targetZ = ai.runZ;
+    return;
+  }
+  mover.targetX = tt.x;
+  mover.targetZ = tt.z;
+}
+
+/** Seconds an aircraft sits on its airpad being loaded, and how near the pad counts as on it. */
+const REARM_TIME = 5;
+const PAD_REACH = 3;
+
+/**
+ * Back to the nearest of its side's (finished) airpads to rearm, or to its
+ * base if it has none. Helicopters set down on the pad; planes, which can't,
+ * circle low over it. Once loaded it goes back to the fight.
+ */
+function rearm(world: World, ctx: SimContext, e: Entity, ammo: Ammo, mover: Mover, t: Transform, faction: number): void {
+  let pad: { x: number; z: number } | null = null;
+  let best = Infinity;
+  for (const b of world.query(Building, Transform, Faction)) {
+    if (world.req(b, Building).def.id !== 'airpad' || world.has(b, Construction) || world.req(b, Faction).id !== faction) continue;
+    const bt = world.req(b, Transform);
+    const d = D.hypot(bt.x - t.x, bt.z - t.z);
+    if (d < best) {
+      best = d;
+      pad = { x: bt.x, z: bt.z };
+    }
+  }
+  pad ??= ctx.field.baseSites[faction] ?? { x: t.x, z: t.z };
+  const g = world.get(e, GroundFollow);
+  const there = D.hypot(pad.x - t.x, pad.z - t.z) < (mover.cruise ? PAD_REACH * 4 : PAD_REACH);
+  mover.targetX = there ? null : pad.x;
+  mover.targetZ = there ? null : pad.z;
+  mover.faceX = pad.x;
+  mover.faceZ = pad.z;
+  if (mover.cruise) {
+    mover.loiterX = pad.x;
+    mover.loiterZ = pad.z;
+  }
+  if (g) g.landing = there;
+  if (!there) return;
+  ammo.readyAt ??= world.time + REARM_TIME;
+  if (world.time < ammo.readyAt) return;
+  ammo.left = ammo.max;
+  ammo.rearming = false;
+  ammo.readyAt = null;
+  if (g) g.landing = false;
+}
+
+/** The closest enemy unit (not building) within `range`, if any; with `ground`, not counting aircraft. */
+function nearestEnemyUnit(world: World, ctx: SimContext, e: Entity, faction: number, range: number, ground = false): Entity | null {
   if (range <= 0) return null;
   const t = world.req(e, Transform);
   let best: Entity | null = null;
@@ -275,6 +373,10 @@ function nearestEnemyUnit(world: World, ctx: SimContext, e: Entity, faction: num
   ctx.grid.forEachNear(t.x, t.z, range, (other, d2) => {
     if (d2 >= bestD2 || world.get(other, Targetable)?.kind !== 'unit') return;
     if (!ctx.sides.hostile(faction, world.req(other, Faction).id)) return;
+    if (ground) {
+      const m = world.get(other, Mover);
+      if (m && MOVE_RULES[m.move].flies) return;
+    }
     best = other;
     bestD2 = d2;
   });

@@ -4,6 +4,7 @@ import { Armed, Construction, Faction, Renderable, Transform, Wreck } from '../g
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
 import { CHARRED } from './models/units';
+import { SIM_HZ } from '../game/game';
 
 function lerpAngle(a: number, b: number, t: number): number {
   let d = b - a;
@@ -22,9 +23,13 @@ interface ViewEntry {
   /** The model's meshes and sprites, which the batcher draws. */
   meshes: THREE.Mesh[];
   sprites: THREE.Sprite[];
+  /** How far an aircraft is leaning into its turn now (see ModelRig.bank). */
+  roll: number;
 }
 
 const _ahead = new THREE.Vector3();
+/** Most an aircraft leans into a turn, radians. */
+const MAX_BANK = 0.75;
 
 /** Whether a part and everything between it and its model's root is visible (models blink lights by hiding them). */
 function shown(part: THREE.Object3D, top: THREE.Object3D): boolean {
@@ -102,7 +107,9 @@ export class EntityView {
           if ((o as THREE.Sprite).isSprite) sprites.push(o as THREE.Sprite);
           else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
         });
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0 };
+        // Roll after turning, so banking leans along the model's own length.
+        obj.rotation.order = 'YXZ';
         this.entries.set(e, entry);
         this.owners.set(obj, e);
         this.root.add(obj);
@@ -130,6 +137,14 @@ export class EntityView {
 
       if (!entry.wrecked && w.has(e, Wreck)) this.makeWreck(entry);
       if (entry.wrecked) continue;
+
+      if (rig?.bank) {
+        // Lean into the turn: the turn rate over the last tick, eased so it doesn't twitch.
+        const turn = lerpAngle(0, t.heading - t.pheading, 1) * SIM_HZ;
+        const want = Math.max(-MAX_BANK, Math.min(MAX_BANK, -turn * rig.bank));
+        entry.roll += (want - entry.roll) * Math.min(1, dt * 4);
+        obj.rotation.x = entry.roll;
+      }
 
       const armed = w.get(e, Armed);
       if (rig?.turret && armed) rig.turret.rotation.y = armed.aim - obj.rotation.y;

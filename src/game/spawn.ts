@@ -3,6 +3,7 @@ import { BuildingDef } from './buildings';
 import { productionFor } from './doctrines';
 import {
   Ai,
+  Ammo,
   Armed,
   Carrier,
   Building,
@@ -117,6 +118,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     faceZ: null,
     move: def.move,
     nav: makeNavState(),
+    ...(def.fixedWing ? { cruise: true, loiterX: x, loiterZ: z } : {}),
   });
   world.add(e, Health, { hp: def.hp, max: def.hp, armor: def.armor, lastHit: null, hurtAt: -Infinity });
   world.add(e, Collider, { radius: def.radius });
@@ -140,6 +142,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     escort: null,
   });
   if (def.carries) world.add(e, Carrier, { loaded: true, reloadAt: 0 });
+  if (def.ammo) world.add(e, Ammo, { left: def.ammo, max: def.ammo, rearming: false, readyAt: null });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;
 }

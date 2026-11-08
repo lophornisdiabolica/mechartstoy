@@ -1,6 +1,7 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { MOVE_RULES, MoveClass } from '../../world/moveClasses';
+import { MOVE_RULES, MoveClass, MoveRules } from '../../world/moveClasses';
+import { BuildingDef } from '../buildings';
 import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, NavState, Transform, Unit } from '../components';
 import { NavGrid } from '../../world/navGrid';
 import { CellArea } from '../../world/ground';
@@ -161,10 +162,12 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
   const lookahead = r + 2.5;
   const myFaction = world.get(e, Faction)?.id;
   const flying = air.has(e);
+  const over = MOVE_RULES[world.get(e, Mover)?.move ?? 'tracked'].over;
   let ax = 0;
   let az = 0;
   ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other, _d2, body) => {
     if (other === e) return;
+    if (body.building && goesOver(over, body.building.def)) return;
     // Aircraft only steer round other aircraft, and ground units don't dodge what's flying over them.
     if (air.size > 0 && air.has(other) !== flying) return;
     const ot = body.t;
@@ -247,6 +250,10 @@ export function movementSystem(ctx: SimContext): System {
       for (const e of world.query(Transform, Mover)) {
         const t = world.req(e, Transform);
         const m = world.req(e, Mover);
+        if (m.cruise) {
+          cruise(ctx, world, e, t, m, dt, air);
+          continue;
+        }
 
         if (m.targetX === null || m.targetZ === null) {
           m.nav.path = null;
@@ -306,18 +313,63 @@ export function movementSystem(ctx: SimContext): System {
   };
 }
 
+/** How far from its loiter point a plane circles, and how far ahead round the circle it steers. */
+const LOITER_RADIUS = 8;
+const LOITER_LEAD = 0.6;
+/** How far in from the map's edge a plane turns back. */
+const EDGE_ROOM = 5;
+
+/**
+ * A plane's flying (see Mover.cruise): always forward at full speed, turning
+ * no faster than it can. Sent somewhere, it steers for it, overshoots and
+ * comes round again; with nowhere to go, it circles the last place it was
+ * sent. Near the map's edge it turns back in.
+ */
+function cruise(ctx: SimContext, world: World, e: Entity, t: Transform, m: Mover, dt: number, air: Set<Entity>): void {
+  let gx: number;
+  let gz: number;
+  if (m.targetX !== null && m.targetZ !== null) {
+    gx = m.targetX;
+    gz = m.targetZ;
+    m.loiterX = gx;
+    m.loiterZ = gz;
+  } else {
+    const cx = m.loiterX ?? t.x;
+    const cz = m.loiterZ ?? t.z;
+    // Round the circle anticlockwise, steering for a point a little ahead on it.
+    const a = D.atan2(t.z - cz, t.x - cx) - LOITER_LEAD;
+    gx = cx + D.cos(a) * LOITER_RADIUS;
+    gz = cz + D.sin(a) * LOITER_RADIUS;
+  }
+  if (!ctx.field.contains(t.x, t.z, EDGE_ROOM)) {
+    gx = 0;
+    gz = 0;
+  }
+  let dirX = gx - t.x;
+  let dirZ = gz - t.z;
+  const dist = D.hypot(dirX, dirZ);
+  if (dist > 1e-4) {
+    dirX /= dist;
+    dirZ /= dist;
+    const avoid = avoidance(ctx, world, e, t, dirX, dirZ, air);
+    t.heading = turnToward(t.heading, D.atan2(-(dirZ + avoid.z), dirX + avoid.x), m.turnRate * dt);
+  }
+  t.x += D.cos(t.heading) * m.speed * dt;
+  t.z -= D.sin(t.heading) * m.speed * dt;
+}
+
 /** Movement classes that knock trees flat by driving into them (infantry and spiders slip between them; walkers only if they're big). */
 const CRUSHERS = new Set<MoveClass>(['tracked', 'amphibious', 'hover', 'walker']);
 
 /** Keeps the nav grid's building obstacles in sync as buildings fall and rise. */
 export function navObstacleSystem(ctx: SimContext): System {
-  const marked = new Map<Entity, { x: number; z: number; r: number }>();
+  const marked = new Map<Entity, { x: number; z: number; r: number; low: boolean }>();
   return {
     name: 'navObstacles',
     update(world) {
       for (const [e, o] of marked) {
         if (!world.has(e, Building)) {
-          ctx.nav.markObstacle(o.x, o.z, o.r, -1);
+          ctx.nav.markObstacle(o.x, o.z, o.r, -1, o.low);
           marked.delete(e);
         }
       }
@@ -325,8 +377,8 @@ export function navObstacleSystem(ctx: SimContext): System {
         if (marked.has(e)) continue;
         const t = world.req(e, Transform);
         // A little clearance so routes don't scrape the walls.
-        const o = { x: t.x, z: t.z, r: world.req(e, Collider).radius + 0.5 };
-        ctx.nav.markObstacle(o.x, o.z, o.r, 1);
+        const o = { x: t.x, z: t.z, r: world.req(e, Collider).radius + 0.5, low: world.req(e, Building).def.low === true };
+        ctx.nav.markObstacle(o.x, o.z, o.r, 1, o.low);
         marked.set(e, o);
       }
     },
@@ -387,8 +439,11 @@ export function separationSystem(ctx: SimContext): System {
         const flying = air.has(e);
         const terrain = ctx.navs.for(move);
         const foot = move === 'foot';
+        const over = MOVE_RULES[move].over;
         ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2, body) => {
           if (other === e || d2 < 1e-6) return;
+          // Spiders climb over buildings, and walkers step over walls, instead of being pushed out of them.
+          if (body.building && goesOver(over, body.building.def)) return;
           if (air.size > 0 && air.has(other) !== flying) return;
           const ot = body.t;
           // Infantry keep a little apart from each other, more so in a fight.
@@ -412,19 +467,66 @@ export function separationSystem(ctx: SimContext): System {
   };
 }
 
-export function groundFollowSystem(field: Battlefield): System {
+/** Whether a unit that goes over `over` buildings goes over this one (see MoveRules.over). */
+export function goesOver(over: MoveRules['over'], def: BuildingDef): boolean {
+  return over === 'all' || (over === 'low' && def.low === true);
+}
+
+/** Height an aircraft rearming sits at, and how fast aircraft come down and climb back up. */
+const LANDED = 1.4;
+const CLIMB_RATE = 2.5;
+
+/** How fast a spider climbs a wall, and comes down off a roof, world units per second. */
+const CLIMB_SPEED = 2.5;
+const DROP_SPEED = 5;
+
+/**
+ * Keeps units on the ground (boats on the water). Spiders crossing a
+ * building climb up its side and walk over its roof, and walkers stepping
+ * over a wall rise a little as they go.
+ */
+export function groundFollowSystem(field: Battlefield, ctx?: SimContext): System {
   return {
     name: 'groundFollow',
-    update(world) {
+    update(world, dt) {
       for (const e of world.query(Transform, GroundFollow)) {
         const t = world.req(e, Transform);
         t.x = field.clampX(t.x, 0.5);
         t.z = field.clampZ(t.z, 0.5);
         // Boats ride the water, under bridges; everything else stands on the ground or a deck.
         const mover = world.get(e, Mover);
-        const floor = mover && MOVE_RULES[mover.move].minDepth > 0 ? field.waterSurfaceAt(t.x, t.z) : field.surfaceAt(t.x, t.z);
-        t.y = floor + world.req(e, GroundFollow).offset;
+        const rules = mover ? MOVE_RULES[mover.move] : null;
+        const floor = rules && rules.minDepth > 0 ? field.waterSurfaceAt(t.x, t.z) : field.surfaceAt(t.x, t.z);
+        const g = world.req(e, GroundFollow);
+        // Aircraft come down onto their airpad to rearm, and climb back up after (see Ammo).
+        if (rules?.flies) {
+          const want = g.landing ? LANDED : rules.altitude;
+          g.offset = g.offset < want ? Math.min(want, g.offset + CLIMB_RATE * dt) : Math.max(want, g.offset - CLIMB_RATE * dt);
+        }
+        if (ctx && rules && rules.over !== 'none') {
+          const roof = Math.max(0, roofUnder(ctx, t.x, t.z, rules.over, world.get(e, Collider)?.radius ?? 0.5) - floor);
+          const lift = g.lift ?? 0;
+          g.lift = roof > lift ? Math.min(roof, lift + CLIMB_SPEED * dt) : Math.max(roof, lift - DROP_SPEED * dt);
+        }
+        t.y = floor + g.offset + (g.lift ?? 0);
       }
     },
   };
+}
+
+/**
+ * The top of the highest building a unit going over `over` buildings is on
+ * at a point (-Infinity if none). Walkers only lift half a wall's height:
+ * their legs do the rest.
+ */
+function roofUnder(ctx: SimContext, x: number, z: number, over: MoveRules['over'], radius: number): number {
+  let top = -Infinity;
+  ctx.grid.forEachNear(x, z, 4, (_other, d2, body) => {
+    const b = body.building;
+    if (!b || !goesOver(over, b.def)) return;
+    const reach = b.def.radius + radius * 0.5;
+    if (d2 > reach * reach) return;
+    top = Math.max(top, body.t.y + b.def.height * (over === 'all' ? 1 : 0.5));
+  });
+  return top;
 }

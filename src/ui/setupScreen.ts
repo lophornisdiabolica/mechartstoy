@@ -5,7 +5,7 @@ import { OUTPOST_KINDS } from '../game/outposts';
 import { MapPreview } from './mapPreview';
 import { RAMP_INTERVAL, RAMP_MAX } from '../game/tide';
 import { UNIT_DEFS, UnitDef, UnitId } from '../game/units';
-import { DOCTRINE_IDS, DOCTRINES, doctrineUnits, isDoctrine } from '../game/doctrines';
+import { DOCTRINE_IDS, DOCTRINES, doctrineUnits, isDoctrine, TEST_DOCTRINE_IDS } from '../game/doctrines';
 import { isStyle, STYLE_IDS, STYLES } from '../game/commander/advice';
 import { dropdown, el, hex, segmented } from './dom';
 import { Rng } from '../core/rng';
@@ -146,7 +146,10 @@ export class SetupScreen {
       const name = el('input', { type: 'text', maxlength: '32', 'aria-label': `Side ${i + 1} name` });
       const team = el('select', { 'aria-label': `Side ${i + 1} team` });
       const doctrine = el('select', { 'aria-label': `Side ${i + 1} doctrine` });
-      doctrine.append(...DOCTRINE_IDS.map((d) => el('option', { value: d, title: DOCTRINES[d].blurb }, DOCTRINES[d].name)));
+      // Variants to try out go at the bottom, under their own heading (see DoctrineDef.testOf).
+      const tests = el('optgroup', { label: 'Test' });
+      tests.append(...TEST_DOCTRINE_IDS.map((d) => el('option', { value: d, title: DOCTRINES[d].blurb }, DOCTRINES[d].name)));
+      doctrine.append(...DOCTRINE_IDS.map((d) => el('option', { value: d, title: DOCTRINES[d].blurb }, DOCTRINES[d].name)), tests);
       const style = el('select', { 'aria-label': `Side ${i + 1} Commander style`, title: 'How its Commander plays' });
       style.append(...STYLE_IDS.map((k) => el('option', { value: k, title: STYLES[k].blurb }, STYLES[k].name)));
       style.addEventListener('change', () => {
