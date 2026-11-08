@@ -21,7 +21,7 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 2, name: 'Ashen Mandate', primary: 0x8b9298, secondary: 0x3a2f2a },
   { id: 3, name: 'Gilded Directorate', primary: 0xd2a535, secondary: 0x2b2b33 },
   { id: 4, name: 'Violet Covenant', primary: 0x8a5cc4, secondary: 0xe4dcef },
-  { id: 5, name: 'Ivory Compact', primary: 0xe4ddcc, secondary: 0xb3262e },
+  { id: 5, name: 'Ivory Compact', primary: 0xe4ddcc, secondary: 0x34495e },
   { id: 6, name: 'Teal Concord', primary: 0x2f9e9a, secondary: 0x1f2a30 },
   { id: 7, name: 'Ember Syndicate', primary: 0xe07a1f, secondary: 0x2e2a28 },
 ];

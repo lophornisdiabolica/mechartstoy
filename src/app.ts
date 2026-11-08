@@ -11,7 +11,7 @@ import { rollBattle, varietyOn } from './game/variety';
 import { Stage } from './render/stage';
 import { loadViewPrefs, saveViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
-import { el, hex } from './ui/dom';
+import { el, hex, textHex } from './ui/dom';
 import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl';
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
@@ -369,7 +369,7 @@ export class App implements MatchControls {
     for (const f of factions) {
       const tr = el('tr');
       const name = el('th', { title: f.name }, narrow ? f.name.split(' ')[0] : f.name);
-      name.style.color = hex(f.primary);
+      name.style.color = textHex(f.primary);
       tr.append(name);
       for (const [, , value] of columns) tr.append(el('td', {}, value(f.id)));
       table.append(tr);

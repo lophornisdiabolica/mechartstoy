@@ -2,7 +2,7 @@ import { GOD, NEUTRAL } from '../game/components';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { GameEvents } from '../game/context';
-import { el, hex } from './dom';
+import { el, textHex } from './dom';
 
 /** Lines shown at once, and seconds (real time) each stays before fading. */
 const MOST = 6;
@@ -158,7 +158,7 @@ export class Ticker {
   private side(f: number): HTMLElement {
     const d = this.factions[f];
     const span = el('span', { class: 'side' }, d ? d.name : 'Someone');
-    if (d) span.style.color = hex(d.primary);
+    if (d) span.style.color = textHex(d.primary);
     return span;
   }
 

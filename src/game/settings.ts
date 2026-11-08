@@ -64,6 +64,12 @@ export interface FactionSettings {
   doctrine: DoctrineId;
   /** Its Commander's temperament (see commander/advice.ts). */
   style: Style;
+  /**
+   * Kept through re-rolls between battles (see variety.ts): this side is
+   * always in the battle, with its own doctrine, name and colour, while the
+   * rest are re-rolled round it. Its team is still dealt out with the rest.
+   */
+  locked?: boolean;
 }
 
 export interface BattleSettings {

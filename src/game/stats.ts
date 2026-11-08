@@ -2,6 +2,7 @@ import { EventBus } from '../core/events';
 import { World } from '../core/ecs';
 import { Armed, Faction, GOD, Guard, NEUTRAL, Unit } from './components';
 import { GameEvents } from './context';
+import { strengthOf } from './offensive';
 
 /** One unit (or building) type's tally on one side. */
 export interface TypeStats {
@@ -46,6 +47,11 @@ export interface SideStats {
   captured: number;
   /** Kills (units and buildings) by the unit or building type that landed the last blow. */
   killsBy: Record<string, number>;
+  /**
+   * The army strength of the enemy units each type killed, counted at full
+   * health (see strengthOf), so a tank kill is worth more than a rifleman.
+   */
+  strengthBy: Record<string, number>;
   /** The same tallies broken down by unit or building type, for balance runs. */
   types: Record<string, TypeStats>;
 }
@@ -60,7 +66,7 @@ export class BattleStats {
   townRazed = 0;
 
   constructor(events: EventBus<GameEvents>, factions: number) {
-    this.sides = Array.from({ length: factions }, () => ({ fielded: 0, lost: 0, kills: 0, razed: 0, captured: 0, killsBy: {}, types: {} }));
+    this.sides = Array.from({ length: factions }, () => ({ fielded: 0, lost: 0, kills: 0, razed: 0, captured: 0, killsBy: {}, strengthBy: {}, types: {} }));
     events.on('spawned', (e) => {
       if (!this.side(e.faction)) return;
       this.sides[e.faction].fielded++;
@@ -78,6 +84,8 @@ export class BattleStats {
       if (k && this.side(k.faction) && k.faction !== e.faction) {
         this.sides[k.faction].kills++;
         this.credit(k.faction, k.source);
+        const by = this.sides[k.faction].strengthBy;
+        by[k.source] = (by[k.source] ?? 0) + strengthOf(e.def.hp, e.def.armor, e.def.weapon);
         const t = this.type(k.faction, k.source);
         t.kills++;
         bump(t.victims, e.def.id);
@@ -125,10 +133,11 @@ export class BattleStats {
   }
 
   /** The type with the most kills on a side, or null before anyone has scored. */
-  best(faction: number): { source: string; kills: number } | null {
-    let top: { source: string; kills: number } | null = null;
-    for (const [source, kills] of Object.entries(this.sides[faction].killsBy)) {
-      if (!top || kills > top.kills) top = { source, kills };
+  best(faction: number): { source: string; kills: number; strength: number } | null {
+    const side = this.sides[faction];
+    let top: { source: string; kills: number; strength: number } | null = null;
+    for (const [source, kills] of Object.entries(side.killsBy)) {
+      if (!top || kills > top.kills) top = { source, kills, strength: side.strengthBy?.[source] ?? 0 };
     }
     return top;
   }

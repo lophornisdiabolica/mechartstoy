@@ -94,6 +94,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
     if (f.team !== def.team) p.set(`team${i + 1}`, String(f.team + 1));
     if (f.doctrine !== def.doctrine) p.set(`doc${i + 1}`, f.doctrine);
     if (f.style !== def.style) p.set(`style${i + 1}`, f.style);
+    if (f.locked) p.set(`lock${i + 1}`, '1');
   });
   // Variety between battles: vary=size,biome,... and its options.
   const v = s.variety;
@@ -189,6 +190,7 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
     if (isDoctrine(doctrine)) f.doctrine = doctrine;
     const style = p.get(`style${i + 1}`);
     if (isStyle(style)) f.style = style;
+    if (p.get(`lock${i + 1}`) === '1') f.locked = true;
   });
   const vary = p.get('vary');
   if (vary !== null) {

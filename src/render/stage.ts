@@ -197,7 +197,7 @@ export class Stage {
     this.frontLines = new FrontLines(game);
     this.frontLines.visible = this.frontsShown;
     battle.add(this.frontLines.root);
-    this.fireGround = new FireGround(game);
+    this.fireGround = new FireGround(game, this.ground as THREE.Mesh);
     battle.add(this.fireGround.root);
     const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
     const costClass = this.debugOverlay?.costClass;

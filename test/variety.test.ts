@@ -30,6 +30,29 @@ describe('variety between battles', () => {
     expect(seen.size).toBe(4);
   });
 
+  it('a locked side stays in every re-roll with its doctrine, name and colour', () => {
+    const s = defaultSettings();
+    s.variety.roll.doctrines = true;
+    s.variety.roll.sides = true;
+    s.variety.repeats = false;
+    s.factions = [0, 1, 2].map((i) => ({ ...s.factions[0], name: `Side ${i}`, color: 0x101010 * (i + 1), team: i, doctrine: DOCTRINE_IDS[i] }));
+    s.factions[2] = { ...s.factions[2], name: 'Wave Lords', color: 0x2f9e9a, doctrine: 'tidewater', locked: true };
+    const against = new Set<string>();
+    for (let k = 0; k < 60; k++) {
+      const r = rollBattle(s, new Rng(k)).settings;
+      const mine = r.factions.filter((f) => f.locked);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({ name: 'Wave Lords', color: 0x2f9e9a, doctrine: 'tidewater' });
+      // Without repeats, nobody else is Tidewater.
+      expect(r.factions.filter((f) => f.doctrine === 'tidewater')).toHaveLength(1);
+      for (const f of r.factions) if (!f.locked) against.add(f.doctrine);
+    }
+    expect(against.size).toBeGreaterThan(4);
+    const back = settingsFromParams(new URLSearchParams('lock2=1'));
+    expect(back.factions[1].locked).toBe(true);
+    expect(back.factions[0].locked).toBeUndefined();
+  });
+
   it('map styles stay within the settings’ ranges', () => {
     const s = defaultSettings();
     s.variety.roll.style = true;

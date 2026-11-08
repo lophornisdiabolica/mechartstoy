@@ -2,7 +2,7 @@ import { Armed, Faction, Unit } from '../game/components';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { fightingStrength } from '../game/offensive';
-import { hex } from './dom';
+import { textHex } from './dom';
 
 /** Sim seconds between samples. */
 const EVERY = 5;
@@ -42,8 +42,11 @@ export class BattleHistory {
     if (!game || game.outcome !== null) return;
     const time = game.world.time;
     if (time < this.next) return;
+    const strength = armyStrength(game);
+    // Nothing on the field yet: a mirrored battle before its first frame, or one still fast-forwarding (the `at` option).
+    if (this.samples.length === 0 && strength.every((v) => v === 0)) return;
     this.next = Math.floor(time / EVERY) * EVERY + EVERY;
-    this.samples.push({ time, strength: armyStrength(game) });
+    this.samples.push({ time, strength });
   }
 
   /** The chart and its notes, for the banner; null if there's too little to draw. */
@@ -79,14 +82,14 @@ export class BattleHistory {
       const path = document.createElementNS(SVG, 'polyline');
       path.setAttribute('points', samples.map((s) => `${x(s.time).toFixed(1)},${y(s.strength[f.id] ?? 0).toFixed(1)}`).join(' '));
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', hex(f.primary));
+      path.setAttribute('stroke', textHex(f.primary));
       path.setAttribute('stroke-width', '2');
       path.setAttribute('stroke-linejoin', 'round');
       svg.append(path);
     });
     const label = document.createElement('div');
     label.className = 'axis';
-    label.textContent = `Army strength, ${clock(t0)} to ${clock(t1)}`;
+    label.textContent = `Army strength (peak ${Math.round(top).toLocaleString('en')}), ${clock(t0)} to ${clock(t1)}`;
     wrap.append(label, svg);
 
     const notes: string[] = [];
@@ -147,7 +150,7 @@ export function turningPoint(game: Game, samples: Sample[]): number | null {
 /** "Unit of the battle: Cobalt Accord's battle tanks, 85 kills." */
 function unitOfTheBattle(game: Game, factions: readonly FactionDef[]): string | null {
   const { stats, ctx } = game;
-  let best: { f: number; source: string; kills: number } | null = null;
+  let best: { f: number; source: string; kills: number; strength: number } | null = null;
   for (const f of factions) {
     const b = stats.best(f.id);
     if (b && (!best || b.kills > best.kills)) best = { f: f.id, ...b };
@@ -155,7 +158,8 @@ function unitOfTheBattle(game: Game, factions: readonly FactionDef[]): string | 
   if (!best || best.kills === 0) return null;
   const def = (ctx.units as Record<string, { name: string }>)[best.source] ?? (ctx.buildings as Record<string, { name: string }>)[best.source];
   const name = def ? def.name : best.source;
-  return `Unit of the battle: ${factions[best.f].name}’s ${name}, ${best.kills} kills.`;
+  const worth = best.strength >= 1 ? ` worth ${Math.round(best.strength).toLocaleString('en')} army strength` : '';
+  return `Unit of the battle: ${factions[best.f].name}’s ${name}, ${best.kills} kills${worth}.`;
 }
 
 function clock(seconds: number): string {

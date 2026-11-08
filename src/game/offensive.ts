@@ -1,5 +1,6 @@
 import { System, World } from '../core/ecs';
 import { Armed, Faction, Guard, Health, Transform, Unit } from './components';
+import { WeaponDef } from './units';
 import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
@@ -78,11 +79,15 @@ export function fightingStrength(world: World, e: number): number {
   const h = world.get(e, Health);
   const a = world.get(e, Armed);
   if (!h || !a) return 0;
-  const w = a.weapon;
+  return strengthOf(h.hp, h.armor, a.weapon);
+}
+
+/** fightingStrength for given health, armour and weapon (a fresh unit of a type: its def's hp, armor and weapon). */
+export function strengthOf(hp: number, armor: number, w: WeaponDef): number {
   const dps = (w.damage * w.burst) / Math.max(0.1, w.cooldown);
   // Armour is taken off each hit; against a typical hit (ARMOUR_REF damage) that's this share of it.
-  const absorbed = h.armor / (h.armor + ARMOUR_REF);
-  return Math.sqrt((h.hp / (1 - absorbed)) * dps);
+  const absorbed = armor / (armor + ARMOUR_REF);
+  return Math.sqrt((hp / (1 - absorbed)) * dps);
 }
 
 export class Offensive {
