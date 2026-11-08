@@ -86,6 +86,8 @@ const REACH = 3;
 export const TOWERS_MOST = 2;
 /** How far behind the wall line a field tower goes. */
 const TOWER_BACK = 3.5;
+/** Behind a Legion trench line (dug a metre behind the site), the tower stands this far back so it leaves the trench room. */
+const LEGION_TOWER_BACK = 5.5;
 /** Comms arrays Bastion has standing at once, how far behind a line they go, and how far out along the way to the enemy the first one stands. */
 export const ARRAYS_MOST = 2;
 const ARRAY_BACK = 5;
@@ -468,14 +470,16 @@ export class Engineers {
     }
     for (const site of sites) {
       const heading = D.atan2(-site.dz, site.dx);
-      // A field tower just behind the middle of the line.
-      add(this.buildAt(world, ctx, side, ctx.buildings.fieldTower, site.x - site.dx * TOWER_BACK, site.z - site.dz * TOWER_BACK, heading, site.dx, site.dz));
+      // Legion plans its trench line first, so the tower can't take the trench's ground.
+      if (doctrine === 'legion') out.push(...this.earthworkJobs(world, ctx, side, site));
+      // A field tower just behind the middle of the line (further back behind a trench, clear of it).
+      const back = doctrine === 'legion' ? LEGION_TOWER_BACK : TOWER_BACK;
+      add(this.buildAt(world, ctx, side, ctx.buildings.fieldTower, site.x - site.dx * back, site.z - site.dz * back, heading, site.dx, site.dz));
       // Bastion: a comms array behind lines out at the front.
       if (doctrine === 'bastion' && site.kind !== 'rally') {
         add(this.buildAt(world, ctx, side, ctx.buildings.commsArray, site.x - site.dx * ARRAY_BACK + site.dz * 3, site.z - site.dz * ARRAY_BACK - site.dx * 3, heading, site.dx, site.dz));
       }
       if (doctrine === 'legion') {
-        out.push(...this.earthworkJobs(world, ctx, side, site));
         // And a couple of walls out in front, a gap between them for the trench's fire, to draw the enemy's.
         for (const off of [-LEGION_WALL_OFF, LEGION_WALL_OFF]) {
           add(this.buildAt(world, ctx, side, ctx.buildings.wall, site.x + site.dx * LEGION_WALL_AHEAD - site.dz * off, site.z + site.dz * LEGION_WALL_AHEAD + site.dx * off, heading, site.dx, site.dz));

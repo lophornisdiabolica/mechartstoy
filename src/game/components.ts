@@ -111,6 +111,19 @@ export interface NavState {
   detourX: number;
   detourZ: number;
   detourUntil: number;
+  /**
+   * Where the unit actually heads for its target: the target itself, or the
+   * nearest spot it fits in when the target is inside a building or on ground
+   * it can't stand on (a rally point a wall went up on). Worked out again
+   * when the target moves (asked) or the map changes (goalVersion).
+   */
+  askedX: number;
+  askedZ: number;
+  goalX: number;
+  goalZ: number;
+  goalVersion: number;
+  /** Gave up short of the goal in a crowd (see checkStuck): stays put while sent within SETTLE of the same place. */
+  settled: boolean;
 }
 
 export function makeNavState(): NavState {
@@ -134,6 +147,12 @@ export function makeNavState(): NavState {
     detourX: 0,
     detourZ: 0,
     detourUntil: -1,
+    askedX: NaN,
+    askedZ: NaN,
+    goalX: 0,
+    goalZ: 0,
+    goalVersion: -1,
+    settled: false,
   };
 }
 

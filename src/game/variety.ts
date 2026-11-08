@@ -133,9 +133,10 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
   if (v.roll.sides) {
     const lo = Math.max(2, Math.min(v.sidesMin, v.sidesMax, MAX_FACTIONS));
     const hi = Math.min(MAX_FACTIONS, Math.max(v.sidesMin, v.sidesMax, lo));
-    const n = rng.int(lo, hi);
-    // Keep the sides already set up, in order; add default ones past them.
-    s.factions = Array.from({ length: n }, (_, i) => (base.factions[i] ? { ...base.factions[i] } : defaultFaction(i)));
+    // Keep the sides already set up, in order (locked ones first, so they always make the cut); add default ones past them.
+    const kept = [...base.factions.filter((f) => f.locked), ...base.factions.filter((f) => !f.locked)];
+    const n = Math.max(rng.int(lo, hi), Math.min(MAX_FACTIONS, kept.filter((f) => f.locked).length));
+    s.factions = Array.from({ length: n }, (_, i) => (kept[i] ? { ...kept[i] } : defaultFaction(i)));
     const split = v.teams === 'either' ? rng.pick<Exclude<VarietyTeams, 'either'>>(['ffa', 'two', 'uneven']) : v.teams;
     if (split === 'uneven' && n >= 3) {
       // Uneven: a smaller team (1v2, 1v3, 2v4...) of sides picked at random.
@@ -161,7 +162,10 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
       if (bag.length === 0) bag = shuffle([...pool], rng);
       return bag.pop()!;
     };
-    const picks = s.factions.map(() => draw());
+    // Locked sides keep theirs; without repeats, the others don't draw it.
+    if (!v.repeats) bag = shuffle(pool.filter((d) => !s.factions.some((f) => f.locked && f.doctrine === d)), rng);
+    if (bag.length === 0 && !v.repeats) bag = shuffle([...pool], rng);
+    const picks = s.factions.map((f) => (f.locked ? f.doctrine : draw()));
     s.factions.forEach((f, i) => (f.doctrine = picks[i]));
     if (!v.roll.sides) label.push(s.factions.map((f) => DOCTRINES[f.doctrine].name).join(' v '));
   }
@@ -178,7 +182,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
  */
 function assignIdentities(s: BattleSettings, rng: Rng): void {
   const all = s.variety.identities === 'all';
-  const plain = s.factions.map((f, i) => isPlainIdentity(f, i));
+  const plain = s.factions.map((f, i) => !f.locked && isPlainIdentity(f, i));
   const done: FactionSettings[] = s.factions.filter((_, i) => !plain[i]);
   s.factions.forEach((f, i) => {
     if (!plain[i]) return;

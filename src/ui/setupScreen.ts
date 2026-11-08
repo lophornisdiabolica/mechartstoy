@@ -157,6 +157,13 @@ export class SetupScreen {
         this.changed();
       });
       const remove = el('button', { type: 'button', class: 'remove', title: 'Remove this side', 'aria-label': `Remove side ${i + 1}` }, '×');
+      const lock = el('button', { type: 'button', class: 'lock', 'aria-label': `Lock side ${i + 1} through re-rolls` }, '🔒');
+      lock.addEventListener('click', () => {
+        const f = this.settings.factions[i];
+        if (f.locked) delete f.locked;
+        else f.locked = true;
+        this.changed();
+      });
       color.addEventListener('input', () => {
         this.settings.factions[i].color = parseInt(color.value.slice(1), 16);
         this.callbacks.change(cloneSettings(this.settings));
@@ -181,7 +188,7 @@ export class SetupScreen {
         this.rebuildSides();
         this.changed();
       });
-      row.append(color, name, doctrine, style, team, remove);
+      row.append(color, name, doctrine, style, team, lock, remove);
       this.sideList.append(row);
       return () => {
         const n = this.settings.factions.length;
@@ -195,6 +202,14 @@ export class SetupScreen {
         style.value = f.style;
         style.title = `${STYLES[f.style].name}: ${STYLES[f.style].blurb}`;
         remove.disabled = n <= 2;
+        const rolling = this.settings.variety.roll.doctrines || this.settings.variety.roll.sides;
+        lock.setAttribute('aria-pressed', String(!!f.locked));
+        lock.classList.toggle('idle', !rolling);
+        lock.title = f.locked
+          ? 'Locked: re-rolls between battles keep this side, with its doctrine, name and colour. Click to unlock.'
+          : rolling
+            ? 'Lock this side: re-rolls between battles keep it, with its doctrine, name and colour, and roll the others round it.'
+            : 'Lock this side through re-rolls (it matters once Between battles re-rolls sides or doctrines).';
       };
     });
   }

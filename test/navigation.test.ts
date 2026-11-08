@@ -81,6 +81,32 @@ describe('unit movement', () => {
     expect(Math.hypot(t.x - (s.x + 8), t.z - s.z)).toBeLessThan(1.5);
   });
 
+  it('sent to a spot inside a building, units stop at its edge instead of pushing into it', () => {
+    const game = quietGame();
+    const s = game.field.baseSites[0];
+    // A rally point a tower went up on.
+    spawnBuilding(game.world, game.ctx, BUILDING_DEFS.factory, 0, s.x + 6, s.z, 0);
+    const squad = [-1, 0, 1].map((dz) => puppet(game, 'trooper', s.x - 6, s.z + dz * 2));
+    for (const e of squad) goTo(game, e, s.x + 6, s.z);
+    run(game, 20);
+    for (const e of squad) {
+      // Arrived (no target left) next to the factory, not still shoving at its middle.
+      expect(game.world.req(e, Mover).targetX).toBeNull();
+      const t = game.world.req(e, Transform);
+      expect(Math.hypot(t.x - (s.x + 6), t.z - s.z)).toBeLessThan(BUILDING_DEFS.factory.radius + 4);
+    }
+  });
+
+  it('a crowd sent to one spot settles round it instead of shoving for good', () => {
+    const game = quietGame();
+    const s = game.field.baseSites[0];
+    const crowd = Array.from({ length: 12 }, (_, k) => puppet(game, 'trooper', s.x - 8 + (k % 4), s.z - 3 + Math.floor(k / 4) * 2));
+    for (const e of crowd) goTo(game, e, s.x + 4, s.z);
+    run(game, 25);
+    const still = crowd.filter((e) => game.world.req(e, Mover).targetX !== null);
+    expect(still.length).toBeLessThanOrEqual(1);
+  });
+
   it('units walking head-on into each other get past', () => {
     const game = quietGame();
     const s = game.field.baseSites[0];

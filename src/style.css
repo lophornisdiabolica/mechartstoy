@@ -733,9 +733,25 @@ body {
 
 #setup .side {
   display: grid;
-  grid-template-columns: 32px 1fr 92px 92px 80px 30px;
+  grid-template-columns: 32px 1fr 92px 92px 80px 30px 30px;
   align-items: center;
   gap: 6px;
+}
+
+#setup .side .lock {
+  padding: 4px 0;
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+
+#setup .side .lock[aria-pressed='true'] {
+  filter: none;
+  opacity: 1;
+  border-color: #e8d27a;
+}
+
+#setup .side .lock.idle[aria-pressed='true'] {
+  opacity: 0.6;
 }
 
 #setup .side input[type='text'],
@@ -768,7 +784,7 @@ body {
 
 @media (max-width: 600px) {
   #setup .side {
-    grid-template-columns: 26px 1fr 70px 70px 62px 24px;
+    grid-template-columns: 26px 1fr 64px 64px 56px 24px 24px;
     gap: 4px;
   }
 }

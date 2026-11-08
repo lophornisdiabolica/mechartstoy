@@ -107,7 +107,7 @@ function pathArea(grid: NavGrid, nav: NavState, from: { x: number; z: number }, 
 function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, radius: number, budget: { plans: number }): { x: number; z: number } {
   const nav = m.nav;
   const grid = ctx.navs.for(m.move);
-  const goal = { x: m.targetX!, z: m.targetZ! };
+  const goal = { x: nav.goalX, z: nav.goalZ };
   if (world.time < nav.detourUntil) return { x: nav.detourX, z: nav.detourZ };
 
   const here = { x: t.x, z: t.z };
@@ -151,6 +151,40 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
   const next = path[nav.pathIndex + 1];
   if (next && grid.lineClear(here, next, radius, Math.max(PLAIN_GROUND, grid.costAt(path[nav.pathIndex].x, path[nav.pathIndex].z), grid.costAt(next.x, next.z)))) nav.pathIndex++;
   return path[Math.min(nav.pathIndex, path.length - 1)];
+}
+
+/**
+ * A unit that can't get closer than this to where it's going because others
+ * are standing there (a squad crowding one spot by a wall) settles where it
+ * is, instead of shoving for good.
+ */
+const SETTLE = 2.5;
+/** How far round a blocked target to look for a spot the unit fits in, in nav cells. */
+const GOAL_SEARCH = 8;
+
+/**
+ * Point the unit's goal (NavState.goalX/Z) at its target, or, if the target
+ * is somewhere it can't stand (inside a building, a wall or a tower put up
+ * on a rally point; deep water for a tank), at the nearest spot it fits.
+ * Without this a unit sent there pushes against the wall for good, and the
+ * ones behind it queue up.
+ */
+function standableGoal(ctx: SimContext, m: Mover, radius: number): void {
+  const nav = m.nav;
+  const grid = ctx.navs.for(m.move);
+  if (nav.askedX === m.targetX && nav.askedZ === m.targetZ && nav.goalVersion === grid.version) return;
+  nav.askedX = m.targetX!;
+  nav.askedZ = m.targetZ!;
+  nav.goalVersion = grid.version;
+  let x = m.targetX!;
+  let z = m.targetZ!;
+  if (!grid.rules.flies && !grid.fitsAt(x, z, 0)) {
+    const open = grid.nearestOpen(x, z, GOAL_SEARCH, radius) ?? grid.nearestOpen(x, z, GOAL_SEARCH);
+    if (open) ({ x, z } = grid.center(open[0], open[1]));
+  }
+  if (D.hypot(x - nav.goalX, z - nav.goalZ) > SETTLE * 0.5) nav.settled = false;
+  nav.goalX = x;
+  nav.goalZ = z;
 }
 
 /**
@@ -209,6 +243,12 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: M
   nav.stuckFor = moved < 0.35 && !turning ? nav.stuckFor + 1 : 0;
   if (nav.stuckFor < STUCK_LIMIT) return;
   nav.stuckFor = 0;
+  // Nearly there and boxed in by friends already there: that's close enough.
+  if (D.hypot(nav.goalX - t.x, nav.goalZ - t.z) < SETTLE && crowded(ctx, world, e, t)) {
+    nav.settled = true;
+    m.targetX = m.targetZ = null;
+    return;
+  }
   // Try a point off to one side (alternating by entity), then the other, then back the way we came.
   // Prefer spots the unit actually fits in; a wide unit wedged between buildings has to back out.
   const radius = world.get(e, Collider)?.radius ?? 0.5;
@@ -233,6 +273,19 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: M
       }
     }
   }
+}
+
+/** Whether friendly units are pressed up against this one. */
+function crowded(ctx: SimContext, world: World, e: Entity, t: Transform): boolean {
+  const r = world.get(e, Collider)?.radius ?? 0.5;
+  const mine = world.get(e, Faction)?.id ?? -1;
+  let n = 0;
+  ctx.grid.forEachNear(t.x, t.z, r + 2, (other, d2, body) => {
+    if (other === e || body.building || !body.collider) return;
+    const reach = r + body.collider.radius + 0.6;
+    if (d2 < reach * reach && ctx.sides.allied(body.faction?.id ?? -2, mine)) n++;
+  });
+  return n >= 2;
 }
 
 /**
@@ -263,12 +316,15 @@ export function movementSystem(ctx: SimContext): System {
           }
           continue;
         }
-        if (D.hypot(m.targetX - t.x, m.targetZ - t.z) < 0.3) {
+        const radius = world.get(e, Collider)?.radius ?? 0;
+        standableGoal(ctx, m, radius);
+        const toGoal = D.hypot(m.nav.goalX - t.x, m.nav.goalZ - t.z);
+        if (toGoal < 0.3 || (m.nav.settled && toGoal < SETTLE)) {
           m.targetX = m.targetZ = null;
           continue;
         }
 
-        const wp = nextWaypoint(ctx, world, t, m, world.get(e, Collider)?.radius ?? 0, budget);
+        const wp = nextWaypoint(ctx, world, t, m, radius, budget);
         const dx = wp.x - t.x;
         const dz = wp.z - t.z;
         const dist = D.hypot(dx, dz);
@@ -440,6 +496,7 @@ export function separationSystem(ctx: SimContext): System {
         const terrain = ctx.navs.for(move);
         const foot = move === 'foot';
         const over = MOVE_RULES[move].over;
+        const moving = world.get(e, Mover)?.targetX != null;
         ctx.grid.forEachNear(t.x, t.z, r + 4, (other, d2, body) => {
           if (other === e || d2 < 1e-6) return;
           // Spiders climb over buildings, and walkers step over walls, instead of being pushed out of them.
@@ -453,7 +510,9 @@ export function separationSystem(ctx: SimContext): System {
           if (d >= minDist) return;
           // Buildings don't budge, so the unit takes the whole overlap. Between units each
           // moves part of it; enemies push a little harder so lines hold.
-          const share = body.building ? 1 : ctx.sides.allied((body.faction ?? world.req(other, Faction)).id, myFaction) ? 0.25 : 0.35;
+          // Between friends, one standing still gives way to one going somewhere, so a unit
+          // setting off can work its way out through a crowd parked at the rally point or in a trench.
+          const share = body.building ? 1 : ctx.sides.allied((body.faction ?? world.req(other, Faction)).id, myFaction) ? friendShare(moving, body.mover?.targetX != null) : 0.35;
           const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
@@ -465,6 +524,12 @@ export function separationSystem(ctx: SimContext): System {
       }
     },
   };
+}
+
+/** How much of an overlap with a friend a unit takes: an even split, unless only one of them is on the move. */
+function friendShare(moving: boolean, otherMoving: boolean): number {
+  if (moving === otherMoving) return 0.25;
+  return moving ? 0.1 : 0.4;
 }
 
 /** Whether a unit that goes over `over` buildings goes over this one (see MoveRules.over). */

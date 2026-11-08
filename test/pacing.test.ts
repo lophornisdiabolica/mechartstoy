@@ -115,7 +115,7 @@ describe('battle stats', () => {
     expect(east.fielded).toBe(1);
     expect(west.kills).toBe(1);
     expect(east.lost).toBe(1);
-    expect(game.stats.best(0)).toEqual({ source: 'tank', kills: 1 });
+    expect(game.stats.best(0)).toMatchObject({ source: 'tank', kills: 1 });
     expect(game.stats.best(1)).toBeNull();
   });
 
@@ -127,7 +127,7 @@ describe('battle stats', () => {
     while (game.world.isAlive(b) && game.world.time < 300) game.step(DT);
     expect(game.world.isAlive(b)).toBe(false);
     expect(game.stats.sides[0].razed).toBe(1);
-    expect(game.stats.best(0)).toEqual({ source: 'howitzer', kills: 1 });
+    expect(game.stats.best(0)).toMatchObject({ source: 'howitzer', kills: 1 });
 
     const doomed = spawnUnit(game.world, game.ctx, UNIT_DEFS.trooper, 1, site.x + 20, site.z + 20);
     game.world.req(doomed, Health).hp = 0;

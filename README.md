@@ -182,7 +182,9 @@ battle, its exact map via `seed`).
   and a colour picked to stand apart from the other sides and from the map's
   ground (Rust Cohort, Plum Levy...), drawn from the battle's seed. "Names"
   can make up an identity for every side instead. Sides you've named or
-  coloured yourself keep theirs.
+  coloured yourself keep theirs. The lock button on a side keeps it in every
+  re-roll with its doctrine, name and colour (`lock3=1` in the link), so you
+  can watch, say, Tidewater against a different doctrine each battle.
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other (unless
@@ -387,7 +389,9 @@ When a battle ends, the banner shows a **chart** of each side's army
 strength through the battle, the **turning point** (when the winners took
 the lead in strength for good, or that they led throughout, or won on the
 buildings without the bigger army) and the **unit of the battle**, the type
-with the most kills on any side.
+with the most kills on any side, with the army strength of what it killed
+(so a tank counts for more than a rifleman). Side names and chart lines in
+dark colours are lifted toward white so they read on the dark panels.
 
 ## Architecture
 
