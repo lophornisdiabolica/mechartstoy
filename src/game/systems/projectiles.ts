@@ -3,6 +3,7 @@ import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Trans
 import { SimContext } from '../context';
 import { entityHeight, inTrench, UNIT_HIT_SLACK } from '../lineOfFire';
 import * as D from '../../core/dmath';
+import { heatPerShot } from '../fire';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -15,6 +16,7 @@ export function damageThrough(amount: number, armor: number, pierce = 0): number
   return Math.max(amount * MIN_DAMAGE_SHARE, amount - armor * (1 - pierce));
 }
 
+/** `pierce`: the share of armour the hit goes through (1 for white-hot fire, see fire.ts; guard towers' AP shells, see WeaponDef.pierce). */
 export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null, pierce = 0): void {
   const h = world.get(e, Health);
   if (!h) return;
@@ -90,6 +92,10 @@ export function projectileSystem(ctx: SimContext): System {
             const cover = inTrench(world, ctx, other) && ctx.field.groundAt(p.ex, p.ez).id !== 'trench' ? TRENCH_SPLASH : 1;
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)) * cover, by);
           });
+        }
+        // Flame keeps burning where it lands (see fire.ts); not in the air, or on the water.
+        if (p.kind === 'flame' && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) {
+          ctx.fire.add(p.ex, p.ez, w.splash, heatPerShot(w), p.faction, p.source);
         }
         // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them.
         ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });

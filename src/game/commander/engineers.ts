@@ -4,7 +4,7 @@ import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
 import { BuildingDef } from '../buildings';
-import { doctrineOf, DoctrineId } from '../doctrines';
+import { canonicalDoctrine, doctrineOf, DoctrineId } from '../doctrines';
 import { settle } from '../god';
 import { STEEP_SLOPE } from '../../world/moveClasses';
 import { CellArea } from '../../world/ground';
@@ -326,7 +326,7 @@ export class Engineers {
 
   /** Everything a side's engineers could be doing now, most wanted first, within the caps. */
   private jobsFor(world: World, ctx: SimContext, side: number): EngineerJob[] {
-    const doctrine = doctrineOf(ctx, side).id;
+    const doctrine = canonicalDoctrine(doctrineOf(ctx, side).id);
     const out: EngineerJob[] = [];
     // Tidewater: the base's missing hover pad or dock first, then the canal.
     if (doctrine === 'tidewater') {
@@ -458,7 +458,7 @@ export class Engineers {
   private findChoke(ctx: SimContext, side: number, enemy: number): Site | null {
     const { field, lanes } = ctx;
     const nav = ctx.navs.land;
-    const mobility = MOBILITY[doctrineOf(ctx, side).id];
+    const mobility = MOBILITY[canonicalDoctrine(doctrineOf(ctx, side).id)];
     const reach = mobility ? CHOKE_REACH_MOBILE : CHOKE_REACH;
     const home = field.baseSites[side];
     const from = lanes.rally(enemy, side, 0);

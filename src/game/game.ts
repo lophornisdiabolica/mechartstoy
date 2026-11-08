@@ -37,6 +37,7 @@ import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
 import { engineerSystem } from './commander/engineers';
 import { Divine, godSystem, Power, powerSpot } from './god';
+import { FireField, fireSystem } from './fire';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -128,6 +129,7 @@ export class Game {
       outcome: null,
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
       god: new Divine(),
+      fire: new FireField(this.field),
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -148,13 +150,14 @@ export class Game {
       aiSystem(ctx),
       movementSystem(ctx),
       separationSystem(ctx),
-      groundFollowSystem(this.field),
+      groundFollowSystem(this.field, ctx),
       weaponSystem(ctx),
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
       godSystem(ctx),
       projectileSystem(ctx),
+      fireSystem(ctx),
       deathSystem(ctx),
-      wreckSystem(),
+      wreckSystem(ctx),
       scrapSystem(ctx),
       outpostSystem(ctx),
       constructionSystem(ctx),

@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -32,11 +32,22 @@ export interface DoctrineDef {
   extraTowers?: number;
   /** Eternal-mode reinforcement waves for a side with no production left. */
   waves: ProductionEntry[];
+  /**
+   * Units that spot for this doctrine's long-range guns, and how far round
+   * them (see UnitDef.spots, which works for every doctrine).
+   */
+  spotters?: Partial<Record<UnitId, number>>;
+  /**
+   * A variant to try out, off by default: it's in the side's doctrine list
+   * under "Test", but never in the variety pool, the sims' doctrine sweeps or
+   * a faction's default. It wears the colours of the doctrine it varies.
+   */
+  testOf?: DoctrineId;
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
 
-export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
+const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   armour: {
     id: 'armour',
     name: 'Armour',
@@ -107,7 +118,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   skyline: {
     id: 'skyline',
     name: 'Skyline',
-    blurb: 'Aircraft. Gunships, bombers and scout copters from its airpad, flak walkers on the ground, a bigger air cap and fewer of everything else. Super unit: the Airship Carrier, which launches drones.',
+    blurb: 'Aircraft. Gunships, bombers, strike jets and scout copters from its airpad, which they fly back to to rearm, flak walkers on the ground, a bigger air cap and fewer of everything else. Super unit: the Airship Carrier, which launches drones.',
     caps: { infantry: 0.8, vehicle: 0.8, air: 2.5 },
     production: {
       factory: {
@@ -120,6 +131,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
         table: [
           { unit: 'gunship', weight: 2, count: 1 },
           { unit: 'bomber', weight: 1.2, count: 1 },
+          { unit: 'jet', weight: 1.2, count: 2 },
           { unit: 'scout', weight: 1.5, count: 2 },
         ],
         interval: 22,
@@ -151,6 +163,8 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
     signature: 'sensorMast',
     extraTowers: 2,
     waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'howitzer', weight: 2, count: 1 }, { unit: 'railgun', weight: 1, count: 1 }],
+    // Its scout copters fly ahead and call in the guns, like a little flying sensor mast.
+    spotters: { scout: 14 },
   },
   talon: {
     id: 'talon',
@@ -229,8 +243,33 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = {
   },
 };
 
+/**
+ * Bastion with a Siege Spider in its mech bay instead of the Fortress Walker:
+ * a giant eight-legged howitzer that out-ranges everything and climbs over
+ * buildings, but hangs back with the guns instead of soaking up fire at the front.
+ */
+export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastionSpider: {
+  ...CANONICAL.bastion,
+  id: 'bastionSpider',
+  name: 'Bastion (spider test)',
+  blurb: 'Bastion with a different super unit, to try out: the Siege Spider, a giant eight-legged howitzer that spots for itself and climbs over buildings, instead of the Fortress Walker.',
+  production: { ...CANONICAL.bastion.production, mechbay: { table: [{ unit: 'siegeSpider', weight: 1, count: 1 }] } },
+  testOf: 'bastion',
+} };
+
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
 export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm'];
+
+/** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
+export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];
+
+/** Every doctrine, test variants last: for reports that list whatever was played. */
+export const ALL_DOCTRINE_IDS: DoctrineId[] = [...DOCTRINE_IDS, ...TEST_DOCTRINE_IDS];
+
+/** The doctrine a test variant varies (itself for the rest), whose faction colours and name it wears. */
+export function canonicalDoctrine(id: DoctrineId): DoctrineId {
+  return DOCTRINES[id].testOf ?? id;
+}
 
 /**
  * Each faction slot's default doctrine, in faction order (see FACTIONS):

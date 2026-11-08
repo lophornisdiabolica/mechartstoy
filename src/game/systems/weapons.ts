@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Armed, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
+import { Ammo, Armed, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
 import { aimPoint, clearShot, muzzlePoint, traceShot } from '../lineOfFire';
@@ -98,7 +98,8 @@ export function weaponSystem(ctx: SimContext): System {
         } else {
           // Turret-less units turn the whole body once they've stopped to shoot.
           const mover = world.get(e, Mover);
-          if (!mover || mover.targetX === null) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
+          // Planes can only aim by flying at it (see Mover.cruise).
+          if (!mover || (mover.targetX === null && !mover.cruise)) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
           armed.aim = t.heading;
         }
 
@@ -115,7 +116,7 @@ export function weaponSystem(ctx: SimContext): System {
         const d = distanceToTarget(world, e, target);
         const inRange = d <= effectiveRange(world, e, armed, target) && d >= armed.weapon.minRange;
         const aligned = Math.abs(wrapAngle(desired - armed.aim)) < AIM_TOLERANCE;
-        if (armed.cooldown <= 0 && inRange && aligned) {
+        if (armed.cooldown <= 0 && inRange && aligned && !world.get(e, Ammo)?.rearming) {
           // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
           if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
             const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
@@ -126,6 +127,9 @@ export function weaponSystem(ctx: SimContext): System {
           const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
           fire(world, ctx, e, armed, target, w);
           armed.firedAt = world.time;
+          // Aircraft that carry only so much go home to rearm once it's spent (see Ammo).
+          const ammo = world.get(e, Ammo);
+          if (ammo && --ammo.left <= 0) ammo.rearming = true;
           armed.burstLeft = w.burst - 1;
           armed.burstTimer = w.burstGap;
           armed.cooldown = w.cooldown;

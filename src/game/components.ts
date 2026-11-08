@@ -53,6 +53,10 @@ export const Renderable = defineComponent<Renderable>('Renderable');
 export interface GroundFollow {
   /** Height above the surface, e.g. for hover units. */
   offset: number;
+  /** How far up a building it has climbed (spiders, see groundFollowSystem). */
+  lift?: number;
+  /** An aircraft setting down on its airpad to rearm (see Ammo): it sinks to just above the ground. */
+  landing?: boolean;
 }
 export const GroundFollow = defineComponent<GroundFollow>('GroundFollow');
 
@@ -70,6 +74,14 @@ export interface Mover {
   move: MoveClass;
   /** Route-following and unsticking state, owned by the movement system. */
   nav: NavState;
+  /**
+   * Planes (see UnitDef.fixedWing): always flying at full speed, never
+   * stopping; with nowhere to go they circle the loiter point, the last place
+   * they were sent.
+   */
+  cruise?: boolean;
+  loiterX?: number;
+  loiterZ?: number;
 }
 export const Mover = defineComponent<Mover>('Mover');
 
@@ -227,6 +239,10 @@ export interface Ai {
   threat: Entity | null;
   /** The frontline ally a support unit follows. */
   escort: Entity | null;
+  /** A plane's attack run (see UnitDef.fixedWing): having flown over its target, it carries on to here before turning round. */
+  runX?: number;
+  runZ?: number;
+  runUntil?: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
 
@@ -312,6 +328,32 @@ export interface Guard {
   outpost: number;
 }
 export const Guard = defineComponent<Guard>('Guard');
+
+/**
+ * Shots before an aircraft has to fly home to rearm (see UnitDef.ammo): it
+ * goes back to its airpad (or its base, if it has none), sets down, and
+ * comes back loaded.
+ */
+export interface Ammo {
+  left: number;
+  max: number;
+  rearming: boolean;
+  /** Sim time it's loaded again, once it has set down (null until then). */
+  readyAt: number | null;
+}
+export const Ammo = defineComponent<Ammo>('Ammo');
+
+/** A shot-down aircraft still flying on as it falls: it explodes where it hits the ground. */
+export interface Falling {
+  vx: number;
+  vz: number;
+  /** Radians per second it spins round as it goes down (helicopters). */
+  spin: number;
+  /** What its crash does. */
+  damage: number;
+  radius: number;
+}
+export const Falling = defineComponent<Falling>('Falling');
 
 /** A destroyed unit's hulk, left on the field for a while before sinking away. */
 export interface Wreck {

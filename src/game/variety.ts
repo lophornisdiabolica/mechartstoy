@@ -1,6 +1,6 @@
 import { Rng } from '../core/rng';
 import { BIOME_IDS, BIOMES } from '../world/biomes';
-import { DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
+import { canonicalDoctrine, DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
 import { generateIdentity, isGeneratedIdentity } from './identity';
 import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
@@ -182,7 +182,7 @@ function assignIdentities(s: BattleSettings, rng: Rng): void {
   const done: FactionSettings[] = s.factions.filter((_, i) => !plain[i]);
   s.factions.forEach((f, i) => {
     if (!plain[i]) return;
-    const home = FACTIONS[DOCTRINE_IDS.indexOf(f.doctrine)];
+    const home = FACTIONS[DOCTRINE_IDS.indexOf(canonicalDoctrine(f.doctrine))];
     if (!all && home && !done.some((d) => d.color === home.primary || d.name.trim() === home.name)) {
       f.name = home.name;
       f.color = home.primary;

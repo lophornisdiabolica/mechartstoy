@@ -16,6 +16,7 @@ import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
 import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
+import { FireGround } from './fireGround';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
 import { setFactionPalette } from './models';
 import './models/buildings';
@@ -72,6 +73,7 @@ export class Stage {
   outpostRings!: OutpostRings;
   commanderOverlay!: CommanderOverlay;
   frontLines!: FrontLines;
+  private fireGround!: FireGround;
   /** Where a god power will land (see GodPanel). */
   readonly godCursor = new GodCursor();
   private godEffects!: GodEffects;
@@ -163,6 +165,7 @@ export class Stage {
       this.entities.dispose();
       this.commanderOverlay.dispose();
       this.frontLines.dispose();
+      this.fireGround.dispose();
       this.debugOverlay.dispose();
       disposeTree(this.battle);
     }
@@ -194,6 +197,8 @@ export class Stage {
     this.frontLines = new FrontLines(game);
     this.frontLines.visible = this.frontsShown;
     battle.add(this.frontLines.root);
+    this.fireGround = new FireGround(game);
+    battle.add(this.fireGround.root);
     const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
     const costClass = this.debugOverlay?.costClass;
     this.debugOverlay = new DebugOverlay(game);
@@ -348,6 +353,7 @@ export class Stage {
     this.outpostRings.update();
     this.commanderOverlay.update();
     this.frontLines.update(frameSeconds);
+    this.fireGround.update(simSeconds);
     this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();
     this.composer.render(frameSeconds);

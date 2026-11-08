@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AnimState, box, cylinder, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
+import { AnimState, box, cylinder, glowBox, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
 
 /**
  * Low-poly unit models. Each is a handful of boxes built facing +x, with
@@ -449,7 +449,7 @@ registerModel('scout', (faction) => {
   turret.position.set(0.55, 0.05, 0);
   turret.add(box(0.35, 0.08, 0.08, DARK, 0.18, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, animate: rotors([{ group: blades, spin: 30 }]) });
+  return setRig(root, { turret, bank: 0.25, animate: rotors([{ group: blades, spin: 30 }]) });
 });
 
 registerModel('gunship', (faction) => {
@@ -467,7 +467,7 @@ registerModel('gunship', (faction) => {
   turret.position.set(0.7, 0.05, 0);
   turret.add(box(0.4, 0.1, 0.1, DARK, 0.2, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, animate: rotors([{ group: blades, spin: 26 }]) });
+  return setRig(root, { turret, bank: 0.25, animate: rotors([{ group: blades, spin: 26 }]) });
 });
 
 registerModel('bomber', (faction) => {
@@ -486,7 +486,28 @@ registerModel('bomber', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.1, 0.05, 0);
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, bank: 0.8 });
+});
+
+// Skyline's strike jet: swept wings, twin tails, and cannon in the nose.
+registerModel('jet', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(2.0, 0.3, 0.38, primary, 0, 0.3, 0)); // fuselage
+  root.add(box(0.5, 0.2, 0.26, primary, 1.2, 0.28, 0)); // nose
+  root.add(box(0.45, 0.18, 0.28, GLASS, 0.65, 0.48, 0)); // canopy
+  for (const side of [-1, 1]) {
+    const wing = box(0.9, 0.05, 1.1, secondary, -0.15, 0.27, side * 0.7);
+    wing.rotation.y = side * 0.45; // swept back
+    root.add(wing);
+    const fin = box(0.4, 0.4, 0.05, primary, -0.85, 0.55, side * 0.16);
+    fin.rotation.x = side * 0.25;
+    root.add(fin);
+    root.add(box(0.3, 0.04, 0.45, secondary, -0.9, 0.3, side * 0.35)); // tailplanes
+    root.add(box(0.5, 0.05, 0.05, DARK, 1.35, 0.22, side * 0.1)); // cannon
+  }
+  root.add(glowBox(0.08, 0.16, 0.16, 0xffa040).translateX(-1.04).translateY(0.3)); // afterburner
+  return setRig(root, { bank: 0.6 });
 });
 
 registerModel('drone', (faction) => {
@@ -666,6 +687,31 @@ registerModel('spider', (faction) => {
   for (const side of [-1, 1]) turret.add(box(0.6, 0.07, 0.07, DARK, 0.45, 0.12, side * 0.1));
   body.add(turret);
   return setRig(root, { turret, animate: spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11) });
+});
+
+// Bastion's test super unit: a howitzer on a giant spider's back.
+registerModel('siegeSpider', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.3;
+  root.add(body);
+  body.add(box(3.0, 0.9, 2.2, primary, 0, 0, 0));
+  body.add(box(2.4, 0.3, 1.8, secondary, -0.2, 0.6, 0));
+  body.add(box(0.7, 0.5, 1.2, METAL, 1.65, -0.1, 0)); // head
+  for (const side of [-1, 1]) body.add(glowBox(0.12, 0.12, 0.12, 0xffd27a).translateX(2.0).translateZ(side * 0.35));
+  const turret = new THREE.Group();
+  turret.position.set(-0.3, 0.75, 0);
+  turret.add(box(1.5, 0.8, 1.4, METAL, 0, 0.4, 0));
+  turret.add(box(1.2, 0.2, 1.5, secondary, -0.1, 0.9, 0));
+  const barrel = new THREE.Group();
+  barrel.position.set(0.6, 0.55, 0);
+  barrel.rotation.z = 0.55;
+  barrel.add(box(3.4, 0.3, 0.3, DARK, 1.7, 0, 0));
+  barrel.add(box(0.5, 0.42, 0.42, METAL, 3.3, 0, 0));
+  turret.add(barrel);
+  body.add(turret);
+  return setRig(root, { turret, animate: spiderLegs(body, 4, 3.0, 0.9, 2.3, 0.3) });
 });
 
 registerModel('warhound', (faction) => {

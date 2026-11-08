@@ -218,6 +218,8 @@ export class SimHost {
   private worstMs = 0;
   /** The Commander picture last sent (its updatedAt): it changes every couple of seconds, so it's only sent when it does. */
   private commanderSent = -Infinity;
+  /** The burning ground last sent (its version), sent again only when it changes. */
+  private fireSent = 0;
   /** Fast-forwarded since the last frame (see skip). */
   private skipped = false;
   /** The stats need sending (see Frame.stats). */
@@ -404,6 +406,7 @@ export class SimHost {
         outcome: ctx.outcome,
         commander: ctx.commander.updatedAt !== this.commanderSent ? ctx.commander.state : null,
         god: ctx.god.blessings,
+        fire: ctx.fire.version !== this.fireSent ? ctx.fire.snapshot() : null,
       }),
       profile,
       ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
@@ -414,6 +417,7 @@ export class SimHost {
     this.skipped = false;
     this.statsDue = false;
     this.commanderSent = ctx.commander.updatedAt;
+    this.fireSent = ctx.fire.version;
     this.destroyed = [];
     this.events = [];
     this.areas = [];
@@ -432,6 +436,7 @@ interface CtxState {
   outcome: Game['ctx']['outcome'];
   commander: Game['ctx']['commander']['state'] | null;
   god: GodState;
+  fire: number[] | null;
 }
 
 /** The page's side: copies Frames into a view Game (see GameOptions.view). */
@@ -528,6 +533,7 @@ export class SimView {
     ctx.outcome = s.outcome;
     if (s.commander) ctx.commander.state = s.commander;
     ctx.god.blessings = s.god;
+    if (s.fire) ctx.fire.apply(s.fire);
     if (frame.routes) this.routes = frame.routes;
     if (frame.stats) {
       const stats = this.game.stats;

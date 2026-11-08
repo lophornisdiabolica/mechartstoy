@@ -8,6 +8,7 @@ import { BuildingDef, BuildingId } from './buildings';
 import { Building, Collider, Faction, Hit, Mover, Transform } from './components';
 import type { Commander } from './commander/commander';
 import type { Divine, Power } from './god';
+import type { FireField } from './fire';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -123,4 +124,6 @@ export interface SimContext {
   outcome: Outcome | null;
   /** God powers in play: bomb runs, quakes and blessings (see god.ts). */
   god: Divine;
+  /** Burning and scorched ground (see fire.ts). */
+  fire: FireField;
 }

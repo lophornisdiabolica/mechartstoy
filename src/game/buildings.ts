@@ -59,6 +59,8 @@ export interface BuildingDef {
   field?: boolean;
   /** Seconds the construction animation takes. */
   buildTime: number;
+  /** Low enough for walkers to step over (see MoveRules.over): walls. */
+  low?: boolean;
 }
 
 /**
@@ -333,6 +335,7 @@ export const BUILDING_DEFS = {
     armor: 10,
     radius: 1.2,
     height: 1.2,
+    low: true,
     lasts: 600,
     field: true,
     rebuildDelay: 0,

@@ -1,7 +1,7 @@
 import { hashSeed } from '../core/rng';
 import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
-import { DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
+import { ALL_DOCTRINE_IDS, DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
 import { TypeStats } from '../game/stats';
 import { Building, Faction, Producer, Unit } from '../game/components';
 import { outpostsHeldBy } from '../game/outposts';
@@ -675,7 +675,7 @@ export function margin(won: number, n: number): number {
 
 /** Wins per doctrine across decided battles (a doctrine on several sides of one battle counts once per side). */
 export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
-  return DOCTRINE_IDS.map((doctrine) => {
+  return ALL_DOCTRINE_IDS.map((doctrine) => {
     let played = 0;
     let won = 0;
     let par = 0;
@@ -705,7 +705,7 @@ export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
 
 /** For two-sided battles: wins of each doctrine (row) against each other doctrine (column). */
 export function headToHead(results: BattleResult[]): Record<DoctrineId, Record<DoctrineId, number>> {
-  const grid = Object.fromEntries(DOCTRINE_IDS.map((a) => [a, Object.fromEntries(DOCTRINE_IDS.map((b) => [b, 0]))])) as Record<DoctrineId, Record<DoctrineId, number>>;
+  const grid = Object.fromEntries(ALL_DOCTRINE_IDS.map((a) => [a, Object.fromEntries(ALL_DOCTRINE_IDS.map((b) => [b, 0]))])) as Record<DoctrineId, Record<DoctrineId, number>>;
   for (const r of results) {
     if (r.sides.length !== 2 || r.winner === null) continue;
     const w = r.sides.find((s) => s.team === r.winner)!;
@@ -741,7 +741,7 @@ export function formatDoctrines(results: BattleResult[]): string {
       formatGrid(
         ['Doctrine', ...maps, 'all'],
         doctrines.map((d) => {
-          const i = DOCTRINE_IDS.indexOf(d.doctrine);
+          const i = ALL_DOCTRINE_IDS.indexOf(d.doctrine);
           return [d.doctrine, ...by.map((b) => (b[i].played ? `${pct(b[i].rate)} ${pm(b[i].margin)}` : '-')), pct(d.rate)];
         }),
       ),
@@ -749,8 +749,8 @@ export function formatDoctrines(results: BattleResult[]): string {
   }
   if (doctrines.length > 1 && results.some((r) => r.sides.length === 2)) {
     const grid = headToHead(results);
-    lines.push('', 'Two-sided battles, wins of each row against each column:', pad('', 10) + DOCTRINE_IDS.map((d) => pad(d, 10)).join(''));
-    for (const a of DOCTRINE_IDS) lines.push(pad(a, 10) + DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 10)).join(''));
+    lines.push('', 'Two-sided battles, wins of each row against each column:', pad('', 10) + ALL_DOCTRINE_IDS.map((d) => pad(d, 10)).join(''));
+    for (const a of ALL_DOCTRINE_IDS) lines.push(pad(a, 10) + ALL_DOCTRINE_IDS.map((b) => pad(a === b ? '-' : String(grid[a][b]), 10)).join(''));
   }
   return lines.join('\n');
 }
@@ -816,7 +816,7 @@ export function unitReport(results: BattleResult[]): UnitReportRow[] {
   const ranked = (counts: Record<string, number>) => Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return [...rows.values()]
     .map(({ v, k, ...row }) => ({ ...row, victims: ranked(v), killers: ranked(k) }))
-    .sort((a, b) => DOCTRINE_IDS.indexOf(a.doctrine) - DOCTRINE_IDS.indexOf(b.doctrine) || b.dealt - a.dealt || b.kills - a.kills || a.unit.localeCompare(b.unit));
+    .sort((a, b) => ALL_DOCTRINE_IDS.indexOf(a.doctrine) - ALL_DOCTRINE_IDS.indexOf(b.doctrine) || b.dealt - a.dealt || b.kills - a.kills || a.unit.localeCompare(b.unit));
 }
 
 /** The top few of a ranked count list, as "trooper 150, tank 40". */
@@ -854,7 +854,7 @@ const perSlotMinute = (n: number, alive: number, digits = 0) => (alive > 0 ? ((n
 export function formatUnits(results: BattleResult[]): string {
   const rows = unitReport(results);
   const out: string[] = [];
-  for (const doctrine of DOCTRINE_IDS) {
+  for (const doctrine of ALL_DOCTRINE_IDS) {
     // Buildings that only ever took fire (everything but towers) are left out here; the CSV has them.
     const mine = rows.filter((r) => r.doctrine === doctrine && (r.built > 0 || r.kills > 0 || r.razed > 0 || r.dealt > 0));
     if (mine.length === 0) continue;
@@ -945,7 +945,7 @@ export function compareRuns(before: SavedRun, after: SavedRun): string {
 
   const da = summarizeDoctrines(before.battles);
   const db = summarizeDoctrines(after.battles);
-  const rows = DOCTRINE_IDS.map((_, i) => [da[i], db[i]] as const).filter(([a, b]) => a.played > 0 || b.played > 0);
+  const rows = ALL_DOCTRINE_IDS.map((_, i) => [da[i], db[i]] as const).filter(([a, b]) => a.played > 0 || b.played > 0);
   if (rows.length > 0) {
     out.push(
       '',
@@ -1070,14 +1070,14 @@ export function formatSweep(results: BattleResult[], variants: SweepVariant[]): 
   const doctrines = new Set(results.flatMap((r) => r.sides.map((x) => x.doctrine)));
   if (doctrines.size > 1) {
     const sums = by.map((rs) => summarizeDoctrines(rs));
-    const ids = DOCTRINE_IDS.filter((d) => doctrines.has(d));
+    const ids = ALL_DOCTRINE_IDS.filter((d) => doctrines.has(d));
     lines.push(
       '',
       'Doctrine win rates (strength against par below each):',
       formatGrid(
         ['Doctrine', ...variants.map((v) => v.label)],
         ids.flatMap((d) => {
-          const i = DOCTRINE_IDS.indexOf(d);
+          const i = ALL_DOCTRINE_IDS.indexOf(d);
           return [
             [d, ...sums.map((s) => (s[i].played ? `${pct(s[i].rate)} ${pm(s[i].margin)}` : '-'))],
             ['', ...sums.map((s) => edgeText(s[i]))],

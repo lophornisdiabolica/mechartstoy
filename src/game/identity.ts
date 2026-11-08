@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import type { BiomeId } from '../world/biomes';
 import { BIOMES } from '../world/biomes';
 import type { DoctrineId } from './doctrines';
+import { canonicalDoctrine } from './doctrines';
 import { FACTIONS } from './factions';
 
 /**
@@ -46,7 +47,7 @@ export const IDENTITY_COLORS: readonly { word: string; color: number }[] = [
 ];
 
 /** Organisation words that suit each doctrine, besides the canonical faction's own. */
-export const DOCTRINE_WORDS: Record<DoctrineId, readonly string[]> = {
+export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readonly string[]> = {
   armour: ['Combine', 'Consortium', 'Union', 'Bulwark', 'Concern'],
   raiders: ['Brigade', 'Outriders', 'Rovers', 'Marauders', 'Band', 'Clans', 'Freebooters'],
   legion: ['Cohort', 'Levy', 'Phalanx', 'Horde', 'Muster', 'Multitude'],
@@ -110,7 +111,7 @@ export function generateIdentity(doctrine: DoctrineId, ctx: IdentityContext, rng
 /** An organisation word: the doctrine's own most of the time, generic otherwise or once its pool runs dry. */
 function pickWord(doctrine: DoctrineId, names: readonly string[], rng: Rng): string {
   const taken = new Set(names.map((n) => n.trim().split(/\s+/).slice(1).join(' ')));
-  const own = DOCTRINE_WORDS[doctrine].filter((w) => !taken.has(w));
+  const own = DOCTRINE_WORDS[canonicalDoctrine(doctrine) as keyof typeof DOCTRINE_WORDS].filter((w) => !taken.has(w));
   const generic = GENERIC_WORDS.filter((w) => !taken.has(w));
   if (own.length > 0 && (generic.length === 0 || rng.chance(0.6))) return rng.pick(own);
   return rng.pick(generic.length > 0 ? generic : GENERIC_WORDS);

@@ -245,21 +245,29 @@ battle, its exact map via `seed`).
     Super unit: the
     Siege Crawler, slow heavy mortars that drops off a squad every 40
     seconds.
-  - *Skyline:* gunships, bombers and scout copters from its **airpad**,
-    battle tanks and flak walkers from the factory; 2.5× air cap, 0.8×
-    infantry and vehicles. Super unit: the Airship Carrier, a slow
-    armoured airship that launches drones.
+  - *Skyline:* gunships, bombers, strike jets and scout copters from its
+    **airpad**, battle tanks and flak walkers from the factory; 2.5× air
+    cap, 0.8× infantry and vehicles. Bombers and jets are planes: they
+    never stop, circling where they were sent when there's nothing to do
+    and attacking in runs straight over the target. Gunships, bombers and
+    jets carry so many shots, then fly back to the airpad to rearm
+    (gunships set down on it). Every aircraft banks into its turns, and a
+    shot-down one flies on as it falls and explodes where it hits.
+    Super unit: the Airship Carrier, a slow armoured airship that launches drones.
   - *Bastion:* howitzers (its signature unit), railgun batteries (long,
     flat, armour-piercing shots), battle tanks and flak tanks, a **sensor
     mast** and two extra guard towers; 1.1× vehicles. Howitzers and
     railguns shoot further than their crews can see; inside the mast's
-    30-unit radius, or the Fortress Walker's 26, they fire at their full
-    range. Its engineers put up **comms arrays** at the front, which spot
-    for the guns like a small mast (22 units). Super unit: the Fortress
-    Walker.
+    30-unit radius, the Fortress Walker's 26, or 14 round any of its scout
+    copters, they fire at their full range. Its engineers put up **comms
+    arrays** at the front, which spot for the guns like a small mast (22
+    units). Super unit: the Fortress Walker.
+    *Bastion (spider test)*, under "Test" in a side's doctrine list and
+    nowhere by default, swaps it for the Siege Spider: a giant
+    eight-legged howitzer that spots for itself and climbs over buildings.
   - *Talon:* packs of three striders, spider walkers (which take any slope
-    as easily as flat ground and fit down town streets, and shoot at
-    aircraft) and Warhound heavy walkers from the factory and a **mech
+    as easily as flat ground, climb straight over buildings and walls,
+    and shoot at aircraft) and Warhound heavy walkers from the factory and a **mech
     forge**; 1.05× vehicles, 0.8× infantry. Super unit: the Juggernaut.
   - *Tidewater:* skimmer hover tanks, amphibious transports (which carry a
     squad) and battle tanks from the factory; 1.35× vehicles, 0.8×
@@ -279,7 +287,13 @@ battle, its exact map via `seed`).
     **fuel depot**, which blows up when destroyed, hurting everything
     round it; 1.25× infantry, 1.2× vehicles. Flame is short-ranged and
     splashes, and isn't stopped by cover: it licks round corners, so it's
-    best for clearing towns. Super unit: the Inferno Walker.
+    best for clearing towns. It keeps burning where it lands
+    (`game/fire.ts`): hot at first, cooling to scorched ground that
+    smoulders for a while; several flamers on one spot make it white-hot,
+    which burns straight through armour. Every flame unit carries fuel:
+    badly hurt, it breaks off and drives at the nearest enemy, and it
+    explodes when destroyed. Super unit: the Inferno Walker.
+  - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
   the squad then fights (and is refilled in territory) like any other, and
