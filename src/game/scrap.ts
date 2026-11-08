@@ -34,12 +34,15 @@ export function scrapSystem(ctx: SimContext): System {
   const pending = new Set<number>();
   const scrap = groundCode('scrap');
   const road = groundCode('road');
+  // Engineers' earthworks keep their ground (see commander/engineers.ts).
+  const trench = groundCode('trench');
+  const earth = groundCode('earth');
   let acc = 0;
   let time = 0;
 
   const pile = (k: number, weight: number) => {
     debris[k] += weight;
-    if (debris[k] >= SCRAP_AT && field.ground[k] !== scrap && field.ground[k] !== road && !scrapped.has(k)) pending.add(k);
+    if (debris[k] >= SCRAP_AT && field.ground[k] !== scrap && field.ground[k] !== road && field.ground[k] !== trench && field.ground[k] !== earth && !scrapped.has(k)) pending.add(k);
   };
   if (ctx.settings.map.scrap) {
     ctx.events.on('unitDestroyed', (ev) => {

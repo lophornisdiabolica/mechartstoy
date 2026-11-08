@@ -236,7 +236,9 @@ battle, its exact map via `seed`).
     Super unit: the Land-train, an armoured rocket battery on tracks.
   - *Legion:* big squads with two AT troopers each and mortar teams from
     the barracks and a **barracks block**, light tanks and squad carriers
-    from the factory; 1.7× infantry cap, 0.8× vehicles. Super unit: the
+    from the factory; 1.7× infantry cap, 0.8× vehicles. Its engineers dig
+    trenches with an earth berm in front, which its massing squads man.
+    Super unit: the
     Siege Crawler, slow heavy mortars that drops off a squad every 40
     seconds.
   - *Skyline:* gunships, bombers and scout copters from its **airpad**,
@@ -248,21 +250,24 @@ battle, its exact map via `seed`).
     mast** and two extra guard towers; 1.1× vehicles. Howitzers and
     railguns shoot further than their crews can see; inside the mast's
     30-unit radius, or the Fortress Walker's 26, they fire at their full
-    range. Super unit: the Fortress Walker.
+    range. Its engineers put up **comms arrays** at the front, which spot
+    for the guns like a small mast (22 units). Super unit: the Fortress
+    Walker.
   - *Talon:* packs of three striders, spider walkers (which take any slope
     as easily as flat ground and fit down town streets, and shoot at
     aircraft) and Warhound heavy walkers from the factory and a **mech
     forge**; 1.05× vehicles, 0.8× infantry. Super unit: the Juggernaut.
   - *Tidewater:* skimmer hover tanks, amphibious transports (which carry a
     squad) and battle tanks from the factory; 1.35× vehicles, 0.8×
-    infantry. A **dock** on the nearest shore launches missile boats, if
-    there's open water within reach of the base (on the default maps
-    there usually isn't; from 0.6 water up, waterways give every base some).
-    Boats don't count against the vehicle cap: a side has six berths
-    (times its team boost), and a dock with them all full builds
-    skimmers.
-    Without a coast it gets a **hover pad** that turns out skimmers
-    instead, and it's the weaker for it. Boats can't take outposts or
+    infantry. A **dock** on the nearest shore launches missile boats (and
+    only boats), if there's open water within reach of the base (on the
+    default maps there usually isn't; from 0.6 water up, waterways give
+    every base some). Boats don't count against the vehicle cap: a side
+    has six berths (times its team boost). Without a coast it starts with
+    a **hover pad** that turns out skimmers instead. Its engineers build
+    whichever of the two the base lacks (a dock on a shore a little
+    further out), and dig canals out toward the enemy so the boats can
+    reach it. Boats can't take outposts or
     follow the land lanes: they head for the enemy base and stop at the
     nearest water to it. Super unit: the Hover Fortress.
   - *Firestorm:* flame troopers in the squads, cinder walkers, light
@@ -596,7 +601,8 @@ outposts and the light scenery are still placed once, at the start.
 
 - Each base has an HQ, barracks, vehicle factory and mech bay that produce
   units on timers, plus its doctrine's signature building and guard
-  towers. What each building turns out depends on the doctrine. Infantry come in squads of riflemen
+  towers. A guard tower's cannon switches to an armour-piercing shell
+  against tanks and other heavily armoured targets. What each building turns out depends on the doctrine. Infantry come in squads of riflemen
   with an AT trooper. Squads march huddled together and open out once
   they have something to shoot at, have fired or have been hit (for six
   seconds after), so a big infantry army fits on its rally ground but one
@@ -662,18 +668,26 @@ outposts and the light scenery are still placed once, at the start.
 - **Engineers** (`game/commander/engineers.ts`). Every doctrine's HQ
   trains engineers (one every 40 seconds, up to the *Engineers* setting
   under Armies, 2 by default; 0 is off) when its Commander has work for
-  them. For now the work is fortifying where the army masses: a line of
-  three wall segments 7 units in front of the rally point, facing the
-  enemy base, for each of the two nearest enemies, with a field tower (a
-  guard tower; at most two per side) just behind it. A wall stops shots like
+  them. They fortify with lines of wall segments, each with a field tower
+  (a guard tower; at most two per side) just behind it: across a choke
+  point on the enemy's way in that suits the doctrine (a valley between
+  steep slopes for Talon, a neck of land between waters for Tidewater;
+  other doctrines only wall a choke close to home), in front of outposts
+  held out toward the enemy, behind the army while it pushes forward, and
+  in front of the rally points. With nothing to build they follow a push,
+  so the next line goes up where the front now is. A wall stops shots like
   any building, so it's cover, and attackers have to go round it or knock
   it down. Walls crumble over ten minutes and towers over fifteen; neither
-  is rebuilt (no rubble),
-  and a side has at most six standing. Engineers don't build where an
-  enemy unit is within 14 units, take no cap, never join an attack or a
-  task force, and wait at home when there's nothing to build; the rally
-  flag and stances pause their work. Docks, hover pads, bridge repairs
-  and canals are still to come.
+  is rebuilt (no rubble), they don't count as production in Conquest, and
+  a side has at most ten wall segments standing. Doctrine jobs: Legion
+  digs trench lines with a berm instead of walls (soldiers in a trench
+  stand up to shoot over the berm, shots at them from afar mostly hit it,
+  and bursts outside reach them halved), Bastion builds comms arrays, and
+  Tidewater builds a missing dock or hover pad and digs canals of
+  boat-deep water a few metres at a time (never one that cuts a base off
+  by land). Engineers don't build where an enemy unit is within 14 units,
+  take no cap, never join an attack or a task force; the rally flag and
+  stances pause their work. Bridge repairs are still to come.
 - **Keeping out of where they're weak** (`game/commander/threats.ts`).
   Each Commander maps how dangerous every part of the field is to
   infantry (artillery, big blasts and flame most), vehicles (hard
@@ -803,5 +817,6 @@ outposts and the light scenery are still placed once, at the start.
     map changes: scrap piling up, and dense forest that gets knocked down.~~
 21. The Commander AI: battle picture, task forces, jobs that suit the
     unit, production advice and styles, shared routes, and engineers who
-    build walls. Next: engineers that repair bridges, put up docks and
-    hover pads and dig canals; then aircraft that fly like planes.
+    build walls; then doctrine engineering: choke-point walls, comms
+    arrays, trenches and berms, docks, hover pads and canals. Next:
+    engineers that repair bridges; then aircraft that fly like planes.

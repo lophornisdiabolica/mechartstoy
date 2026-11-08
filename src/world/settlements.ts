@@ -99,7 +99,7 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras:
   // The doctrine's signature building: on the shore if it's coastal and there is one, else in the first free spot round the back.
   let signature = extras.signature;
   if (signature && (BUILDING_DEFS[signature] as BuildingDef).coastal) {
-    const shore = findShore(field, site, BUILDING_DEFS[signature].radius, layout);
+    const shore = findShore(field, site, BUILDING_DEFS[signature].radius, (x, z, r) => layout.fits(x, z, r));
     if (shore) layout.tryPlaceProducer({ building: signature, faction: f, ...shore });
     signature = shore ? undefined : extras.inland;
   }
@@ -167,32 +167,39 @@ function townBuilding(field: Battlefield, site: TownSite, rng: Rng, x: number, z
 }
 
 /** Water at least this deep counts as open water for a dock's door (boats need 0.2; see MOVE_RULES.naval). */
-const DOCK_DEPTH = 0.5;
+export const DOCK_DEPTH = 0.5;
 /** Furthest past the base's edge a dock goes looking for a shore. */
 const SHORE_SEARCH = 16;
 /** Grid step for measuring a body of water, and the cells of it that make it open water rather than a pond (about 250 square units). */
 const WATER_STEP = 1.5;
-const OPEN_WATER = 110;
+export const OPEN_WATER = 110;
 
 /**
  * The nearest spot to a base for a building on the shore: dry ground for its
  * footprint, its door facing open water (deep enough for boats, and a lake
  * or sea rather than a pond). Null if there's none near enough.
  */
-function findShore(field: Battlefield, site: BaseSite, radius: number, layout: Layout): { x: number; z: number; heading: number } | null {
+export function findShore(
+  field: Battlefield,
+  site: { x: number; z: number; radius: number },
+  radius: number,
+  fits: (x: number, z: number, radius: number) => boolean,
+  search = SHORE_SEARCH,
+  minWater = OPEN_WATER,
+): { x: number; z: number; heading: number } | null {
   const sizes = new Map<string, number>();
-  for (let dist = site.radius * 0.5; dist <= site.radius + SHORE_SEARCH; dist += 1.5) {
+  for (let dist = site.radius * 0.5; dist <= site.radius + search; dist += 1.5) {
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
       const x = site.x + D.cos(a) * dist;
       const z = site.z - D.sin(a) * dist;
-      if (!layout.fits(x, z, radius)) continue;
+      if (!fits(x, z, radius)) continue;
       for (let h = 0; h < 16; h++) {
         const heading = (h / 16) * Math.PI * 2;
         const door = { x: x + D.cos(heading) * (radius + 2.5), z: z - D.sin(heading) * (radius + 2.5) };
         // Boats leave through open water, not under a bridge.
         if (field.nearBridge(door.x, door.z, 3)) continue;
-        if (deepWaterArea(field, door.x, door.z, OPEN_WATER, sizes) >= OPEN_WATER) return { x, z, heading };
+        if (deepWaterArea(field, door.x, door.z, minWater, sizes) >= minWater) return { x, z, heading };
       }
     }
   }
@@ -203,7 +210,7 @@ function findShore(field: Battlefield, site: BaseSite, radius: number, layout: L
  * Roughly how much boat-deep water (in WATER_STEP cells) is connected to a
  * point, counting up to `cap`. Remembered per starting cell in `sizes`.
  */
-function deepWaterArea(field: Battlefield, x: number, z: number, cap: number, sizes: Map<string, number>): number {
+export function deepWaterArea(field: Battlefield, x: number, z: number, cap: number, sizes: Map<string, number>): number {
   const deep = (i: number, j: number) => {
     const px = i * WATER_STEP;
     const pz = j * WATER_STEP;

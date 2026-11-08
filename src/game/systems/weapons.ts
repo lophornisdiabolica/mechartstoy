@@ -3,7 +3,9 @@ import { Armed, Building, Collider, Construction, Faction, makeTransform, Mover,
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
 import { aimPoint, clearShot, muzzlePoint, traceShot } from '../lineOfFire';
-import { distanceToTarget, effectiveRange } from './targeting';
+import { distanceToTarget, effectiveRange, volleyWeapon } from './targeting';
+import { Health } from '../components';
+import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
 
@@ -15,11 +17,10 @@ const OVERSHOOT = 1.3;
 /** A shot that would only just scrape past a building (most of a burst would hit it) counts as blocked. */
 const FIRE_ROOM = 0.5;
 
-function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity): void {
+function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, w: WeaponDef = armed.weapon): void {
   const tt = world.req(target, Transform);
-  const w = armed.weapon;
   const faction = world.req(e, Faction).id;
-  const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, w.muzzleHeight);
+  const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, w.muzzleHeight, ctx);
   const { x: sx, y: sy, z: sz } = muzzle;
 
   const targetRadius = world.get(target, Collider)?.radius ?? 0.5;
@@ -117,15 +118,17 @@ export function weaponSystem(ctx: SimContext): System {
         if (armed.cooldown <= 0 && inRange && aligned) {
           // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
           if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
-            const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, armed.weapon.muzzleHeight);
+            const muzzle = muzzlePoint(world, e, armed.aim, armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
             armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
             if (armed.blocked) continue;
           }
-          fire(world, ctx, e, armed, target);
+          // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
+          const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+          fire(world, ctx, e, armed, target, w);
           armed.firedAt = world.time;
-          armed.burstLeft = armed.weapon.burst - 1;
-          armed.burstTimer = armed.weapon.burstGap;
-          armed.cooldown = armed.weapon.cooldown;
+          armed.burstLeft = w.burst - 1;
+          armed.burstTimer = w.burstGap;
+          armed.cooldown = w.cooldown;
         }
       }
     },

@@ -52,6 +52,15 @@ export interface WeaponDef {
   /** Height of the muzzle above the unit's origin. */
   muzzleHeight: number;
   targets: WeaponTargets;
+  /** Share of the target's armour this weapon's direct hits ignore (0 to 1; see damageThrough). */
+  pierce?: number;
+  /**
+   * A second round for armoured targets: fired instead of this weapon's
+   * volley at anything with at least `heavyAt` armour (guard towers' armour-
+   * piercing shells against tanks and mechs). It shares this weapon's range.
+   */
+  heavy?: WeaponDef;
+  heavyAt?: number;
 }
 
 export interface UnitDef {

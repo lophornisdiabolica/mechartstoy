@@ -51,9 +51,39 @@ export interface BuildingDef {
    * seconds, and isn't rebuilt when destroyed, so fortifications don't pile up for ever.
    */
   lasts?: number;
+  /**
+   * Put up by engineers in battle (see commander/engineers.ts): it leaves no
+   * rubble and isn't rebuilt when destroyed (engineers may build another),
+   * and it doesn't keep its side in a Conquest battle.
+   */
+  field?: boolean;
   /** Seconds the construction animation takes. */
   buildTime: number;
 }
+
+/**
+ * Guard towers' armour-piercing round: against anything with heavy armour
+ * (tanks, walkers, super units), the tower stops spraying its cannon and
+ * fires one big slow shell that goes through half the armour. Trucks and
+ * infantry still get the cannon.
+ */
+const towerShell: WeaponDef = {
+  name: 'Tower AP shell',
+  range: 15,
+  minRange: 0,
+  damage: 30,
+  cooldown: 3,
+  burst: 1,
+  burstGap: 0,
+  projectile: 'shell',
+  speed: 55,
+  splash: 0,
+  spread: 0.03,
+  arc: false,
+  muzzleHeight: 2.1,
+  targets: 'both',
+  pierce: 0.5,
+};
 
 const towerCannon: WeaponDef = {
   name: 'Tower cannon',
@@ -70,6 +100,8 @@ const towerCannon: WeaponDef = {
   arc: false,
   muzzleHeight: 2.1,
   targets: 'both',
+  heavy: towerShell,
+  heavyAt: 6,
 };
 
 /** The hilltop gun: a big, slow artillery piece that lobs shells over whatever's in the way. */
@@ -231,7 +263,7 @@ export const BUILDING_DEFS = {
     armor: 6,
     radius: 2.6,
     height: 2.4,
-    production: { table: [{ unit: 'missileBoat', weight: 1, count: 2, ifDry: 'skimmer' }], interval: 28 },
+    production: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 28 },
     coastal: true,
     rebuildDelay: 40,
     buildTime: 10,
@@ -289,6 +321,7 @@ export const BUILDING_DEFS = {
     sight: 16,
     turretTurnRate: 2.5,
     lasts: 900,
+    field: true,
     rebuildDelay: 0,
     buildTime: 10,
   },
@@ -301,8 +334,24 @@ export const BUILDING_DEFS = {
     radius: 1.2,
     height: 1.2,
     lasts: 600,
+    field: true,
     rebuildDelay: 0,
     buildTime: 8,
+  },
+  // Bastion's engineers: a lattice mast with dishes that spots for the guns at the front, like a small sensor mast.
+  commsArray: {
+    id: 'commsArray',
+    name: 'Comms Array',
+    model: 'bld:commsArray',
+    hp: 380,
+    armor: 6,
+    radius: 1.1,
+    height: 5,
+    spots: 22,
+    lasts: 900,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 12,
   },
   outpost: {
     id: 'outpost',

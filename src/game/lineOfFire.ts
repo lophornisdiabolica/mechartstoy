@@ -135,10 +135,25 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
   return { x: from.x + ux * best, y: yAt(best), z: from.z + uz * best, hit, stoppedBy: kind };
 }
 
-/** Where a weapon's shots leave from. */
-export function muzzlePoint(world: World, e: Entity, aim: number, muzzleOffset: number, muzzleHeight: number): Point3 {
+/** How far infantry in a trench stand up to fire over its berm (see inTrench). */
+export const TRENCH_STAND = 0.8;
+
+/** Whether an entity is a soldier standing in a trench (see the 'trench' ground). */
+export function inTrench(world: World, ctx: SimContext, e: Entity): boolean {
+  if (world.get(e, Unit)?.def.class !== 'infantry') return false;
   const t = world.req(e, Transform);
-  return { x: t.x + D.cos(aim) * muzzleOffset, y: t.y + muzzleHeight, z: t.z - D.sin(aim) * muzzleOffset };
+  return ctx.field.groundAt(t.x, t.z).id === 'trench';
+}
+
+/**
+ * Where a weapon's shots leave from. Soldiers in a trench stand up to fire
+ * over the berm in front of it, so they shoot out of cover that shots aimed
+ * at their bodies (down in the trench) mostly hit.
+ */
+export function muzzlePoint(world: World, e: Entity, aim: number, muzzleOffset: number, muzzleHeight: number, ctx?: SimContext): Point3 {
+  const t = world.req(e, Transform);
+  const stand = ctx && inTrench(world, ctx, e) ? TRENCH_STAND : 0;
+  return { x: t.x + D.cos(aim) * muzzleOffset, y: t.y + muzzleHeight + stand, z: t.z - D.sin(aim) * muzzleOffset };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { System } from '../../core/ecs';
-import { Faction, Producer } from '../components';
+import { Building, Faction, Producer } from '../components';
 import { SimContext } from '../context';
 
 /** Seconds between checks; losing a building doesn't need to register on the exact tick. */
@@ -7,7 +7,7 @@ const CHECK_INTERVAL = 0.5;
 
 /**
  * Conquest rules: a side is knocked out once its last production building
- * (the HQ counts) is destroyed, and the battle is over when every side still
+ * (the HQ counts, ones its engineers built don't) is destroyed, and the battle is over when every side still
  * standing is on one team. The winners are that whole team, including allies
  * knocked out along the way. Records the outcome once; the battle keeps
  * running afterwards so the survivors can mop up while the result is shown.
@@ -23,7 +23,8 @@ export function conquestSystem(ctx: SimContext): System {
       const producers = new Array<number>(sides.count).fill(0);
       for (const e of world.query(Producer, Faction)) {
         const f = world.req(e, Faction).id;
-        if (f >= 0) producers[f]++;
+        // A dock or hover pad engineers put up mid-battle doesn't keep a side in (see BuildingDef.field).
+        if (f >= 0 && !world.get(e, Building)?.def.field) producers[f]++;
       }
       for (let f = 0; f < sides.count; f++) {
         if (sides.eliminated[f] || producers[f] > 0) continue;
