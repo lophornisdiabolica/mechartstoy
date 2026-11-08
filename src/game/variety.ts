@@ -2,6 +2,7 @@ import { Rng } from '../core/rng';
 import { BIOME_IDS, BIOMES } from '../world/biomes';
 import { DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
+import { generateIdentity, isGeneratedIdentity } from './identity';
 import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
 import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
 
@@ -20,6 +21,9 @@ export const VARIETY_KEYS: VarietyKey[] = ['size', 'biome', 'style', 'sides', 'd
 export type VarietyTeams = 'ffa' | 'two' | 'uneven' | 'either';
 export const VARIETY_TEAMS: VarietyTeams[] = ['ffa', 'two', 'uneven', 'either'];
 
+/** Which re-rolled sides get generated names and colours. */
+export type VarietyIdentities = 'repeats' | 'all';
+
 export interface VarietySettings {
   /** Which settings to re-roll between battles. */
   roll: Record<VarietyKey, boolean>;
@@ -32,6 +36,8 @@ export interface VarietySettings {
   doctrines: DoctrineId[];
   /** Whether a doctrine can come up for more than one side (each copy gets its own name and colour). */
   repeats: boolean;
+  /** Which re-rolled sides get a generated name and colour: only repeats of a doctrine (the first keeps its canonical faction), or all of them. */
+  identities: VarietyIdentities;
   /** Minutes before a battle that hasn't ended gives way to the next one; 0 never does. */
   after: number;
 }
@@ -47,6 +53,7 @@ export function defaultVariety(): VarietySettings {
     teams: 'either',
     doctrines: [...DOCTRINE_IDS],
     repeats: true,
+    identities: 'repeats',
     after: 0,
   };
 }
@@ -154,55 +161,42 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
       if (bag.length === 0) bag = shuffle([...pool], rng);
       return bag.pop()!;
     };
-    const used = new Set<number>();
     const picks = s.factions.map(() => draw());
-    s.factions.forEach((f, i) => {
-      const plain = isPlainIdentity(f, i);
-      f.doctrine = picks[i];
-      if (plain) Object.assign(f, identityFor(f.doctrine, used, s.factions, i));
-      used.add(f.color);
-    });
+    s.factions.forEach((f, i) => (f.doctrine = picks[i]));
     if (!v.roll.sides) label.push(s.factions.map((f) => DOCTRINES[f.doctrine].name).join(' v '));
   }
+  if (v.roll.sides || v.roll.doctrines) assignIdentities(s, rng.fork(0x1d3e));
   return { settings: s, label: label.join(' · ') };
 }
 
-/** A side still wearing a standard name and colour (its slot's, or another slot's from an earlier roll). */
-function isPlainIdentity(f: FactionSettings, i: number): boolean {
-  const slot = FACTIONS.find((d) => d.primary === f.color) ?? SECOND_IDENTITIES.find((d) => d.primary === f.color);
-  return (slot !== undefined && slot.name === f.name.trim()) || (f.name.trim() === '' && f.color === FACTIONS[i].primary);
+/**
+ * Names and colours for re-rolled sides. A side still wearing a standard or
+ * generated identity takes its doctrine's canonical faction (Cobalt Accord for
+ * Armour...) if no other side wears it, else a generated one (see identity.ts);
+ * with `identities: 'all'`, every such side gets a generated one. Sides named
+ * or coloured by hand keep theirs.
+ */
+function assignIdentities(s: BattleSettings, rng: Rng): void {
+  const all = s.variety.identities === 'all';
+  const plain = s.factions.map((f, i) => isPlainIdentity(f, i));
+  const done: FactionSettings[] = s.factions.filter((_, i) => !plain[i]);
+  s.factions.forEach((f, i) => {
+    if (!plain[i]) return;
+    const home = FACTIONS[DOCTRINE_IDS.indexOf(f.doctrine)];
+    if (!all && home && !done.some((d) => d.color === home.primary || d.name.trim() === home.name)) {
+      f.name = home.name;
+      f.color = home.primary;
+    } else {
+      Object.assign(f, generateIdentity(f.doctrine, { colors: done.map((d) => d.color), names: done.map((d) => d.name), biome: s.map.biome }, rng));
+    }
+    done.push(f);
+  });
 }
 
-/**
- * Names and colours for a second side of a doctrine already in the battle,
- * so two Legions read as two different armies: none of them is a standard
- * faction's.
- */
-export const SECOND_IDENTITIES: readonly { name: string; primary: number }[] = [
-  { name: 'Jade Vanguard', primary: 0x4f9a4a },
-  { name: 'Rust Brigade', primary: 0xa0522d },
-  { name: 'Slate Cohort', primary: 0x5a6b7d },
-  { name: 'Rose Order', primary: 0xd46a8c },
-  { name: 'Azure Pact', primary: 0x3ab0e0 },
-  { name: 'Olive Front', primary: 0x7d8a3a },
-  { name: 'Sable Watch', primary: 0x3d3d48 },
-  { name: 'Copper Assembly', primary: 0xb87333 },
-];
-
-/**
- * The standard name and colour for a side with this doctrine: the faction
- * whose default doctrine it is (Cobalt for Armour, Crimson for Raiders...).
- * If another side already wears those (a repeated doctrine), the first free
- * second identity, and failing that the first free standard colours.
- */
-function identityFor(doctrine: DoctrineId, used: Set<number>, sides: FactionSettings[], self: number): Pick<FactionSettings, 'name' | 'color'> {
-  const taken = (c: number) => used.has(c) || sides.some((f, j) => j > self && f.color === c && !isPlainIdentity(f, j));
-  const home = FACTIONS[DOCTRINE_IDS.indexOf(doctrine)];
-  if (home && !taken(home.primary)) return { name: home.name, color: home.primary };
-  const second = SECOND_IDENTITIES.find((d) => !taken(d.primary));
-  if (second) return { name: second.name, color: second.primary };
-  const def = FACTIONS.find((d) => !taken(d.primary)) ?? FACTIONS[self];
-  return { name: def.name, color: def.primary };
+/** A side still wearing a standard name and colour (its slot's, another slot's from an earlier roll, or a generated one). */
+function isPlainIdentity(f: FactionSettings, i: number): boolean {
+  const slot = FACTIONS.find((d) => d.primary === f.color);
+  return (slot !== undefined && slot.name === f.name.trim()) || isGeneratedIdentity(f.name, f.color) || (f.name.trim() === '' && f.color === FACTIONS[i].primary);
 }
 
 function shuffle<T>(items: T[], rng: Rng): T[] {

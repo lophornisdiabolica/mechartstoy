@@ -177,8 +177,12 @@ battle, its exact map via `seed`).
 - **Between battles** a new battle can re-roll the map, biome, style, sides
   and doctrines. Re-rolled sides go free-for-all, two even teams, two uneven
   teams (1v3, 2v4...) or any of those. With repeats on (the default) a
-  doctrine can turn up more than once; the repeat gets a name and colour of
-  its own (Jade Vanguard, Rust Brigade...).
+  doctrine can turn up more than once. The first side of each doctrine wears
+  its own faction (Cobalt Accord for Armour...); a repeat gets a made-up name
+  and a colour picked to stand apart from the other sides and from the map's
+  ground (Rust Cohort, Plum Levy...), drawn from the battle's seed. "Names"
+  can make up an identity for every side instead. Sides you've named or
+  coloured yourself keep theirs.
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other (unless
@@ -341,7 +345,7 @@ Pick the side you're acting for, then:
 
 The **battle ticker** (top left, on by default) is a quiet feed of what's
 happening: outposts changing hands, super units falling and where ("at the
-fuel depot in the north", "on a bridge", "outside Crimson Host's base"),
+fuel depot in the north", "on a bridge", "outside Crimson Brigade's base"),
 production buildings razed, attacks setting out, sides knocked out. **Show
 front lines** shades the ground in the colour of whoever holds it, from
 where each side's strength is (buildings hold the ground they stand on),

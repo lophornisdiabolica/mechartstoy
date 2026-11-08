@@ -109,7 +109,7 @@ export class Ticker {
     this.say([this.side(faction), ` took ${what}`, ...from]);
   }
 
-  /** " to Crimson Host's Lancer", from the killing blow, if a side landed it. */
+  /** " to Crimson Brigade's Lancer", from the killing blow, if a side landed it. */
   private by(killer: { source: string; faction: number } | null): (string | HTMLElement)[] {
     if (killer?.faction === GOD) return [killer.source === 'airstrike' ? ' to an airstrike' : killer.source === 'earthquake' ? ' in the earthquake' : ' to a curse'];
     if (!killer || killer.faction < 0 || killer.faction >= this.factions.length) return [];
@@ -118,7 +118,7 @@ export class Ticker {
     return [' to ', this.side(killer.faction), def ? `'s ${def.name.toLowerCase()}` : ''];
   }
 
-  /** Where something happened, by the nearest named place: "outside Crimson Host's base", "at the supply depot in the north", "on a bridge", "in the east". */
+  /** Where something happened, by the nearest named place: "outside Crimson Brigade's base", "at the supply depot in the north", "on a bridge", "in the east". */
   private where(x: number, z: number, faction: number): string {
     const game = this.game!;
     const { field, ctx } = game;
@@ -165,7 +165,7 @@ export class Ticker {
   /** The last stroke of each brush, so a stroke of many dabs is one line. */
   private strokes = new Map<string, { time: number; x: number; z: number }>();
 
-  /** A god power, in words: "A heavy airstrike hit outside Crimson Host's base". */
+  /** A god power, in words: "A heavy airstrike hit outside Crimson Brigade's base". */
   private god(e: GameEvents['godUsed']): void {
     const p = e.power;
     const where = () => this.where(e.x, e.z, -1);

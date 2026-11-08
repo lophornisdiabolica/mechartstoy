@@ -103,6 +103,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (v.sidesMin !== dv.sidesMin || v.sidesMax !== dv.sidesMax) p.set('vsides', `${v.sidesMin}-${v.sidesMax}`);
   if (v.teams !== dv.teams) p.set('vteams', v.teams);
   if (v.repeats !== dv.repeats) p.set('vrep', v.repeats ? '1' : '0');
+  if (v.identities !== dv.identities) p.set('vnames', v.identities);
   if (v.doctrines.join(',') !== dv.doctrines.join(',')) p.set('vdocs', v.doctrines.join(','));
   if (v.after !== dv.after) p.set('vafter', String(v.after));
   return p;
@@ -204,6 +205,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (vteams === 'ffa' || vteams === 'two' || vteams === 'uneven' || vteams === 'either') s.variety.teams = vteams;
   const vrep = p.get('vrep');
   if (vrep === '0' || vrep === '1') s.variety.repeats = vrep === '1';
+  const vnames = p.get('vnames');
+  if (vnames === 'repeats' || vnames === 'all') s.variety.identities = vnames;
   const vdocs = p.get('vdocs');
   if (vdocs !== null) {
     const listed = vdocs.split(',').map((k) => k.trim());
