@@ -1,6 +1,7 @@
-import { NEUTRAL } from '../game/components';
+import { GOD, NEUTRAL } from '../game/components';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
+import { GameEvents } from '../game/context';
 import { el, hex } from './dom';
 
 /** Lines shown at once, and seconds (real time) each stays before fading. */
@@ -51,6 +52,7 @@ export class Ticker {
     this.factions = factions;
     this.attacking = factions.map(() => false);
     this.lines = [];
+    this.strokes.clear();
     this.root.replaceChildren();
     const { events } = game;
     // Events from a battle that's since been replaced are ignored.
@@ -64,6 +66,7 @@ export class Ticker {
       const by = e.killer && e.killer.faction >= 0 ? [this.side(e.killer.faction), ' razed '] : ['Down went '];
       this.say([...by, this.side(e.faction), `'s ${e.def.name.toLowerCase()}`]);
     });
+    events.on('godUsed', (e) => this.game === game && this.god(e));
     events.on('sideEliminated', (e) => this.game === game && this.say([this.side(e.faction), ' is out of the war']));
     events.on('battleOver', (o) => {
       if (this.game !== game) return;
@@ -108,6 +111,7 @@ export class Ticker {
 
   /** " to Crimson Host's Lancer", from the killing blow, if a side landed it. */
   private by(killer: { source: string; faction: number } | null): (string | HTMLElement)[] {
+    if (killer?.faction === GOD) return [killer.source === 'airstrike' ? ' to an airstrike' : killer.source === 'earthquake' ? ' in the earthquake' : ' to a curse'];
     if (!killer || killer.faction < 0 || killer.faction >= this.factions.length) return [];
     const ctx = this.game!.ctx;
     const def = (ctx.units as Record<string, { name: string }>)[killer.source] ?? (ctx.buildings as Record<string, { name: string }>)[killer.source];
@@ -156,6 +160,51 @@ export class Ticker {
     const span = el('span', { class: 'side' }, d ? d.name : 'Someone');
     if (d) span.style.color = hex(d.primary);
     return span;
+  }
+
+  /** The last stroke of each brush, so a stroke of many dabs is one line. */
+  private strokes = new Map<string, { time: number; x: number; z: number }>();
+
+  /** A god power, in words: "A heavy airstrike hit outside Crimson Host's base". */
+  private god(e: GameEvents['godUsed']): void {
+    const p = e.power;
+    const where = () => this.where(e.x, e.z, -1);
+    switch (p.kind) {
+      case 'drop': {
+        const def = this.game!.ctx.units[p.unit];
+        const what = p.count === 1 ? `A ${def.name}` : `${p.count} ${def.name}s`;
+        return this.say([`✦ ${what} dropped from the sky for `, this.side(p.faction), ` ${where()}`]);
+      }
+      case 'airstrike': {
+        const words = { light: 'A light airstrike hit', heavy: 'A heavy airstrike hit', carpet: 'Carpet bombing rained down', big: 'The big one fell' };
+        return this.say([`✦ ${words[p.strike]} ${where()}`]);
+      }
+      case 'quake': {
+        const words = { tremor: 'A tremor shook the ground', quake: 'An earthquake struck', cataclysm: 'A cataclysm tore the land apart' };
+        return this.say([`✦ ${words[p.quake]} ${where()}`]);
+      }
+      case 'terrain':
+      case 'forest': {
+        // A stroke is many dabs: one line for each, unless it's the same brush near the last line's spot.
+        const key = `${p.kind}:${p.brush}`;
+        const now = this.game!.world.time;
+        const last = this.strokes.get(key);
+        this.strokes.set(key, { time: now, x: e.x, z: e.z });
+        if (last && now - last.time < 6 && Math.hypot(last.x - e.x, last.z - e.z) < 25) return;
+        const words = { raise: 'The land rose', lower: 'The ground sank', flatten: 'The ground was levelled', plant: 'A forest sprang up', clear: 'The trees were felled' };
+        return this.say([`✦ ${words[p.brush]} ${where()}`]);
+      }
+      case 'bridge':
+        return this.say([`✦ A bridge appeared ${where()}`]);
+      case 'wall':
+        return this.say([`✦ A wall rose ${where()}`]);
+      case 'bless': {
+        const words = { production: ' was blessed with faster production', healing: ' was blessed with healing', curse: ' was cursed' };
+        return this.say(['✦ ', this.side(p.faction), words[p.blessing]]);
+      }
+      case 'unbless':
+        return this.say(['✦ ', this.side(p.faction), '’s blessings and curses were lifted']);
+    }
   }
 
   private say(parts: (string | HTMLElement)[]): void {

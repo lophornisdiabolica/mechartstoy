@@ -874,6 +874,8 @@ body.photo #toast,
 body.photo #ticker,
 body.photo #banner,
 body.photo #perf,
+body.photo #god,
+body.photo #god-toggle,
 body.photo #debug {
   display: none !important;
 }
@@ -958,4 +960,267 @@ body.photo #debug {
   padding-top: 0;
   font-size: 10px;
   opacity: 0.8;
+}
+
+/* God powers tab (see GodPanel): its own panel beside the battle controls. */
+#god,
+#god-toggle {
+  position: fixed;
+  top: 12px;
+  right: 284px;
+  color: #e6edf3;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+
+#god {
+  width: 250px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border-radius: 8px;
+  background: rgba(22, 18, 30, 0.8);
+  border: 1px solid rgba(232, 210, 122, 0.25);
+}
+
+#god[hidden],
+#god-toggle[hidden] {
+  display: none;
+}
+
+#god-toggle {
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(232, 210, 122, 0.4);
+  background: rgba(22, 18, 30, 0.8);
+  color: #e8d27a;
+  cursor: pointer;
+}
+
+#god-toggle:hover {
+  background: rgba(40, 32, 52, 0.9);
+}
+
+#god header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: #e8d27a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#god .body {
+  padding: 4px 10px 10px;
+}
+
+#god h3,
+#god .group {
+  margin: 6px 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b98a8;
+}
+
+#god details {
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 4px;
+}
+
+#god summary {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c9b98a;
+  padding: 2px 0 4px;
+}
+
+#god button {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 5px 6px;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#god button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#god button.on {
+  background: #e8d27a;
+  border-color: #e8d27a;
+  color: #1a1d24;
+}
+
+#god button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#god .collapse {
+  width: 24px;
+  padding: 0;
+  line-height: 20px;
+}
+
+#god .seg {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+#god .seg button {
+  flex: 1;
+}
+
+#god .grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+#god .row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  align-items: center;
+}
+
+#god .row button:first-child {
+  flex: 1;
+}
+
+#god .row.all span {
+  color: #8b98a8;
+  margin-right: 2px;
+}
+
+#god .row.all button {
+  flex: 1;
+}
+
+#god .labelled {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+#god .labelled .seg {
+  margin-top: 0;
+}
+
+#god .sides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#god .sides button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 calc(50% - 4px);
+}
+
+#god .swatch {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+#god .wide {
+  width: 100%;
+  margin-top: 6px;
+}
+
+#god .hint {
+  margin: 4px 0 0;
+  color: #8b98a8;
+  font-size: 11px;
+}
+
+#god .blessing {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 3px 0 5px;
+}
+
+#god .blessing .what {
+  flex: 1;
+}
+
+#god .blessing button {
+  padding: 2px 6px;
+}
+
+#god .blessing .left {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: #e8d27a;
+  border-radius: 1px;
+}
+
+#god .blessing .left.curse {
+  background: #a070ff;
+}
+
+/* With the battle controls collapsed to their bar, the god powers tuck in under it. */
+#panel.collapsed ~ #god,
+#panel.collapsed ~ #god-toggle {
+  top: calc(12px + var(--panel-bar, 37px) + 6px);
+  right: 12px;
+}
+
+#panel.collapsed ~ #god {
+  width: 260px;
+  max-height: calc(100vh - 24px - var(--panel-bar, 37px) - 6px);
+}
+
+@media (max-width: 600px) {
+  #god,
+  #god-toggle {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  #god,
+  #panel.collapsed ~ #god {
+    left: 12px;
+    width: auto;
+    max-height: 45vh;
+  }
+
+  #panel.collapsed ~ #god,
+  #panel.collapsed ~ #god-toggle {
+    top: auto;
+  }
 }

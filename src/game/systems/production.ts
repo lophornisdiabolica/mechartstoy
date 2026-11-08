@@ -107,7 +107,7 @@ export function productionSystem(ctx: SimContext): System {
         const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
         // An outpost adds the same to every side, not a share of a big side's boosted rate.
         const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
-        producer.timer -= dt * armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide);
+        producer.timer -= dt * armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
 

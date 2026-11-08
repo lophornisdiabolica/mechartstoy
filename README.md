@@ -305,18 +305,39 @@ battle, its exact map via `seed`).
   screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, F follows the fighting, T toggles tilt-shift, H opens photo mode,
-space pauses, 1-4 set speed, Esc cancels.
+rotate, F follows the fighting, T toggles tilt-shift, G opens the god powers,
+H opens photo mode, space pauses, 1-4 set speed, Esc cancels.
 
 The **Battle controls** panel (top right) sets speed and camera effects.
 **Follow the fighting** turns the camera into a spectator that glides to
 wherever the biggest fight is (panning by hand turns it off). **Shadows**
 High / Low / Off trades looks for speed in huge battles; shadows are only
 drawn around the part of the map in view either way. Both are remembered
-in this browser rather than in the battle link. Pick a
-side to drop units anywhere on the map, place a rally flag, and override the
-AI with Attack / Hold (Auto follows the ebb and flow of the battle). Click any
-unit or building to inspect it.
+in this browser rather than in the battle link. Click any unit or building
+to inspect it.
+
+The **God powers** tab (the button beside the panel, or G; × hides it again)
+is everything you can do to the battle. There are no cooldowns: it's a toy.
+Pick the side you're acting for, then:
+
+- **Orders**: Attack / Hold / Auto for that side (Auto follows the ebb and
+  flow of the battle), a rally flag, or the same for every side at once.
+- **Bless or curse** a side for 30 s, a minute or two: faster production,
+  healing wherever its units are (gold motes rise off them), or a curse
+  that withers them (dark wisps). Lift ends them early.
+- **Airstrike**: drag a line and bombers fly it. Light (many small bombs,
+  for infantry), Heavy (fewer big ones that crater the ground), Carpet
+  (three bombers abreast) or the Big one (one huge bomb on a point, a deep
+  crater and a long shake). Bombs hurt every side.
+- **Earthquake**: Tremor, Quake or Cataclysm. The ground heaves into ridges
+  and hollows (routes and line of fire follow), buildings crack, trees
+  fall and the camera shakes.
+- **Shape the land**: hold and drag to raise, lower (down into a lake) or
+  flatten ground, plant dense forest or fell it, with a small, medium or
+  large brush; drag a bridge across water, or a wall (nobody's, so it
+  blocks everyone until it's shot down).
+- **Drop units**: any unit, 1 to 25 at a time in a ring, for the side
+  you're acting for. Caps don't apply, so a dozen Titans is fine.
 
 The **battle ticker** (top left, on by default) is a quiet feed of what's
 happening: outposts changing hands, super units falling and where ("at the
@@ -398,6 +419,7 @@ src/
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there
     orders.ts        per-faction player orders (stance, rally point)
+    god.ts           god powers: airstrikes, quakes, the land brush, forest, bridges, walls, blessings (commands, off unless used)
     context.ts       shared services and the game event types
     factions.ts      default faction names and colours
     settings.ts      BattleSettings: everything the setup screen tunes, and what it derives
@@ -424,6 +446,7 @@ src/
     debugOverlay.ts  debug overlays: lanes, routes, line of fire, strength map, route costs
   ui/
     controls.ts      in-battle panel and map clicks; changes the sim only via Game commands
+    godPanel.ts      the god powers tab: orders, drops, blessings, airstrikes, quakes, land, forest, bridges, walls
     setupScreen.ts   pre-battle settings screen
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     perfOverlay.ts   render and sim stats readout (P)
@@ -455,8 +478,9 @@ everything listening through `onChange` which cells changed: the route
 grids recompute those cells and their connected regions and bump their
 version (so routes through those cells re-plan, as they do when buildings go up or down), and
 the terrain mesh redraws them (and any road over them). Scrap from wrecks
-(`game/scrap.ts`) and dense forest being cleared (`world/woods.ts`) use it
-now; walls, canals and towns that engineers grow can use it later. Lanes,
+(`game/scrap.ts`), dense forest being cleared (`world/woods.ts`) and the
+god powers (`game/god.ts`: craters, quakes, the land brush, planted forest,
+bridges) use it now; walls, canals and towns that engineers grow can use it later. Lanes,
 outposts and the light scenery are still placed once, at the start.
 
 ### Conventions

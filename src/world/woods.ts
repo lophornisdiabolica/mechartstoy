@@ -52,6 +52,7 @@ export class Woods {
   /** Tree indices per map cell. */
   private readonly byCell = new Map<number, number[]>();
   private readonly listeners: TreeListener[] = [];
+  private readonly growers: TreeListener[] = [];
 
   constructor(private readonly field: Battlefield) {}
 
@@ -70,6 +71,18 @@ export class Woods {
     else this.byCell.set(cell, [index]);
   }
 
+  /** A tree planted mid-battle (a god power): like add, but the listeners hear about it. */
+  grow(x: number, z: number, size: number): void {
+    this.add(x, z, size);
+    for (const l of [...this.growers]) l(this.trees.length - 1);
+  }
+
+  /** Hear about every tree planted mid-battle (see grow). Returns an unsubscribe. */
+  onGrow(listener: TreeListener): () => void {
+    this.growers.push(listener);
+    return () => this.growers.splice(this.growers.indexOf(listener), 1);
+  }
+
   /** Hear about every tree that falls. Returns an unsubscribe. */
   onFell(listener: TreeListener): () => void {
     this.listeners.push(listener);
@@ -86,6 +99,11 @@ export class Woods {
         for (const t of this.byCell.get(j * cols + i) ?? []) if (this.trees[t].fell === null) yield t;
       }
     }
+  }
+
+  /** Every tree (standing or fallen) in the cell a point is in. */
+  treesNear(x: number, z: number): readonly number[] {
+    return this.byCell.get(this.cellOf(x, z)) ?? [];
   }
 
   /** The standing trees in one cell. */

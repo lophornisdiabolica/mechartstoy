@@ -33,6 +33,8 @@ export const NEUTRAL = -1;
  * fight every side, and every side fights them.
  */
 export const GARRISON = -2;
+/** God powers (see god.ts): hostile to everyone, so bombs and quakes spare nobody. */
+export const GOD = -3;
 
 /** Which side an entity belongs to (index into FACTIONS, NEUTRAL or GARRISON). */
 export interface Faction {

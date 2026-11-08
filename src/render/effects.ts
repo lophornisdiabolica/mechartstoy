@@ -164,6 +164,8 @@ export class Effects {
   private readonly shocks: ParticlePool;
   private readonly burners: Burner[] = [];
   private time = 0;
+  /** How hard the camera should shake now (quakes, the big bomb); Stage reads it, and it dies away. */
+  shake = 0;
 
   constructor(
     events: EventBus<GameEvents>,
@@ -205,6 +207,71 @@ export class Effects {
       this.collapse(e.x, e.y, e.z, e.def.radius);
     });
     events.on('constructionStarted', (e) => this.dust(e.x, e.y, e.z, e.def.radius, 10));
+    events.on('power', (e) => this.power(e));
+  }
+
+  /** What god powers look like beyond their shells and map changes (see GameEvents.power). */
+  private power(e: GameEvents['power']): void {
+    const y = this.groundAt(e.x, e.z, this.field.seaLevel);
+    switch (e.kind) {
+      case 'quake': {
+        // Dust shaken up all over, thickest in the middle, and the camera judders.
+        const n = Math.min(40, Math.round(e.radius * 1.5));
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.sqrt(Math.random()) * e.radius;
+          const x = e.x + Math.cos(a) * r;
+          const z = e.z + Math.sin(a) * r;
+          this.smoke.spawn({ x, y: this.groundAt(x, z, y) + 0.2, z, vx: rand(-0.6, 0.6), vy: rand(0.6, 1.6), vz: rand(-0.6, 0.6), life: rand(1.5, 3), size: rand(0.4, 0.9), endSize: rand(1.4, 2.4), color: 0x9a8a70, endColor: 0xc8bca8, drag: 0.9 });
+          if (Math.random() < 0.35) this.debris.spawn({ x, y: this.groundAt(x, z, y) + 0.1, z, vx: rand(-1.5, 1.5), vy: rand(2, 5), vz: rand(-1.5, 1.5), life: rand(0.8, 1.5), size: rand(0.1, 0.2), endSize: 0.05, color: 0x5a4636, gravity: 14 });
+        }
+        this.shocks.spawn({ x: e.x, y: y + 0.15, z: e.z, life: 0.5, size: 1, endSize: e.radius, color: 0x8a6a40, endColor: 0x000000 });
+        this.shake = Math.max(this.shake, Math.min(1.2, 0.25 + (e.strength ?? 1) * 0.35));
+        break;
+      }
+      case 'bigBomb':
+        // The bomb's own blast is drawn by its impact; this is the rest: a towering fireball, a dust wall and a long shake.
+        this.blast(e.x, y + 0.5, e.z, e.radius * 0.6);
+        this.blast(e.x, y + e.radius * 0.5, e.z, e.radius * 0.45);
+        this.dust(e.x, y, e.z, e.radius * 0.9, 28);
+        for (let i = 0; i < 18; i++) {
+          this.smoke.spawn({ x: e.x + rand(-1, 1), y: y + rand(1, e.radius), z: e.z + rand(-1, 1), vx: rand(-0.4, 0.4), vy: rand(1.5, 3), vz: rand(-0.4, 0.4), life: rand(4, 7), size: rand(1, 1.8), endSize: rand(3, 5), color: 0x3a3430, endColor: 0x8a8278, drag: 0.6 });
+        }
+        this.shake = Math.max(this.shake, 1.6);
+        break;
+      case 'bless':
+      case 'curse': {
+        // A ring of light (gold, or a sickly violet) rising from the side's base.
+        const color = e.kind === 'bless' ? 0xffe9a0 : 0xa070ff;
+        this.shocks.spawn({ x: e.x, y: y + 0.2, z: e.z, life: 1.2, size: 2, endSize: e.radius * 1.6, color, endColor: 0x000000 });
+        for (let i = 0; i < 40; i++) {
+          const a = (i / 40) * Math.PI * 2;
+          this.flashes.spawn({ x: e.x + Math.cos(a) * e.radius * 0.7, y: y + 0.3, z: e.z + Math.sin(a) * e.radius * 0.7, vy: rand(2, 5), life: rand(1, 2), size: 0.25, endSize: 0.05, color, endColor: 0x000000 });
+        }
+        break;
+      }
+      case 'bridge':
+        this.dust(e.x, y, e.z, Math.max(2, e.radius * 0.6), 16);
+        break;
+      case 'grow':
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.sqrt(Math.random()) * e.radius;
+          const x = e.x + Math.cos(a) * r;
+          const z = e.z + Math.sin(a) * r;
+          this.flashes.spawn({ x, y: this.groundAt(x, z, y) + 0.4, z, vy: rand(1, 2.5), life: rand(0.6, 1.2), size: 0.18, endSize: 0.04, color: 0xb8f090, endColor: 0x000000 });
+        }
+        break;
+    }
+  }
+
+  /** A mote of light drifting up from a blessed (or cursed) unit. */
+  sparkle(x: number, y: number, z: number, curse: boolean): void {
+    if (curse) {
+      this.smoke.spawn({ x: x + rand(-0.3, 0.3), y, z: z + rand(-0.3, 0.3), vy: rand(0.4, 0.9), life: rand(0.8, 1.4), size: 0.12, endSize: 0.35, color: 0x5a3080, endColor: 0x2a2030, drag: 0.5 });
+    } else {
+      this.flashes.spawn({ x: x + rand(-0.35, 0.35), y, z: z + rand(-0.35, 0.35), vy: rand(1, 2), life: rand(0.5, 0.9), size: 0.12, endSize: 0.02, color: 0xffe9a0, endColor: 0x000000 });
+    }
   }
 
   update(dt: number): void {
@@ -236,6 +303,7 @@ export class Effects {
         this.flashes.spawn({ x: b.x, y: b.y, z: b.z, vy: 0.8, life: 0.4, size: 0.3 * b.size, color: 0xff8a30, endColor: 0x000000 });
       }
     }
+    this.shake = Math.max(0, this.shake - dt * 0.9);
     this.flashes.update(dt);
     this.shocks.update(dt);
     this.smoke.update(dt);
