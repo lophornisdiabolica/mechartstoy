@@ -7,6 +7,7 @@ import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
 import { threatKindOf } from '../commander/threats';
+import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
 
 /** How far an outpost's guards chase from the post before going back. */
@@ -27,6 +28,9 @@ const CHARGE_RANGE = 30;
 const ROLE_CHECK = 0.5;
 /** Massing infantry man trenches within this distance of their rally point. */
 const TRENCH_MUSTER = 16;
+/** Room each soldier takes along a trench, which holds two ranks; soldiers past what the trenches near the rally point hold wait at the rally point. */
+const TRENCH_ROOM = 1.2;
+const TRENCH_RANK = 0.35;
 /**
  * Whether a squad is one of the `share` of squads that hold outposts (see
  * the outpostHold setting): fixed per squad, spread evenly by the golden ratio.
@@ -51,6 +55,8 @@ export function aiSystem(ctx: SimContext): System {
   return {
     name: 'ai',
     update(world) {
+      // Places taken in each trench this tick (see trenchPlace).
+      const manned = new Map<Earthwork, Uint8Array>();
       for (const e of world.query(Ai, Armed, Mover, Transform)) {
         const ai = world.req(e, Ai);
         const armed = world.req(e, Armed);
@@ -235,15 +241,11 @@ export function aiSystem(ctx: SimContext): System {
           // Infantry squads man the trenches their engineers dug near the rally point (see commander/engineers.ts).
           if (def?.class === 'infantry' && !orders.rally && !defend) {
             const trenches = ctx.commander.engineers.trenchesNear(faction, rally.x, rally.z, TRENCH_MUSTER);
-            if (trenches.length > 0) {
-              const w = trenches[ai.squad % trenches.length];
-              // Spread along the stretch, by squad and soldier.
-              const spread = (((ai.squad * 0.618 + ai.rallyOffsetX * 0.11 + ai.rallyOffsetZ * 0.07) % 1) + 1) % 1;
-              const k = 0.1 + 0.8 * spread;
-              const x = w.ax + (w.bx - w.ax) * k;
-              const z = w.az + (w.bz - w.az) * k;
+            const place = trenches.length > 0 ? trenchPlace(manned, trenches, ai.squad, e) : null;
+            if (place) {
+              const { x, z } = place;
               // Right into the trench, not just near it.
-              const there = D.hypot(x - t.x, z - t.z) < 0.4;
+              const there = D.hypot(x - t.x, z - t.z) < 0.5;
               mover.targetX = there ? null : x;
               mover.targetZ = there ? null : z;
               mover.faceX = facing.x;
@@ -439,6 +441,34 @@ function patrolPoint(outpost: Outpost, squad: number, time: number): { x: number
 }
 
 /** Head for a spot and face a point; stop when close so units settle rather than jostle. */
+/**
+ * A soldier's own place in one of the trenches near its rally point: each
+ * trench holds two ranks, a soldier apart, and each soldier keeps to the
+ * same place while it's free (picked by entity), so a squad files in along
+ * the trench instead of crowding one spot. Null when they're all full.
+ */
+function trenchPlace(manned: Map<Earthwork, Uint8Array>, trenches: Earthwork[], squad: number, e: Entity): { x: number; z: number } | null {
+  for (let n = 0; n < trenches.length; n++) {
+    const w = trenches[(squad + n) % trenches.length];
+    const len = D.hypot(w.bx - w.ax, w.bz - w.az);
+    const perRank = Math.max(1, Math.floor(len / TRENCH_ROOM));
+    const places = perRank * 2;
+    let taken = manned.get(w);
+    if (!taken) manned.set(w, (taken = new Uint8Array(places)));
+    for (let p = 0; p < places; p++) {
+      const k = (e * 7 + p) % places;
+      if (taken[k]) continue;
+      taken[k] = 1;
+      const along = ((k % perRank) + 0.5) / perRank;
+      const rank = k < perRank ? -TRENCH_RANK : TRENCH_RANK;
+      const ux = (w.bx - w.ax) / Math.max(1e-6, len);
+      const uz = (w.bz - w.az) / Math.max(1e-6, len);
+      return { x: w.ax + (w.bx - w.ax) * along - uz * rank, z: w.az + (w.bz - w.az) * along + ux * rank };
+    }
+  }
+  return null;
+}
+
 function moveTo(mover: Mover, t: Transform, x: number, z: number, faceX: number, faceZ: number): void {
   mover.faceX = faceX;
   mover.faceZ = faceZ;
