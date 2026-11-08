@@ -220,7 +220,7 @@ export function fireSystem(ctx: SimContext): System {
         if (heat < LIT && scorch <= 0) continue;
         if (!ctx.sides.hostile(fire.owners(k), world.req(e, Faction).id)) continue;
         const damage = (heat >= LIT ? BURN * heat : SMOULDER) * BURN_EVERY;
-        applyDamage(world, ctx, e, damage, fire.hit(k), heat >= WHITE_HOT);
+        applyDamage(world, ctx, e, damage, fire.hit(k), heat >= WHITE_HOT ? 1 : 0);
       }
     },
   };

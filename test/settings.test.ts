@@ -83,7 +83,7 @@ describe('settings in the URL', () => {
     s.armies = { caps: { infantry: 70, vehicle: 25, air: 7, super: 3 }, superGrowth: 'outposts', superGate: true, production: 1.5, startingArmy: 0, attackTiming: 'tide', tideStrength: 0, tidePeriod: 200, buildingHp: 2.25, flanking: 0.8, evenTeams: 0.6, ramp: { conquest: { tide: 0.25, siege: 0.75 }, eternal: { tide: 0.6, siege: 0 } }, outpostBonus: 1.5, outpostHold: 0.3, taskForces: 0.5, advice: 0.15, engineers: 3, avoidance: false };
     s.units.titan = { hp: 2, damage: 0.65, speed: 0.5, range: 1.25 };
     s.factions[1] = { name: 'Moss Pact', color: 0x33aa55, team: 1, doctrine: 'legion', style: 'raider' };
-    s.variety = { roll: { size: true, biome: false, style: true, sides: true, doctrines: false }, sidesMin: 3, sidesMax: 6, teams: 'uneven', doctrines: ['raiders', 'skyline'], repeats: false, after: 20 };
+    s.variety = { roll: { size: true, biome: false, style: true, sides: true, doctrines: false }, sidesMin: 3, sidesMax: 6, teams: 'uneven', doctrines: ['raiders', 'skyline'], repeats: false, identities: 'all', after: 20 };
     const back = settingsFromParams(new URLSearchParams(settingsToParams(s).toString()));
     expect(back).toEqual(s);
   });

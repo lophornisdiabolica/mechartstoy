@@ -403,15 +403,26 @@ export class SetupScreen {
     const repeatsLabel = el('label', { class: 'check' });
     repeatsLabel.append(repeats, document.createTextNode(' The same doctrine can come up for more than one side'));
     row(variety, 'Repeats', repeatsLabel);
+    const generated = el('input', { type: 'checkbox', 'aria-label': 'Generate every side' });
+    generated.addEventListener('change', () => {
+      this.settings.variety.identities = generated.checked ? 'all' : 'repeats';
+      this.changed();
+    });
+    const generatedLabel = el('label', { class: 'check' });
+    generatedLabel.append(generated, document.createTextNode(' Every side gets a made-up name and colour, not only repeats'));
+    row(variety, 'Names', generatedLabel);
     this.sync.push(() => {
-      repeats.checked = this.settings.variety.repeats;
-      repeats.disabled = !this.settings.variety.roll.doctrines;
+      const v = this.settings.variety;
+      repeats.checked = v.repeats;
+      repeats.disabled = !v.roll.doctrines;
+      generated.checked = v.identities === 'all';
+      generated.disabled = !v.roll.doctrines && !v.roll.sides;
     });
     variety.append(
       el(
         'p',
         { class: 'hint' },
-        'Re-rolled doctrines are drawn from the pool: with repeats, any for any side; without, each once before any comes up twice. A side with a standard name takes the name and colours that go with its new doctrine, and a second side of the same doctrine gets a name and colour of its own. New sides past the ones listed under Sides get the standard ones.',
+        'Re-rolled doctrines are drawn from the pool: with repeats, any for any side; without, each once before any comes up twice. A side with a standard name takes the faction that goes with its doctrine (Cobalt Accord for Armour...), and a second side of the same doctrine gets a made-up name and a colour that stands apart from the others and from the map, like Rust Cohort. Hand-named or hand-coloured sides keep theirs.',
       ),
     );
     const after = dropdown(

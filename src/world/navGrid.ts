@@ -94,7 +94,7 @@ class CellSamples {
 }
 
 /** Minimal binary min-heap of cell indices keyed by an external score array. */
-class Heap {
+export class Heap {
   private items: number[] = [];
   constructor(private readonly score: Float32Array) {}
 

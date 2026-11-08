@@ -3,6 +3,7 @@ import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, 
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
+import { trimFor } from './identity';
 import { UNIT_DEFS, UnitCategory, UnitDef, UnitId } from './units';
 import { defaultDoctrine, DoctrineId } from './doctrines';
 import { defaultVariety, VarietySettings } from './variety';
@@ -448,12 +449,13 @@ export function tunedBuildings(s: BattleSettings): Record<BuildingId, BuildingDe
 
 /** Faction display definitions (names and colours) for these settings, one per side. */
 export function factionDefs(s: BattleSettings): FactionDef[] {
-  // The trim colour goes with the hull colour when it's one of the standard ones
-  // (a side can wear another slot's colours after a re-roll), else with the slot.
+  // The trim colour goes with the hull colour: a standard faction's own trim
+  // (a side can wear another slot's colours after a re-roll), else one worked
+  // out from the hull (see identity.ts).
   return s.factions.map((f, i) => ({
     ...FACTIONS[i],
     name: f.name.trim() || FACTIONS[i].name,
     primary: f.color,
-    secondary: (FACTIONS.find((d) => d.primary === f.color) ?? FACTIONS[i]).secondary,
+    secondary: trimFor(f.color),
   }));
 }

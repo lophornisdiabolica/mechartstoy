@@ -4,6 +4,7 @@ import { Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, 
 import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
+import type { WeaponDef } from '../units';
 import * as D from '../../core/dmath';
 import { doctrineOf } from '../doctrines';
 import { UnitId } from '../units';
@@ -46,19 +47,25 @@ export function effectiveRange(world: World, e: Entity, armed: Armed, target: En
  */
 export function hitWorth(world: World, armed: Armed, target: Entity): number {
   const h = world.get(target, Health);
-  const damage = armed.weapon.damage;
-  if (!h || damage <= 0) return 1;
-  return Math.min(damageThrough(damage, h.armor), h.max) / damage;
+  if (!h) return 1;
+  const w = volleyWeapon(armed.weapon, h.armor);
+  if (w.damage <= 0) return 1;
+  return Math.min(damageThrough(w.damage, h.armor, w.pierce ?? 0), h.max) / w.damage;
+}
+
+/** The round a weapon fires at a target with this much armour: its heavy round if it has one and the armour calls for it (see WeaponDef.heavy). */
+export function volleyWeapon(weapon: WeaponDef, armor: number): WeaponDef {
+  return weapon.heavy && armor >= (weapon.heavyAt ?? 0) ? weapon.heavy : weapon;
 }
 
 /** How many of the best-scoring targets to check for a clear shot before settling for one behind cover. */
 const SIGHT_CHECKS = 3;
 
 /** Muzzle position for a shot at `target`, with the weapon swung round to face it. */
-function muzzleToward(world: World, e: Entity, armed: Armed, target: Entity): Point3 {
+function muzzleToward(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity): Point3 {
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
-  return muzzlePoint(world, e, D.atan2(-(tt.z - t.z), tt.x - t.x), armed.muzzleOffset, armed.weapon.muzzleHeight);
+  return muzzlePoint(world, e, D.atan2(-(tt.z - t.z), tt.x - t.x), armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
 }
 
 /**
@@ -97,7 +104,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   candidates.sort((a, b) => a.score - b.score || a.e - b.e);
   if (armed.weapon.arc || armed.weapon.projectile === 'flame') return candidates[0].e;
   for (const c of candidates.slice(0, SIGHT_CHECKS)) {
-    if (clearShot(world, ctx, muzzleToward(world, e, armed, c.e), c.e, e, faction)) return c.e;
+    if (clearShot(world, ctx, muzzleToward(world, ctx, e, armed, c.e), c.e, e, faction)) return c.e;
   }
   armed.blocked = true;
   return candidates[0].e;

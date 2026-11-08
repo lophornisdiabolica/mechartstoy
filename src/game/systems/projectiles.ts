@@ -1,27 +1,30 @@
 import { Entity, System, World } from '../../core/ecs';
 import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
-import { entityHeight, UNIT_HIT_SLACK } from '../lineOfFire';
+import { entityHeight, inTrench, UNIT_HIT_SLACK } from '../lineOfFire';
 import * as D from '../../core/dmath';
 import { heatPerShot } from '../fire';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
 
-/** Damage a hit of `amount` does through `armor`: the armour is taken off, down to MIN_DAMAGE_SHARE of the hit. */
-export function damageThrough(amount: number, armor: number): number {
-  return Math.max(amount * MIN_DAMAGE_SHARE, amount - armor);
+/** Share of a burst outside the trench that reaches soldiers in it. */
+const TRENCH_SPLASH = 0.5;
+
+/** Damage a hit of `amount` does through `armor`: the armour (less the share `pierce` goes through) is taken off, down to MIN_DAMAGE_SHARE of the hit. */
+export function damageThrough(amount: number, armor: number, pierce = 0): number {
+  return Math.max(amount * MIN_DAMAGE_SHARE, amount - armor * (1 - pierce));
 }
 
-/** `pierce`: the hit ignores armour altogether (white-hot fire, see fire.ts). */
-export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null, pierce = false): void {
+/** `pierce`: the share of armour the hit goes through (1 for white-hot fire, see fire.ts; guard towers' AP shells, see WeaponDef.pierce). */
+export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: number, by: Hit | null = null, pierce = 0): void {
   const h = world.get(e, Health);
   if (!h) return;
   const before = h.hp;
   const building = world.get(e, Building);
   // As a battle escalates, sieges bite harder so a won field turns into a won battle.
   if (building) amount *= 1 + ctx.escalation.siege;
-  const through = pierce ? amount : damageThrough(amount, h.armor);
+  const through = damageThrough(amount, h.armor, pierce);
   h.hp -= through;
   h.hurtAt = world.time;
   if (before > 0) {
@@ -69,7 +72,7 @@ export function projectileSystem(ctx: SimContext): System {
           const r = world.req(p.target, Collider).radius + (w.arc ? 0.4 : UNIT_HIT_SLACK + 0.5);
           const friendly = ctx.sides.allied(world.req(p.target, Faction).id, p.faction);
           if (!friendly && D.sq(tt.x - p.ex) + D.sq(tt.z - p.ez) <= r * r) {
-            applyDamage(world, ctx, p.target, w.damage, by);
+            applyDamage(world, ctx, p.target, w.damage, by, w.pierce ?? 0);
             hit.add(p.target);
           }
         }
@@ -85,7 +88,9 @@ export function projectileSystem(ctx: SimContext): System {
             const dy = p.ey < ot.y ? ot.y - p.ey : p.ey > top ? p.ey - top : 0;
             const edge = D.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), dy);
             if (edge > w.splash) return;
-            applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)), by);
+            // Soldiers down in a trench take half a burst outside it (one that lands in the trench gets them all).
+            const cover = inTrench(world, ctx, other) && ctx.field.groundAt(p.ex, p.ez).id !== 'trench' ? TRENCH_SPLASH : 1;
+            applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)) * cover, by);
           });
         }
         // Flame keeps burning where it lands (see fire.ts); not in the air, or on the water.

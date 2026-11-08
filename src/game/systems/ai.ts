@@ -25,6 +25,8 @@ const ORBIT_STEP = 0.7;
 const CHARGE_RANGE = 30;
 /** Seconds between an artillery or support unit's looks around (see Ai.roleCheckAt). */
 const ROLE_CHECK = 0.5;
+/** Massing infantry man trenches within this distance of their rally point. */
+const TRENCH_MUSTER = 16;
 /**
  * Whether a squad is one of the `share` of squads that hold outposts (see
  * the outpostHold setting): fixed per squad, spread evenly by the golden ratio.
@@ -64,7 +66,10 @@ export function aiSystem(ctx: SimContext): System {
           const home = ctx.field.baseSites[faction];
           const enemy = ctx.sides.target(faction, ctx.offensive.attack(faction, world.time));
           const face = enemy !== null ? ctx.field.baseSites[enemy] : { x: 0, z: 0 };
+          // With nothing to build, they follow a push out (see Engineers.waitFor) or wait at home.
+          const wait = ctx.commander.engineers.waitFor(faction);
           if (job) moveTo(mover, t, job.standX, job.standZ, job.x, job.z);
+          else if (wait) moveTo(mover, t, wait.x + ai.rallyOffsetX * 0.3, wait.z + ai.rallyOffsetZ * 0.3, face.x, face.z);
           else moveTo(mover, t, home.x + ai.rallyOffsetX * 0.5, home.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
           continue;
         }
@@ -226,6 +231,26 @@ export function aiSystem(ctx: SimContext): System {
             continue;
           }
           const rally = orders.rally ?? defend ?? (target >= 0 ? ctx.lanes.rally(faction, target, ai.lane) : home);
+          const facing = defend?.face ?? (target >= 0 ? ctx.field.baseSites[target] : { x: 0, z: 0 });
+          // Infantry squads man the trenches their engineers dug near the rally point (see commander/engineers.ts).
+          if (def?.class === 'infantry' && !orders.rally && !defend) {
+            const trenches = ctx.commander.engineers.trenchesNear(faction, rally.x, rally.z, TRENCH_MUSTER);
+            if (trenches.length > 0) {
+              const w = trenches[ai.squad % trenches.length];
+              // Spread along the stretch, by squad and soldier.
+              const spread = (((ai.squad * 0.618 + ai.rallyOffsetX * 0.11 + ai.rallyOffsetZ * 0.07) % 1) + 1) % 1;
+              const k = 0.1 + 0.8 * spread;
+              const x = w.ax + (w.bx - w.ax) * k;
+              const z = w.az + (w.bz - w.az) * k;
+              // Right into the trench, not just near it.
+              const there = D.hypot(x - t.x, z - t.z) < 0.4;
+              mover.targetX = there ? null : x;
+              mover.targetZ = there ? null : z;
+              mover.faceX = facing.x;
+              mover.faceZ = facing.z;
+              continue;
+            }
+          }
           let rx = rally.x + ai.rallyOffsetX;
           let rz = rally.z + ai.rallyOffsetZ;
           if (!ctx.navs.for(mover.move).terrainAllowsAt(rx, rz)) {
@@ -233,7 +258,6 @@ export function aiSystem(ctx: SimContext): System {
             rz = rally.z;
           }
           // Hold near the rally point facing the next enemy; small tolerance so units settle rather than jostle.
-          const facing = defend?.face ?? (target >= 0 ? ctx.field.baseSites[target] : { x: 0, z: 0 });
           moveTo(mover, t, rx, rz, facing.x, facing.z);
           continue;
         }

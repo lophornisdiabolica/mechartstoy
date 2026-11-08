@@ -3,7 +3,8 @@ import { Rng } from '../src/core/rng';
 import { DOCTRINE_IDS } from '../src/game/doctrines';
 import { FACTIONS } from '../src/game/factions';
 import { defaultSettings, factionDefs, LIMITS } from '../src/game/settings';
-import { MAP_STYLES, rollBattle, SECOND_IDENTITIES } from '../src/game/variety';
+import { MAP_STYLES, rollBattle } from '../src/game/variety';
+import { generateIdentity, IDENTITY_COLORS, isGeneratedIdentity } from '../src/game/identity';
 import { settingsFromParams } from '../src/ui/settingsUrl';
 
 describe('variety between battles', () => {
@@ -127,23 +128,59 @@ describe('variety between battles', () => {
       const r = rollBattle(s, new Rng(k)).settings;
       expect(new Set(r.factions.map((f) => f.color)).size).toBe(5);
       expect(new Set(r.factions.map((f) => f.name)).size).toBe(5);
+      const firsts = new Set<string>();
       for (const f of r.factions) {
-        const second = SECOND_IDENTITIES.find((d) => d.primary === f.color);
-        if (second) {
+        const home = FACTIONS[DOCTRINE_IDS.indexOf(f.doctrine)];
+        if (!firsts.has(f.doctrine)) {
+          // The first side of a doctrine wears its canonical faction.
+          firsts.add(f.doctrine);
+          expect(f.name).toBe(home.name);
+          expect(f.color).toBe(home.primary);
+        } else {
           seen = true;
-          expect(f.name).toBe(second.name);
+          expect(isGeneratedIdentity(f.name, f.color)).toBe(true);
         }
       }
     }
     expect(seen).toBe(true);
   });
 
+  it('generates every side when asked, the same way for the same seed, keeping hand-named sides', () => {
+    const s = defaultSettings();
+    s.variety.roll.sides = true;
+    s.variety.roll.doctrines = true;
+    s.variety.sidesMin = 8;
+    s.variety.sidesMax = 8;
+    s.variety.doctrines = ['firestorm'];
+    s.variety.identities = 'all';
+    s.factions[0] = { ...s.factions[0], name: 'My Own Lot', color: 0x123456 };
+    for (let k = 0; k < 10; k++) {
+      const a = rollBattle(s, new Rng(k)).settings;
+      const b = rollBattle(s, new Rng(k)).settings;
+      expect(a.factions.map((f) => [f.name, f.color])).toEqual(b.factions.map((f) => [f.name, f.color]));
+      expect(a.factions[0].name).toBe('My Own Lot');
+      expect(a.factions[0].color).toBe(0x123456);
+      for (const f of a.factions.slice(1)) expect(isGeneratedIdentity(f.name, f.color)).toBe(true);
+      expect(new Set(a.factions.map((f) => f.color)).size).toBe(8);
+      expect(new Set(a.factions.map((f) => f.name)).size).toBe(8);
+    }
+  });
+
+  it('keeps generated colours off the ground: no pale sides on snow, no tan ones in the desert', () => {
+    const word = (c: number) => IDENTITY_COLORS.find((d) => d.color === c)!.word;
+    for (let k = 0; k < 50; k++) {
+      expect(['Mint', 'Lilac']).not.toContain(word(generateIdentity('legion', { colors: [], names: [], biome: 'snow' }, new Rng(k)).color));
+      expect(['Ochre', 'Bronze', 'Copper', 'Umber']).not.toContain(word(generateIdentity('legion', { colors: [], names: [], biome: 'desert' }, new Rng(k)).color));
+    }
+  });
+
   it('round-trips through the URL', () => {
-    const s = settingsFromParams(new URLSearchParams('vary=biome,doctrines,junk&vsides=7-3&vteams=ffa&vdocs=raiders,nope,legion&vafter=15'));
+    const s = settingsFromParams(new URLSearchParams('vary=biome,doctrines,junk&vsides=7-3&vteams=ffa&vdocs=raiders,nope,legion&vafter=15&vnames=all'));
     expect(s.variety.roll).toEqual({ size: false, biome: true, style: false, sides: false, doctrines: true });
     expect([s.variety.sidesMin, s.variety.sidesMax]).toEqual([3, 7]);
     expect(s.variety.teams).toBe('ffa');
     expect(s.variety.doctrines).toEqual(['raiders', 'legion']);
     expect(s.variety.after).toBe(15);
+    expect(s.variety.identities).toBe('all');
   });
 });

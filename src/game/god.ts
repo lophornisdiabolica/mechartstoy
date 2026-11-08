@@ -388,7 +388,7 @@ function falloff(d: number, radius: number): number {
  * it again, and dense forest trees stand on it (units follow the ground by
  * themselves).
  */
-function settle(world: World, ctx: SimContext, x: number, z: number, radius: number): void {
+export function settle(world: World, ctx: SimContext, x: number, z: number, radius: number): void {
   const field = ctx.field;
   const r2 = (radius + 2) * (radius + 2);
   for (const type of [Building, Wreck, Rubble]) {
