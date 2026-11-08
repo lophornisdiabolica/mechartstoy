@@ -97,6 +97,8 @@ export function projectileSystem(ctx: SimContext): System {
         if (p.kind === 'flame' && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) {
           ctx.fire.add(p.ex, p.ez, w.splash, heatPerShot(w), p.faction, p.source);
         }
+        // An engineers' bridge it lands on, or bursts by, takes the hit too (see commander/engineers.ts).
+        ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by);
         // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them.
         ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });
         ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: w.splash });

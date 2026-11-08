@@ -212,6 +212,8 @@ export interface Armed {
   burstTimer: number;
   /** Sim time of the last trigger pull (-Infinity if never), for healing out of combat. */
   firedAt: number;
+  /** The side of what it last fired at (null if it never has), so a Commander knows whose guns are shelling it (see commander/hunts.ts). */
+  firedOn: number | null;
 }
 export const Armed = defineComponent<Armed>('Armed');
 

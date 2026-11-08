@@ -363,6 +363,38 @@ registerModel('bld:commsArray', (faction) => {
   });
 });
 
+/** Skyline's forward helipad: a small pad of steel plates with an H, landing lights, fuel drums and a windsock, put up by its engineers at outposts. */
+registerModel('bld:helipad', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.4, 0.16, 3.4, METAL, 0, 0.08, 0));
+  g.add(box(2.6, 0.04, 2.6, DARK, 0, 0.18, 0));
+  // The H.
+  for (const z of [-0.55, 0.55]) g.add(box(1.5, 0.03, 0.22, secondary, 0, 0.21, z));
+  g.add(box(0.22, 0.03, 0.9, secondary, 0, 0.205, 0));
+  const lights: THREE.Object3D[] = [];
+  for (const x of [-1.55, 1.55]) {
+    for (const z of [-1.55, 1.55]) {
+      const l = glowBox(0.12, 0.1, 0.12, 0xffc040);
+      l.position.set(x, 0.22, z);
+      lights.push(l);
+      g.add(l);
+    }
+  }
+  // Fuel drums and a crate of rounds by the edge.
+  for (const z of [-0.6, -0.1]) g.add(cylinder(0.22, 0.22, 0.5, 8, primary, -2.05, 0.25, z));
+  g.add(box(0.6, 0.4, 0.5, WALLS[1], -2.05, 0.2, 0.6));
+  g.add(box(0.07, 1.6, 0.07, DARK, 1.95, 0.8, -1.95));
+  g.add(box(0.4, 0.14, 0.14, primary, 2.15, 1.55, -1.95));
+  return setRig(g, {
+    animate: ({ dt }) => {
+      g.userData.t = (g.userData.t ?? Math.random() * 2) + dt;
+      const on = g.userData.t % 1.2 < 0.6;
+      lights.forEach((l, i) => (l.visible = on === (i % 2 === 0)));
+    },
+  });
+});
+
 /** An outpost's fuel tanks: three round tanks in a bund, with pipework. They go up when destroyed. */
 registerModel('bld:fuelTanks', (faction) => {
   const { primary } = factionColors(faction);

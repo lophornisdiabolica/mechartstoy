@@ -27,6 +27,8 @@ const CHARGE_RANGE = 30;
 const ROLE_CHECK = 0.5;
 /** Massing infantry man trenches within this distance of their rally point. */
 const TRENCH_MUSTER = 16;
+/** Hunters going for a gun stop to fight only what's within this of it. */
+const HUNT_GUARD = 12;
 /**
  * Whether a squad is one of the `share` of squads that hold outposts (see
  * the outpostHold setting): fixed per squad, spread evenly by the golden ratio.
@@ -120,6 +122,20 @@ export function aiSystem(ctx: SimContext): System {
           }
         }
 
+        // Hunting a long-range gun (see commander/hunts.ts): round the flank point first without stopping to
+        // fight, then at the gun, fighting only what's guarding it. The flag and stances override it.
+        const hunt = !post && ctx.orders[faction].stance === 'auto' && !ctx.orders[faction].rally ? ctx.commander.hunts.forSquad(ai.squad) : undefined;
+        if (hunt && hunt.side === faction) {
+          if (hunt.stage === 'flank' && hunt.flankX !== null && hunt.flankZ !== null) {
+            moveTo(mover, t, hunt.flankX + ai.rallyOffsetX * 0.4, hunt.flankZ + ai.rallyOffsetZ * 0.4, hunt.x, hunt.z);
+            continue;
+          }
+          const onGuard = armed.target !== null && world.isAlive(armed.target) && D.hypot(world.req(armed.target, Transform).x - hunt.x, world.req(armed.target, Transform).z - hunt.z) < HUNT_GUARD;
+          if (!onGuard) {
+            moveTo(mover, t, hunt.x + ai.rallyOffsetX * 0.2, hunt.z + ai.rallyOffsetZ * 0.2, hunt.x, hunt.z);
+            continue;
+          }
+        }
         if (armed.target !== null && world.isAlive(armed.target) && (!post || near(world, armed.target, post, GUARD_LEASH))) {
           const tt = world.req(armed.target, Transform);
           const reach = effectiveRange(world, e, armed, armed.target);
@@ -351,7 +367,7 @@ const REARM_TIME = 5;
 const PAD_REACH = 3;
 
 /**
- * Back to the nearest of its side's (finished) airpads to rearm, or to its
+ * Back to the nearest of its side's (finished) airpads or forward helipads to rearm, or to its
  * base if it has none. Helicopters set down on the pad; planes, which can't,
  * circle low over it. Once loaded it goes back to the fight.
  */
@@ -359,7 +375,7 @@ function rearm(world: World, ctx: SimContext, e: Entity, ammo: Ammo, mover: Move
   let pad: { x: number; z: number } | null = null;
   let best = Infinity;
   for (const b of world.query(Building, Transform, Faction)) {
-    if (world.req(b, Building).def.id !== 'airpad' || world.has(b, Construction) || world.req(b, Faction).id !== faction) continue;
+    if (!world.req(b, Building).def.rearms || world.has(b, Construction) || world.req(b, Faction).id !== faction) continue;
     const bt = world.req(b, Transform);
     const d = D.hypot(bt.x - t.x, bt.z - t.z);
     if (d < best) {

@@ -116,6 +116,18 @@ export class CommanderOverlay {
           this.add(marker(field, goal.x, goal.z, 6), color, 0.6);
           continue;
         }
+        // A hunt: from the hunters, round the flank point if they're swinging wide, to the gun.
+        if (goal.hunt) {
+          const h = goal.hunt;
+          const via = h.flankX !== null && h.flankZ !== null ? { x: h.flankX, z: h.flankZ } : null;
+          const legs = via ? [[h.fromX, h.fromZ, via.x, via.z], [via.x, via.z, goal.x, goal.z]] : [[h.fromX, h.fromZ, goal.x, goal.z]];
+          for (const [ax, az, bx, bz] of legs) {
+            const g = arrow(field, ax, az, bx, bz);
+            if (g) this.add(g, color, 0.85);
+          }
+          this.add(marker(field, goal.x, goal.z, 2), color, 0.85);
+          continue;
+        }
         // A task force's arrow starts from where its squads are; the team's goals chain on from the army.
         const force = goal.force !== undefined ? c.taskForces.forces.find((tf) => tf.id === goal.force) : undefined;
         const start = force ?? from;

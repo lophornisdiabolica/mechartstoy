@@ -105,7 +105,11 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   group.name = 'terrain';
   const bridges = new THREE.Group();
   bridges.name = 'bridges';
-  for (const bridge of field.bridges) bridges.add(buildBridge(field, bridge));
+  for (const bridge of field.bridges) {
+    const mesh = buildBridge(field, bridge);
+    mesh.visible = !bridge.gone;
+    bridges.add(mesh);
+  }
   const roads = new THREE.Group();
   roads.name = 'roads';
   const drawRoads = () => {
@@ -132,6 +136,8 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     ground.computeVertexNormals();
     ground.computeBoundingSphere();
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
+    // Engineers' bridges come down.
+    for (let k = 0; k < drawnBridges; k++) if (field.bridges[k]?.gone && bridges.children[k]?.visible) bridges.children[k].visible = false;
     // Roads follow the ground, so redraw them if the ground under one moved (or there's a new one).
     const touched = field.roads.some((r) => r.points.some((p) => {
       const [i, j] = field.cellAt(p.x, p.z);
@@ -230,8 +236,10 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const dz = bridge.bz - bridge.az;
   const length = Math.hypot(dx, dz);
   const heading = Math.atan2(-dz, dx);
-  const deck = new THREE.MeshStandardMaterial({ color: 0x9c978c, flatShading: true, roughness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x5f5b55, flatShading: true, roughness: 0.9 });
+  // Engineers' bridges are timber on trestles; the map's are concrete.
+  const timber = bridge.builtBy !== undefined;
+  const deck = new THREE.MeshStandardMaterial({ color: timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: 0.9 });
   const rail = new THREE.MeshStandardMaterial({ color: 0x6c7278, flatShading: true, roughness: 0.6, metalness: 0.3 });
   // The deck in short segments that follow its height (ramps at the ends).
   const steps = Math.max(2, Math.ceil(length / 1.5));

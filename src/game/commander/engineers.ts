@@ -1,12 +1,14 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Construction, Faction, Health, Rubble, Targetable, Transform, Unit } from '../components';
+import { Building, Construction, Faction, Health, Hit, Mover, Rubble, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
 import { BuildingDef } from '../buildings';
 import { canonicalDoctrine, doctrineOf, DoctrineId } from '../doctrines';
 import { settle } from '../god';
-import { STEEP_SLOPE } from '../../world/moveClasses';
+import { MOVE_RULES, STEEP_SLOPE } from '../../world/moveClasses';
+import { placeBridge } from '../../world/waterways';
+import { damageThrough } from '../systems/projectiles';
 import { CellArea } from '../../world/ground';
 import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
@@ -27,8 +29,9 @@ import * as D from '../../core/dmath';
  *   forward, and in front of each rally point. Engineers with nothing to
  *   build follow the army on a push, so the next line goes up where the
  *   front now is.
- * - Legion digs instead of building walls: a trench for its squads with an
- *   earth berm in front (see the 'trench' ground). Soldiers in the trench
+ * - Legion digs as well as building walls: a trench for its squads with an
+ *   earth berm in front (see the 'trench' ground), and a couple of walls out
+ *   in front of that, with a gap between, to draw the enemy's fire. Soldiers in the trench
  *   stand up to fire over the berm, while shots aimed at their bodies, down
  *   in the trench, mostly hit the berm unless fired from close by or from
  *   above, and bursts outside it reach them weakened. Massing squads man the
@@ -39,8 +42,17 @@ import * as D from '../../core/dmath';
  *   a dock on the nearest shore where it hasn't) and digs canals: channels
  *   of boat-deep water, a few metres at a time, out from its water toward
  *   the enemy until its boats can shell the enemy base, or toward its own
- *   base when there's no shore near enough for a dock. A canal never cuts
- *   one base off from another by land.
+ *   base when there's no shore near enough for a dock. Where there's no
+ *   boat-deep water to dig from at all, they dig a harbour basin by the base
+ *   and put the dock on it. The base's missing dock or pad, and the digging
+ *   toward it, come before anything else. A canal never cuts one base off
+ *   from another by land.
+ * - Skyline puts up forward helipads at outposts it holds out toward the
+ *   enemy, where its aircraft rearm without flying all the way home.
+ * - Everyone else throws timber bridges across an enemy Tidewater side's
+ *   canals where a bridge cuts the way to the enemy short. They come down
+ *   when shelled enough, or after a while; anything on one when it goes
+ *   ends up in the water.
  *
  * Walls, field towers and comms arrays crumble over BuildingDef.lasts and
  * aren't rebuilt, so they don't pile up; earthworks stay, but a side digs
@@ -141,6 +153,33 @@ const CANAL_KEEP_OFF = 12;
 /** Seconds between looks for a shore while the water hasn't changed (buildings may have). */
 const SHORE_RECHECK = 20;
 
+/** Tidewater's harbour basin, where there's no water to dig a canal from: its length (out from the base), half its width, and how far out from the base pad it goes. */
+const BASIN_LENGTH = 10;
+const BASIN_HALF = 4;
+const BASIN_OUT = [9, 12, 15];
+
+/** Legion's walls in front of its trench line: how far ahead of the line, and how far either side of its middle (the gap between is for its fire). */
+const LEGION_WALL_AHEAD = 5.5;
+const LEGION_WALL_OFF = 3.2;
+
+/** Skyline's forward helipads: most a side has standing, how far behind an outpost (toward home) one goes, and how near another counts as already there. */
+export const HELIPADS_MOST = 2;
+const HELIPAD_BACK = 6;
+const HELIPAD_APART = 14;
+
+/** Engineers' bridges: most a side has standing, how far either side of a canal's middle the ends go, seconds to put one up, health and armour, and how long one lasts. */
+export const SPANS_MOST = 2;
+const SPAN_HALF = CANAL_HALF + 2.6;
+const SPAN_BUILD = 10;
+const SPAN_HP = 600;
+const SPAN_ARMOR = 6;
+const SPAN_LASTS = 600;
+/** A bridge goes up only if it cuts the land way to the enemy to this share of what it was, and no nearer another bridge than this. */
+const SPAN_SHORTER = 0.8;
+const SPAN_APART = 10;
+/** Most canal stretches looked at for a bridge per update (spread evenly along what's dug). */
+const SPAN_CANDIDATES = 8;
+
 /** Seconds of an engineer's work per pulse of digging, and how far one pulse moves the ground. */
 const DIG_PULSE = 1;
 const DIG_STEP = 0.3;
@@ -154,6 +193,30 @@ export interface BuildJob {
   heading: number;
   standX: number;
   standZ: number;
+  /** Comes before anything else: engineers are handed these first, whatever's nearer. */
+  urgent?: boolean;
+}
+
+/** A bridge an engineer is sent to throw across water from a to b, standing by a. */
+export interface BridgeJob {
+  kind: 'bridge';
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  x: number;
+  z: number;
+  standX: number;
+  standZ: number;
+  urgent?: boolean;
+}
+
+/** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
+interface Span {
+  index: number;
+  side: number;
+  hp: number;
+  until: number;
 }
 
 /** A stretch of ground being dug or raised: a canal, a trench, or a berm. */
@@ -170,6 +233,10 @@ export interface Earthwork {
   /** Seconds of work put in toward the next pulse. */
   effort: number;
   done: boolean;
+  /** Toward the side's first dock (a canal toward home, or a harbour basin): urgent. */
+  harbour?: boolean;
+  /** A canal's half-width, if not CANAL_HALF (a harbour basin is one wide stretch). */
+  half?: number;
 }
 
 /** An engineer sent to dig: the stretch, and where to stand. */
@@ -180,9 +247,10 @@ export interface DigJob {
   z: number;
   standX: number;
   standZ: number;
+  urgent?: boolean;
 }
 
-export type EngineerJob = BuildJob | DigJob;
+export type EngineerJob = BuildJob | DigJob | BridgeJob;
 
 /** A place to fortify: a point on the enemy's way in, the way toward the enemy, and how wide a line it wants. */
 interface Site {
@@ -203,6 +271,7 @@ export class Engineers {
   private walls: number[] = [];
   private towers: number[] = [];
   private arrays: number[] = [];
+  private pads: number[] = [];
   private open: number[] = [];
   private trainAt: number[] = [];
   /** Every crumbling building standing or going up, as of the last update plus those put up since (some may be gone). */
@@ -222,6 +291,15 @@ export class Engineers {
   private berths: ({ x: number; z: number; heading: number } | undefined)[] = [];
   /** Canal routes being dug, per side and goal ('side:home' or 'side:enemy'): the points, and the index the next stretch starts at. */
   private routes = new Map<string, { points: Point[]; next: number }>();
+  /** Per side: a harbour basin has been planned. */
+  private basins = new Set<number>();
+  /** Engineers' bridges standing. */
+  private spans: Span[] = [];
+  /** Seconds put in on each bridge going up, by where it goes. */
+  private spanWork = new Map<string, number>();
+  /** Land route lengths, by from, to and the land grid's passable version (bridges are only worth it if they cut one short). */
+  private routeLengths = new Map<string, number>();
+  private routeVersion = -1;
   /** Choke points found, per side and enemy, for the land grid's passable version. */
   private chokes = new Map<string, { version: number; site: Site | null }>();
 
@@ -257,6 +335,16 @@ export class Engineers {
     return this.arrays[side] ?? 0;
   }
 
+  /** Forward helipads a side has standing. */
+  padsOf(side: number): number {
+    return this.pads[side] ?? 0;
+  }
+
+  /** Engineers' bridges a side has standing. */
+  spansOf(side: number): number {
+    return this.spans.filter((s) => s.side === side).length;
+  }
+
   /** Metres of canal a side has dug. */
   canalOf(side: number): number {
     return this.canalDug[side] ?? 0;
@@ -277,6 +365,7 @@ export class Engineers {
     this.walls = new Array(n).fill(0);
     this.towers = new Array(n).fill(0);
     this.arrays = new Array(n).fill(0);
+    this.pads = new Array(n).fill(0);
     this.open = new Array(n).fill(0);
     this.waits = new Array(n).fill(null);
     while (this.lines.length < n) {
@@ -296,6 +385,7 @@ export class Engineers {
       const f = world.req(e, Faction).id;
       const def = world.req(e, Building).def;
       if (f >= 0 && f < n && def.id === 'hq') hq[f] = true;
+      if (f >= 0 && f < n && def.id === 'helipad') this.pads[f]++;
       if (f < 0 || f >= n || !def.lasts) continue;
       if (def.id === 'fieldTower') this.towers[f]++;
       else if (def.id === 'commsArray') this.arrays[f]++;
@@ -310,8 +400,31 @@ export class Engineers {
       if (crew[side].length === 0 && !hq[side]) continue;
       const jobs = this.jobsFor(world, ctx, side);
       this.open[side] = jobs.length;
-      // Each engineer to the nearest open job, in a fixed order.
+      // Urgent jobs first, each to the nearest engineer; then each engineer to the nearest open job, in a fixed order.
+      for (let k = 0; k < jobs.length; ) {
+        const job = jobs[k];
+        if (!job.urgent) {
+          k++;
+          continue;
+        }
+        let best: Entity | null = null;
+        let bestD = Infinity;
+        for (const e of crew[side]) {
+          if (this.jobs.has(e)) continue;
+          const t = world.req(e, Transform);
+          const d = D.hypot(job.standX - t.x, job.standZ - t.z);
+          if (d < bestD) {
+            bestD = d;
+            best = e;
+          }
+        }
+        if (best === null) break;
+        this.jobs.set(best, job);
+        this.sideOf.set(best, side);
+        jobs.splice(k, 1);
+      }
       for (const e of crew[side]) {
+        if (this.jobs.has(e)) continue;
         if (jobs.length === 0) break;
         const t = world.req(e, Transform);
         let best = 0;
@@ -346,6 +459,13 @@ export class Engineers {
     };
     // Bastion's first comms array goes out along the way to the nearest enemy, past the base mast's reach.
     if (doctrine === 'bastion') add(this.approachArray(world, ctx, side));
+    // Skyline: forward helipads at outposts out front.
+    if (doctrine === 'skyline') out.push(...this.helipadJobs(world, ctx, side));
+    // Everyone but Tidewater: bridges over an enemy Tidewater's canals, where they cut the way short.
+    if (doctrine !== 'tidewater') {
+      const span = this.bridgeJob(world, ctx, side);
+      if (span) out.push(span);
+    }
     for (const site of sites) {
       const heading = D.atan2(-site.dz, site.dx);
       // A field tower just behind the middle of the line.
@@ -356,6 +476,10 @@ export class Engineers {
       }
       if (doctrine === 'legion') {
         out.push(...this.earthworkJobs(world, ctx, side, site));
+        // And a couple of walls out in front, a gap between them for the trench's fire, to draw the enemy's.
+        for (const off of [-LEGION_WALL_OFF, LEGION_WALL_OFF]) {
+          add(this.buildAt(world, ctx, side, ctx.buildings.wall, site.x + site.dx * LEGION_WALL_AHEAD - site.dz * off, site.z + site.dz * LEGION_WALL_AHEAD + site.dx * off, heading, site.dx, site.dz));
+        }
         continue;
       }
       for (let k = 0; k < site.segments; k++) {
@@ -622,7 +746,7 @@ export class Engineers {
           if (field.slopeAt(x, z) > 0.5 || !nav.fitsAt(x, z, def.radius + 1) || !nav.fitsAt(doorX, doorZ, 1)) continue;
           const job = this.buildAt(world, ctx, side, def, x, z, forward, D.cos(forward), -D.sin(forward));
           if (job) {
-            out.push(job);
+            out.push({ ...job, urgent: true });
             break spots;
           }
         }
@@ -642,7 +766,7 @@ export class Engineers {
       const shore = known.shore ?? this.berths[side] ?? null;
       if (shore) {
         const job = this.buildAt(world, ctx, side, def, shore.x, shore.z, shore.heading, D.cos(shore.heading), -D.sin(shore.heading));
-        if (job) out.push(job);
+        if (job) out.push({ ...job, urgent: true });
       }
     }
     return out;
@@ -677,7 +801,7 @@ export class Engineers {
     }
     const stand = this.canalStand(ctx, work);
     if (!stand || !this.safe(world, ctx, side, stand.x, stand.z)) return null;
-    return { kind: 'dig', work, x: work.bx, z: work.bz, standX: stand.x, standZ: stand.z };
+    return { kind: 'dig', work, x: work.bx, z: work.bz, standX: stand.x, standZ: stand.z, urgent: work.harbour };
   }
 
   /** Where an engineer stands to dig a canal stretch: on dry ground past its end, or to one side. */
@@ -686,9 +810,10 @@ export class Engineers {
     const ux = (w.bx - w.ax) / len;
     const uz = (w.bz - w.az) / len;
     const foot = ctx.navs.for('foot');
+    const stand = CANAL_STAND + (w.half ?? CANAL_HALF) - CANAL_HALF;
     for (const [f, sd] of [[1, 0], [0.4, 1], [0.4, -1], [-0.3, 1], [-0.3, -1]]) {
-      const x = w.bx + ux * CANAL_STAND * f - uz * CANAL_STAND * sd;
-      const z = w.bz + uz * CANAL_STAND * f + ux * CANAL_STAND * sd;
+      const x = w.bx + ux * stand * f - uz * stand * sd;
+      const z = w.bz + uz * stand * f + ux * stand * sd;
       if (ctx.field.contains(x, z, 1) && !ctx.field.isWater(x, z) && foot.terrainAllowsAt(x, z)) return { x, z };
     }
     return null;
@@ -733,6 +858,15 @@ export class Engineers {
         const points = canalRoute(ctx, harbour, target, reach);
         if (!points) {
           this.canalDone.add(key);
+          // No water to dig from at all: dig a harbour basin by the base instead, and the dock goes on that.
+          if (goal === 'home' && !this.basins.has(side)) {
+            this.basins.add(side);
+            const basin = this.planBasin(ctx, side);
+            if (basin) {
+              this.works.push(...basin.slice(1));
+              return basin[0];
+            }
+          }
           return null;
         }
         route = { points, next: 0 };
@@ -762,7 +896,7 @@ export class Engineers {
       const b = pts[j];
       if (this.canDig(ctx, a, b)) {
         route.next = j;
-        return { kind: 'canal', side, ax: a.x, az: a.z, bx: b.x, bz: b.z, level: field.seaLevel, effort: 0, done: false };
+        return { kind: 'canal', side, ax: a.x, az: a.z, bx: b.x, bz: b.z, level: field.seaLevel, effort: 0, done: false, harbour: goal === 'home' };
       }
       // Something's in the way now (a building, a cut-off): plan again once, from the water as it is.
       this.routes.delete(key);
@@ -789,6 +923,212 @@ export class Engineers {
     return landStaysLinked(ctx, a, b, CANAL_HALF + 0.7);
   }
 
+  /**
+   * Tidewater's harbour basin, for a base with no boat-deep water to dig a
+   * canal from: one wide stretch dug out from near the base pad,
+   * on the lowest dry ground about it (behind the base, if it can), deep
+   * enough for a dock. Null if nowhere will take one.
+   */
+  private planBasin(ctx: SimContext, side: number): Earthwork[] | null {
+    const { field } = ctx;
+    const home = field.baseSites[side];
+    const enemy = this.nearestEnemy(ctx, side);
+    const forward = enemy !== null ? D.atan2(-(field.baseSites[enemy].z - home.z), field.baseSites[enemy].x - home.x) : 0;
+    const half = BASIN_LENGTH / 2;
+    const wide = BASIN_HALF;
+    const candidates: { cx: number; cz: number; ux: number; uz: number; score: number }[] = [];
+    for (const out of BASIN_OUT) {
+      for (let k = 0; k < 16; k++) {
+        // Behind the base first, then round toward the front.
+        const turn = (k % 2 === 0 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 8);
+        const a = forward + Math.PI + turn;
+        const ux = D.cos(a);
+        const uz = -D.sin(a);
+        const dist = home.radius + out;
+        const cx = home.x + ux * dist;
+        const cz = home.z + uz * dist;
+        if (field.baseSites.some((b, g) => g !== side && D.hypot(b.x - cx, b.z - cz) < b.radius + half + 8)) continue;
+        if (field.outpostSites.some((o) => D.hypot(o.x - cx, o.z - cz) < half + 10)) continue;
+        let dig = 0;
+        let ok = true;
+        // The basin and a margin round it for its banks.
+        for (let sAlong = -half - 3; sAlong <= half + 3 && ok; sAlong += 1) {
+          for (let across = -wide - 3; across <= wide + 3 && ok; across += 1) {
+            const x = cx + ux * sAlong - uz * across;
+            const z = cz + uz * sAlong + ux * across;
+            if (!field.contains(x, z, 3) || field.nearBridge(x, z, 1) || builtOver(ctx, x, z, 0.5)) ok = false;
+            else if (Math.abs(sAlong) <= half && Math.abs(across) <= wide) {
+              const h = field.heightAt(x, z);
+              if (h > field.seaLevel + CANAL_HIGHEST) ok = false;
+              else dig += Math.max(0, h - field.seaLevel);
+            }
+          }
+        }
+        if (ok) candidates.push({ cx, cz, ux, uz, score: dig + Math.abs(turn) * 6 + out });
+      }
+    }
+    candidates.sort((a, b) => a.score - b.score);
+    for (const { cx, cz, ux, uz } of candidates) {
+      // One wide stretch, inner end to outer end, so the engineer stands out past the far end.
+      const works: Earthwork[] = [{ kind: 'canal', side, ax: cx - ux * half, az: cz - uz * half, bx: cx + ux * half, bz: cz + uz * half, level: field.seaLevel, effort: 0, done: false, harbour: true, half: BASIN_HALF }];
+      if (works.some((w) => !this.canalStand(ctx, w))) continue;
+      if (!landStaysLinked(ctx, { x: cx - ux * half, z: cz - uz * half }, { x: cx + ux * half, z: cz + uz * half }, wide + 0.7)) continue;
+      return works;
+    }
+    return null;
+  }
+
+  /** Skyline: a forward helipad behind each outpost it holds out toward the enemy (the furthest out first), up to HELIPADS_MOST. */
+  private helipadJobs(world: World, ctx: SimContext, side: number): BuildJob[] {
+    let room = HELIPADS_MOST - (this.pads[side] ?? 0);
+    if (room <= 0) return [];
+    const { field, lanes } = ctx;
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return [];
+    const home = field.baseSites[side];
+    const pads: { x: number; z: number }[] = [];
+    for (const e of world.query(Building, Faction, Transform)) {
+      if (world.req(e, Faction).id !== side || !world.req(e, Building).def.rearms) continue;
+      const t = world.req(e, Transform);
+      pads.push({ x: t.x, z: t.z });
+    }
+    const held = ctx.outposts
+      .filter((o) => o.owner === side && D.hypot(o.x - home.x, o.z - home.z) > home.radius + HELIPAD_APART)
+      .sort((a, b) => lanes.progress(side, enemy, b.x, b.z) - lanes.progress(side, enemy, a.x, a.z) || a.index - b.index);
+    const def = ctx.buildings.helipad;
+    const out: BuildJob[] = [];
+    for (const o of held) {
+      if (room <= 0) break;
+      if (pads.some((p) => D.hypot(p.x - o.x, p.z - o.z) < HELIPAD_APART)) continue;
+      const d = Math.max(1, D.hypot(home.x - o.x, home.z - o.z));
+      const dx = (home.x - o.x) / d;
+      const dz = (home.z - o.z) / d;
+      const cell = ctx.navs.land.nearestOpen(o.x + dx * HELIPAD_BACK, o.z + dz * HELIPAD_BACK, 5, def.radius + 0.8);
+      if (!cell) continue;
+      const p = ctx.navs.land.center(cell[0], cell[1]);
+      if (field.slopeAt(p.x, p.z) > 0.5) continue;
+      // The engineer builds it from the outpost's side, facing home.
+      const job = this.buildAt(world, ctx, side, def, p.x, p.z, D.atan2(-dz, dx), -dx, -dz);
+      if (!job) continue;
+      // Ahead of walls: the outpost is held already, and aircraft are flying home and back meanwhile.
+      out.push({ ...job, urgent: true });
+      pads.push(p);
+      room--;
+    }
+    return out;
+  }
+
+  /** Length of the land route between two points (Infinity with none), remembered until the land grid changes. */
+  private routeLength(ctx: SimContext, a: Point, b: Point): number {
+    const nav = ctx.navs.land;
+    if (this.routeVersion !== nav.passableVersion) {
+      this.routeLengths.clear();
+      this.routeVersion = nav.passableVersion;
+    }
+    const key = `${Math.round(a.x)},${Math.round(a.z)}>${Math.round(b.x)},${Math.round(b.z)}`;
+    const known = this.routeLengths.get(key);
+    if (known !== undefined) return known;
+    const path = nav.findPath(a, b);
+    let len = Infinity;
+    if (path && path.length > 0) {
+      len = D.hypot(path[0].x - a.x, path[0].z - a.z);
+      for (let k = 1; k < path.length; k++) len += D.hypot(path[k].x - path[k - 1].x, path[k].z - path[k - 1].z);
+    }
+    this.routeLengths.set(key, len);
+    return len;
+  }
+
+  /**
+   * A bridge across an enemy Tidewater side's canal, if one would cut a
+   * side's land way to an enemy base short (to SPAN_SHORTER of what it is):
+   * the canal stretch where it cuts it shortest, straight across, the near
+   * end toward home.
+   */
+  private bridgeJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
+    if (this.spansOf(side) >= SPANS_MOST) return null;
+    const { field, sides, lanes } = ctx;
+    const canals = this.works.filter((w) => w.kind === 'canal' && w.done && sides.hostile(side, w.side));
+    if (canals.length === 0) return null;
+    const home = field.baseSites[side];
+    const enemies = sides.enemiesOf(side).filter((g) => !sides.eliminated[g]);
+    const foot = ctx.navs.for('foot');
+    const step = Math.max(1, Math.ceil(canals.length / SPAN_CANDIDATES));
+    let best: { job: BridgeJob; gain: number } | null = null;
+    for (let k = 0; k < canals.length; k += step) {
+      const w = canals[k];
+      const mx = (w.ax + w.bx) / 2;
+      const mz = (w.az + w.bz) / 2;
+      if (!field.isWater(mx, mz) || field.nearBridge(mx, mz, SPAN_APART)) continue;
+      const len = Math.max(1e-3, D.hypot(w.bx - w.ax, w.bz - w.az));
+      const nx = -(w.bz - w.az) / len;
+      const nz = (w.bx - w.ax) / len;
+      let a = { x: mx + nx * SPAN_HALF, z: mz + nz * SPAN_HALF };
+      let b = { x: mx - nx * SPAN_HALF, z: mz - nz * SPAN_HALF };
+      if (D.hypot(a.x - home.x, a.z - home.z) > D.hypot(b.x - home.x, b.z - home.z)) [a, b] = [b, a];
+      if (field.isWater(a.x, a.z) || field.isWater(b.x, b.z) || !foot.terrainAllowsAt(a.x, a.z) || !foot.terrainAllowsAt(b.x, b.z)) continue;
+      // Stand a little back from the near end.
+      const ox = (a.x - mx) / SPAN_HALF;
+      const oz = (a.z - mz) / SPAN_HALF;
+      const stand = { x: a.x + ox * 1.5, z: a.z + oz * 1.5 };
+      if (!foot.terrainAllowsAt(stand.x, stand.z)) continue;
+      for (const enemy of enemies) {
+        const from = lanes.rally(side, enemy, 0);
+        const to = field.baseSites[enemy];
+        const now = this.routeLength(ctx, from, to);
+        const via = this.routeLength(ctx, from, a) + SPAN_HALF * 2 + this.routeLength(ctx, b, to);
+        const gain = now === Infinity ? (via === Infinity ? 0 : 1) : 1 - via / now;
+        if (gain < 1 - SPAN_SHORTER || (best && gain <= best.gain)) continue;
+        best = { job: { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x: mx, z: mz, standX: stand.x, standZ: stand.z, urgent: true }, gain };
+      }
+    }
+    if (!best || !this.safe(world, ctx, side, best.job.standX, best.job.standZ)) return null;
+    return best.job;
+  }
+
+  /**
+   * A shot landed at a point: an engineers' bridge it's on, or bursts by, of
+   * a side hostile to the shooter's takes the hit (see projectiles.ts).
+   */
+  blast(world: World, ctx: SimContext, x: number, y: number, z: number, damage: number, splash: number, by: Hit): void {
+    if (this.spans.length === 0) return;
+    for (const span of this.spans) {
+      if (!ctx.sides.hostile(span.side, by.faction)) continue;
+      const b = ctx.field.bridges[span.index];
+      if (!b || b.gone) continue;
+      const off = distanceToSegment(x, z, { x: b.ax, z: b.az }, { x: b.bx, z: b.bz });
+      if (off > b.width / 2 + splash || y > b.level + 2 + splash) continue;
+      span.hp -= damageThrough(damage * (off <= b.width / 2 ? 1 : 0.5), SPAN_ARMOR);
+      if (span.hp <= 0) this.collapse(world, ctx, span, by);
+    }
+    this.spans = this.spans.filter((s) => s.hp > 0);
+  }
+
+  /** An engineers' bridge comes down, and whatever's driving or walking on it goes in the water. */
+  private collapse(world: World, ctx: SimContext, span: Span, by: Hit | null): void {
+    span.hp = 0;
+    const b = ctx.field.bridges[span.index];
+    if (!b || b.gone) return;
+    const mx = (b.ax + b.bx) / 2;
+    const mz = (b.az + b.bz) / 2;
+    const reach = D.hypot(b.bx - b.ax, b.bz - b.az) / 2 + b.width;
+    const drowned: Entity[] = [];
+    ctx.grid.forEachNear(mx, mz, reach, (e) => {
+      if (world.get(e, Targetable)?.kind !== 'unit') return;
+      const t = world.req(e, Transform);
+      const move = world.get(e, Mover)?.move;
+      if (!move || move === 'naval' || MOVE_RULES[move].flies) return;
+      if (ctx.field.bridgeAt(t.x, t.z) === span.index && ctx.field.deckAt(t.x, t.z) !== null && ctx.field.isWater(t.x, t.z)) drowned.push(e);
+    });
+    ctx.field.removeBridge(span.index);
+    for (const e of drowned) {
+      const h = world.get(e, Health);
+      if (!h) continue;
+      if (by) h.lastHit = by;
+      h.hp = 0;
+    }
+    ctx.events.emit('span', { faction: span.side, x: mx, z: mz, down: true });
+  }
+
   private safe(world: World, ctx: SimContext, side: number, x: number, z: number): boolean {
     let safe = true;
     ctx.grid.forEachNear(x, z, SAFE_RADIUS, (other) => {
@@ -812,6 +1152,21 @@ export class Engineers {
       }
       const t = world.req(e, Transform);
       if (D.hypot(job.standX - t.x, job.standZ - t.z) > REACH) continue;
+      if (job.kind === 'bridge') {
+        const key = `${Math.round(job.x)},${Math.round(job.z)}`;
+        const work = (this.spanWork.get(key) ?? 0) + dt;
+        this.spanWork.set(key, work);
+        if (work < SPAN_BUILD) continue;
+        this.spanWork.delete(key);
+        this.jobs.delete(e);
+        if (this.spansOf(side) >= SPANS_MOST || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
+        if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, { builtBy: side })) {
+          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS });
+          ctx.events.emit('span', { faction: side, x: job.x, z: job.z, down: false });
+        }
+        this.open[side] = Math.max(0, this.open[side] - 1);
+        continue;
+      }
       if (job.kind === 'dig') {
         const w = job.work;
         if (w.done) {
@@ -826,12 +1181,14 @@ export class Engineers {
       }
       this.jobs.delete(e);
       const id = job.def.id;
-      const full = id === 'fieldTower' ? this.towers[side] >= TOWERS_MOST : id === 'commsArray' ? this.arrays[side] >= ARRAYS_MOST : job.def.lasts ? this.walls[side] >= WALLS_MOST : false;
+      const full =
+        id === 'fieldTower' ? this.towers[side] >= TOWERS_MOST : id === 'commsArray' ? this.arrays[side] >= ARRAYS_MOST : id === 'helipad' ? this.pads[side] >= HELIPADS_MOST : job.def.lasts ? this.walls[side] >= WALLS_MOST : false;
       if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
       if (id === 'fieldTower') this.towers[side]++;
       else if (id === 'commsArray') this.arrays[side]++;
+      else if (id === 'helipad') this.pads[side]++;
       else if (job.def.lasts) this.walls[side]++;
       this.open[side] = Math.max(0, this.open[side] - 1);
     }
@@ -856,6 +1213,10 @@ export class Engineers {
         this.engineers[side]++;
       }
     }
+
+    // Engineers' bridges come down after a while, or once their side's out of the battle.
+    for (const span of this.spans) if (world.time >= span.until || ctx.sides.eliminated[span.side]) this.collapse(world, ctx, span, null);
+    this.spans = this.spans.filter((sp) => sp.hp > 0);
 
     // Walls, field towers and comms arrays crumble over their lifetime (not while they're still going up).
     for (const e of this.crumbling) {
@@ -906,7 +1267,7 @@ function distanceToSegment(x: number, z: number, a: Point, b: Point): number {
 function shapeOf(field: { seaLevel: number }, w: Earthwork, d: number): { h: number; down: boolean } | null {
   if (w.kind === 'canal') {
     // A flat channel bed with banks sloping up to the ground.
-    const half = CANAL_HALF;
+    const half = w.half ?? CANAL_HALF;
     if (d > half + 3) return null;
     return { h: field.seaLevel - CANAL_DEPTH + Math.max(0, d - half) * 1.6, down: true };
   }
@@ -922,7 +1283,8 @@ function shapeOf(field: { seaLevel: number }, w: Earthwork, d: number): { h: num
 export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
   const field = ctx.field;
   const { cols, rows, cellSize } = field.config;
-  const pad = 3.2;
+  // A wide basin's banks reach further out.
+  const pad = w.half !== undefined ? Math.max(3.2, w.half + 2.4) : 3.2;
   const x0 = Math.min(w.ax, w.bx) - pad;
   const x1 = Math.max(w.ax, w.bx) + pad;
   const z0 = Math.min(w.az, w.bz) - pad;

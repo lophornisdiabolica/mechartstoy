@@ -434,7 +434,7 @@ export function bridgeLand(field: Battlefield): number {
  * Returns false (and builds nothing) if it would overlap another bridge,
  * unless `force` (a base would otherwise be cut off).
  */
-export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, force = false): boolean {
+export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, force = false, extra: Partial<Bridge> = {}): boolean {
   const len0 = D.hypot(b.x - a.x, b.z - a.z);
   if (len0 < 0.1) return false;
   const ux = (b.x - a.x) / len0;
@@ -462,7 +462,7 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
   const ga = field.heightAt(A.x, A.z);
   const gb = field.heightAt(B.x, B.z);
   const low = sea + BRIDGE_CLEARANCE;
-  const bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, level: Math.max(low, Math.min(ga, gb, low + MAX_RAISE)) };
+  const bridge: Bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, level: Math.max(low, Math.min(ga, gb, low + MAX_RAISE)), ...extra };
   cutBanks(field, bridge);
   field.addBridge(bridge);
   return true;

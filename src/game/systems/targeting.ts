@@ -1,6 +1,6 @@
 import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
+import { Ai, Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { damageThrough } from './projectiles';
 import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
 import { SimContext } from '../context';
@@ -19,6 +19,8 @@ const BUILDING_PENALTY = 8;
  * spending a whole rocket on one soldier. See hitWorth.
  */
 const WASTE_PENALTY = 10;
+/** A hunted gun counts as this much nearer to its hunters. */
+const HUNT_PULL = 20;
 /** Extra range per world unit of height above the target, as a fraction of the weapon's range, and the most it can add. */
 const HEIGHT_RANGE_PER_UNIT = 0.03;
 const HEIGHT_RANGE_MAX = 0.15;
@@ -83,6 +85,10 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   const reach = ours.length > 0 ? armed.weapon.range : armed.sight;
   // Walkers step over walls and spiders climb them, so they don't waste shots on them (see MoveRules.over).
   const over = MOVE_RULES[world.get(e, Mover)?.move ?? 'tracked'].over;
+  // A squad hunting a gun shoots it before anything else in reach (see commander/hunts.ts).
+  const squad = world.get(e, Ai)?.squad;
+  const hunt = squad !== undefined ? ctx.commander.hunts.forSquad(squad) : undefined;
+  const prey = hunt && hunt.side === faction ? hunt.gun : null;
   ctx.grid.forEachNear(t.x, t.z, reach, (other, d2, body) => {
     if (over !== 'none' && body.building?.def.low) return;
     const otherFaction = world.req(other, Faction).id;
@@ -97,7 +103,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
     }
     const isBuilding = world.req(other, Targetable).kind === 'building';
     const waste = WASTE_PENALTY * (1 - hitWorth(world, armed, other));
-    candidates.push({ e: other, score: d + waste + (isBuilding ? (armed.siege ? -BUILDING_PENALTY * 3 : BUILDING_PENALTY) : 0) });
+    candidates.push({ e: other, score: d + waste + (isBuilding ? (armed.siege ? -BUILDING_PENALTY * 3 : BUILDING_PENALTY) : 0) - (other === prey ? HUNT_PULL : 0) });
   });
   armed.blocked = false;
   if (candidates.length === 0) return null;
