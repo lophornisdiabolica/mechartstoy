@@ -36,7 +36,7 @@ import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
 import { engineerSystem } from './commander/engineers';
-import { Divine, godSystem, Power } from './god';
+import { Divine, godSystem, Power, powerSpot } from './god';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -224,10 +224,14 @@ export class Game {
         // Dropped together, they move together.
         const squad = newSquad(this.ctx);
         for (const p of spots) spawnUnit(this.world, this.ctx, this.ctx.units[c.unit], c.faction, p.x, p.z, squad);
+        this.events.emit('godUsed', { power: { kind: 'drop', unit: c.unit, count: spots.length, faction: c.faction }, x: c.x, z: c.z });
         return true;
       }
-      case 'power':
-        return this.ctx.god.use(this.world, this.ctx, c.power);
+      case 'power': {
+        if (!this.ctx.god.use(this.world, this.ctx, c.power)) return false;
+        this.events.emit('godUsed', { power: c.power, ...powerSpot(this.ctx, c.power) });
+        return true;
+      }
       case 'rally':
         this.ctx.orders[c.faction].rally = c.point && { x: this.field.clampX(c.point.x, 2), z: this.field.clampZ(c.point.z, 2) };
         return true;

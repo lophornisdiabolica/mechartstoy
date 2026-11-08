@@ -358,6 +358,14 @@ export class Divine {
 const CURSE: Hit = { source: 'curse', faction: GOD };
 const QUAKE: Hit = { source: 'earthquake', faction: GOD };
 
+/** Where a power was used, for the ticker: its point, the middle of its line, or the side's base. */
+export function powerSpot(ctx: SimContext, p: Power): { x: number; z: number } {
+  if ('ax' in p) return { x: (p.ax + p.bx) / 2, z: (p.az + p.bz) / 2 };
+  if ('x' in p) return { x: p.x, z: p.z };
+  const site = ctx.field.baseSites.find((s) => s.faction === p.faction);
+  return site ? { x: site.x, z: site.z } : { x: 0, z: 0 };
+}
+
 /** Runs the god powers in play (see Divine); does nothing when none are. */
 export function godSystem(ctx: SimContext): System {
   return {

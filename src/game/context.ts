@@ -7,7 +7,7 @@ import { NavGrid, NavGrids } from '../world/navGrid';
 import { BuildingDef, BuildingId } from './buildings';
 import { Building, Collider, Faction, Hit, Mover, Transform } from './components';
 import type { Commander } from './commander/commander';
-import type { Divine } from './god';
+import type { Divine, Power } from './god';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -49,6 +49,12 @@ export type GameEvents = {
    * changes show: a quake's heave (`strength` is how hard), the big bomb, a
    * blessing or curse on a side, a bridge, a forest springing up.
    */
+  /**
+   * The player used a god power (see god.ts) or dropped units, for the
+   * battle ticker: the power, where (its middle) and, for drops, blessings
+   * and curses, the side and what.
+   */
+  godUsed: { power: Power | { kind: 'drop'; unit: UnitId; count: number; faction: number }; x: number; z: number };
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
 };
 

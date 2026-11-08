@@ -58,6 +58,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   sideEliminated: true,
   battleOver: true,
   power: true,
+  godUsed: true,
 };
 
 /** Page to worker. */

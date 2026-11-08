@@ -1192,6 +1192,18 @@ body.photo #debug {
   background: #a070ff;
 }
 
+/* With the battle controls collapsed to their bar, the god powers tuck in under it. */
+#panel.collapsed ~ #god,
+#panel.collapsed ~ #god-toggle {
+  top: calc(12px + var(--panel-bar, 37px) + 6px);
+  right: 12px;
+}
+
+#panel.collapsed ~ #god {
+  width: 260px;
+  max-height: calc(100vh - 24px - var(--panel-bar, 37px) - 6px);
+}
+
 @media (max-width: 600px) {
   #god,
   #god-toggle {
@@ -1200,9 +1212,15 @@ body.photo #debug {
     bottom: 12px;
   }
 
-  #god {
+  #god,
+  #panel.collapsed ~ #god {
     left: 12px;
     width: auto;
     max-height: 45vh;
+  }
+
+  #panel.collapsed ~ #god,
+  #panel.collapsed ~ #god-toggle {
+    top: auto;
   }
 }
