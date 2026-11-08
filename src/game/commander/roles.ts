@@ -95,7 +95,8 @@ export class Roles {
       const def = world.req(e, Unit).def;
       const flies = MOVE_RULES[world.req(e, Mover).move].flies;
       if (def.category === 'super') {
-        if (!flies) supers[side].push(e);
+        // Escorts can't follow a Dreadnought out onto the water.
+        if (!flies && world.req(e, Mover).move !== 'naval') supers[side].push(e);
         continue;
       }
       // Squads on a task force do its job.

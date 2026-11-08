@@ -52,7 +52,7 @@ export function deathSystem(ctx: SimContext): System {
         if (unit) {
           ctx.events.emit('unitDestroyed', { entity: e, x: t.x, y: t.y, z: t.z, def: unit.def, faction, killer });
           // Losing a super unit is a real setback: the next one takes a full build from now.
-          if (unit.def.category === 'super' && faction >= 0 && !world.has(e, Guard)) restartSuperBuilds(world, ctx, faction);
+          if (unit.def.category === 'super' && faction >= 0 && !world.has(e, Guard)) restartSuperBuilds(world, ctx, faction, unit.def);
           // Fuel tanks go up, and the spilt fuel burns (see UnitDef.explodes).
           if (unit.def.explodes) {
             explode(world, ctx, t, unit.def.explodes, killer, e);
