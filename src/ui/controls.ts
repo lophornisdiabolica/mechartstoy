@@ -61,6 +61,10 @@ function describeGoals(goals: readonly Goal[], name: (side: number) => string, f
         return `${force(g)} taking an outpost`;
       case 'hold':
         return `${force(g)} holding an outpost`;
+      case 'hunt': {
+        const n = g.hunt?.squads ?? 0;
+        return `${n} ${n === 1 ? 'squad' : 'squads'} hunting a long-range gun${g.hunt?.flankX != null ? ' round its flank' : ''}`;
+      }
       case 'defend':
         return 'Defending home';
       case 'mass':
@@ -485,7 +489,9 @@ export class Controls {
     if (construction) lines.push(`Under construction: ${Math.round((construction.elapsed / construction.duration) * 100)}%`);
     const producer = w.get(e, Producer);
     if (producer && !construction) {
-      const names = [...new Set(producer.table.map((p) => this.game.ctx.units[p.unit].name))].join(', ');
+      const ids = producer.table.map((p) => p.unit);
+      if (producer.flagship) ids.push(producer.flagship);
+      const names = [...new Set(ids.map((id) => this.game.ctx.units[id].name))].join(', ');
       lines.push(`Builds ${names}`);
     }
     if (rubble) {

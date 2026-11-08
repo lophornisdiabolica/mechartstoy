@@ -59,6 +59,10 @@ export type GameEvents = {
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
   /** Engineers finished digging (or heaping up) a stretch of canal, trench or berm (see commander/engineers.ts). */
   earthwork: { kind: 'canal' | 'trench' | 'berm'; faction: number; x: number; z: number };
+  /** A side's Commander sent squads to hunt a long-range gun shelling it, or they killed it (`done`; see commander/hunts.ts). */
+  hunt: { faction: number; x: number; z: number; unit: string; done: boolean };
+  /** Engineers threw a temporary bridge across water, or it came down (`down`; see commander/engineers.ts). */
+  span: { faction: number; x: number; z: number; down: boolean };
 };
 
 /** How a conquest battle ended. */

@@ -64,7 +64,7 @@ export function findPlaces(field: Battlefield, nav: NavGrid): Place[] {
   for (const b of field.baseSites) places.push({ kind: 'base', x: b.x, z: b.z, id: b.faction, size: b.radius });
   for (const o of field.outpostSites) places.push({ kind: 'outpost', x: o.x, z: o.z, id: o.index, size: o.radius });
   for (const t of field.townSites) places.push({ kind: 'town', x: t.x, z: t.z, id: -1, size: t.radius });
-  for (const b of field.bridges) places.push({ kind: 'bridge', x: (b.ax + b.bx) / 2, z: (b.az + b.bz) / 2, id: -1, size: b.width });
+  for (const b of field.bridges) if (!b.gone) places.push({ kind: 'bridge', x: (b.ax + b.bx) / 2, z: (b.az + b.bz) / 2, id: -1, size: b.width });
 
   const nearBase = (x: number, z: number) => field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < BASE_CLEAR);
   const { minX, maxX, minZ, maxZ } = field.bounds;

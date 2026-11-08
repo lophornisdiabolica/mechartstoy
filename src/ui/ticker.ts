@@ -67,6 +67,15 @@ export class Ticker {
       this.say([...by, this.side(e.faction), `'s ${e.def.name.toLowerCase()}`]);
     });
     events.on('godUsed', (e) => this.game === game && this.god(e));
+    events.on('hunt', (e) => {
+      if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
+      const name = ((game.ctx.units as Record<string, { name: string }>)[e.unit]?.name ?? 'gun').toLowerCase();
+      this.say([this.side(e.faction), e.done ? ` hunted down a ${name}` : ` sends squads to hunt a ${name}`, this.direction(e.x, e.z, ' in the ')]);
+    });
+    events.on('span', (e) => {
+      if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length || !e.down) return;
+      this.say([this.side(e.faction), `'s bridge came down`, this.direction(e.x, e.z, ' in the ')]);
+    });
     events.on('sideEliminated', (e) => this.game === game && this.say([this.side(e.faction), ' is out of the war']));
     events.on('battleOver', (o) => {
       if (this.game !== game) return;

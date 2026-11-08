@@ -618,6 +618,16 @@ export class SetupScreen {
     row(armies, 'Squads', avoidLabel);
     armies.append(el('p', { class: 'hint' }, 'Each Commander maps how dangerous the field is to infantry, vehicles and aircraft. Squads take the lane least dangerous to them, and on the march swing round ground they’d be outgunned on: infantry round artillery, aircraft round flak.'));
     this.sync.push(() => (avoid.checked = this.settings.armies.avoidance));
+    const hunt = el('input', { type: 'checkbox', 'aria-label': 'Hunt long-range guns' });
+    hunt.addEventListener('change', () => {
+      this.settings.armies.hunts = hunt.checked;
+      this.changed();
+    });
+    const huntLabel = el('label', { class: 'check' });
+    huntLabel.append(hunt, document.createTextNode(' Hunt long-range guns'));
+    row(armies, 'Gun hunts', huntLabel);
+    armies.append(el('p', { class: 'hint' }, 'A howitzer or rocket truck shelling a side from far behind the enemy’s lines gets hunted: the Commander sends its fastest squads to kill it, swinging round a flank first if the enemy’s army is in the way.'));
+    this.sync.push(() => (hunt.checked = this.settings.armies.hunts));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);

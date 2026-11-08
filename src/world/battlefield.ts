@@ -168,6 +168,10 @@ export interface Bridge {
   width: number;
   /** Deck height in the middle; the ends ramp down to meet the banks, no steeper than DECK_GRADE. */
   level: number;
+  /** Thrown across by a side's engineers (see commander/engineers.ts): it can come down. The side that built it. */
+  builtBy?: number;
+  /** Come down (see removeBridge): kept in the list so other bridges keep their indices, but it's no longer there. */
+  gone?: boolean;
 }
 
 /** Room under a bridge deck, above the water. */
@@ -416,6 +420,26 @@ export class Battlefield {
     this.changed(area);
   }
 
+  /**
+   * Take a bridge off the map (an engineers' bridge coming down). It stays in
+   * the list, marked gone, so the other bridges keep their indices.
+   */
+  removeBridge(index: number): void {
+    const bridge = this.bridges[index];
+    if (!bridge || bridge.gone) return;
+    this.bridges[index] = { ...bridge, gone: true };
+    const { cols } = this.config;
+    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + bridge.width / 2 + 1);
+    for (let j = area.j0; j <= area.j1; j++) for (let i = area.i0; i <= area.i1; i++) if (this.bridgeCell[j * cols + i] === index) this.bridgeCell[j * cols + i] = -1;
+    this.changed(area);
+  }
+
+  /** The index of the bridge whose deck is over a point, or -1. */
+  bridgeAt(x: number, z: number): number {
+    const [i, j] = this.cellAt(x, z);
+    return this.bridgeCell[j * this.config.cols + i];
+  }
+
   /** A bridge's deck height at a point, or null if the point isn't on it. */
   private deckOf(b: Bridge, x: number, z: number): number | null {
     const dx = b.bx - b.ax;
@@ -433,7 +457,7 @@ export class Battlefield {
 
   /** Whether a point is on or within `margin` of a bridge (buildings keep off them). */
   nearBridge(x: number, z: number, margin = 0): boolean {
-    return this.bridges.some((b) => distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz) < b.width / 2 + margin);
+    return this.bridges.some((b) => !b.gone && distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz) < b.width / 2 + margin);
   }
 
   /**

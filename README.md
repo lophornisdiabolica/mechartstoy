@@ -243,7 +243,9 @@ battle, its exact map via `seed`).
   - *Legion:* big squads with two AT troopers each and mortar teams from
     the barracks and a **barracks block**, light tanks and squad carriers
     from the factory; 1.7× infantry cap, 0.8× vehicles. Its engineers dig
-    trenches with an earth berm in front, which its massing squads man.
+    trenches with an earth berm in front, which its massing squads man,
+    and put up a pair of walls out in front of each (a gap between for the
+    trench's fire) to draw the enemy's.
     Super unit: the
     Siege Crawler, slow heavy mortars that drops off a squad every 40
     seconds.
@@ -253,7 +255,9 @@ battle, its exact map via `seed`).
     never stop, circling where they were sent when there's nothing to do
     and attacking in runs straight over the target. Gunships, bombers and
     jets carry so many shots, then fly back to the airpad to rearm
-    (gunships set down on it). Every aircraft banks into its turns, and a
+    (gunships set down on it), or to a **forward helipad** its engineers
+    put up behind an outpost it holds out toward the enemy (two at most).
+    Every aircraft banks into its turns, and a
     shot-down one flies on as it falls and explodes where it hits.
     Super unit: the Airship Carrier, a slow armoured airship that launches drones.
   - *Bastion:* howitzers (its signature unit), railgun batteries (long,
@@ -280,8 +284,9 @@ battle, its exact map via `seed`).
     has six berths (times its team boost). Without a coast it starts with
     a **hover pad** that turns out skimmers instead. Its engineers build
     whichever of the two the base lacks (a dock on a shore a little
-    further out), and dig canals out toward the enemy so the boats can
-    reach it. Boats can't take outposts or
+    further out, or on a harbour basin they dig by the base when the map
+    has no boat-deep water at all), before anything else, and dig canals
+    out toward the enemy so the boats can reach it. Boats can't take outposts or
     follow the land lanes: they head for the enemy base and stop at the
     nearest water to it. Super unit: the Hover Fortress.
   - *Firestorm:* flame troopers in the squads, cinder walkers, light
@@ -707,9 +712,30 @@ outposts and the light scenery are still placed once, at the start.
   and bursts outside reach them halved), Bastion builds comms arrays, and
   Tidewater builds a missing dock or hover pad and digs canals of
   boat-deep water a few metres at a time (never one that cuts a base off
-  by land). Engineers don't build where an enemy unit is within 14 units,
-  take no cap, never join an attack or a task force; the rally flag and
-  stances pause their work. Bridge repairs are still to come.
+  by land; with no boat-deep water anywhere near, they dig a harbour
+  basin by the base for the dock). The base's missing dock or pad, and
+  digging toward it, come before any other job, whichever engineer is
+  nearest. Legion also puts a pair of walls out in front of each trench
+  line, and Skyline puts up forward helipads behind outposts it holds,
+  where its aircraft rearm. Everyone else throws timber bridges across an
+  enemy Tidewater's canals where one cuts the land way to the enemy to
+  80% or less (two at most per side): a bridge comes down after ten
+  minutes, or when enemy shells landing on it have done 600 damage, and
+  anything on it goes in the water. Engineers don't build where an enemy
+  unit is within 14 units, take no cap, never join an attack or a task
+  force; the rally flag and stances pause their work. Bridge repairs are
+  still to come.
+- **Hunting the guns** (`game/commander/hunts.ts`, *Gun hunts* under
+  Armies, on by default). A howitzer, rocket truck or other long-range
+  artillery shelling a side from beyond its reach gets hunted: the side's
+  Commander sends its quickest squads (up to 30% of its army, enough to
+  beat what's guarding the gun) to kill it. If the enemy's army stands
+  between them and the gun, they swing out round the quieter side first
+  and come at it from the flank, not stopping to fight on the way; then
+  they charge the gun and shoot it before anything else in reach. One hunt
+  per side at a time; it ends when the gun dies, the hunters are spent, or
+  after two and a half minutes. The plans overlay draws it as an arrow
+  round the flank to the gun.
 - **Keeping out of where they're weak** (`game/commander/threats.ts`).
   Each Commander maps how dangerous every part of the field is to
   infantry (artillery, big blasts and flame most), vehicles (hard

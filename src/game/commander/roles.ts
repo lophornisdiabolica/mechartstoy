@@ -95,11 +95,12 @@ export class Roles {
       const def = world.req(e, Unit).def;
       const flies = MOVE_RULES[world.req(e, Mover).move].flies;
       if (def.category === 'super') {
-        if (!flies) supers[side].push(e);
+        // Escorts can't follow a Dreadnought out onto the water.
+        if (!flies && world.req(e, Mover).move !== 'naval') supers[side].push(e);
         continue;
       }
       // Squads on a task force do its job.
-      if (forces.forSquad(world.req(e, Ai).squad)?.side === side) continue;
+      if (forces.forSquad(world.req(e, Ai).squad)?.side === side || ctx.commander.hunts.forSquad(world.req(e, Ai).squad)?.side === side) continue;
       if (ANTI_AIR.has(def.id)) flak[side].push(e);
       else if (def.role === 'artillery') artillery[side].push(e);
       else if (def.category === 'vehicle' && !flies && world.req(e, Mover).move !== 'naval') vehicles[side].push(e);

@@ -191,7 +191,8 @@ export class TaskForces {
     for (const [q, s] of squads) {
       if (s.side !== side) continue;
       army += s.strength;
-      if (s.free && !busy.has(q)) free.push([q, s]);
+      // Squads hunting a gun (see hunts.ts) are busy too.
+      if (s.free && !busy.has(q) && !ctx.commander.hunts.forSquad(q)) free.push([q, s]);
     }
     const budget = army * share - mine.reduce((sum, tf) => sum + tf.strength, 0);
     if (budget < LEAST_FORCE) return;

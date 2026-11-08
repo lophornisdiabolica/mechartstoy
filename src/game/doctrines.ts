@@ -22,8 +22,13 @@ export interface DoctrineDef {
   blurb: string;
   /** Multipliers on the settings' unit caps (missing categories are 1). */
   caps: Partial<Record<UnitCategory, number>>;
-  /** What each production building turns out, replacing its default table. */
-  production: Partial<Record<BuildingId, { table: ProductionEntry[]; interval?: number }>>;
+  /**
+   * What each production building turns out, replacing its default table.
+   * A `flagship` is a super unit the building also builds, on its own slow
+   * timer (Tidewater's Dreadnought at the dock). A naval one doesn't take the
+   * super cap from the mech bay's: it has a berth of its own (see caps.ts).
+   */
+  production: Partial<Record<BuildingId, { table: ProductionEntry[]; interval?: number; flagship?: { unit: UnitId; interval: number } }>>;
   /** Built in the base alongside the HQ, barracks, factory and mech bay. */
   signature: BuildingId;
   /** Built instead of a coastal signature building (see BuildingDef.coastal) when the base has no coast. */
@@ -194,7 +199,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   tidewater: {
     id: 'tidewater',
     name: 'Tidewater',
-    blurb: 'Hovers and boats. Skimmer hover tanks and amphibious transports, missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super unit: the Hover Fortress.',
+    blurb: 'Hovers and boats. Skimmer hover tanks and amphibious transports, missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super units: the Hover Fortress from its mech bay, and the Dreadnought battleship from its dock.',
     caps: { infantry: 0.8, vehicle: 1.35 },
     production: {
       factory: {
@@ -207,7 +212,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       },
       // Boats launch from the dock's door into the water, and only boats: skimmers come from a hover pad,
       // which engineers put up in a base that has a dock (see commander/engineers.ts).
-      dock: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 28 },
+      // The dock also lays down a Dreadnought now and then: a second super unit, beside the Hover Fortress.
+      dock: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 28, flagship: { unit: 'dreadnought', interval: 80 } },
       hoverPad: { table: [{ unit: 'skimmer', weight: 1, count: 2 }], interval: 30 },
       mechbay: { table: [{ unit: 'hoverFortress', weight: 1, count: 1 }] },
     },
@@ -292,6 +298,7 @@ export function doctrineUnits(d: DoctrineDef): UnitId[] {
     if (e.with) out.add(e.with.unit);
     if (e.ifDry) out.add(e.ifDry);
   }
+  for (const p of Object.values(d.production)) if (p!.flagship) out.add(p!.flagship.unit);
   return [...out];
 }
 
@@ -301,8 +308,8 @@ export function doctrineOf(ctx: SimContext, faction: number): DoctrineDef {
 }
 
 /** What a production building turns out for a side: its doctrine's table, or the building's own. */
-export function productionFor(ctx: SimContext, def: BuildingDef, faction: number): { table: ProductionEntry[]; interval: number } | undefined {
+export function productionFor(ctx: SimContext, def: BuildingDef, faction: number): { table: ProductionEntry[]; interval: number; flagship?: { unit: UnitId; interval: number } } | undefined {
   if (!def.production) return undefined;
   const override = faction >= 0 ? doctrineOf(ctx, faction).production[def.id as BuildingId] : undefined;
-  return { table: override?.table ?? def.production.table, interval: override?.interval ?? def.production.interval };
+  return { table: override?.table ?? def.production.table, interval: override?.interval ?? def.production.interval, flagship: override?.flagship };
 }

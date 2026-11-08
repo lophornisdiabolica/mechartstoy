@@ -858,6 +858,43 @@ registerModel('hoverFortress', (faction) => {
   return setRig(root, { turret, animate: bob(hull, 0.05, 0) });
 });
 
+/** The Dreadnought: a long grey-hulled battleship in the side's colours, twin-gun turrets fore and aft, and a funnel. */
+registerModel('dreadnought', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const hull = new THREE.Group();
+  root.add(hull);
+  hull.add(box(4.2, 0.55, 1.5, primary, -0.2, 0.15, 0)); // hull
+  hull.add(box(0.8, 0.45, 1.0, primary, 2.2, 0.15, 0)); // bow
+  hull.add(box(0.45, 0.35, 0.5, primary, 2.75, 0.15, 0)); // stem
+  hull.add(box(4.6, 0.06, 1.56, DARK, 0.1, -0.1, 0)); // waterline
+  hull.add(box(3.6, 0.05, 1.3, METAL, 0, 0.45, 0)); // deck
+  hull.add(box(1.2, 0.6, 0.9, secondary, -0.35, 0.75, 0)); // superstructure
+  hull.add(box(0.6, 0.45, 0.65, secondary, -0.15, 1.25, 0)); // bridge
+  hull.add(box(0.06, 0.18, 0.55, GLASS, 0.16, 1.3, 0));
+  hull.add(box(0.08, 0.9, 0.08, METAL, -0.35, 1.85, 0)); // mast
+  hull.add(box(0.06, 0.06, 0.6, METAL, -0.35, 2.05, 0));
+  hull.add(cylinder(0.22, 0.26, 0.7, 8, DARK, -0.95, 1.05, 0)); // funnel
+  const gun = (x: number) => {
+    const t = new THREE.Group();
+    t.position.set(x, 0.5, 0);
+    t.add(box(0.75, 0.32, 0.7, secondary, 0, 0.16, 0));
+    for (const side of [-1, 1]) t.add(box(1.0, 0.09, 0.09, DARK, 0.75, 0.22, side * 0.16));
+    hull.add(t);
+    return t;
+  };
+  const turret = gun(1.15);
+  const aft = gun(-1.75);
+  const rock = bob(hull, 0.04, 0.03);
+  return setRig(root, {
+    turret,
+    animate(s) {
+      rock(s);
+      aft.rotation.y = turret.rotation.y;
+    },
+  });
+});
+
 // Firestorm: the scorch buggy, Cinder Walker and Inferno Walker, all with fuel tanks to feed the flames.
 const FUEL = 0xb0451c;
 const FLAME_TIP = 0xff8a2a;

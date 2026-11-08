@@ -32,8 +32,9 @@ export function countByCategory(world: World, sides: number): CategoryCounts[] {
     const f = world.req(e, Faction).id;
     if (f < 0 || world.has(e, Guard)) continue;
     const def = world.req(e, Unit).def;
-    // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army; engineers aren't the army.
-    if (isBoat(def) || def.builds) continue;
+    // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army,
+    // and so are flagships (see isFlagship); engineers aren't the army.
+    if (isBoat(def) || isFlagship(def) || def.builds) continue;
     out[f][def.category]++;
   }
   return out;
@@ -50,6 +51,30 @@ export const BOAT_BERTHS = 6;
 
 export function isBoat(def: UnitDef): boolean {
   return def.category !== 'super' && def.move === 'naval';
+}
+
+/**
+ * A naval super unit (Tidewater's Dreadnought). It only fights from the
+ * water, so it has a berth of its own rather than taking the super cap from
+ * the land one: as many afloat as the side's super cap, besides those.
+ */
+export function isFlagship(def: UnitDef): boolean {
+  return def.category === 'super' && def.move === 'naval';
+}
+
+/** Flagships afloat per side. */
+export function countFlagships(world: World, sides: number): number[] {
+  const out = new Array<number>(sides).fill(0);
+  for (const e of world.query(Unit, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f >= 0 && f < sides && !world.has(e, Guard) && isFlagship(world.req(e, Unit).def)) out[f]++;
+  }
+  return out;
+}
+
+/** Whether a side has room for another flagship (and holds the outpost super units need, with the gate on). */
+export function flagshipFree(ctx: SimContext, flagships: number[], faction: number): boolean {
+  return flagships[faction] < capFor(ctx, faction, 'super') && superPermitted(ctx, faction);
 }
 
 /** Boats afloat per side. */

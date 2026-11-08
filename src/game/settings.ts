@@ -177,6 +177,8 @@ export interface BattleSettings {
      * steer round ground dangerous to their kind of unit (see commander/threats.ts).
      */
     avoidance: boolean;
+    /** Whether Commanders send fast squads to hunt down long-range guns shelling their side, round a flank if need be (see commander/hunts.ts). */
+    hunts: boolean;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -266,6 +268,7 @@ export function defaultSettings(): BattleSettings {
       advice: 0.3,
       engineers: 2,
       avoidance: true,
+      hunts: true,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],

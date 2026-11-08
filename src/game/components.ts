@@ -2,7 +2,7 @@ import { defineComponent, Entity } from '../core/ecs';
 import { MoveClass } from '../world/moveClasses';
 import { BuildingDef, ProductionEntry } from './buildings';
 import { LaneId } from './lanes';
-import { ProjectileKind, UnitDef, WeaponDef } from './units';
+import { ProjectileKind, UnitDef, UnitId, WeaponDef } from './units';
 
 /**
  * Position and facing on the battlefield. `p*` fields hold the previous tick's
@@ -231,6 +231,8 @@ export interface Armed {
   burstTimer: number;
   /** Sim time of the last trigger pull (-Infinity if never), for healing out of combat. */
   firedAt: number;
+  /** The side of what it last fired at (null if it never has), so a Commander knows whose guns are shelling it (see commander/hunts.ts). */
+  firedOn: number | null;
 }
 export const Armed = defineComponent<Armed>('Armed');
 
@@ -280,6 +282,14 @@ export interface Producer {
   interval: number;
   /** Seconds until the next batch. */
   timer: number;
+  /**
+   * A super unit it builds on a slow timer of its own, beside its usual
+   * batches (Tidewater's dock and its Dreadnought; see DoctrineDef.production).
+   * Flat fields rather than an object, so the page's copy keeps up (see mirror.ts).
+   */
+  flagship?: UnitId;
+  flagshipInterval?: number;
+  flagshipTimer?: number;
 }
 export const Producer = defineComponent<Producer>('Producer');
 
