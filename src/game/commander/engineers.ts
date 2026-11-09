@@ -13,6 +13,7 @@ import { CellArea } from '../../world/ground';
 import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
 import * as D from '../../core/dmath';
+import { Crossings, Danger, Gap } from './crossings';
 
 /*
  * Engineers (Commander step 6, and the doctrine jobs after it). Every
@@ -53,6 +54,15 @@ import * as D from '../../core/dmath';
  *   canals where a bridge cuts the way to the enemy short. They come down
  *   when shelled enough, or after a while; anything on one when it goes
  *   ends up in the water.
+ *
+ * - Every side's engineers keep a way open across the map for its biggest
+ *   units: where craters have flooded the ground (or anything else has cut
+ *   it) so there's no way from the base to the enemy's wide enough for a
+ *   super unit (see crossings.ts), they throw a timber bridge over the gap
+ *   and raise the ground in it, a stretch at a time, until there's a way
+ *   again. That comes before anything else.
+ * - Engineers with nothing to build repair their side's vehicles that are
+ *   out of the fighting: damaged, not hit for a while, and no enemy near.
  *
  * Walls, field towers and comms arrays crumble over BuildingDef.lasts and
  * aren't rebuilt, so they don't pile up; earthworks stay, but a side digs
@@ -186,6 +196,42 @@ const SPAN_CANDIDATES = 8;
 const DIG_PULSE = 1;
 const DIG_STEP = 0.3;
 
+/** Filling a gap in the way across (see crossings.ts): one stretch's length, half its width, how far above the sea it's raised, and how far one pulse raises it (slow: it's a lot of earth). */
+const FILL_STEP = 3;
+const FILL_HALF = 2.6;
+const FILL_ABOVE = 0.4;
+const FILL_RISE = 0.03;
+/** While a fill is deep under the water, a pulse raises it this share of what's left to go instead (so a deep hole doesn't take for ever). */
+const FILL_DEEP_RISE = 0.04;
+/** Longest gap a bridge is thrown over while it's filled in. */
+const GAP_SPAN = 12;
+/**
+ * Choosing where to cross (see crossings.ts Danger): how far units count;
+ * what each enemy unit that near adds to filling a cell, and the most; what
+ * each of the side's own takes off, and the most; what ground this near an
+ * enemy base (past its edge) adds; what the place already chosen takes off,
+ * so the choice doesn't flit about as armies move; and how often it's
+ * looked at again.
+ */
+const DANGER_REACH = 24;
+const DANGER_PER = 10;
+const DANGER_MOST = 160;
+const COVER_PER = 2;
+const COVER_MOST = 10;
+const DANGER_BASE_REACH = 30;
+const DANGER_BASE = 80;
+const CROSSING_KEEP = 15;
+const CROSSING_REPLAN = 20;
+
+/** Repairs: a vehicle counts as out of the fighting once it's gone this long without being hit; how much below full health is worth it; how far an engineer goes for one; and health back per second (a share of its full health, and at least this much). */
+const CALM = 10;
+const REPAIR_BELOW = 0.97;
+const REPAIR_REACH = 45;
+const REPAIR_SHARE = 0.008;
+const REPAIR_MIN = 2.5;
+/** Seconds between the sparks of a repair. */
+const SPARK_EVERY = 0.8;
+
 /** Something an engineer is sent to put up: what, where it goes and faces, and where the engineer stands. */
 export interface BuildJob {
   kind: 'build';
@@ -211,6 +257,8 @@ export interface BridgeJob {
   standX: number;
   standZ: number;
   urgent?: boolean;
+  /** Bridging a gap in the way across (see crossingJobs): engineers at it don't shoot each other's crews. */
+  crossing?: boolean;
 }
 
 /** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
@@ -223,21 +271,21 @@ interface Span {
 
 /** A stretch of ground being dug or raised: a canal, a trench, or a berm. */
 export interface Earthwork {
-  kind: 'canal' | 'trench' | 'berm';
+  kind: 'canal' | 'trench' | 'berm' | 'fill';
   side: number;
   /** The stretch's centre line. */
   ax: number;
   az: number;
   bx: number;
   bz: number;
-  /** The ground level it's dug down from or raised above (for a canal, unused). */
+  /** The ground level it's dug down from or raised above (for a canal, unused; for a fill, what it's raised to). */
   level: number;
   /** Seconds of work put in toward the next pulse. */
   effort: number;
   done: boolean;
   /** Toward the side's first dock (a canal toward home, or a harbour basin): urgent. */
   harbour?: boolean;
-  /** A canal's half-width, if not CANAL_HALF (a harbour basin is one wide stretch). */
+  /** A canal's half-width, if not CANAL_HALF (a harbour basin is one wide stretch); a fill's. */
   half?: number;
 }
 
@@ -250,9 +298,22 @@ export interface DigJob {
   standX: number;
   standZ: number;
   urgent?: boolean;
+  /** Filling a gap in the way across (see crossingJobs). */
+  crossing?: boolean;
 }
 
-export type EngineerJob = BuildJob | DigJob | BridgeJob;
+/** An engineer sent to repair one of its side's vehicles: which, and where to stand by it (as of the last update; it may move). */
+export interface RepairJob {
+  kind: 'repair';
+  target: Entity;
+  x: number;
+  z: number;
+  standX: number;
+  standZ: number;
+  urgent?: boolean;
+}
+
+export type EngineerJob = BuildJob | DigJob | BridgeJob | RepairJob;
 
 /** A place to fortify: a point on the enemy's way in, the way toward the enemy, and how wide a line it wants. */
 interface Site {
@@ -304,10 +365,26 @@ export class Engineers {
   private routeVersion = -1;
   /** Choke points found, per side and enemy, for the land grid's passable version. */
   private chokes = new Map<string, { version: number; site: Site | null }>();
+  /** Whether there's a way across for big units, and where it's cut (see crossings.ts). */
+  readonly crossings = new Crossings();
+  /** Fills planned or done, by where they go (one stretch is never planned twice). */
+  private fills = new Map<string, Earthwork>();
+  /** Per side: the bridge it's throwing over a gap in the way across, kept while the gap's there so the site doesn't wander as the fill creeps on. */
+  private gapSpans: (BridgeJob | undefined)[] = [];
+  /** Per side: where it's crossing a gap in the way across, and when to look again (see crossingFor). */
+  private crossingAt: ({ gap: Gap | null; until: number; land: number; naval: number } | undefined)[] = [];
+  /** Seconds to each engineer's next repair spark. */
+  private sparks = new Map<Entity, number>();
 
   /** An engineer's job, if it has one. */
   jobFor(e: Entity): EngineerJob | undefined {
     return this.jobs.get(e);
+  }
+
+  /** Whether an engineer is at work on a way across (see crossingJobs): engineers don't shoot one another's crews at it. */
+  onCrossing(e: Entity): boolean {
+    const job = this.jobs.get(e);
+    return job !== undefined && (job.kind === 'dig' || job.kind === 'bridge') && job.crossing === true;
   }
 
   /** Where a side's engineers with nothing to build wait, or null for at home. */
@@ -435,6 +512,7 @@ export class Engineers {
         this.sideOf.set(e, side);
         jobs.splice(best, 1);
       }
+      this.repairs(world, ctx, side, crew[side]);
       this.waits[side] = this.followPoint(ctx, side);
     }
   }
@@ -443,6 +521,8 @@ export class Engineers {
   private jobsFor(world: World, ctx: SimContext, side: number): EngineerJob[] {
     const doctrine = canonicalDoctrine(doctrineOf(ctx, side).id);
     const out: EngineerJob[] = [];
+    // A way across for the big units, if craters have cut it.
+    out.push(...this.crossingJobs(world, ctx, side));
     // Tidewater: the base's missing hover pad or dock first, then the canal.
     if (doctrine === 'tidewater') {
       const harbour = this.harbourJobs(world, ctx, side);
@@ -669,10 +749,10 @@ export class Engineers {
   private earthworkJobs(world: World, ctx: SimContext, side: number, site: Site): DigJob[] {
     const cx = site.x + site.dx * TRENCH_AHEAD;
     const cz = site.z + site.dz * TRENCH_AHEAD;
-    const near = this.works.filter((w) => w.side === side && w.kind !== 'canal' && D.hypot((w.ax + w.bx) / 2 - cx, (w.az + w.bz) / 2 - cz) < TRENCH_LENGTH);
+    const near = this.works.filter((w) => w.side === side && (w.kind === 'trench' || w.kind === 'berm') && D.hypot((w.ax + w.bx) / 2 - cx, (w.az + w.bz) / 2 - cz) < TRENCH_LENGTH);
     if (near.length === 0) {
       // One line at a time, up to the most a side digs.
-      const digging = this.works.some((w) => w.side === side && w.kind !== 'canal' && !w.done);
+      const digging = this.works.some((w) => w.side === side && (w.kind === 'trench' || w.kind === 'berm') && !w.done);
       if (digging || this.lines[side] >= EARTHWORKS_MOST || !this.safe(world, ctx, side, cx, cz)) return [];
       const line = this.planLine(ctx, side, cx, cz, site.dx, site.dz);
       if (!line) return [];
@@ -1090,6 +1170,192 @@ export class Engineers {
   }
 
   /**
+   * Where there's no way from a side's base to its nearest enemy's wide
+   * enough for a super unit (see crossings.ts): the next stretch of the gap
+   * to fill in, and a bridge over it meanwhile if it's short enough.
+   */
+  private crossingJobs(world: World, ctx: SimContext, side: number): EngineerJob[] {
+    const gap = this.crossingFor(world, ctx, side);
+    if (!gap) return [];
+    const out: EngineerJob[] = [];
+    const fill = this.planFill(ctx, side, gap);
+    if (fill) {
+      const len = Math.max(1e-3, D.hypot(fill.bx - fill.ax, fill.bz - fill.az));
+      const stand = { x: gap.before.x - ((fill.bx - fill.ax) / len) * 1.5, z: gap.before.z - ((fill.bz - fill.az) / len) * 1.5 };
+      const foot = ctx.navs.for('foot');
+      const at = foot.terrainAllowsAt(stand.x, stand.z) ? stand : gap.before;
+      if (this.safe(world, ctx, side, at.x, at.z)) out.push({ kind: 'dig', work: fill, x: (fill.ax + fill.bx) / 2, z: (fill.az + fill.bz) / 2, standX: at.x, standZ: at.z, urgent: true, crossing: true });
+    }
+    const span = this.gapBridge(world, ctx, side, gap);
+    if (span) out.push(span);
+    return out;
+  }
+
+  /**
+   * Where a side crosses the gap in the way to its nearest enemy, if
+   * there's one: where filling costs least once the danger is added (see
+   * dangerFor). Kept for CROSSING_REPLAN seconds, or until the terrain
+   * changes, so engineers aren't sent back and forth.
+   */
+  private crossingFor(world: World, ctx: SimContext, side: number): Gap | null {
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const { field } = ctx;
+    const land = ctx.navs.land.passableVersion;
+    const naval = ctx.navs.for('naval').passableVersion;
+    const was = this.crossingAt[side];
+    if (was && world.time < was.until && was.land === land && was.naval === naval) return was.gap;
+    // Canals and harbour basins are never filled in.
+    this.crossings.kept = this.works.filter((w) => w.kind === 'canal').map((w) => ({ ax: w.ax, az: w.az, bx: w.bx, bz: w.bz, half: w.half ?? CANAL_HALF }));
+    const gap = this.crossings.gap(ctx, field.baseSites[side], field.baseSites[enemy], this.dangerFor(world, ctx, side, was?.gap ?? null));
+    this.crossingAt[side] = { gap, until: world.time + CROSSING_REPLAN, land, naval };
+    return gap;
+  }
+
+  /**
+   * What filling in a cell costs a side beyond the earth itself: more the
+   * more enemy units are near it and the nearer an enemy base, less where
+   * its own units are and where it's already crossing. So its engineers go
+   * where they can finish the work, and two sides cutting across the same
+   * water mostly cross in different places.
+   */
+  private dangerFor(world: World, ctx: SimContext, side: number, current: Gap | null): Danger {
+    const { sides, field } = ctx;
+    // Units binned DANGER_REACH square, so a cell only looks at the bins round it.
+    const bins = new Map<number, { x: number; z: number; foe: boolean }[]>();
+    const binOf = (x: number, z: number) => Math.floor((x - field.bounds.minX) / DANGER_REACH) * 4096 + Math.floor((z - field.bounds.minZ) / DANGER_REACH);
+    for (const e of world.query(Unit, Faction, Transform)) {
+      const id = world.req(e, Faction).id;
+      const foe = sides.hostile(side, id);
+      if (!foe && id !== side) continue;
+      const t = world.req(e, Transform);
+      const k = binOf(t.x, t.z);
+      let bin = bins.get(k);
+      if (!bin) bins.set(k, (bin = []));
+      bin.push({ x: t.x, z: t.z, foe });
+    }
+    const bases = sides.enemiesOf(side).map((g) => field.baseSites[g]);
+    const chosen = current ? current.points : [];
+    return (x, z) => {
+      let foes = 0;
+      let own = 0;
+      const bi = Math.floor((x - field.bounds.minX) / DANGER_REACH);
+      const bj = Math.floor((z - field.bounds.minZ) / DANGER_REACH);
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          const bin = bins.get((bi + di) * 4096 + bj + dj);
+          if (!bin) continue;
+          for (const u of bin) {
+            const d = D.hypot(u.x - x, u.z - z);
+            if (d >= DANGER_REACH) continue;
+            if (u.foe) foes += 1 - d / DANGER_REACH;
+            else own += 1 - d / DANGER_REACH;
+          }
+        }
+      }
+      let cost = Math.min(DANGER_MOST, foes * DANGER_PER) - Math.min(COVER_MOST, own * COVER_PER);
+      for (const b of bases) {
+        const d = D.hypot(b.x - x, b.z - z) - b.radius;
+        if (d < DANGER_BASE_REACH) cost += DANGER_BASE * (1 - Math.max(0, d) / DANGER_BASE_REACH);
+      }
+      if (chosen.some((p) => D.hypot(p.x - x, p.z - z) < 3)) cost -= CROSSING_KEEP;
+      return cost;
+    };
+  }
+
+  /** The next stretch to fill in a gap: from the open ground before it, FILL_STEP into it. Null once that stretch has been filled already. */
+  private planFill(ctx: SimContext, side: number, gap: Gap): Earthwork | null {
+    const a = gap.before;
+    let b = gap.points[gap.points.length - 1];
+    for (const p of gap.points) {
+      if (D.hypot(p.x - a.x, p.z - a.z) >= FILL_STEP) {
+        b = p;
+        break;
+      }
+    }
+    const key = `${Math.round(a.x * 2)},${Math.round(a.z * 2)}>${Math.round(b.x * 2)},${Math.round(b.z * 2)}`;
+    const known = this.fills.get(key);
+    if (known) return known.done ? null : known;
+    const work: Earthwork = { kind: 'fill', side, ax: a.x, az: a.z, bx: b.x, bz: b.z, level: ctx.field.seaLevel + FILL_ABOVE, effort: 0, done: false, half: FILL_HALF };
+    this.fills.set(key, work);
+    this.works.push(work);
+    return work;
+  }
+
+  /** A timber bridge over a gap with water in it, while it's filled in, if it's short enough and there's a bridge to spare. */
+  private gapBridge(world: World, ctx: SimContext, side: number, gap: Gap): BridgeJob | null {
+    if (!gap.water || this.spansOf(side) >= SPANS_MOST) return null;
+    // The one already going up, while the gap's still there.
+    const going = this.gapSpans[side];
+    if (going && gap.points.some((p) => D.hypot(p.x - going.x, p.z - going.z) < 6) && !ctx.field.nearBridge(going.x, going.z, SPAN_APART)) return going;
+    const { field } = ctx;
+    const wet = D.hypot(gap.wetTo.x - gap.wetFrom.x, gap.wetTo.z - gap.wetFrom.z);
+    // Along the way across: from the open ground before the gap to after it.
+    const len = Math.max(1e-3, D.hypot(gap.after.x - gap.before.x, gap.after.z - gap.before.z));
+    const ux = (gap.after.x - gap.before.x) / len;
+    const uz = (gap.after.z - gap.before.z) / len;
+    // Ends a little either side of the water (placeBridge carries them on to dry ground).
+    const a = { x: gap.wetFrom.x - ux * 2, z: gap.wetFrom.z - uz * 2 };
+    const b = { x: gap.wetTo.x + ux * 2, z: gap.wetTo.z + uz * 2 };
+    const x = (a.x + b.x) / 2;
+    const z = (a.z + b.z) / 2;
+    if (wet > GAP_SPAN || field.nearBridge(x, z, SPAN_APART)) return null;
+    const stand = { x: a.x - ux * 1.5, z: a.z - uz * 1.5 };
+    if (!ctx.navs.for('foot').terrainAllowsAt(stand.x, stand.z) || !this.safe(world, ctx, side, stand.x, stand.z)) return null;
+    const job: BridgeJob = { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x, z, standX: stand.x, standZ: stand.z, urgent: true, crossing: true };
+    this.gapSpans[side] = job;
+    return job;
+  }
+
+  /**
+   * Hand a side's engineers that have nothing to build a vehicle each to
+   * repair: the nearest of the side's damaged land vehicles that's out of the
+   * fighting (not hit for CALM seconds, no enemy near).
+   */
+  private repairs(world: World, ctx: SimContext, side: number, crew: Entity[]): void {
+    const idle = crew.filter((e) => !this.jobs.has(e));
+    if (idle.length === 0) return;
+    const hurt: Entity[] = [];
+    for (const e of world.query(Unit, Faction, Health, Transform, Mover)) {
+      if (world.req(e, Faction).id !== side) continue;
+      const def = world.req(e, Unit).def;
+      if (def.class === 'infantry') continue;
+      const move = world.req(e, Mover).move;
+      if (move === 'naval' || MOVE_RULES[move].flies) continue;
+      const h = world.req(e, Health);
+      if (h.hp >= h.max * REPAIR_BELOW || world.time - h.hurtAt < CALM) continue;
+      hurt.push(e);
+    }
+    if (hurt.length === 0) return;
+    for (const e of idle) {
+      const t = world.req(e, Transform);
+      let best: Entity | null = null;
+      let bestD = REPAIR_REACH;
+      for (const v of hurt) {
+        const vt = world.req(v, Transform);
+        const d = D.hypot(vt.x - t.x, vt.z - t.z);
+        if (d < bestD) {
+          bestD = d;
+          best = v;
+        }
+      }
+      if (best === null) continue;
+      const vt = world.req(best, Transform);
+      if (!this.safe(world, ctx, side, vt.x, vt.z)) {
+        hurt.splice(hurt.indexOf(best), 1);
+        continue;
+      }
+      // Stand at its side, on the engineer's side of it.
+      const r = world.req(best, Unit).def.radius + 0.7;
+      const d = Math.max(1e-3, bestD);
+      this.jobs.set(e, { kind: 'repair', target: best, x: vt.x, z: vt.z, standX: vt.x + ((t.x - vt.x) / d) * r, standZ: vt.z + ((t.z - vt.z) / d) * r });
+      this.sideOf.set(e, side);
+      hurt.splice(hurt.indexOf(best), 1);
+      if (hurt.length === 0) break;
+    }
+  }
+
+  /**
    * A shot landed at a point: an engineers' bridge it's on, or bursts by, of
    * a side hostile to the shooter's takes the hit (see projectiles.ts).
    */
@@ -1155,6 +1421,10 @@ export class Engineers {
         continue;
       }
       const t = world.req(e, Transform);
+      if (job.kind === 'repair') {
+        this.repair(world, ctx, e, t, job, dt);
+        continue;
+      }
       if (D.hypot(job.standX - t.x, job.standZ - t.z) > REACH) continue;
       if (job.kind === 'bridge') {
         const key = `${Math.round(job.x)},${Math.round(job.z)}`;
@@ -1230,6 +1500,29 @@ export class Engineers {
     }
   }
 
+  /** An engineer by the vehicle it's repairing patches it up; it gives up if the vehicle's gone, mended or back under fire. */
+  private repair(world: World, ctx: SimContext, e: Entity, t: Transform, job: RepairJob, dt: number): void {
+    const h = world.get(job.target, Health);
+    if (!h || !world.has(job.target, Unit) || h.hp >= h.max || world.time - h.hurtAt < CALM) {
+      this.jobs.delete(e);
+      this.sparks.delete(e);
+      return;
+    }
+    const vt = world.req(job.target, Transform);
+    const r = world.req(job.target, Unit).def.radius;
+    if (D.hypot(vt.x - t.x, vt.z - t.z) > r + REACH) return;
+    h.hp = Math.min(h.max, h.hp + Math.max(REPAIR_MIN, h.max * REPAIR_SHARE) * dt);
+    const next = (this.sparks.get(e) ?? 0) - dt;
+    if (next <= 0) {
+      // Sparks where the engineer's working, on the side of the vehicle facing it.
+      const d = Math.max(1e-3, D.hypot(t.x - vt.x, t.z - vt.z));
+      const x = vt.x + ((t.x - vt.x) / d) * r * 0.8;
+      const z = vt.z + ((t.z - vt.z) / d) * r * 0.8;
+      ctx.events.emit('repair', { faction: world.req(e, Faction).id, x, y: vt.y + r * 0.5, z });
+      this.sparks.set(e, SPARK_EVERY);
+    } else this.sparks.set(e, next);
+  }
+
   /** A stretch is dug: trenches get their ground, canals count toward the side's total, and the ticker hears of it. */
   private finish(ctx: SimContext, w: Earthwork): void {
     w.done = true;
@@ -1244,7 +1537,7 @@ export function layGround(ctx: SimContext, w: Earthwork): void {
   if (w.kind === 'canal') return;
   const { field } = ctx;
   // The trench floor gets trench ground (cover), the berm fresh earth.
-  const reach = w.kind === 'trench' ? TRENCH_HALF + 0.3 : BERM_HALF;
+  const reach = w.kind === 'trench' ? TRENCH_HALF + 0.3 : w.kind === 'fill' ? (w.half ?? FILL_HALF) : BERM_HALF;
   const { cols } = field.config;
   const area = field.areaAround((w.ax + w.bx) / 2, (w.az + w.bz) / 2, D.hypot(w.bx - w.ax, w.bz - w.az) / 2 + 2);
   const cells: number[] = [];
@@ -1275,6 +1568,12 @@ function shapeOf(field: { seaLevel: number }, w: Earthwork, d: number): { h: num
     if (d > half + 3) return null;
     return { h: field.seaLevel - CANAL_DEPTH + Math.max(0, d - half) * 1.6, down: true };
   }
+  if (w.kind === 'fill') {
+    // A flat causeway a little above the water, its shoulders sloping down to the ground either side.
+    const half = w.half ?? FILL_HALF;
+    if (d > half + 2.4) return null;
+    return { h: w.level - Math.max(0, d - half) * 0.45, down: false };
+  }
   if (w.kind === 'trench') {
     if (d > TRENCH_HALF + 0.8) return null;
     return { h: w.level - TRENCH_DEPTH + Math.max(0, d - TRENCH_HALF) * (TRENCH_DEPTH / 0.8), down: true };
@@ -1300,6 +1599,8 @@ export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
   const a = { x: w.ax, z: w.az };
   const b = { x: w.bx, z: w.bz };
   let moved = false;
+  // Filling in is slow work: there's a lot of earth to bring.
+  const rise = w.kind === 'fill' ? FILL_RISE : DIG_STEP;
   for (let j = j0; j <= j1; j++) {
     for (let i = i0; i <= i1; i++) {
       const shape = shapeOf(field, w, distanceToSegment(field.vertexX(i), field.vertexZ(j), a, b));
@@ -1308,7 +1609,9 @@ export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
       const h = field.heights[k];
       // Heights are stored as 32-bit floats: aim for what the store will hold, or it never quite gets there.
       const goal = Math.fround(shape.h);
-      const next = Math.fround(shape.down ? (h > goal ? Math.max(goal, h - DIG_STEP) : h) : h < goal ? Math.min(goal, h + DIG_STEP) : h);
+      // A deep hole takes more earth, but it's tipped in faster while it's deep.
+      const up = w.kind === 'fill' ? Math.max(rise, (goal - h) * FILL_DEEP_RISE) : rise;
+      const next = Math.fround(shape.down ? (h > goal ? Math.max(goal, h - DIG_STEP) : h) : h < goal ? Math.min(goal, h + up) : h);
       if (next === h) continue;
       field.heights[k] = next;
       moved = true;

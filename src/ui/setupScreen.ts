@@ -517,11 +517,20 @@ export class SetupScreen {
     scrapLabel.append(scrap, document.createTextNode(' Wrecks pile up into scrap'));
     row(map, 'Scrap', scrapLabel);
     this.sync.push(() => (scrap.checked = this.settings.map.scrap));
+    const craters = el('input', { type: 'checkbox', 'aria-label': 'Craters' });
+    craters.addEventListener('change', () => {
+      this.settings.map.craters = craters.checked;
+      this.changed();
+    });
+    const cratersLabel = el('label', { class: 'check' });
+    cratersLabel.append(craters, document.createTextNode(' Super units leave craters'));
+    row(map, 'Craters', cratersLabel);
+    this.sync.push(() => (craters.checked = this.settings.map.craters));
     map.append(
       el(
         'p',
         { class: 'hint' },
-        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later.',
+        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later. A super unit blowing up leaves a small crater; on low ground it fills with water, and engineers fill in or bridge any that cut the way across.',
       ),
     );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));

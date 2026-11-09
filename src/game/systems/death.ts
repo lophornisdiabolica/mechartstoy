@@ -26,6 +26,7 @@ import { SimContext } from '../context';
 import { applyDamage } from './projectiles';
 import * as D from '../../core/dmath';
 import { MOVE_RULES } from '../../world/moveClasses';
+import { blastCrater, craterOf } from '../craters';
 
 /** Seconds a wreck spends sinking into the ground before it's removed. */
 const SINK_TIME = 3;
@@ -58,6 +59,10 @@ export function deathSystem(ctx: SimContext): System {
             explode(world, ctx, t, unit.def.explodes, killer, e);
             ctx.fire.add(t.x, t.z, unit.def.explodes.radius * 0.6, 1, faction, unit.def.id);
           }
+          // A super unit going up leaves a crater (an aircraft's, where it comes down).
+          const crater = craterOf(ctx, unit.def);
+          const flying = MOVE_RULES[unit.def.move].flies;
+          if (crater && !flying) blastCrater(world, ctx, t.x, t.z, crater.radius, crater.depth);
           if (unit.def.wreckTime <= 0) {
             world.destroy(e);
             continue;
@@ -67,7 +72,7 @@ export function deathSystem(ctx: SimContext): System {
           if (mover && MOVE_RULES[mover.move].flies) {
             const d = unit.def;
             const speed = d.fixedWing ? d.speed * 0.8 : d.speed * 0.45;
-            world.add(e, Falling, { vx: D.cos(t.heading) * speed, vz: -D.sin(t.heading) * speed, spin: d.fixedWing ? 0 : ((e % 2) * 2 - 1) * (d.radius > 2 ? 0.3 : 2.5), damage: 15 + d.hp * 0.08, radius: 1.5 + d.radius });
+            world.add(e, Falling, { vx: D.cos(t.heading) * speed, vz: -D.sin(t.heading) * speed, spin: d.fixedWing ? 0 : ((e % 2) * 2 - 1) * (d.radius > 2 ? 0.3 : 2.5), damage: 15 + d.hp * 0.08, radius: 1.5 + d.radius, ...(crater ? { crater } : {}) });
           }
           for (const c of [Unit, Health, Armed, Ai, Mover, Collider, Targetable, Ammo]) world.remove(e, c);
           world.add(e, Wreck, { removeAt: world.time + unit.def.wreckTime });
@@ -127,7 +132,10 @@ export function wreckSystem(ctx?: SimContext): System {
           g.offset = Math.max(0, g.offset - dt * (falling.spin === 0 ? GLIDE_SPEED : FALL_SPEED));
           if (g.offset <= 0) {
             world.remove(e, Falling);
-            if (ctx) explode(world, ctx, t, { damage: falling.damage, radius: falling.radius }, null);
+            if (ctx) {
+              explode(world, ctx, t, { damage: falling.damage, radius: falling.radius }, null);
+              if (falling.crater) blastCrater(world, ctx, t.x, t.z, falling.crater.radius, falling.crater.depth);
+            }
           }
           continue;
         }

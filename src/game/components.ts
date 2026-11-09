@@ -406,6 +406,8 @@ export interface Falling {
   /** What its crash does. */
   damage: number;
   radius: number;
+  /** The crater it leaves where it comes down (a super unit; see craters.ts). */
+  crater?: { radius: number; depth: number };
 }
 export const Falling = defineComponent<Falling>('Falling');
 

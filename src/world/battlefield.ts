@@ -228,6 +228,8 @@ export class Battlefield {
   private readonly listeners: MapChangeListener[] = [];
   /** Bumps on every change, for anything that caches what the map looked like. */
   version = 0;
+  /** Vertex heights as the map was made, before the battle reshaped anything (see markMade, wasWater). */
+  private madeHeights: Float32Array | null = null;
 
   constructor(
     readonly config: BattlefieldConfig,
@@ -533,6 +535,31 @@ export class Battlefield {
     return (h00 * (1 - fx) + h10 * fx) * (1 - fz) + (h01 * (1 - fx) + h11 * fx) * fz;
   }
 
+  /** Remember the map as it was made, so later changes can tell made water from the map's own (see wasWater). */
+  markMade(): void {
+    this.madeHeights = this.heights.slice();
+  }
+
+  /**
+   * Whether a point was under water when the map was made: the sea, lakes
+   * and rivers, not ponds that craters, quakes, god powers or engineers'
+   * digging left mid-battle.
+   */
+  wasWater(x: number, z: number): boolean {
+    const made = this.madeHeights;
+    if (!made) return this.isWater(x, z);
+    const { cellSize, cols, rows } = this.config;
+    const gx = Math.max(0, Math.min(cols, (x - this.bounds.minX) / cellSize));
+    const gz = Math.max(0, Math.min(rows, (z - this.bounds.minZ) / cellSize));
+    const i = Math.min(cols - 1, Math.floor(gx));
+    const j = Math.min(rows - 1, Math.floor(gz));
+    const fx = gx - i;
+    const fz = gz - j;
+    const at = (a: number, b: number) => made[b * (cols + 1) + a];
+    const h = (at(i, j) * (1 - fx) + at(i + 1, j) * fx) * (1 - fz) + (at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx) * fz;
+    return h < this.seaLevel;
+  }
+
   /** Height a unit should stand at: ground, a bridge deck, or the water surface for anything over water. */
   surfaceAt(x: number, z: number): number {
     const deck = this.deckAt(x, z);
@@ -739,6 +766,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);
+  field.markMade();
 
   return field;
 }

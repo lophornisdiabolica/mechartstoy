@@ -63,6 +63,8 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   hunt: true,
   span: true,
   militia: true,
+  crater: true,
+  repair: true,
 };
 
 /** Page to worker. */

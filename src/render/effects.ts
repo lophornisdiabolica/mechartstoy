@@ -208,6 +208,20 @@ export class Effects {
     });
     events.on('constructionStarted', (e) => this.dust(e.x, e.y, e.z, e.def.radius, 10));
     events.on('power', (e) => this.power(e));
+    // A super unit's crater: earth thrown up round its rim (the blast itself is its explosion).
+    events.on('crater', (e) => {
+      const y = this.groundAt(e.x, e.z, this.field.seaLevel);
+      this.dust(e.x, y, e.z, e.radius, 14);
+      for (let i = 0; i < 14; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = rand(1.5, 3.5);
+        this.debris.spawn({ x: e.x, y: y + 0.2, z: e.z, vx: Math.cos(a) * sp, vy: rand(3, 6), vz: Math.sin(a) * sp, life: rand(0.8, 1.4), size: rand(0.12, 0.24), endSize: 0.06, color: 0x5a4636, gravity: 14 });
+      }
+    });
+    // An engineer at work on a vehicle: a few welding sparks.
+    events.on('repair', (e) => {
+      for (let i = 0; i < 4; i++) this.flashes.spawn({ x: e.x, y: e.y, z: e.z, vx: rand(-1.2, 1.2), vy: rand(0.5, 2), vz: rand(-1.2, 1.2), life: rand(0.15, 0.35), size: 0.12, endSize: 0.02, color: 0xfff1b0, endColor: 0xff9a30 });
+    });
   }
 
   /** What god powers look like beyond their shells and map changes (see GameEvents.power). */
