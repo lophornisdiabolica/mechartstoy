@@ -78,6 +78,9 @@ describe('townsfolk', () => {
     run(game, 1);
     const militia = folk(game).filter((e) => world.req(e, Townsfolk).role === 'militia');
     expect(militia.length).toBeGreaterThanOrEqual(3);
+    // The end screen says who angered the town, and what it lost.
+    expect(game.stats.townAngered).toEqual([1]);
+    expect(game.stats.townRazed).toBe(MILITIA_AT);
     expect(world.req(militia[0], Faction).id).toBe(militiaOf(0));
     expect(world.has(militia[0], Armed)).toBe(true);
     expect(ctx.sides.hostile(militiaOf(0), 1)).toBe(true);
@@ -95,7 +98,7 @@ describe('townsfolk', () => {
     expect(world.req(blue, Health).hp).toBe(blueHp);
   }, 60000);
 
-  it("doesn't count townsfolk as kills", () => {
+  it("doesn't count townsfolk as kills, but as the town's losses", () => {
     const game = quietTown();
     run(game, 1);
     const victim = folk(game)[0];
@@ -105,5 +108,6 @@ describe('townsfolk', () => {
     run(game, 0.5);
     expect(game.world.isAlive(victim)).toBe(false);
     expect(game.stats.sides[0].kills).toBe(0);
+    expect(game.stats.townFolkLost).toBe(1);
   });
 });

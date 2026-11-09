@@ -64,6 +64,10 @@ export class BattleStats {
   readonly sides: SideStats[];
   /** Civilian buildings destroyed by anyone. */
   townRazed = 0;
+  /** Townsfolk (civilians, town engineers and militia) killed by anyone. */
+  townFolkLost = 0;
+  /** Sides a town took up arms against (see towns.ts), in the order they made one angry, each once. */
+  townAngered: number[] = [];
 
   constructor(events: EventBus<GameEvents>, factions: number) {
     this.sides = Array.from({ length: factions }, () => ({ fielded: 0, lost: 0, kills: 0, razed: 0, captured: 0, killsBy: {}, strengthBy: {}, types: {} }));
@@ -74,6 +78,7 @@ export class BattleStats {
     });
     events.on('unitDestroyed', (e) => {
       const k = e.killer;
+      if (isTownFaction(e.faction)) this.townFolkLost++;
       if (this.side(e.faction)) {
         this.sides[e.faction].lost++;
         const t = this.type(e.faction, e.def.id);
@@ -102,6 +107,9 @@ export class BattleStats {
         t.dealt += e.amount;
         t.dealtTo[e.category] = (t.dealtTo[e.category] ?? 0) + e.amount;
       }
+    });
+    events.on('militia', (e) => {
+      if (!this.townAngered.includes(e.faction)) this.townAngered.push(e.faction);
     });
     events.on('outpostCaptured', (e) => this.side(e.faction) && this.sides[e.faction].captured++);
     events.on('buildingDestroyed', (e) => {

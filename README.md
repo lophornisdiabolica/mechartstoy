@@ -217,7 +217,9 @@ battle, its exact map via `seed`).
   base and shooting its units that come within nine units, and that side
   shoots back. They never go out to attack and leave other sides alone.
   Lost townsfolk come back one a minute from the town's buildings.
-  Townsfolk count toward nothing: no caps, kills or strength.
+  Townsfolk count toward nothing: no caps, kills or strength. The end
+  screen says how many town buildings and townsfolk were caught in the
+  crossfire, and which sides the towns took up arms against.
   **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an

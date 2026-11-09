@@ -119,7 +119,7 @@ export interface Frame {
    * spawned before the page was listening) and after a fast-forward (the
    * events that built them weren't sent).
    */
-  stats?: { sides: SideStats[]; townRazed: number };
+  stats?: { sides: SideStats[]; townRazed: number; townFolkLost: number; townAngered: number[] };
   /** After a fast-forward: a sign for the page to jump its drawing clock. */
   skipped?: true;
   /** When asked for (see SimHost.routes): each moving unit's route, as [entity, goal x, goal z, then x, z of each waypoint left]. */
@@ -412,7 +412,7 @@ export class SimHost {
         fire: ctx.fire.version !== this.fireSent ? ctx.fire.snapshot() : null,
       }),
       profile,
-      ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed } } : {}),
+      ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed, townFolkLost: this.game.stats.townFolkLost, townAngered: [...this.game.stats.townAngered] } } : {}),
       ...(this.skipped ? { skipped: true as const } : {}),
       ...(this.routes && world.time - this.routesAt >= ROUTES_EVERY ? { routes: unitRoutes(world) } : {}),
     };
@@ -542,6 +542,8 @@ export class SimView {
       const stats = this.game.stats;
       frame.stats.sides.forEach((side, f) => Object.assign(stats.sides[f], side));
       stats.townRazed = frame.stats.townRazed;
+      stats.townFolkLost = frame.stats.townFolkLost;
+      stats.townAngered = frame.stats.townAngered;
     }
     if (frame.skipped) {
       // Nothing from before the jump is left to show.
