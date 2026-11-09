@@ -9,6 +9,7 @@ import { Building, Collider, Faction, Hit, Mover, Transform } from './components
 import type { Commander } from './commander/commander';
 import type { Divine, Power } from './god';
 import type { FireField } from './fire';
+import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -65,6 +66,8 @@ export type GameEvents = {
   hunt: { faction: number; x: number; z: number; unit: string; done: boolean };
   /** Engineers threw a temporary bridge across water, or it came down (`down`; see commander/engineers.ts). */
   span: { faction: number; x: number; z: number; down: boolean };
+  /** A town's people took up arms against a side that razed too much of it (see towns.ts). */
+  militia: { town: number; faction: number; x: number; z: number };
   /** A super unit blew a crater in the ground (see craters.ts). */
   crater: { x: number; z: number; radius: number };
 };
@@ -134,4 +137,6 @@ export interface SimContext {
   god: Divine;
   /** Burning and scorched ground (see fire.ts). */
   fire: FireField;
+  /** The towns' people (see towns.ts). */
+  towns: Towns;
 }

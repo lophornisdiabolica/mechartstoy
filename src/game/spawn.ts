@@ -27,7 +27,7 @@ import { MOVE_RULES } from '../world/moveClasses';
 import { UnitDef, WeaponDef } from './units';
 import * as D from '../core/dmath';
 
-function armed(
+export function armed(
   ctx: SimContext,
   weapon: WeaponDef,
   sight: number,

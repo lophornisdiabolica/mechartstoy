@@ -302,7 +302,15 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'wrench';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+
+/** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
+const TOWN_CLOTHES: Record<string, [string, string, string]> = {
+  civilian0: ['#c9a25e', '#4a3222', '#5a5048'],
+  civilian1: ['#6f8fa8', '#2a1e16', '#3d4a5a'],
+  civilian2: ['#a8574a', '#8a6a3a', '#4e4a40'],
+  militia: ['#7d7458', '#3a2a1c', '#4a4636'],
+};
 
 /** Two walk frames of an infantry sprite. */
 function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
@@ -318,6 +326,27 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       g.fillStyle = c;
       g.fillRect(ox + x, y, w, h);
     };
+    const clothes = TOWN_CLOTHES[kit];
+    if (clothes) {
+      // Townsfolk: bare heads (a flat cap for the militia), everyday clothes.
+      px(2, 0, 4, 1, clothes[1]); // hair, or the cap's crown
+      if (kit === 'militia') px(1, 1, 6, 1, clothes[1]); // cap brim
+      else {
+        px(2, 1, 1, 1, clothes[1]);
+        px(5, 1, 1, 1, clothes[1]);
+      }
+      px(3, 1, 2, 2, '#e0b48a'); // face
+      px(2, 3, 4, 4, clothes[0]); // shirt
+      px(1, 3, 1, 3, clothes[0]); // arm
+      if (kit === 'militia') {
+        px(2, 4, 4, 1, '#d8d0b8'); // armband / bandolier
+        px(5, 4, 3, 1, '#5a3c22'); // hunting rifle
+      }
+      for (const [x, y, w, h] of frame === 0 ? [[2, 7, 2, 4], [4, 7, 2, 4]] : [[1, 7, 2, 4], [5, 7, 2, 3]]) px(x, y, w, h, clothes[2]);
+      px(1, 11, 3, 1, '#2a2018');
+      px(4, 11, 3, 1, '#2a2018');
+      continue;
+    }
     px(2, 0, 4, 3, kit === 'wrench' ? '#f0c419' : hex(secondary)); // helmet (an engineer's hard hat)
     px(3, 2, 2, 1, '#e0b48a'); // face
     px(2, 3, 4, 4, hex(primary)); // torso
@@ -976,6 +1005,11 @@ registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
 registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
 registerModel('engineer', (faction) => infantry(faction, 'wrench'));
+// Townsfolk (see game/towns.ts): three sets of everyday clothes, and the militia.
+registerModel('civilian:0', (faction) => infantry(faction, 'civilian0'));
+registerModel('civilian:1', (faction) => infantry(faction, 'civilian1'));
+registerModel('civilian:2', (faction) => infantry(faction, 'civilian2'));
+registerModel('militia', (faction) => infantry(faction, 'militia'));
 
 // Shared dark material for burnt-out hulks.
 export const CHARRED = flatMaterial(0x2a2623);

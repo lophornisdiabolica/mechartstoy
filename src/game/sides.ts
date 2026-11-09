@@ -1,7 +1,7 @@
 import { System } from '../core/ecs';
 import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
-import { Faction, GARRISON, Transform, Unit } from './components';
+import { Faction, GARRISON, MILITIA_BASE, Transform, Unit } from './components';
 import { SimContext } from './context';
 import * as D from '../core/dmath';
 
@@ -52,6 +52,8 @@ export class Sides {
    */
   readonly recalling: boolean[];
   private readonly targets = new Map<string, number | null>();
+  /** Per town militia faction (see militiaOf): the sides it fights, for razing too much of its town. */
+  readonly grudges = new Map<number, Set<number>>();
 
   constructor(
     /** Team of each side. */
@@ -141,6 +143,9 @@ export class Sides {
    * nobody's ally; an outpost's garrison fights every side.
    */
   hostile(a: number, b: number): boolean {
+    // A town's militia and the sides it holds a grudge against (see towns.ts).
+    if (a <= MILITIA_BASE) return b >= 0 && (this.grudges.get(a)?.has(b) ?? false);
+    if (b <= MILITIA_BASE) return a >= 0 && (this.grudges.get(b)?.has(a) ?? false);
     if (a === GARRISON || b === GARRISON) return a !== b && (a >= 0 || b >= 0);
     return a >= 0 && b >= 0 && a !== b && this.teams[a] !== this.teams[b];
   }
