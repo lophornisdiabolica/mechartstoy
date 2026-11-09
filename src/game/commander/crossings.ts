@@ -5,21 +5,30 @@ import * as D from '../../core/dmath';
 /*
  * Crossings: whether there's still a way across the map wide enough for
  * the biggest land units, and if not, where it's cut. Craters (see
- * craters.ts) flood low ground over a long battle; once they, or anything
- * else, leave no comfortable way from a side's base to its enemy's,
- * engineers of any side fill the gap in with earth, and throw one of their
- * timber bridges over it meanwhile (see Engineers.crossingJobs), so craters
- * can't wall a battle into a stalemate.
+ * craters.ts), quakes and the god powers' terrain brush can leave water
+ * where the map had none; once that, or anything else, leaves no
+ * comfortable way from a side's base to its enemy's, engineers of any side
+ * fill the gap in with earth, however deep it is, and throw one of their
+ * timber bridges over it meanwhile (see Engineers.crossingJobs), so a
+ * battle can't be walled into a stalemate.
  *
- * Only the terrain counts (buildings and walls come and go, and so do
- * engineers' timber bridges, so a gap under one still gets filled in). The way is
- * measured on the land route grid: a cell is comfortable when it's at
- * least COMFORT from any cell tracked vehicles can't enter.
+ * Only water that wasn't there when the map was made is filled however
+ * deep (and never a Tidewater canal); the map's own sea, lakes and rivers
+ * only where they're shallows. Only the terrain counts (buildings and walls
+ * come and go, and so do engineers' timber bridges, so a gap under one
+ * still gets filled in). The way is measured on the land route grid: a
+ * cell is comfortable when it's at least COMFORT from any cell tracked
+ * vehicles can't enter.
+ *
+ * Each side picks its own place to cross (gap's `danger`): where its own
+ * units are and the enemy's aren't, so its engineers can finish the work
+ * instead of being shot off it, and two sides cutting across the same
+ * water mostly do it in different places.
  */
 
 /** Room a way across needs: a super unit's radius (the widest is 2.1), plus a little. */
 export const COMFORT = 2.2;
-/** Deepest water (below the sea) engineers fill in: crater ponds and shallows, not lakes or canals. */
+/** Deepest of the map's own water (below the sea) engineers fill in: shallows, not lakes or rivers. */
 export const FILL_DEEPEST = 0.5;
 /** What a cell costs a search for the way to fix, per step: comfortable, too tight, and water to fill (plus per metre of depth). */
 const COST_OPEN = 1;
@@ -40,32 +49,105 @@ export interface Gap {
   wetTo: Point;
 }
 
+/** Extra cost of filling a cell at a point (where the enemy is), for a side choosing where to cross. */
+export type Danger = (x: number, z: number) => number;
+
+/** A stretch of water that's never filled in (a Tidewater canal or basin): a segment and its half width. */
+export interface KeptWater {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  half: number;
+}
+
+/** The terrain half of a search, the same whoever is crossing: what's blocked, and what each cell costs. */
+interface Terrain {
+  land: number;
+  naval: number;
+  blocked: Uint8Array;
+  cost: Float32Array;
+}
+
 export class Crossings {
-  /** The gap found between two points, for the land and boat grids' passable versions. */
+  /** Whether there was a comfortable way between two points, for the land and boat grids' passable versions. */
   private known = new Map<string, { land: number; naval: number; gap: Gap | null }>();
-  /** Per route cell, 1 where it's in boat water that's somewhere deeper than FILL_DEEPEST (a lake, the sea or a canal), for a naval grid passable version. */
+  private terrainNow: Terrain | null = null;
+  /** Per route cell, 1 where it's in the map's own boat water that's somewhere deeper than FILL_DEEPEST (a lake, the sea or a river), for a naval grid passable version. */
   private boats: { version: number; deep: Uint8Array } | null = null;
+  /** Water never to fill (canals and basins), set by the engineers before they search. */
+  kept: KeptWater[] = [];
 
   /**
    * Where the way from a to b (base to base) is cut for big land units, or
-   * null if there's a comfortable way (or no way that filling in shallow
-   * water would open). Remembered until the terrain changes.
+   * null if there's a comfortable way (or no way that filling in would
+   * open). Without `danger` it's remembered until the terrain changes; with
+   * it, the cut is looked for where filling costs least once the danger at
+   * each cell is added.
    */
-  gap(ctx: SimContext, a: Point, b: Point): Gap | null {
+  gap(ctx: SimContext, a: Point, b: Point, danger?: Danger): Gap | null {
     const key = `${Math.round(a.x)},${Math.round(a.z)}>${Math.round(b.x)},${Math.round(b.z)}`;
     const land = ctx.navs.land.passableVersion;
     const naval = ctx.navs.for('naval').passableVersion;
-    const was = this.known.get(key);
-    if (was && was.land === land && was.naval === naval) return was.gap;
-    const gap = findGap(ctx, a, b, this.boatWater(ctx));
-    this.known.set(key, { land, naval, gap });
-    return gap;
+    let was = this.known.get(key);
+    if (!was || was.land !== land || was.naval !== naval) {
+      was = { land, naval, gap: findGap(ctx, a, b, this.terrain(ctx)) };
+      this.known.set(key, was);
+    }
+    // Whether there's a gap at all doesn't depend on the danger; where it's best crossed does.
+    if (!was.gap || !danger) return was.gap;
+    return findGap(ctx, a, b, this.terrain(ctx), danger) ?? was.gap;
+  }
+
+  /** What's blocked for big land units and what filling each cell costs, for the current terrain. */
+  private terrain(ctx: SimContext): Terrain {
+    const land = ctx.navs.land.passableVersion;
+    const naval = ctx.navs.for('naval').passableVersion;
+    const now = this.terrainNow;
+    if (now && now.land === land && now.naval === naval) return now;
+    const boats = this.boatWater(ctx);
+    const { field } = ctx;
+    const nav = ctx.navs.land;
+    const { cols, rows, cellSize } = nav;
+    const n = cols * rows;
+    const centre = (k: number) => nav.center(k % cols, Math.floor(k / cols));
+    const blocked = new Uint8Array(n);
+    // Engineers' timber bridges don't count: they come down again, so the gap under one still wants filling.
+    const timber = field.bridges.some((br) => br.builtBy !== undefined && !br.gone);
+    for (let k = 0; k < n; k++) {
+      const c = centre(k);
+      blocked[k] = nav.terrainBlocksCell(c.x, c.z) ? 1 : 0;
+      if (!blocked[k] && timber && field.isWater(c.x, c.z)) {
+        const br = field.bridgeAt(c.x, c.z);
+        if (br >= 0 && field.bridges[br].builtBy !== undefined) blocked[k] = 1;
+      }
+    }
+    const room = clearance(blocked, cols, rows, cellSize);
+    // What each cell costs a way through it: Infinity where filling can't help (the map's deep water, canals, map bridges' rivers).
+    const cost = new Float32Array(n);
+    for (let k = 0; k < n; k++) {
+      if (!blocked[k]) {
+        cost[k] = room[k] >= COMFORT ? COST_OPEN : COST_TIGHT;
+        continue;
+      }
+      const c = centre(k);
+      const depth = field.seaLevel - field.heightAt(c.x, c.z);
+      const made = !field.wasWater(c.x, c.z);
+      const fillable =
+        depth > 0 &&
+        (made ? !this.kept.some((w) => distanceToSegment(c.x, c.z, w) <= w.half + 1) : depth <= FILL_DEEPEST && !boats[k]) &&
+        field.contains(c.x, c.z, 2) &&
+        (field.deckAt(c.x, c.z) === null || field.bridges[field.bridgeAt(c.x, c.z)].builtBy !== undefined);
+      cost[k] = fillable ? COST_FILL + depth * COST_DEPTH : Infinity;
+    }
+    this.terrainNow = { land, naval, blocked, cost };
+    return this.terrainNow;
   }
 
   /**
-   * Which route cells are in boat water joined to something deeper than
-   * engineers fill (a lake, the sea or a canal), so a fill never cuts boats
-   * off. Crater ponds are never that deep, so they're fair game.
+   * Which route cells are in the map's own boat water joined to something
+   * deeper than FILL_DEEPEST (a lake, the sea or a river), so filling its
+   * shallows never cuts boats off.
    */
   private boatWater(ctx: SimContext): Uint8Array {
     const naval = ctx.navs.for('naval');
@@ -91,7 +173,8 @@ export class Crossings {
         const k = stack.pop()!;
         body.push(k);
         const c = nav.center(k % cols, Math.floor(k / cols));
-        deepest = Math.max(deepest, field.seaLevel - field.heightAt(c.x, c.z));
+        // Only the map's own water counts: a deep hole dug since doesn't make the shallows by it a lake.
+        if (field.wasWater(c.x, c.z)) deepest = Math.max(deepest, field.seaLevel - field.heightAt(c.x, c.z));
         const i = k % cols;
         const j = (k - i) / cols;
         for (const [ni, nj] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
@@ -109,35 +192,28 @@ export class Crossings {
   }
 }
 
-function findGap(ctx: SimContext, a: Point, b: Point, boats: Uint8Array): Gap | null {
-  const { field } = ctx;
+function distanceToSegment(x: number, z: number, w: KeptWater): number {
+  const dx = w.bx - w.ax;
+  const dz = w.bz - w.az;
+  const len2 = dx * dx + dz * dz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - w.ax) * dx + (z - w.az) * dz) / len2)) : 0;
+  return D.hypot(x - (w.ax + dx * t), z - (w.az + dz * t));
+}
+
+function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?: Danger): Gap | null {
   const nav = ctx.navs.land;
-  const { cols, rows, cellSize } = nav;
+  const { cols, rows } = nav;
   const n = cols * rows;
   const centre = (k: number) => nav.center(k % cols, Math.floor(k / cols));
-  const blocked = new Uint8Array(n);
-  // Engineers' timber bridges don't count: they come down again, so the gap under one still wants filling.
-  const timber = field.bridges.some((br) => br.builtBy !== undefined && !br.gone);
-  for (let k = 0; k < n; k++) {
-    const c = centre(k);
-    blocked[k] = nav.terrainBlocksCell(c.x, c.z) ? 1 : 0;
-    if (!blocked[k] && timber && field.isWater(c.x, c.z)) {
-      const br = field.bridgeAt(c.x, c.z);
-      if (br >= 0 && field.bridges[br].builtBy !== undefined) blocked[k] = 1;
+  const { blocked } = terrain;
+  let cost = terrain.cost;
+  if (danger) {
+    cost = cost.slice();
+    for (let k = 0; k < n; k++) {
+      if (!blocked[k] || !Number.isFinite(cost[k])) continue;
+      const c = centre(k);
+      cost[k] = Math.max(COST_FILL * 0.5, cost[k] + danger(c.x, c.z));
     }
-  }
-  const room = clearance(blocked, cols, rows, cellSize);
-  // What each cell costs a way through it: Infinity where filling can't help (deep water, boats' water).
-  const cost = new Float32Array(n);
-  for (let k = 0; k < n; k++) {
-    if (!blocked[k]) {
-      cost[k] = room[k] >= COMFORT ? COST_OPEN : COST_TIGHT;
-      continue;
-    }
-    const c = centre(k);
-    const depth = field.seaLevel - field.heightAt(c.x, c.z);
-    const fillable = depth > 0 && depth <= FILL_DEEPEST && !boats[k] && field.contains(c.x, c.z, 2) && (field.deckAt(c.x, c.z) === null || field.bridges[field.bridgeAt(c.x, c.z)].builtBy !== undefined);
-    cost[k] = fillable ? COST_FILL + depth * COST_DEPTH : Infinity;
   }
   const [ai, aj] = nav.cellOf(a.x, a.z);
   const [bi, bj] = nav.cellOf(b.x, b.z);
@@ -146,7 +222,7 @@ function findGap(ctx: SimContext, a: Point, b: Point, boats: Uint8Array): Gap | 
   if (!Number.isFinite(cost[start]) || !Number.isFinite(cost[goal])) return null;
 
   // First the easy question: is there a comfortable way at all?
-  if (reaches(cost, cols, rows, start, goal)) return null;
+  if (reaches(terrain.cost, cols, rows, start, goal)) return null;
 
   // Then the cheapest way to make one (Dijkstra, 8-way, no corner cutting through what can't be filled).
   const g = new Float32Array(n).fill(Infinity);

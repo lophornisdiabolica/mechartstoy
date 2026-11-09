@@ -735,12 +735,21 @@ outposts and the light scenery are still placed once, at the start.
   engineers also keep a way open across the map (`crossings.ts`): when
   there's no way from the base to the nearest enemy's at least 2.2 units
   from water all the way (room for a super unit), because craters have
-  flooded it or anything else, they throw a timber bridge over the gap if
-  it's short enough and raise the ground in it with earth, a few metres at
-  a time, until there's a way again; that comes before every other job.
-  Only water up to half a unit deep is filled (crater ponds and shallows,
-  never a lake, the sea or a canal), and timber bridges don't count as a
-  way across, so the gap under one still gets filled. Engineers with
+  flooded it, a god power's Lower Land has cut it, or anything else, they
+  throw a timber bridge over the gap if it's short enough and raise the
+  ground in it with earth, a few metres at a time, until there's a way
+  again; that comes before every other job. Any water the battle made is
+  filled however deep (a deep hole fills faster while it's deep, so a
+  three-metre trench takes a few minutes); of the map's own water only
+  shallows up to half a unit deep, never a lake, the sea, a river or a
+  canal. Timber bridges don't count as a way across, so the gap under one
+  still gets filled. Each side picks where to cross for itself: where
+  filling costs least once enemy units near it (and enemy bases) are
+  added, and its own units near it taken off, looked at again every 20
+  seconds, so its engineers work away from the enemy's armies and two
+  sides cutting across the same water mostly do it in different places.
+  Engineers at work on a crossing and the other side's engineers don't
+  shoot one another. Engineers with
   nothing to build **repair** their side's land vehicles that are out of
   the fighting (below 97% health, not hit for ten seconds, no enemy within
   14 units): they walk over and patch it up at 0.8% of its health a second

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Health } from '../src/game/components';
+import { Armed, Health } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
@@ -8,6 +8,8 @@ import { blastCrater, CRATER_FLOOR } from '../src/game/craters';
 import { Crossings } from '../src/game/commander/crossings';
 
 const DT = 1 / 30;
+/** How far from an enemy camp a crossing is chosen, at least. */
+const DANGER_CLEAR = 20;
 
 function run(game: Game, seconds: number): void {
   for (let i = 0; i < seconds / DT; i++) game.step(DT);
@@ -43,10 +45,12 @@ describe('craters', () => {
     world.req(titan, Health).hp = 0;
     run(game, 0.2);
     expect(craters).toBe(1);
-    expect(field.heightAt(10, 5)).toBeLessThan(before - 0.5);
+    expect(field.heightAt(10, 5)).toBeLessThan(before - 0.4);
     // The rim stands a little proud of the ground round it.
-    const rim = 2.2 + UNIT_DEFS.titan.radius * 0.6 + 0.4;
-    expect(field.heightAt(10 + rim, 5)).toBeGreaterThan(before);
+    const r = 1.6 + UNIT_DEFS.titan.radius * 0.45;
+    let rim = -Infinity;
+    for (let d = r; d <= r * 1.6; d += 0.1) rim = Math.max(rim, field.heightAt(10 + d, 5), field.heightAt(10, 5 + d));
+    expect(rim).toBeGreaterThan(before);
     expect(field.groundAt(10, 5).id).toBe('earth');
   });
 
@@ -69,7 +73,7 @@ describe('craters', () => {
     expect(off.field.heightAt(-5, 3)).toBe(h);
   });
 
-  it('on low ground they flood, but never deeper than engineers can fill', () => {
+  it('on low ground they flood, but only into ponds', () => {
     const game = flatGame();
     const { world, ctx, field } = game;
     field.reshape(0, 0, 8, () => field.seaLevel + 0.2);
@@ -101,11 +105,33 @@ describe('crossings', () => {
     expect(gap!.after.x).toBeGreaterThan(0);
   });
 
-  it('leaves water too deep to fill alone', () => {
+  it("leaves the map's own deep water alone, but not deep water the battle made", () => {
+    const own = flatGame();
+    moat(own, 1.2);
+    // As if the map had been made with it: a river, not a hole.
+    own.field.markMade();
+    const [a, b] = own.field.baseSites;
+    expect(new Crossings().gap(own.ctx, a, b)).toBeNull();
+
+    const made = flatGame();
+    moat(made, 3);
+    expect(new Crossings().gap(made.ctx, a, b)).not.toBeNull();
+  });
+
+  it('a side crosses where its enemy is not', () => {
     const game = flatGame();
-    moat(game, 1.2);
-    const [a, b] = game.field.baseSites;
-    expect(new Crossings().gap(game.ctx, a, b)).toBeNull();
+    const { world, ctx, field } = game;
+    moat(game, 0.3);
+    // An enemy army camped on the far bank, north of the middle.
+    for (let k = 0; k < 12; k++) spawnUnit(world, ctx, UNIT_DEFS.tank, 1, 6 + (k % 3) * 2, 20 + Math.floor(k / 3) * 2);
+    spawnUnit(world, ctx, UNIT_DEFS.engineer, 0, field.baseSites[0].x + 10, field.baseSites[0].z);
+    const eng = ctx.commander.engineers;
+    eng.update(world, ctx);
+    const plain = eng.crossings.gap(ctx, field.baseSites[0], field.baseSites[1])!;
+    const gap = (eng as unknown as { crossingAt: { gap: { points: { z: number }[] } }[] }).crossingAt[0].gap;
+    const mid = (g: { points: { z: number }[] }) => g.points.reduce((s, p) => s + p.z, 0) / g.points.length;
+    expect(Math.abs(mid(gap) - 23)).toBeGreaterThan(Math.abs(mid(plain) - 23) + 10);
+    expect(Math.abs(mid(gap) - 23)).toBeGreaterThan(DANGER_CLEAR);
   });
 
   it("any side's engineers bridge the gap and fill it in until there's a way across again", () => {
@@ -125,6 +151,38 @@ describe('crossings', () => {
     expect(eng.crossings.gap(ctx, field.baseSites[0], field.baseSites[1])).toBeNull();
     expect(eng.works.some((w) => w.kind === 'fill' && w.side === 0)).toBe(true);
   }, 120000);
+});
+
+describe('deep crossings', () => {
+  it('engineers fill in a deep trench cut right across the map, bit by bit', () => {
+    const game = flatGame();
+    const { world, ctx, field } = game;
+    // As the god powers' Lower Land leaves it: three metres under the water, too wide to bridge.
+    moat(game, 3, 8);
+    const home = field.baseSites[0];
+    for (const dz of [-1, 0, 1]) spawnUnit(world, ctx, UNIT_DEFS.engineer, 0, home.x + 20, home.z + dz);
+    const eng = ctx.commander.engineers;
+    const across = () => eng.crossings.gap(ctx, field.baseSites[0], field.baseSites[1]);
+    expect(across()).not.toBeNull();
+    let t = 0;
+    for (; t < 1500 && across(); t += 10) run(game, 10);
+    expect(across()).toBeNull();
+  }, 300000);
+
+  it("engineers at a crossing and the other side's engineers don't shoot each other", () => {
+    const game = flatGame();
+    const { world, ctx, field } = game;
+    moat(game, 0.3, 4.5);
+    const home = field.baseSites[0];
+    const ours = spawnUnit(world, ctx, UNIT_DEFS.engineer, 0, home.x + 20, home.z);
+    const eng = ctx.commander.engineers;
+    eng.update(world, ctx);
+    expect(eng.onCrossing(ours)).toBe(true);
+    const theirs = spawnUnit(world, ctx, UNIT_DEFS.engineer, 1, home.x + 24, home.z);
+    run(game, 2);
+    expect(world.req(theirs, Armed).target).not.toBe(ours);
+    expect(world.req(ours, Armed).target).not.toBe(theirs);
+  });
 });
 
 describe('repairs', () => {

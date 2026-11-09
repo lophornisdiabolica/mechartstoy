@@ -17,15 +17,15 @@ import { UnitDef } from './units';
  */
 
 /** A crater's radius: this much, plus this share of the super unit's own radius. */
-const CRATER_BASE = 2.2;
-const CRATER_PER_RADIUS = 0.6;
+const CRATER_BASE = 1.6;
+const CRATER_PER_RADIUS = 0.45;
 /** How deep a fresh crater digs at its middle. */
-export const CRATER_DEPTH = 0.7;
-/** How far below the water a crater can dig: shallow enough that engineers can fill it in (see crossings.ts FILL_DEEPEST). */
+export const CRATER_DEPTH = 0.55;
+/** How far below the water a crater can dig: a pond, not a lake (engineers fill in any that cut the way across, see crossings.ts). */
 export const CRATER_FLOOR = 0.45;
 /** The rim: how far past the bowl it reaches (as a share of the radius), and how high it heaps (as a share of the depth). */
-const RIM = 0.35;
-const RIM_HEIGHT = 0.3;
+const RIM = 0.6;
+const RIM_HEIGHT = 0.35;
 
 /** The crater a super unit leaves, if any: its radius and depth. */
 export function craterOf(ctx: SimContext, def: UnitDef): { radius: number; depth: number } | null {

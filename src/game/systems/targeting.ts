@@ -89,11 +89,16 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   const squad = world.get(e, Ai)?.squad;
   const hunt = squad !== undefined ? ctx.commander.hunts.forSquad(squad) : undefined;
   const prey = hunt && hunt.side === faction ? hunt.gun : null;
+  // Engineers at work on a way across and the other side's engineers leave each other be (see Engineers.onCrossing).
+  const engineers = ctx.commander.engineers;
+  const builder = world.get(e, Unit)?.def.builds === true;
+  const crossing = builder && engineers.onCrossing(e);
   ctx.grid.forEachNear(t.x, t.z, reach, (other, d2, body) => {
     if (over !== 'none' && body.building?.def.low) return;
     const otherFaction = world.req(other, Faction).id;
     // Only enemies; nobody aims at the civilian town (it only suffers stray fire).
     if (!ctx.sides.hostile(faction, otherFaction)) return;
+    if (builder && world.get(other, Unit)?.def.builds === true && (crossing || engineers.onCrossing(other))) return;
     if (!canHit(world, armed, other)) return;
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;

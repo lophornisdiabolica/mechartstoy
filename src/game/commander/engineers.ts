@@ -13,7 +13,7 @@ import { CellArea } from '../../world/ground';
 import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
 import * as D from '../../core/dmath';
-import { Crossings, Gap } from './crossings';
+import { Crossings, Danger, Gap } from './crossings';
 
 /*
  * Engineers (Commander step 6, and the doctrine jobs after it). Every
@@ -201,8 +201,27 @@ const FILL_STEP = 3;
 const FILL_HALF = 2.6;
 const FILL_ABOVE = 0.4;
 const FILL_RISE = 0.03;
+/** While a fill is deep under the water, a pulse raises it this share of what's left to go instead (so a deep hole doesn't take for ever). */
+const FILL_DEEP_RISE = 0.04;
 /** Longest gap a bridge is thrown over while it's filled in. */
 const GAP_SPAN = 12;
+/**
+ * Choosing where to cross (see crossings.ts Danger): how far units count;
+ * what each enemy unit that near adds to filling a cell, and the most; what
+ * each of the side's own takes off, and the most; what ground this near an
+ * enemy base (past its edge) adds; what the place already chosen takes off,
+ * so the choice doesn't flit about as armies move; and how often it's
+ * looked at again.
+ */
+const DANGER_REACH = 24;
+const DANGER_PER = 10;
+const DANGER_MOST = 160;
+const COVER_PER = 2;
+const COVER_MOST = 10;
+const DANGER_BASE_REACH = 30;
+const DANGER_BASE = 80;
+const CROSSING_KEEP = 15;
+const CROSSING_REPLAN = 20;
 
 /** Repairs: a vehicle counts as out of the fighting once it's gone this long without being hit; how much below full health is worth it; how far an engineer goes for one; and health back per second (a share of its full health, and at least this much). */
 const CALM = 10;
@@ -238,6 +257,8 @@ export interface BridgeJob {
   standX: number;
   standZ: number;
   urgent?: boolean;
+  /** Bridging a gap in the way across (see crossingJobs): engineers at it don't shoot each other's crews. */
+  crossing?: boolean;
 }
 
 /** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
@@ -277,6 +298,8 @@ export interface DigJob {
   standX: number;
   standZ: number;
   urgent?: boolean;
+  /** Filling a gap in the way across (see crossingJobs). */
+  crossing?: boolean;
 }
 
 /** An engineer sent to repair one of its side's vehicles: which, and where to stand by it (as of the last update; it may move). */
@@ -348,12 +371,20 @@ export class Engineers {
   private fills = new Map<string, Earthwork>();
   /** Per side: the bridge it's throwing over a gap in the way across, kept while the gap's there so the site doesn't wander as the fill creeps on. */
   private gapSpans: (BridgeJob | undefined)[] = [];
+  /** Per side: where it's crossing a gap in the way across, and when to look again (see crossingFor). */
+  private crossingAt: ({ gap: Gap | null; until: number; land: number; naval: number } | undefined)[] = [];
   /** Seconds to each engineer's next repair spark. */
   private sparks = new Map<Entity, number>();
 
   /** An engineer's job, if it has one. */
   jobFor(e: Entity): EngineerJob | undefined {
     return this.jobs.get(e);
+  }
+
+  /** Whether an engineer is at work on a way across (see crossingJobs): engineers don't shoot one another's crews at it. */
+  onCrossing(e: Entity): boolean {
+    const job = this.jobs.get(e);
+    return job !== undefined && (job.kind === 'dig' || job.kind === 'bridge') && job.crossing === true;
   }
 
   /** Where a side's engineers with nothing to build wait, or null for at home. */
@@ -1144,10 +1175,7 @@ export class Engineers {
    * to fill in, and a bridge over it meanwhile if it's short enough.
    */
   private crossingJobs(world: World, ctx: SimContext, side: number): EngineerJob[] {
-    const enemy = this.nearestEnemy(ctx, side);
-    if (enemy === null) return [];
-    const { field } = ctx;
-    const gap = this.crossings.gap(ctx, field.baseSites[side], field.baseSites[enemy]);
+    const gap = this.crossingFor(world, ctx, side);
     if (!gap) return [];
     const out: EngineerJob[] = [];
     const fill = this.planFill(ctx, side, gap);
@@ -1156,11 +1184,83 @@ export class Engineers {
       const stand = { x: gap.before.x - ((fill.bx - fill.ax) / len) * 1.5, z: gap.before.z - ((fill.bz - fill.az) / len) * 1.5 };
       const foot = ctx.navs.for('foot');
       const at = foot.terrainAllowsAt(stand.x, stand.z) ? stand : gap.before;
-      if (this.safe(world, ctx, side, at.x, at.z)) out.push({ kind: 'dig', work: fill, x: (fill.ax + fill.bx) / 2, z: (fill.az + fill.bz) / 2, standX: at.x, standZ: at.z, urgent: true });
+      if (this.safe(world, ctx, side, at.x, at.z)) out.push({ kind: 'dig', work: fill, x: (fill.ax + fill.bx) / 2, z: (fill.az + fill.bz) / 2, standX: at.x, standZ: at.z, urgent: true, crossing: true });
     }
     const span = this.gapBridge(world, ctx, side, gap);
     if (span) out.push(span);
     return out;
+  }
+
+  /**
+   * Where a side crosses the gap in the way to its nearest enemy, if
+   * there's one: where filling costs least once the danger is added (see
+   * dangerFor). Kept for CROSSING_REPLAN seconds, or until the terrain
+   * changes, so engineers aren't sent back and forth.
+   */
+  private crossingFor(world: World, ctx: SimContext, side: number): Gap | null {
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const { field } = ctx;
+    const land = ctx.navs.land.passableVersion;
+    const naval = ctx.navs.for('naval').passableVersion;
+    const was = this.crossingAt[side];
+    if (was && world.time < was.until && was.land === land && was.naval === naval) return was.gap;
+    // Canals and harbour basins are never filled in.
+    this.crossings.kept = this.works.filter((w) => w.kind === 'canal').map((w) => ({ ax: w.ax, az: w.az, bx: w.bx, bz: w.bz, half: w.half ?? CANAL_HALF }));
+    const gap = this.crossings.gap(ctx, field.baseSites[side], field.baseSites[enemy], this.dangerFor(world, ctx, side, was?.gap ?? null));
+    this.crossingAt[side] = { gap, until: world.time + CROSSING_REPLAN, land, naval };
+    return gap;
+  }
+
+  /**
+   * What filling in a cell costs a side beyond the earth itself: more the
+   * more enemy units are near it and the nearer an enemy base, less where
+   * its own units are and where it's already crossing. So its engineers go
+   * where they can finish the work, and two sides cutting across the same
+   * water mostly cross in different places.
+   */
+  private dangerFor(world: World, ctx: SimContext, side: number, current: Gap | null): Danger {
+    const { sides, field } = ctx;
+    // Units binned DANGER_REACH square, so a cell only looks at the bins round it.
+    const bins = new Map<number, { x: number; z: number; foe: boolean }[]>();
+    const binOf = (x: number, z: number) => Math.floor((x - field.bounds.minX) / DANGER_REACH) * 4096 + Math.floor((z - field.bounds.minZ) / DANGER_REACH);
+    for (const e of world.query(Unit, Faction, Transform)) {
+      const id = world.req(e, Faction).id;
+      const foe = sides.hostile(side, id);
+      if (!foe && id !== side) continue;
+      const t = world.req(e, Transform);
+      const k = binOf(t.x, t.z);
+      let bin = bins.get(k);
+      if (!bin) bins.set(k, (bin = []));
+      bin.push({ x: t.x, z: t.z, foe });
+    }
+    const bases = sides.enemiesOf(side).map((g) => field.baseSites[g]);
+    const chosen = current ? current.points : [];
+    return (x, z) => {
+      let foes = 0;
+      let own = 0;
+      const bi = Math.floor((x - field.bounds.minX) / DANGER_REACH);
+      const bj = Math.floor((z - field.bounds.minZ) / DANGER_REACH);
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          const bin = bins.get((bi + di) * 4096 + bj + dj);
+          if (!bin) continue;
+          for (const u of bin) {
+            const d = D.hypot(u.x - x, u.z - z);
+            if (d >= DANGER_REACH) continue;
+            if (u.foe) foes += 1 - d / DANGER_REACH;
+            else own += 1 - d / DANGER_REACH;
+          }
+        }
+      }
+      let cost = Math.min(DANGER_MOST, foes * DANGER_PER) - Math.min(COVER_MOST, own * COVER_PER);
+      for (const b of bases) {
+        const d = D.hypot(b.x - x, b.z - z) - b.radius;
+        if (d < DANGER_BASE_REACH) cost += DANGER_BASE * (1 - Math.max(0, d) / DANGER_BASE_REACH);
+      }
+      if (chosen.some((p) => D.hypot(p.x - x, p.z - z) < 3)) cost -= CROSSING_KEEP;
+      return cost;
+    };
   }
 
   /** The next stretch to fill in a gap: from the open ground before it, FILL_STEP into it. Null once that stretch has been filled already. */
@@ -1202,7 +1302,7 @@ export class Engineers {
     if (wet > GAP_SPAN || field.nearBridge(x, z, SPAN_APART)) return null;
     const stand = { x: a.x - ux * 1.5, z: a.z - uz * 1.5 };
     if (!ctx.navs.for('foot').terrainAllowsAt(stand.x, stand.z) || !this.safe(world, ctx, side, stand.x, stand.z)) return null;
-    const job: BridgeJob = { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x, z, standX: stand.x, standZ: stand.z, urgent: true };
+    const job: BridgeJob = { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x, z, standX: stand.x, standZ: stand.z, urgent: true, crossing: true };
     this.gapSpans[side] = job;
     return job;
   }
@@ -1509,7 +1609,9 @@ export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
       const h = field.heights[k];
       // Heights are stored as 32-bit floats: aim for what the store will hold, or it never quite gets there.
       const goal = Math.fround(shape.h);
-      const next = Math.fround(shape.down ? (h > goal ? Math.max(goal, h - DIG_STEP) : h) : h < goal ? Math.min(goal, h + rise) : h);
+      // A deep hole takes more earth, but it's tipped in faster while it's deep.
+      const up = w.kind === 'fill' ? Math.max(rise, (goal - h) * FILL_DEEP_RISE) : rise;
+      const next = Math.fround(shape.down ? (h > goal ? Math.max(goal, h - DIG_STEP) : h) : h < goal ? Math.min(goal, h + up) : h);
       if (next === h) continue;
       field.heights[k] = next;
       moved = true;
