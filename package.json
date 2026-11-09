@@ -12,7 +12,8 @@
     "sims": "node scripts/sims.mjs",
     "map": "node scripts/map.mjs",
     "bench": "node scripts/bench.mjs",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "sounds": "node scripts/sounds.mjs"
   },
   "dependencies": {
     "simplex-noise": "^4.0.3",

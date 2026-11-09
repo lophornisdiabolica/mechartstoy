@@ -15,6 +15,8 @@ import { ShadowQuality, Stage } from '../render/stage';
 import { el, hex, segmented } from './dom';
 import { saveViewPrefs } from './viewPrefs';
 import { GodPanel } from './godPanel';
+import { BattleAudio } from '../audio/battleAudio';
+import { CATEGORIES, defaultAudioPrefs, MIX_MAX } from '../audio/prefs';
 
 const SPEEDS = [0, 1, 2, 4];
 /** A press that moves less than this (px) and is shorter than CLICK_MS counts as a click, not a pan. */
@@ -35,6 +37,8 @@ export interface MatchControls {
   photoMode(): void;
   /** Whether the god powers tab is open (remembered between battles). */
   godOpen: boolean;
+  /** The battle's sound, which the Sound section tunes. */
+  readonly audio: BattleAudio;
 }
 
 /**
@@ -396,7 +400,93 @@ export class Controls {
     photo.addEventListener('click', () => this.match.photoMode());
     cam.append(photo);
 
+    this.buildSound(section('Sound'));
+
     body.append(this.inspect);
+  }
+
+  /**
+   * Sound: mute, volume, how closely it follows the camera, and a mix of
+   * each kind of sound. Remembered in this browser, like the view settings.
+   */
+  private buildSound(s: HTMLElement): void {
+    const audio = this.match.audio;
+    const prefs = audio.prefs;
+    const changed = () => {
+      audio.changed();
+      this.refresh();
+    };
+    const muteLabel = el('label', { class: 'check', title: 'Turn all sound off (M)' });
+    const mute = el('input', { type: 'checkbox' });
+    mute.addEventListener('change', () => {
+      prefs.muted = mute.checked;
+      changed();
+    });
+    muteLabel.append(mute, document.createTextNode(' Mute (M)'));
+    const note = el('p', { class: 'hint' });
+    s.append(muteLabel, note);
+    this.sync.push(() => {
+      mute.checked = prefs.muted;
+      note.hidden = prefs.muted || audio.running;
+      note.textContent = 'Sound starts once you click or press a key (the browser’s rule).';
+    });
+    const slider = (parent: HTMLElement, label: string, title: string, max: number, get: () => number, set: (v: number) => void, shown: (v: number) => string) => {
+      const wrap = el('label', { class: 'slider valued', title });
+      const input = el('input', { type: 'range', min: '0', max: String(max), step: '0.01' });
+      const value = el('span', { class: 'value' });
+      input.addEventListener('input', () => {
+        set(Number(input.value));
+        changed();
+      });
+      wrap.append(el('span', {}, label), input, value);
+      parent.append(wrap);
+      this.sync.push(() => {
+        input.value = String(get());
+        value.textContent = shown(get());
+      });
+      return wrap;
+    };
+    const percent = (v: number) => `${Math.round(v * 100)}%`;
+    slider(s, 'Volume', 'Master volume', 1, () => prefs.volume, (v) => (prefs.volume = v), percent);
+    slider(
+      s,
+      'Focus',
+      'How closely the sound follows the camera: low hears the whole battlefield about equally, high hears what’s on screen clearly and the rest as a muffled distance. Zooming in narrows it further.',
+      1,
+      () => prefs.focus,
+      (v) => (prefs.focus = v),
+      (v) => (v < 0.15 ? 'Whole map' : v > 0.85 ? 'On screen' : percent(v)),
+    );
+    const mixer = el('details', { class: 'mix' });
+    mixer.append(el('summary', {}, 'Mix'));
+    for (const c of CATEGORIES) {
+      const row = slider(mixer, c.label, c.title, MIX_MAX, () => prefs.mix[c.id], (v) => (prefs.mix[c.id] = v), (v) => (v === 0 ? 'Off' : percent(v)));
+      if (c.id !== 'ambience') {
+        // Letting go of the slider plays one of its sounds, to judge the level by.
+        row.querySelector('input')!.addEventListener('change', () => audio.preview(c.id));
+      }
+    }
+    const everywhereLabel = el('label', { class: 'check', title: 'Hear alert chimes wherever they happen; off, they follow the focus like everything else' });
+    const everywhere = el('input', { type: 'checkbox' });
+    everywhere.addEventListener('change', () => {
+      prefs.alertsEverywhere = everywhere.checked;
+      changed();
+    });
+    everywhereLabel.append(everywhere, document.createTextNode(' Alerts heard map-wide'));
+    this.sync.push(() => (everywhere.checked = prefs.alertsEverywhere));
+    const reset = el('button', { type: 'button', class: 'wide', title: 'Put every sound setting back as it was' }, 'Reset sound');
+    reset.addEventListener('click', () => {
+      const d = defaultAudioPrefs();
+      Object.assign(prefs, { ...d, mix: { ...d.mix } });
+      changed();
+    });
+    mixer.append(everywhereLabel, reset);
+    s.append(mixer);
+  }
+
+  /** Re-sync the sound controls (after M toggles mute). */
+  refreshSound(): void {
+    this.refresh();
   }
 
   /** Re-sync every control with current state. */

@@ -20,6 +20,7 @@ import { BattleHistory } from './ui/battleChart';
 import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
 import { RemoteSim } from './sim/remoteSim';
+import { BattleAudio, listenerFrom } from './audio/battleAudio';
 
 /** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
 const VICTORY_PAUSE = 15;
@@ -112,6 +113,8 @@ export class App implements MatchControls {
   private readonly history = new BattleHistory();
   private readonly photo: PhotoMode;
   private readonly debug: DebugPanel;
+  /** The battle's sound (see BattleAudio); lives as long as the page. */
+  readonly audio = new BattleAudio();
   /** Plays the battle in a worker thread; null plays it on the page (`?worker=0`, or no worker support). */
   private readonly sim: RemoteSim | null;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
@@ -136,17 +139,22 @@ export class App implements MatchControls {
     });
     document.body.append(this.banner, this.skipNote);
     this.photo = new PhotoMode(this.stage, this.loop);
-    this.perf = new PerfOverlay(this.stage);
+    this.perf = new PerfOverlay(this.stage, this.audio.stats);
     this.debug = new DebugPanel(this.stage);
     if (this.sim) this.sim.onFrame = (f) => this.perf.simFrame(f.ticks, f.simMs, f.worstMs, f.profile);
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (key === 'escape' && this.photo.active) return this.photo.leave();
-      if (key !== 'p' && key !== 'o' && key !== 'h') return;
+      if (key !== 'p' && key !== 'o' && key !== 'h' && key !== 'm') return;
       if ((e.target instanceof HTMLInputElement && e.target.type !== 'range') || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       if (key === 'p') this.perf.toggle();
       else if (key === 'o') this.debug.toggle();
+      else if (key === 'm') {
+        this.audio.prefs.muted = !this.audio.prefs.muted;
+        this.audio.changed();
+        this.battle.controls?.refreshSound();
+      }
       else if (!this.setup.visible) this.photo.toggle();
     });
     this.setup = new SetupScreen(this.settings, {
@@ -252,6 +260,7 @@ export class App implements MatchControls {
     this.stage.restoreDebug();
     this.debug.refresh();
     this.perf.attach(game);
+    this.audio.attach(game);
     this.tickerFeed.attach(game, factions);
     this.history.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
@@ -269,6 +278,7 @@ export class App implements MatchControls {
     this.stage.render(alpha, frameSeconds, frameSeconds * this.loop.timeScale);
     controls?.update(frameSeconds);
     this.tickerFeed.update(frameSeconds);
+    this.audio.update(frameSeconds, listenerFrom(this.stage.rig), this.setup.visible);
     this.history.update();
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
     this.perf.frame(frameSeconds);
@@ -412,7 +422,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · G god powers · 1-4 speed · space pause · P stats · O overlays · H photo mode`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · G god powers · 1-4 speed · space pause · M mute · P stats · O overlays · H photo mode`
     );
   }
 

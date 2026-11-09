@@ -180,6 +180,21 @@ body {
   grid-template-columns: 48px 1fr 40px;
 }
 
+/* The sound mix: a little indent, and room for its longer labels. */
+#panel details.mix {
+  margin-top: 6px;
+}
+
+#panel details.mix summary {
+  cursor: pointer;
+  color: #c9d3de;
+}
+
+#panel details.mix label.slider.valued {
+  grid-template-columns: 64px 1fr 40px;
+  padding-left: 8px;
+}
+
 #panel label.slider .value {
   color: #8b98a8;
   text-align: right;

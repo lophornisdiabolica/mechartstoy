@@ -15,7 +15,19 @@ npm run sims     # balance runs: play many battles headlessly, print stats
 npm run bench    # sim speed on fixed battles, with a fingerprint of the result
 npm run map -- "seed=abc&biome=desert"   # the map a battle would get, as a PNG
 npm run shot -- 1v1-7 --at 12m           # a screenshot from the real renderer
+npm run sounds   # every sound as a WAV plus a spectrogram PNG, with a loudness/frequency report
 ```
+
+### Sound
+
+All sound is synthesized in code (`src/audio/synth.ts`): no sample files.
+The recipes are rendered once into clips in a worker when sound starts
+(on the first click or key press), and the battle's events play them,
+placed by where the camera looks. The panel's Sound section has mute (M),
+volume, a Focus slider for how closely the sound follows the camera, and
+a mix per category (gunfire, cannons, artillery, buildings, chimes,
+ambience); settings are kept in this browser. `docs/audio.md` explains
+how the sounds were designed and checked.
 
 ### Balance runs
 
