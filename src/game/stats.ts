@@ -1,6 +1,6 @@
 import { EventBus } from '../core/events';
 import { World } from '../core/ecs';
-import { Armed, Faction, GOD, Guard, NEUTRAL, Unit } from './components';
+import { Armed, Faction, GOD, Guard, isTownFaction, NEUTRAL, Unit } from './components';
 import { GameEvents } from './context';
 import { strengthOf } from './offensive';
 
@@ -79,9 +79,10 @@ export class BattleStats {
         const t = this.type(e.faction, e.def.id);
         t.lost++;
         // Outpost garrisons aren't a side: their kills show as e.g. "outpost tower".
-        if (k && k.faction !== e.faction) bump(t.killers, this.side(k.faction) ? k.source : k.faction === GOD ? `god ${k.source}` : `outpost ${k.source}`);
+        if (k && k.faction !== e.faction) bump(t.killers, this.side(k.faction) ? k.source : k.faction === GOD ? `god ${k.source}` : isTownFaction(k.faction) ? `town ${k.source}` : `outpost ${k.source}`);
       }
-      if (k && this.side(k.faction) && k.faction !== e.faction) {
+      // Townsfolk (see towns.ts) don't count: they're nobody's army.
+      if (k && this.side(k.faction) && k.faction !== e.faction && !isTownFaction(e.faction)) {
         this.sides[k.faction].kills++;
         this.credit(k.faction, k.source);
         const by = this.sides[k.faction].strengthBy;
@@ -94,7 +95,7 @@ export class BattleStats {
     events.on('damaged', (e) => {
       const k = e.by;
       // Only damage between enemies: stray fire on the town and blasts on your own side don't count.
-      if (!k || k.faction === e.faction || e.faction === NEUTRAL) return;
+      if (!k || k.faction === e.faction || isTownFaction(e.faction)) return;
       if (this.side(e.faction)) this.type(e.faction, e.victim).taken += e.amount;
       if (this.side(k.faction)) {
         const t = this.type(k.faction, k.source);

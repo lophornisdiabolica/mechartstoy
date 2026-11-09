@@ -12,6 +12,7 @@ import { defenceSystem, Sides } from './sides';
 import { defaultOrders, Stance } from './orders';
 import { Offensive, offensiveSystem } from './offensive';
 import { scrapSystem } from './scrap';
+import { Towns, townSystem } from './towns';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -130,6 +131,7 @@ export class Game {
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
       god: new Divine(),
       fire: new FireField(this.field),
+      towns: new Towns(this.field.townSites, seed),
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -159,6 +161,7 @@ export class Game {
       deathSystem(ctx),
       wreckSystem(ctx),
       scrapSystem(ctx),
+      townSystem(ctx),
       outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),

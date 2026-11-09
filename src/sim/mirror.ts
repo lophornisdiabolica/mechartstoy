@@ -62,6 +62,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   earthwork: true,
   hunt: true,
   span: true,
+  militia: true,
 };
 
 /** Page to worker. */

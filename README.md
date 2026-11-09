@@ -205,7 +205,20 @@ battle, its exact map via `seed`).
   **towns** (none to four) and how big. Towns have districts: a harbour of
   warehouses on the waterfront, an industrial quarter, taller blocks in the
   centre, houses round them, and a paved main street; **roads** join the
-  towns, along the easiest ground. **Waterways** (on by
+  towns, along the easiest ground. **Townsfolk** (on by default, `folk=0`
+  turns them off): a few people walk each town's streets, scattering from
+  soldiers and vehicles that come near, and the town's own engineer puts
+  up a new building every four minutes on the nearest open spot of its
+  street grid, so a town grows outward over a long battle (to 1.6 times
+  its radius). Nobody aims at a town, but stray fire wrecks it: once one
+  side has razed three of a town's buildings, its people take up hunting
+  rifles against that side as a **militia** (a faction of their own, see
+  `militiaOf`), standing guard round the edge of town facing that side's
+  base and shooting its units that come within nine units, and that side
+  shoots back. They never go out to attack and leave other sides alone.
+  Lost townsfolk come back one a minute from the town's buildings.
+  Townsfolk count toward nothing: no caps, kills or strength.
+  **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an
   inlet dug to any that has none. Wherever water cuts the land, an
@@ -447,6 +460,7 @@ src/
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
+    towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there

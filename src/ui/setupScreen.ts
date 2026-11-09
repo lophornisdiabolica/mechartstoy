@@ -544,6 +544,16 @@ export class SetupScreen {
     );
     row(map, 'Town size', townSize.row);
     this.sync.push(() => townSize.set(this.settings.map.townSize));
+    const folk = el('input', { type: 'checkbox', 'aria-label': 'Townsfolk' });
+    folk.addEventListener('change', () => {
+      this.settings.map.townLife = folk.checked;
+      this.changed();
+    });
+    const folkLabel = el('label', { class: 'check' });
+    folkLabel.append(folk, document.createTextNode(' People in the towns'));
+    row(map, 'Townsfolk', folkLabel);
+    this.sync.push(() => (folk.checked = this.settings.map.townLife));
+    map.append(el('p', { class: 'hint' }, 'A few townsfolk walk each town’s streets and scatter from the fighting, and the town’s engineer puts up a new building every four minutes. A side that razes three of a town’s buildings turns its people into a militia that guards the town’s edge and shoots that side’s units that come close.'));
 
     // Armies
     const armies = section('Armies', false);

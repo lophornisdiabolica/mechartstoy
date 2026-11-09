@@ -36,6 +36,20 @@ export const GARRISON = -2;
 /** God powers (see god.ts): hostile to everyone, so bombs and quakes spare nobody. */
 export const GOD = -3;
 
+/**
+ * A town's militia (see towns.ts) is a faction of its own: MILITIA_BASE for
+ * the first town, one less for each after. It fights only the sides that
+ * have razed enough of its town (see Sides.grudges), and they fight it.
+ */
+export const MILITIA_BASE = -10;
+export function militiaOf(town: number): number {
+  return MILITIA_BASE - town;
+}
+/** Whether a faction id is a town's: its civilians (NEUTRAL) or its militia. */
+export function isTownFaction(f: number): boolean {
+  return f === NEUTRAL || f <= MILITIA_BASE;
+}
+
 /** Which side an entity belongs to (index into FACTIONS, NEUTRAL or GARRISON). */
 export interface Faction {
   id: number;
@@ -351,6 +365,17 @@ export interface Garrison {
   timer: number;
 }
 export const Garrison = defineComponent<Garrison>('Garrison');
+
+/** A town's people (see towns.ts): which town, and what they do there. */
+export interface Townsfolk {
+  town: number;
+  role: 'civilian' | 'engineer' | 'militia';
+  /** When it next picks somewhere to go. */
+  nextAt: number;
+  /** Its place in the town's guard, for militia. */
+  post: number;
+}
+export const Townsfolk = defineComponent<Townsfolk>('Townsfolk');
 
 /** A unit that stays at an outpost and defends it instead of joining the army. */
 export interface Guard {

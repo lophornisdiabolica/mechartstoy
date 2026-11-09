@@ -95,6 +95,8 @@ export interface BattleSettings {
     /** Civilian towns in no-man's land, and how big they are. */
     towns: number;
     townSize: TownSize;
+    /** Townsfolk: people in the towns, a town engineer who grows each town, and a militia once a side razes too much of it (see towns.ts). */
+    townLife: boolean;
     /** Join the bases' water with channels and bridge them (see waterways.ts). */
     waterways: boolean;
     /** Dense forest, 0 (none) to 1: patches of big trees that block shots and slow vehicles until they're knocked down (see woods.ts). */
@@ -248,7 +250,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', townLife: true, waterways: true, forest: 0.2, scrap: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
