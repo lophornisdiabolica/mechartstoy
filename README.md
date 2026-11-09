@@ -219,7 +219,13 @@ battle, its exact map via `seed`).
   blasts knock them down too, and a cleared patch is open ground again.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
-  until it's cleared away four minutes later.
+  until it's cleared away four minutes later. **Craters** (on by default):
+  a super unit blowing up leaves a small crater with a rim of churned
+  earth (a shot-down airship, where it hits the ground), so a front that's
+  been fought over for an hour is worn down and pocked. On low ground a
+  crater goes below the water and floods, so long battles by a lake or
+  river slowly turn the ground there to ponds; engineers fill them in
+  where they cut the way across (see Engineers).
 - **Placement:** a map of the battle the settings make, on the setup
   screen, where the bases, towns and outposts can be dragged to new spots.
   Dropping one fixes where every one of its kind goes (kept in the link as
@@ -444,10 +450,12 @@ src/
       places.ts        the map's key places: bases, outposts, towns, bridges, narrow crossings and high ground
       taskForces.ts    squads sent off between attacks to take outposts or save the side's own
       advice.ts        production advice (leaning each doctrine's table toward what the battle needs) and per-side styles
+      crossings.ts     whether there's still a way across wide enough for super units, and where it's cut
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     scrap.ts         wreckage piling up into scrap, and being cleared
+    craters.ts       craters where super units blow up
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there
     orders.ts        per-faction player orders (stance, rally point)
@@ -723,8 +731,29 @@ outposts and the light scenery are still placed once, at the start.
   minutes, or when enemy shells landing on it have done 600 damage, and
   anything on it goes in the water. Engineers don't build where an enemy
   unit is within 14 units, take no cap, never join an attack or a task
-  force; the rally flag and stances pause their work. Bridge repairs are
-  still to come.
+  force; the rally flag and stances pause their work. Every side's
+  engineers also keep a way open across the map (`crossings.ts`): when
+  there's no way from the base to the nearest enemy's at least 2.2 units
+  from water all the way (room for a super unit), because craters have
+  flooded it, a god power's Lower Land has cut it, or anything else, they
+  throw a timber bridge over the gap if it's short enough and raise the
+  ground in it with earth, a few metres at a time, until there's a way
+  again; that comes before every other job. Any water the battle made is
+  filled however deep (a deep hole fills faster while it's deep, so a
+  three-metre trench takes a few minutes); of the map's own water only
+  shallows up to half a unit deep, never a lake, the sea, a river or a
+  canal. Timber bridges don't count as a way across, so the gap under one
+  still gets filled. Each side picks where to cross for itself: where
+  filling costs least once enemy units near it (and enemy bases) are
+  added, and its own units near it taken off, looked at again every 20
+  seconds, so its engineers work away from the enemy's armies and two
+  sides cutting across the same water mostly do it in different places.
+  Engineers at work on a crossing and the other side's engineers don't
+  shoot one another. Engineers with
+  nothing to build **repair** their side's land vehicles that are out of
+  the fighting (below 97% health, not hit for ten seconds, no enemy within
+  14 units): they walk over and patch it up at 0.8% of its health a second
+  (2.5 at least), with welding sparks. Bridge repairs are still to come.
 - **Hunting the guns** (`game/commander/hunts.ts`, *Gun hunts* under
   Armies, on by default). A howitzer, rocket truck or other long-range
   artillery shelling a side from beyond its reach gets hunted: the side's
