@@ -126,6 +126,25 @@ summary, with a warning when the battles changed, which is expected for a
 balance change and a bug in a speed-up. In the browser, **P** shows the
 same numbers live, with draw calls, triangles and meshes.
 
+`npm run leaks` checks that a long battle settles down instead of piling
+up memory: it plays an Eternal battle headlessly for 90 minutes and
+prints, every 10, the live entities, the JS heap after a garbage
+collection, and every collection (Map, Set or array) reachable from the
+battle that kept growing after the first 20 minutes by more than the
+entities did, such as a cache keyed by something that never repeats. It
+exits with an error if anything did. `--minutes`, `--every`, `--warmup`,
+`--set` and `--seed` change the battle; collections with a cap in the
+code are listed in `BOUNDED` in `src/sim/leaks.ts`. It can't see inside
+closures (a system's own local state), so the heap line is the backstop
+for those. `--page` checks the page instead: it plays `--battles`
+battles back to back in headless Chromium, as ambient mode does, and
+prints the GPU geometries, textures and shader programs, scene objects,
+DOM nodes and JS heap after each. A 120-minute battle on main held at
+27-28 MB with nothing growing, and six battles in a row on the page held
+at about 40 geometries, 13 textures and 21 programs.
+`test/leaks.test.ts` plays a shorter battle (24 minutes on a small map)
+on every test run.
+
 `npm run map -- WHAT` draws the map a battle would get, top down, as a PNG
 in `maps-out/`: WHAT is a battle link or query string, or a sims seed such
 as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
