@@ -172,6 +172,86 @@ The audio also stops completely while muted or when the tab is hidden. The
 P stats overlay shows the audio's live cost, how many sounds a second are
 requested and played, and the current war level.
 
+## Second pass: checking against real recordings
+
+Playtesters said the first version sounded too tinny, sizzly and metallic.
+One said the gunfire sounded like "rain on a metal roof". The rockets
+sounded like wind, the wind sounded like plain white noise, and everything
+sounded too close, even things far away. Someone who knows audio read this
+note and suspected I had overcorrected for small speakers and the booms
+just needed more bass.
+
+This time I didn't rely on my own sense of what a gunshot sounds like. I
+measured real recordings to see what my versions were missing. I gathered
+72 reference clips from public sources: two datasets of recorded sound
+(wind, rain, thunder, fireworks and crackling fire) and sound effect files
+from open-source game projects (rifle shots, rocket launches, tank guns,
+distant explosions). I ran each one through the same analysis as my own
+sounds. The references were only measured, never copied: every sound in
+the game is still made from scratch in code. The table below shows the
+share of energy in each frequency band, plus the centroid (roughly where
+the sound's brightness sits).
+
+| | below 250 Hz | 250 Hz–2 kHz | above 2 kHz | centroid |
+|---|---|---|---|---|
+| Real gunshots | 41% | 32% | 26% | 1270 Hz |
+| My first rifle | 7% | 61% | 32% | 2410 Hz |
+| Real rain | 12% | 31% | 57% | 2670 Hz |
+| My new rifle | 64% | 19% | 17% | 1300 Hz |
+| Real rocket launches | 58% | 36% | 6% | 430 Hz |
+| My first rocket | 1.5% | 85% | 14% | 1320 Hz |
+| My new rocket | 50% | 49% | 1% | 385 Hz |
+| Real tank guns and booms | 84% | 13% | 3% | 190 Hz |
+| My first cannon | 88% | 7% | 4% | 410 Hz |
+| My new cannon | 83% | 16% | 1% | 230 Hz |
+
+Each piece of feedback had a cause the measurements could show:
+
+- **Rain on a metal roof.** My rifle had almost none of a real gunshot's
+  low muzzle blast. Its body came from a narrow filter around 1 kHz, which
+  rings. Remove the low end and add a ring, and a fast stream of shots
+  sounds like rain on metal. The new rifle has a strong low blast and a
+  broad body with no narrow filters. Its 2–8 kHz energy is about a quarter
+  of rain's, where before it was about half.
+- **Rockets that sounded like wind.** Real launches are a low roar
+  centred around 120–500 Hz. Mine was a rising, hissing sweep, which is
+  essentially how you synthesize wind. The new one is an ignition thump
+  followed by a low motor roar with a rough flutter in it, and it gets
+  darker as it flies off.
+- **More bass.** The friend was right. Real booms keep 84% of their
+  energy below 250 Hz, so lifting mine into the 100–500 Hz range had gone
+  too far. The cannon, blast and artillery now sit close to the recorded
+  profiles. They keep a little energy higher up for small speakers.
+- **Metallic.** Three things caused this: the narrow ringing filters, a
+  bell-like clank I had put in vehicle wrecks, and heavy overdrive on
+  everything, which adds buzzy upper harmonics. The clank is gone, the
+  filters are broad, and the overdrive is much lighter. Construction knocks
+  are now low and dull.
+- **Wind that sounded like noise.** Measuring the recorded wind showed it
+  isn't one sound. It swells in gusts, with a low buffeting from the
+  wind on the microphone and soft whistles whose pitch rises as each gust
+  builds, all moving together. My first wind was one steady band of
+  filtered noise. The new one builds those layers and drives them all from
+  the same slow, random gust curve.
+- **Too close.** Recorded distant explosions have almost nothing above
+  1 kHz, and every recording of a battle has the space around it.
+  The camera in this game is always well above the ground, so now every
+  sound, even one in the middle of the screen, is partly muffled and partly
+  reverberant, and more so the further out the camera is zoomed. The
+  reverb is synthesized too: a few early echoes off the ground, then a
+  two-second tail that loses its high frequencies as it fades. One shared
+  reverb serves every sound, so it costs the same whether 2 sounds are
+  playing or 28.
+
+In a recording of the actual in-game mix, energy above 1 kHz fell from
+19% to about 2%, and most of the mix now sits between 60 and 500 Hz. The
+main-thread cost in the 6-side load test is still about 0.03 ms per frame.
+
+Matching a band profile doesn't make a sound good. It only shows that the
+sound is in the right ballpark. The references turned vague words like
+"tinny" and "windy" into numbers I could act on, but a person still has to
+listen to the result.
+
 ## What still needs a person
 
 Measurements can tell me a sound is the right length, isn't clipping and
@@ -179,7 +259,8 @@ will come through on a laptop. They can't tell me whether it sounds good,
 whether the cannon is satisfying, or whether the chimes get annoying after
 an hour. That part is taste, and it needs someone listening.
 
-Feedback is most useful when it describes the sound in plain words. "The
+Feedback is most useful when it describes the sound in plain words, as
+the second pass showed. "The
 rifles sound like typing" tells me the attack is too clicky and the body
 too short. "The big explosions are mush" points to the rumbling cloud
 drowning out the crack. "I can't hear the artillery on my laptop" means

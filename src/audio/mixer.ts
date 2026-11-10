@@ -25,6 +25,8 @@ export interface Placement {
   gain: number;
   /** How much of it goes through the muffled "far away" path, 0 to 1. */
   far: number;
+  /** How much of it to send to the outdoor reverb, 0 to 1. */
+  wet: number;
   /** Stereo position, -1 left to 1 right. */
   pan: number;
 }
@@ -47,11 +49,15 @@ export function place(x: number, z: number, l: Listener, focus: number): Placeme
   const reach = lerp(8, 0.7, focus);
   const steep = lerp(1.2, 3, focus);
   const gain = 1 / (1 + Math.pow(d / reach, steep));
-  const far = clamp01((d / reach - 0.6) / 1.6);
+  // The camera is always some way up, higher the further out it's zoomed, so even what's in
+  // the middle of the screen is heard from a distance: somewhat muffled, with the space around it.
+  const height = 0.2 + 0.25 * l.zoomOut;
+  const far = clamp01(height + (d / reach) * 0.55);
+  const wet = clamp01(0.3 + far * 0.55);
   const side = (dx * l.rightX + dz * l.rightZ) / Math.max(1, l.radius);
   // Far things are harder to place, so they pan less.
   const pan = Math.max(-1, Math.min(1, side)) * 0.75 * (1 - far * 0.5);
-  return { gain, far, pan };
+  return { gain, far, wet, pan };
 }
 
 /** A sound that wants a voice this frame. */
@@ -60,6 +66,7 @@ export interface Cue {
   category: SoundCategory;
   gain: number;
   far: number;
+  wet: number;
   pan: number;
   /** Playback rate (pitch); 1 is as rendered. */
   rate: number;

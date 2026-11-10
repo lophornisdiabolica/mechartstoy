@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Activity, BUDGET, choose, Cue, INAUDIBLE, Listener, MAX_VOICES, place } from '../src/audio/mixer';
 import { CATEGORIES, defaultAudioPrefs, MIX_MAX, parseAudioPrefs, SoundCategory } from '../src/audio/prefs';
-import { LOOP_IDS, renderLoop, renderSound, SOUND_IDS, variantsOf } from '../src/audio/synth';
+import { LOOP_IDS, renderLoop, renderReverb, renderSound, SOUND_IDS, variantsOf } from '../src/audio/synth';
 
 const RATE = 22050;
 const listener: Listener = { x: 0, z: 0, radius: 40, rightX: 1, rightZ: 0, zoomOut: 0.5 };
@@ -34,6 +34,15 @@ describe('sound synthesis', () => {
     }
   }, 30_000);
 
+  it('renders a wide, decaying outdoor reverb', () => {
+    const [l, r] = renderReverb(RATE);
+    expect(l.length).toBe(r.length);
+    expect(l).not.toEqual(r);
+    const energy = (a: Float32Array, from: number, to: number) => a.slice(Math.round(from * RATE), Math.round(to * RATE)).reduce((e, x) => e + x * x, 0);
+    expect(energy(l, 0.02, 0.3)).toBeGreaterThan(energy(l, 1.2, 1.5) * 20);
+    expect(l.every(Number.isFinite)).toBe(true);
+  });
+
   it('renders the same samples every time, and different variants differ', () => {
     expect(renderSound('blast', RATE, 1)).toEqual(renderSound('blast', RATE, 1));
     expect(renderSound('rifle', RATE, 0)).not.toEqual(renderSound('rifle', RATE, 1));
@@ -49,6 +58,15 @@ describe('placing sounds', () => {
     expect(edge.gain).toBeLessThan(centre.gain);
     expect(far.gain).toBeLessThan(edge.gain);
     expect(far.far).toBeGreaterThan(edge.far);
+  });
+
+  it('hears even the middle of the screen from some way up, more so zoomed out', () => {
+    const close = place(0, 0, { ...listener, zoomOut: 0 }, 0.5);
+    const high = place(0, 0, { ...listener, zoomOut: 1 }, 0.5);
+    expect(close.far).toBeGreaterThan(0.1);
+    expect(close.wet).toBeGreaterThan(0.3);
+    expect(high.far).toBeGreaterThan(close.far);
+    expect(place(400, 0, listener, 0.5).wet).toBeGreaterThan(close.wet);
   });
 
   it('focus narrows what is heard: far things are quieter and more muffled at high focus', () => {
@@ -75,7 +93,7 @@ describe('placing sounds', () => {
 });
 
 describe('choosing voices', () => {
-  const cue = (category: SoundCategory, gain: number): Cue => ({ sound: 'rifle', category, gain, far: 0, pan: 0, rate: 1 });
+  const cue = (category: SoundCategory, gain: number): Cue => ({ sound: 'rifle', category, gain, far: 0, wet: 0, pan: 0, rate: 1 });
 
   it('keeps the loudest within each category’s budget', () => {
     const cues = Array.from({ length: 50 }, (_, i) => cue('gunfire', 0.1 + i * 0.01));

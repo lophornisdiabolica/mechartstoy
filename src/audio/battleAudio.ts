@@ -4,7 +4,7 @@ import { Game } from '../game/game';
 import { BiomeId } from '../world/biomes';
 import { Activity, choose, Cue, Listener, place } from './mixer';
 import { AudioPrefs, CATEGORIES, loadAudioPrefs, saveAudioPrefs, SoundCategory } from './prefs';
-import { LOOP_IDS, LoopId, renderLoop, renderSound, SOUND_IDS, SoundId, variantsOf } from './synth';
+import { LOOP_IDS, LoopId, renderLoop, renderReverb, renderSound, SOUND_IDS, SoundId, variantsOf } from './synth';
 import type { FromAudioWorker } from './audioWorker';
 
 /** How loud each sound is next to the others, before any settings. */
@@ -35,8 +35,13 @@ const STIR = { bullet: 0.06, flame: 0.05, shell: 0.35, missile: 0.3, artillery: 
 /** How windy each biome sounds, 0 to 1. */
 const WIND: Record<BiomeId, number> = { temperate: 0.45, desert: 0.7, snow: 0.85, forest: 0.3 };
 
-/** Cut-off of the muffled path that far-away sounds go through, in Hz. */
-const FAR_CUTOFF = 650;
+/** Cut-off of the muffled path that far-away sounds go through, in Hz (recorded distant blasts have almost nothing above 1 kHz). */
+const FAR_CUTOFF = 600;
+/** Cut-off of the "near" path, zoomed in and zoomed out: air takes the top off even close sounds seen from up high. */
+const AIR_IN = 7000;
+const AIR_OUT = 3200;
+/** How much of a voice's wet share reaches the reverb. */
+const WET = 0.55;
 /** Seconds alert chimes are kept apart, so a flurry of captures doesn't jangle. */
 const ALERT_GAP = 0.9;
 /** How much quieter it all is while the setup screen is up over the backdrop battle. */
@@ -45,6 +50,7 @@ const BEHIND_SETUP = 0.35;
 interface Bus {
   near: GainNode;
   far: GainNode;
+  wet: GainNode;
 }
 
 /** Per-session counters for the P stats overlay and for checking performance. */
@@ -79,6 +85,8 @@ export class BattleAudio {
   private buses = new Map<SoundCategory, Bus>();
   private buffers = new Map<SoundId, AudioBuffer[]>();
   private beds = new Map<LoopId, GainNode>();
+  private air: BiquadFilterNode | null = null;
+  private reverb: ConvolverNode | null = null;
   private game: Game | null = null;
   private cues: Cue[] = [];
   private playing: Record<SoundCategory, number> = { gunfire: 0, cannons: 0, explosions: 0, buildings: 0, alerts: 0, ambience: 0 };
@@ -193,6 +201,7 @@ export class BattleAudio {
     this.beds.get('rumble')?.gain.setTargetAtTime(level * (0.35 + out * 0.5), now, 0.6);
     this.beds.get('distantFire')?.gain.setTargetAtTime(this.fire.level * (0.25 + out * 0.45), now, 0.4);
     this.master!.gain.setTargetAtTime(this.masterGain(), now, 0.1);
+    this.air?.frequency.setTargetAtTime(AIR_IN + (AIR_OUT - AIR_IN) * out, now, 0.3);
     this.stats.ms += performance.now() - t0;
   }
 
@@ -205,6 +214,7 @@ export class BattleAudio {
       const bus = this.buses.get(id)!;
       bus.near.gain.setTargetAtTime(this.prefs.mix[id], now, 0.05);
       bus.far.gain.setTargetAtTime(this.prefs.mix[id], now, 0.05);
+      bus.wet.gain.setTargetAtTime(this.prefs.mix[id], now, 0.05);
     }
     this.master!.gain.setTargetAtTime(this.masterGain(), now, 0.05);
     if (this.prefs.muted || this.prefs.volume <= 0) this.suspendIfIdle();
@@ -217,7 +227,7 @@ export class BattleAudio {
     if (!this.running) return;
     const sound: Record<SoundCategory, SoundId> = { gunfire: 'rifle', cannons: 'cannon', explosions: 'blast', buildings: 'collapse', alerts: 'chimeCapture', ambience: 'chimeGod' };
     if (category === 'ambience') return;
-    this.voice({ sound: sound[category], category, gain: LOUDNESS[sound[category]], far: 0, pan: 0, rate: 1 });
+    this.voice({ sound: sound[category], category, gain: LOUDNESS[sound[category]], far: 0.25, wet: 0.45, pan: 0, rate: 1 });
   }
 
   // ------------------------------------------------------------ events to cues
@@ -261,7 +271,7 @@ export class BattleAudio {
     const p = place(x, z, this.listener, this.prefs.focus);
     // Zoomed right out, single sounds step back so the beds can carry the battle.
     const gain = LOUDNESS[sound] * loud * p.gain * (1 - this.listener.zoomOut * 0.35);
-    this.cues.push({ sound, category, gain, far: p.far, pan: p.pan, rate: jitter ? 0.9 + Math.random() * 0.2 : 1 });
+    this.cues.push({ sound, category, gain, far: p.far, wet: p.wet, pan: p.pan, rate: jitter ? 0.9 + Math.random() * 0.2 : 1 });
   }
 
   private alert(sound: SoundId, x: number, z: number): void {
@@ -270,7 +280,7 @@ export class BattleAudio {
     // Chimes are never muffled: they're there to tell you something.
     const gain = LOUDNESS[sound] * (this.prefs.alertsEverywhere ? 1 : p.gain);
     if (this.alertQueue.length >= 3) this.alertQueue.shift();
-    this.alertQueue.push({ sound, category: 'alerts', gain, far: 0, pan: p.pan * 0.5, rate: 1 });
+    this.alertQueue.push({ sound, category: 'alerts', gain, far: 0, wet: 0.25, pan: p.pan * 0.5, rate: 1 });
   }
 
   // ------------------------------------------------------------ Web Audio
@@ -312,13 +322,24 @@ export class BattleAudio {
     farFilter.frequency.value = FAR_CUTOFF;
     farFilter.Q.value = 0.5;
     farFilter.connect(this.master);
+    // Air: a gentle shared roll-off on the near path too, darker the higher the camera.
+    this.air = ctx.createBiquadFilter();
+    this.air.type = 'lowpass';
+    this.air.frequency.value = AIR_IN;
+    this.air.Q.value = 0.5;
+    this.air.connect(this.master);
+    // One outdoor reverb for everything (see renderReverb); its impulse arrives from the worker.
+    this.reverb = ctx.createConvolver();
+    this.reverb.connect(this.master);
     for (const { id } of CATEGORIES) {
       const near = ctx.createGain();
       const far = ctx.createGain();
-      near.gain.value = far.gain.value = this.prefs.mix[id];
-      near.connect(this.master);
+      const wet = ctx.createGain();
+      near.gain.value = far.gain.value = wet.gain.value = this.prefs.mix[id];
+      near.connect(this.air);
       far.connect(farFilter);
-      this.buses.set(id, { near, far });
+      wet.connect(this.reverb);
+      this.buses.set(id, { near, far, wet });
     }
     this.render(ctx);
     if (ctx.state === 'suspended') void ctx.resume();
@@ -334,11 +355,20 @@ export class BattleAudio {
     const rate = ctx.sampleRate;
     // Beds: wind and the war's rumble under ambience; distant gunfire under gunfire (muffled).
     const bedBus: Record<LoopId, AudioNode> = { wind: this.buses.get('ambience')!.near, rumble: this.buses.get('ambience')!.near, distantFire: this.buses.get('gunfire')!.far };
-    let left = LOOP_IDS.length + SOUND_IDS.reduce((n, id) => n + variantsOf(id), 0);
+    let left = 2 + LOOP_IDS.length + SOUND_IDS.reduce((n, id) => n + variantsOf(id), 0);
+    const impulse: Float32Array[] = [];
     const arrived = (m: FromAudioWorker) => {
       const b = ctx.createBuffer(1, m.data.length, rate);
       b.copyToChannel(m.data as Float32Array<ArrayBuffer>, 0);
-      if (m.kind === 'loop') {
+      if (m.kind === 'reverb') {
+        impulse[m.variant] = m.data;
+        if (impulse[0] && impulse[1]) {
+          const ir = ctx.createBuffer(2, impulse[0].length, rate);
+          ir.copyToChannel(impulse[0] as Float32Array<ArrayBuffer>, 0);
+          ir.copyToChannel(impulse[1] as Float32Array<ArrayBuffer>, 1);
+          this.reverb!.buffer = ir;
+        }
+      } else if (m.kind === 'loop') {
         const id = m.id as LoopId;
         const src = ctx.createBufferSource();
         src.buffer = b;
@@ -359,6 +389,7 @@ export class BattleAudio {
     const total = left;
     const onPage = () => {
       const queue: (() => FromAudioWorker)[] = [
+        ...[0, 1].map((ch) => () => ({ kind: 'reverb' as const, id: 'reverb', variant: ch, data: renderReverb(rate)[ch] })),
         ...LOOP_IDS.map((id) => () => ({ kind: 'loop' as const, id, variant: 0, data: renderLoop(id, rate) })),
         ...SOUND_IDS.flatMap((id) => Array.from({ length: variantsOf(id) }, (_, v) => () => ({ kind: 'sound' as const, id, variant: v, data: renderSound(id, rate, v) }))),
       ];
@@ -410,6 +441,12 @@ export class BattleAudio {
       far.gain.value = c.gain * c.far * 1.3;
       pan.connect(far).connect(bus.far);
     }
+    let wet: GainNode | null = null;
+    if (c.wet > 0.02) {
+      wet = ctx.createGain();
+      wet.gain.value = c.gain * c.wet * WET;
+      pan.connect(wet).connect(bus.wet);
+    }
     this.voices++;
     this.playing[c.category]++;
     this.stats.started++;
@@ -420,6 +457,7 @@ export class BattleAudio {
       pan.disconnect();
       near.disconnect();
       far?.disconnect();
+      wet?.disconnect();
     };
     src.start();
   }

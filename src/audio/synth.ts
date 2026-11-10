@@ -207,6 +207,28 @@ function bell(n: number, rate: number, f: number, decay: number, partials = [1, 
   return b;
 }
 
+/**
+ * A smooth random curve from about `floor` to 1: a few slow sine waves at random phases
+ * (`hz` their rates), for gusts and swells.
+ */
+function slowRandom(n: number, rate: number, rnd: () => number, hz: number[], floor: number): Float32Array {
+  const out = new Float32Array(n);
+  const phases = hz.map(() => rnd() * Math.PI);
+  for (let i = 0; i < n; i++) {
+    let v = 0;
+    hz.forEach((f, k) => (v += Math.sin((2 * Math.PI * f * i) / rate + phases[k] * 2) / (k + 1)));
+    out[i] = v;
+  }
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of out) {
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+  }
+  for (let i = 0; i < n; i++) out[i] = floor + ((out[i] - lo) / (hi - lo || 1)) * (1 - floor);
+  return out;
+}
+
 const NOTE = (semitonesFromA4: number) => 440 * Math.pow(2, semitonesFromA4 / 12);
 
 // ---------------------------------------------------------------- the sounds
@@ -215,116 +237,133 @@ type Render = (rate: number, rnd: () => number, v: number) => Float32Array;
 
 /** v is the variant, 0..VARIANTS-1, for small differences in pitch and length. */
 const SOUNDS: Record<SoundId, Render> = {
-  // Small arms: a sharp crack of bright noise, a short papery body, a quick tail.
+  // Small arms. Real gunshots carry about 40% of their energy below 250 Hz (the muzzle blast);
+  // the crack is brief and the body broad, never a narrow ring. Measured against recordings,
+  // see docs/audio.md.
   rifle: (rate, rnd, v) => {
-    const n = Math.round(0.28 * rate);
-    const crack = envelope(highpass(white(n, rnd), rate, 2200 + v * 300), rate, 0.0005, 0.008);
-    const body = envelope(bandpass(white(n, rnd), rate, 950 + v * 150, 1.2), rate, 0.001, 0.03);
-    const thump = envelope(sweep(n, rate, 220, 110), rate, 0.001, 0.015);
-    const out = mix(mix(crack, body, 1.4), thump, 0.18);
-    mix(out, envelope(lowpass(white(n, rnd), rate, 900), rate, 0.01, 0.08), 0.25);
-    return tail(saturate(normalize(out), 1.5), rate);
+    const n = Math.round(0.35 * rate);
+    const punch = envelope(sweep(n, rate, 110 - v * 10, 42), rate, 0.001, 0.035);
+    const blast = envelope(lowpass(lowpass(white(n, rnd), rate, 350), rate, 350), rate, 0.001, 0.045);
+    const crack = envelope(lowpass(white(n, rnd), rate, 5000), rate, 0.0003, 0.006);
+    const body = envelope(highpass(lowpass(white(n, rnd), rate, 1800 + v * 200), rate, 300), rate, 0.0008, 0.03);
+    const echo = envelope(lowpass(white(n, rnd), rate, 500), rate, 0.015, 0.12);
+    const out = mix(mix(mix(mix(punch, normalize(blast), 0.9), normalize(crack), 1.1), normalize(body), 1.6), normalize(echo), 0.2);
+    for (let i = 0; i < n; i++) out[i] -= punch[i] * 0.6;
+    return tail(saturate(normalize(out), 1.3), rate);
   },
-  // Flamers: a breathy roar with crackle, swelling in and out.
+  // Flamers: a soft, low roar with a little crackle, swelling in and out.
   flame: (rate, rnd, v) => {
     const n = Math.round(0.7 * rate);
-    const roar = bandpass(white(n, rnd), rate, 500 + v * 80, 0.7);
+    const roar = lowpass(lowpass(white(n, rnd), rate, 650 + v * 80), rate, 900);
+    const under = lowpass(brown(n, rnd), rate, 160);
+    mix(normalize(roar), normalize(under), 0.6);
     for (let i = 0; i < n; i++) roar[i] *= Math.sin((Math.PI * i) / n) ** 1.5;
-    const pops = crackle(n, rate, rnd, 60, (t) => Math.sin(Math.PI * t), 0.003);
-    return tail(normalize(mix(roar, highpass(pops, rate, 1500), 0.5)), rate);
+    const pops = lowpass(crackle(n, rate, rnd, 40, (t) => Math.sin(Math.PI * t), 0.003), rate, 3500);
+    return tail(normalize(mix(normalize(roar), pops, 0.25)), rate);
   },
-  // Tank guns: a hard transient, a pitched-down thump and a rolling noise tail.
+  // Tank guns: mostly a deep thump and a rolling low body; the crack is short and dark.
   cannon: (rate, rnd, v) => {
-    const n = Math.round(1.1 * rate);
-    const thump = envelope(sweep(n, rate, 110 - v * 8, 42), rate, 0.002, 0.12);
-    const crack = envelope(bandpass(white(n, rnd), rate, 1800, 0.8), rate, 0.0005, 0.012);
-    const roll = envelope(lowpass(white(n, rnd), rate, (i) => 1600 * Math.exp(-i / rate / 0.2) + 180), rate, 0.004, 0.28);
-    const out = mix(mix(thump, crack, 0.7), roll, 1.1);
-    return tail(normalize(saturate(normalize(out), 2.2)), rate, 0.1);
+    const n = Math.round(1.4 * rate);
+    const thump = envelope(sweep(n, rate, 70 - v * 5, 26), rate, 0.003, 0.14);
+    const body = envelope(lowpass(lowpass(white(n, rnd), rate, 250), rate, 250), rate, 0.004, 0.25);
+    const crack = envelope(lowpass(white(n, rnd), rate, 3000), rate, 0.0005, 0.01);
+    const roll = envelope(lowpass(white(n, rnd), rate, (i) => 900 * Math.exp(-i / rate / 0.25) + 120), rate, 0.02, 0.35);
+    const out = mix(mix(mix(thump, normalize(body), 1.5), crack, 0.3), normalize(roll), 0.6);
+    return tail(normalize(saturate(normalize(out), 1.4)), rate, 0.15);
   },
-  // Rockets: a hissing whoosh that rises in pitch as it leaves.
+  // Rockets: a thump of ignition, then a low, fluttering motor roar that darkens as it leaves.
+  // Recorded launches sit at 120-500 Hz; a rising whoosh read as wind.
   missile: (rate, rnd, v) => {
-    const n = Math.round(0.9 * rate);
-    const hiss = bandpass(white(n, rnd), rate, (i) => 500 * Math.pow(6 + v, i / n), 2.5);
+    const n = Math.round(1.2 * rate);
+    const ignite = envelope(sweep(n, rate, 95, 45), rate, 0.002, 0.06);
+    mix(ignite, envelope(lowpass(white(n, rnd), rate, 500), rate, 0.002, 0.05), 0.8);
+    const roar = lowpass(lowpass(white(n, rnd), rate, (i) => 700 - (350 * i) / n + v * 40), rate, 600);
+    // Flutter: the motor's rough burn, a fast random wobble in loudness.
+    let flutter = 1;
+    const step = Math.round(rate / 45);
     for (let i = 0; i < n; i++) {
+      if (i % step === 0) flutter = 0.6 + (rnd() * 0.5 + 0.5) * 0.4;
       const t = i / n;
-      hiss[i] *= Math.min(1, t * 25) * Math.pow(1 - t, 1.6);
+      roar[i] *= flutter * Math.min(1, t * 30) * Math.pow(1 - t, 1.4);
     }
-    const kick = envelope(lowpass(white(n, rnd), rate, 400), rate, 0.002, 0.05);
-    return tail(normalize(mix(hiss, kick, 0.6)), rate);
+    const out = mix(normalize(roar), normalize(ignite), 0.7);
+    return tail(normalize(saturate(normalize(out), 1.2)), rate);
   },
-  // Artillery firing: a deep, slightly muffled boom (it's usually far from the camera).
+  // Artillery firing: a deep, heavy boom with only a little presence above it.
   launch: (rate, rnd, v) => {
     const n = Math.round(1.8 * rate);
-    const boom = envelope(sweep(n, rate, 100 - v * 6, 45), rate, 0.004, 0.22);
-    const body = envelope(lowpass(lowpass(white(n, rnd), rate, 650), rate, 650), rate, 0.006, 0.4);
-    const out = mix(boom, normalize(body), 1.3);
-    return tail(normalize(saturate(normalize(out), 3)), rate, 0.2);
+    const boom = envelope(sweep(n, rate, 70 - v * 5, 26), rate, 0.004, 0.3);
+    const body = envelope(lowpass(lowpass(white(n, rnd), rate, 180), rate, 180), rate, 0.006, 0.45);
+    const edge = envelope(lowpass(white(n, rnd), rate, 900), rate, 0.002, 0.05);
+    const out = mix(mix(boom, normalize(body), 1), edge, 0.2);
+    return tail(normalize(saturate(normalize(out), 1.5)), rate, 0.2);
   },
-  // A shell or rocket landing: a dull crump.
+  // A shell or rocket landing: a dull crump of earth.
   thud: (rate, rnd, v) => {
-    const n = Math.round(0.7 * rate);
-    const low = envelope(sweep(n, rate, 140 - v * 15, 55), rate, 0.002, 0.07);
-    const dirt = envelope(lowpass(white(n, rnd), rate, 1100), rate, 0.002, 0.1);
-    const grit = envelope(highpass(crackle(n, rate, rnd, 300, (t) => 1 - t), rate, 1200), rate, 0.01, 0.12);
-    return tail(normalize(saturate(normalize(mix(mix(low, dirt, 0.9), grit, 0.3)), 1.8)), rate, 0.08);
+    const n = Math.round(0.8 * rate);
+    const low = envelope(sweep(n, rate, 80 - v * 8, 32), rate, 0.002, 0.07);
+    const dirt = envelope(lowpass(white(n, rnd), rate, 600), rate, 0.002, 0.12);
+    const grit = envelope(lowpass(crackle(n, rate, rnd, 250, (t) => 1 - t), rate, 2500), rate, 0.01, 0.12);
+    return tail(normalize(saturate(normalize(mix(mix(low, normalize(dirt), 1.8), grit, 0.2)), 1.3)), rate, 0.1);
   },
-  // Big blasts: heavy shells, bombs, big wrecks. Crack, sub drop, a long rumbling cloud and falling debris.
+  // Big blasts: heavy shells, bombs, big wrecks. A dark crack, a deep drop, a long rolling cloud, debris.
   blast: (rate, rnd, v) => {
-    const n = Math.round(2.6 * rate);
-    const crack = envelope(bandpass(white(n, rnd), rate, 1400, 0.6), rate, 0.0005, 0.02);
-    const sub = envelope(sweep(n, rate, 110 - v * 6, 35), rate, 0.003, 0.3);
-    const cloud = lowpass(white(n, rnd), rate, (i) => 2500 * Math.exp(-i / rate / 0.3) + 280);
-    envelope(cloud, rate, 0.01, 0.7);
+    const n = Math.round(2.8 * rate);
+    const crack = envelope(lowpass(white(n, rnd), rate, 2500), rate, 0.0005, 0.015);
+    const sub = envelope(sweep(n, rate, 70 - v * 5, 22), rate, 0.003, 0.45);
+    const cloud = lowpass(white(n, rnd), rate, (i) => 1200 * Math.exp(-i / rate / 0.3) + 150);
+    envelope(cloud, rate, 0.01, 0.8);
     // The cloud rolls: slow random swells in its loudness.
     let swell = 1;
     for (let i = 0; i < n; i++) {
       if (i % 2000 === 0) swell = 0.6 + (rnd() * 0.5 + 0.5) * 0.6;
       cloud[i] *= swell;
     }
-    lowpass(cloud, rate, 1500);
-    const debris = highpass(crackle(n, rate, rnd, 120, (t) => (t > 0.15 ? Math.exp(-(t - 0.15) * 4) : 0), 0.006), rate, 900);
-    const out = mix(mix(mix(crack, sub, 0.7), normalize(cloud), 1.5), debris, 0.25);
-    return tail(normalize(saturate(normalize(out), 3.2)), rate, 0.3);
+    lowpass(cloud, rate, 900);
+    const debris = lowpass(crackle(n, rate, rnd, 100, (t) => (t > 0.15 ? Math.exp(-(t - 0.15) * 4) : 0), 0.006), rate, 3000);
+    const out = mix(mix(mix(crack, sub, 1.4), normalize(cloud), 2.4), debris, 0.12);
+    return tail(normalize(saturate(normalize(out), 1.6)), rate, 0.3);
   },
-  // A vehicle going up: a smaller blast with more metal in it.
+  // A vehicle going up: a smaller blast, a burst of fire and a little falling debris.
   wreck: (rate, rnd, v) => {
-    const n = Math.round(1.4 * rate);
-    const pop = envelope(sweep(n, rate, 150 - v * 10, 40), rate, 0.002, 0.12);
-    const fire = envelope(lowpass(white(n, rnd), rate, (i) => 2500 * Math.exp(-i / rate / 0.15) + 250), rate, 0.002, 0.3);
-    const clank = envelope(bell(n, rate, 310 + v * 47, 0.25, [1, 2.43, 3.9, 5.7]), rate, 0, 0.2);
-    const out = mix(mix(pop, fire, 1.2), clank, 0.18);
-    return tail(normalize(saturate(normalize(out), 2)), rate, 0.15);
+    const n = Math.round(1.5 * rate);
+    const pop = envelope(sweep(n, rate, 110 - v * 8, 35), rate, 0.002, 0.14);
+    const fire = envelope(lowpass(white(n, rnd), rate, (i) => 1400 * Math.exp(-i / rate / 0.15) + 180), rate, 0.002, 0.35);
+    const debris = lowpass(crackle(n, rate, rnd, 60, (t) => (t > 0.1 ? 1 - t : 0), 0.01), rate, 2000);
+    const out = mix(mix(pop, normalize(fire), 2), debris, 0.2);
+    return tail(normalize(saturate(normalize(out), 1.4)), rate, 0.15);
   },
   // A building coming down: a long grinding rumble with crunches in it.
   collapse: (rate, rnd, v) => {
     const n = Math.round(3.2 * rate);
-    const rumble = lowpass(lowpass(white(n, rnd), rate, 380 + v * 60), rate, 500);
+    const rumble = lowpass(lowpass(white(n, rnd), rate, 300 + v * 50), rate, 400);
     for (let i = 0; i < n; i++) {
       const t = i / n;
       rumble[i] *= Math.min(1, t * 8) * Math.pow(1 - t, 1.3);
     }
-    const crunch = lowpass(crackle(n, rate, rnd, 40, (t) => Math.pow(1 - t, 2), 0.03), rate, 2500);
-    return tail(normalize(saturate(normalize(mix(normalize(rumble), normalize(crunch), 0.7)), 1.8)), rate, 0.2);
+    const crunch = lowpass(crackle(n, rate, rnd, 40, (t) => Math.pow(1 - t, 2), 0.03), rate, 1800);
+    return tail(normalize(saturate(normalize(mix(normalize(rumble), normalize(crunch), 0.5)), 1.4)), rate, 0.2);
   },
-  // Construction starting: a few metallic knocks, like a frame going up.
+  // Construction starting: a few heavy, dull knocks of beams going into place.
   build: (rate, rnd, v) => {
     const n = Math.round(0.9 * rate);
     const out = new Float32Array(n);
     const hits = 3 + v;
     for (let k = 0; k < hits; k++) {
       const at = Math.round((0.05 + k * 0.17 + (rnd() * 0.5 + 0.5) * 0.04) * rate);
-      const knock = envelope(bell(Math.round(0.25 * rate), rate, 520 + (rnd() * 0.5 + 0.5) * 220, 0.06, [1, 2.7, 4.1]), rate, 0, 0.05);
+      const len = Math.round(0.25 * rate);
+      const knock = envelope(bell(len, rate, 170 + (rnd() * 0.5 + 0.5) * 90, 0.05, [1, 1.7]), rate, 0, 0.04);
+      mix(knock, normalize(envelope(lowpass(white(len, rnd), rate, 1200), rate, 0.0005, 0.012)), 0.6);
       mix(out, knock, 0.7 - k * 0.1, at);
     }
-    return tail(normalize(out), rate);
+    return tail(normalize(lowpass(out, rate, 1800)), rate);
   },
   // Engineers digging: a dry scrape and spill of earth.
   dig: (rate, rnd, v) => {
     const n = Math.round(0.8 * rate);
-    const scrape = bandpass(white(n, rnd), rate, (i) => 900 - (i / n) * 400 + v * 60, 1.5);
+    const scrape = bandpass(white(n, rnd), rate, (i) => 600 - (i / n) * 300 + v * 50, 0.8);
     for (let i = 0; i < n; i++) scrape[i] *= Math.sin((Math.PI * i) / n) ** 2;
-    const spill = lowpass(crackle(n, rate, rnd, 200, (t) => (t > 0.4 ? 1 - t : 0), 0.008), rate, 1800);
+    const spill = lowpass(crackle(n, rate, rnd, 200, (t) => (t > 0.4 ? 1 - t : 0), 0.008), rate, 1200);
     return tail(normalize(mix(scrape, spill, 0.8)), rate);
   },
   // Earthquakes: a very low, shuddering roar.
@@ -394,13 +433,30 @@ function seamless(buf: Float32Array, rate: number, fade = 0.5): Float32Array {
 }
 
 const LOOPS: Record<LoopId, (rate: number, rnd: () => number) => Float32Array> = {
-  // Wind: brown noise through a band-pass that wanders slowly, so it gusts.
+  // Wind: what makes recorded wind sound like wind is gusts (slow swells of a few dB) that move
+  // everything at once: a low buffeting rumble, and narrow whistles whose pitch rises as the
+  // gust builds. Broad filtered noise alone sounds like a hiss.
   wind: (rate, rnd) => {
-    const n = Math.round(10.5 * rate);
-    const phase = rnd() * 6;
-    const air = bandpass(brown(n, rnd), rate, (i) => 380 + 220 * Math.sin((2 * Math.PI * i) / n * 2 + phase) + 120 * Math.sin((2 * Math.PI * i) / n * 5), 0.9);
-    for (let i = 0; i < n; i++) air[i] *= 0.65 + 0.35 * Math.sin((2 * Math.PI * i) / n * 3 + phase * 2);
-    return normalize(seamless(air, rate), 0.5);
+    const n = Math.round(12.5 * rate);
+    const gust = slowRandom(n, rate, rnd, [0.07, 0.13, 0.31], 0.2);
+    const gust2 = slowRandom(n, rate, rnd, [0.05, 0.17, 0.4], 0.15);
+    const buffet = lowpass(lowpass(white(n, rnd), rate, 110), rate, 140);
+    const howl = bandpass(white(n, rnd), rate, (i) => 260 + 220 * gust[i], 9);
+    const body = lowpass(highpass(white(n, rnd), rate, 120), rate, 450);
+    const whistle = bandpass(white(n, rnd), rate, (i) => 640 + 320 * gust2[i], 14);
+    const rustle = lowpass(highpass(white(n, rnd), rate, 1500), rate, 4500);
+    normalize(buffet);
+    normalize(howl);
+    normalize(whistle);
+    normalize(rustle);
+    normalize(body);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const g = gust[i];
+      const g2 = gust2[i];
+      out[i] = buffet[i] * 0.25 * (0.4 + g) + body[i] * 0.4 * g + howl[i] * 0.3 * g * g + whistle[i] * 0.18 * g2 * g2 + rustle[i] * 0.05 * g * g;
+    }
+    return normalize(seamless(out, rate), 0.5);
   },
   // A far-off war: a deep rumble with distant thumps rolling in it.
   rumble: (rate, rnd) => {
@@ -427,7 +483,7 @@ const LOOPS: Record<LoopId, (rate: number, rnd: () => number) => Float32Array> =
       for (let s = 0; s < shots; s++) mix(out, pop(Math.floor(t * 1000) + s), 0.4 + (rnd() * 0.5 + 0.5) * 0.6, Math.round((t + s * gap) * rate));
       t += shots * gap + 0.1 + (rnd() * 0.5 + 0.5) * 0.9;
     }
-    return normalize(seamless(lowpass(out, rate, 1500), rate, 0.3), 0.6);
+    return normalize(seamless(lowpass(out, rate, 1000), rate, 0.3), 0.6);
   },
 };
 
@@ -442,6 +498,29 @@ export function renderSound(id: SoundId, rate: number, variant = 0): Float32Arra
 /** How many variants a sound has: one for the chimes and the quake (rare, and meant to be recognised), VARIANTS for the rest. */
 export function variantsOf(id: SoundId): number {
   return id.startsWith('chime') || id === 'quake' ? 1 : VARIANTS;
+}
+
+/**
+ * The impulse response of a wide outdoor space, for a ConvolverNode: a few early echoes off
+ * the ground and nearby hills, then a two-second tail that loses its highs as it fades (air
+ * absorbs them). Sending every sound a little of this is most of what makes it sound far off.
+ * Two channels, different noise in each, so the space is wide.
+ */
+export function renderReverb(rate: number): [Float32Array, Float32Array] {
+  const n = Math.round(2.4 * rate);
+  const make = (seed: number) => {
+    const rnd = noiseSource(seed);
+    const b = white(n, rnd);
+    lowpass(b, rate, (i) => 5000 * Math.exp(-i / rate / 0.5) + 400);
+    const pre = Math.round(0.012 * rate);
+    for (let i = 0; i < n; i++) b[i] = i < pre ? 0 : b[i] * Math.exp(-(i - pre) / rate / 0.32) * Math.min(1, (i - pre) / (0.04 * rate));
+    for (let k = 0; k < 6; k++) {
+      const at = Math.round((0.015 + (rnd() * 0.5 + 0.5) * 0.09) * rate);
+      b[at] += (rnd() < 0 ? -1 : 1) * (0.3 + (rnd() * 0.5 + 0.5) * 0.4) * 4;
+    }
+    return lowpass(tail(b, rate, 0.2), rate, 6000);
+  };
+  return [normalize(make(101)), normalize(make(202))];
 }
 
 export function renderLoop(id: LoopId, rate: number): Float32Array {
