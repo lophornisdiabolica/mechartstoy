@@ -280,6 +280,45 @@ for the first 44 ms, then six separate slap-backs spread over the next
 of its energy is in the first 80 ms. `npm run sounds` now writes the
 reverb out as `reverb-impulse.wav`, so you can hear the space on its own.
 
+## Fourth pass: loops that don't give themselves away
+
+Two notes from listening. The wind seemed to "reset" over and over at the
+start of battles, with odd swells and drops in it. And the explosions
+could use a little more variety, without drifting from what already
+sounded right.
+
+**The wind.** I measured the wind loop in the same terms as the
+recordings: its level every tenth of a second, and especially around the
+point where the loop wraps back to its start. Three problems showed up:
+
+- The loop was only 12 seconds long.
+- The gusts were random, so the end of the loop was in a different gust
+  from the start. The cross-fade over the seam jumped 5 dB in under half
+  a second.
+- The gusts were too deep: a 10 dB swing against 2–6 dB in recorded wind.
+
+At the start of a battle the wind is nearly all you hear, so a jump every
+12 seconds sounds like the sound resetting.
+
+The wind is now two loops of different lengths, 37 seconds for the
+body and 23 seconds for the howls, so together they only line up again
+after about 14 minutes. Each loop's gusts are made of slow waves that
+complete a whole number of cycles within the loop, so the end really is
+the start. The swing is 3.4 dB. The cross-fade also changed, from a straight
+fade to an equal-power one, because a straight fade between two
+different stretches of noise dips about 3 dB halfway through. After the
+change, the level around each seam stays within the loop's normal ±2 dB.
+The rumble and distant-gunfire beds also went from 8–9 seconds to 19–29
+seconds.
+
+**Variety.** Each explosion-type sound now has six versions instead of
+three. Each version draws its own small random changes to pitch, length,
+brightness and decay, typically 10–25% and never more than 50%. Big blasts
+and vehicle wrecks sometimes also get a small second thump a moment later,
+like fuel or ammunition catching. I measured the spread so it stays
+modest: a big blast's centroid now ranges from 190 to 290 Hz (it was 190
+to 270), and the averages are where they were.
+
 ## What still needs a person
 
 Measurements can tell me a sound is the right length, isn't clipping and

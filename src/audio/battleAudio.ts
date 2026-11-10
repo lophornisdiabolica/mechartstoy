@@ -197,7 +197,9 @@ export class BattleAudio {
     // Zoomed out, the beds carry more of the war; zoomed in, the single sounds do.
     const out = listener.zoomOut;
     const now = ctx.currentTime;
-    this.beds.get('wind')?.gain.setTargetAtTime(this.wind * (0.25 + out * 0.2) * (1 - level * 0.4), now, 0.5);
+    const windLevel = this.wind * (0.25 + out * 0.2) * (1 - level * 0.4);
+    this.beds.get('wind')?.gain.setTargetAtTime(windLevel, now, 0.5);
+    this.beds.get('windHowl')?.gain.setTargetAtTime(windLevel * 0.8, now, 0.5);
     this.beds.get('rumble')?.gain.setTargetAtTime(level * (0.35 + out * 0.5), now, 0.6);
     this.beds.get('distantFire')?.gain.setTargetAtTime(this.fire.level * (0.25 + out * 0.45), now, 0.4);
     this.master!.gain.setTargetAtTime(this.masterGain(), now, 0.1);
@@ -354,7 +356,7 @@ export class BattleAudio {
     const t0 = performance.now();
     const rate = ctx.sampleRate;
     // Beds: wind and the war's rumble under ambience; distant gunfire under gunfire (muffled).
-    const bedBus: Record<LoopId, AudioNode> = { wind: this.buses.get('ambience')!.near, rumble: this.buses.get('ambience')!.near, distantFire: this.buses.get('gunfire')!.far };
+    const bedBus: Record<LoopId, AudioNode> = { wind: this.buses.get('ambience')!.near, windHowl: this.buses.get('ambience')!.near, rumble: this.buses.get('ambience')!.near, distantFire: this.buses.get('gunfire')!.far };
     let left = 2 + LOOP_IDS.length + SOUND_IDS.reduce((n, id) => n + variantsOf(id), 0);
     const impulse: Float32Array[] = [];
     const arrived = (m: FromAudioWorker) => {

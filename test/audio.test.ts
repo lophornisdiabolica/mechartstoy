@@ -29,8 +29,10 @@ describe('sound synthesis', () => {
     for (const id of LOOP_IDS) {
       const s = renderLoop(id, RATE);
       expect(s.length, id).toBeGreaterThan(RATE * 5);
-      // The seam: the end runs into the start without a jump.
-      expect(Math.abs(s[s.length - 1] - s[0]), id).toBeLessThan(0.05);
+      // The seam: the step from the end back to the start is no bigger than the loop's own
+      // ordinary sample-to-sample steps (its 99.9th percentile), so it can't click.
+      const steps = Array.from(s.subarray(1), (x, i) => Math.abs(x - s[i])).sort((a, b) => a - b);
+      expect(Math.abs(s[s.length - 1] - s[0]), id).toBeLessThanOrEqual(steps[Math.floor(steps.length * 0.999)]);
     }
   }, 30_000);
 
