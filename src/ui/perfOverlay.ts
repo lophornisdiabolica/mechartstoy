@@ -3,6 +3,7 @@ import { Unit } from '../game/components';
 import { Game } from '../game/game';
 import { Stage } from '../render/stage';
 import { el } from './dom';
+import { AudioStats } from '../audio/battleAudio';
 
 /** Seconds between readout updates. */
 const EVERY = 0.5;
@@ -25,7 +26,14 @@ export class PerfOverlay {
   private timer = 0;
   private game: Game | null = null;
 
-  constructor(private readonly stage: Stage) {
+  private audioMs = 0;
+  private audioStarted = 0;
+  private audioCues = 0;
+
+  constructor(
+    private readonly stage: Stage,
+    private readonly audio: AudioStats | null = null,
+  ) {
     document.body.append(this.root);
   }
 
@@ -111,6 +119,16 @@ export class PerfOverlay {
         const top = [...w.profile].sort((a, b) => b[1] - a[1]).slice(0, 5);
         lines.push(top.map(([k, v]) => `${k} ${(v / this.ticks).toFixed(2)}`).join(' · '));
       }
+    }
+    const a = this.audio;
+    if (a && a.cues > 0) {
+      const per = (v: number) => Math.round(v / this.frameTime);
+      lines.push(
+        `audio ${ms((a.ms - this.audioMs) / this.frames)} ms/frame · ${per(a.cues - this.audioCues)} sounds/s asked, ${per(a.started - this.audioStarted)} played · ${a.playing} voices · war level ${Math.round(a.level * 100)}%`,
+      );
+      this.audioMs = a.ms;
+      this.audioStarted = a.started;
+      this.audioCues = a.cues;
     }
     return lines.join('\n');
   }
