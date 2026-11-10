@@ -378,6 +378,17 @@ export class BattleAudio {
         const g = ctx.createGain();
         g.gain.value = 0;
         src.connect(g).connect(bedBus[id]);
+        if (id === 'wind') {
+          // Keep the reverb busy from the start. A convolver whose input has been silent for
+          // longer than its impulse switches itself off, and the browser switches it back on
+          // when a sound arrives. At a battle's start the first scattered sounds keep doing that,
+          // and the wind cutting out right as the first sound of a battle plays points at that
+          // restart costing the audio thread its deadline. A trickle of wind, far too quiet to hear
+          // (about -75 dB), keeps it running at a steady cost instead.
+          const awake = ctx.createGain();
+          awake.gain.value = 0.002;
+          src.connect(awake).connect(this.reverb!);
+        }
         src.start();
         this.beds.set(id, g);
       } else {
