@@ -9,6 +9,7 @@ import { Building, Collider, Faction, Hit, Mover, Transform } from './components
 import type { Commander } from './commander/commander';
 import type { Divine, Power } from './god';
 import type { FireField } from './fire';
+import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
@@ -58,11 +59,17 @@ export type GameEvents = {
   godUsed: { power: Power | { kind: 'drop'; unit: UnitId; count: number; faction: number }; x: number; z: number };
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
   /** Engineers finished digging (or heaping up) a stretch of canal, trench or berm (see commander/engineers.ts). */
-  earthwork: { kind: 'canal' | 'trench' | 'berm'; faction: number; x: number; z: number };
+  earthwork: { kind: 'canal' | 'trench' | 'berm' | 'fill'; faction: number; x: number; z: number };
+  /** An engineer repairing a vehicle: sparks where it's working (see commander/engineers.ts). */
+  repair: { faction: number; x: number; y: number; z: number };
   /** A side's Commander sent squads to hunt a long-range gun shelling it, or they killed it (`done`; see commander/hunts.ts). */
   hunt: { faction: number; x: number; z: number; unit: string; done: boolean };
   /** Engineers threw a temporary bridge across water, or it came down (`down`; see commander/engineers.ts). */
   span: { faction: number; x: number; z: number; down: boolean };
+  /** A town's people took up arms against a side that razed too much of it (see towns.ts). */
+  militia: { town: number; faction: number; x: number; z: number };
+  /** A super unit blew a crater in the ground (see craters.ts). */
+  crater: { x: number; z: number; radius: number };
 };
 
 /** How a conquest battle ended. */
@@ -130,4 +137,6 @@ export interface SimContext {
   god: Divine;
   /** Burning and scorched ground (see fire.ts). */
   fire: FireField;
+  /** The towns' people (see towns.ts). */
+  towns: Towns;
 }

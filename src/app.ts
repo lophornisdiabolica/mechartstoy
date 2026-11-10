@@ -386,7 +386,22 @@ export class App implements MatchControls {
     }
     const wrap = el('div', { class: 'stats' });
     wrap.append(table);
-    if (stats.townRazed > 0) wrap.append(el('div', { class: 'town' }, `${stats.townRazed} town ${stats.townRazed === 1 ? 'building' : 'buildings'} caught in the crossfire`));
+    // What the town suffered: buildings and people caught in the crossfire, and who the townsfolk took up arms against.
+    const hurt: string[] = [];
+    if (stats.townRazed > 0) hurt.push(`${stats.townRazed} town ${stats.townRazed === 1 ? 'building' : 'buildings'}`);
+    if (stats.townFolkLost > 0) hurt.push(`${stats.townFolkLost} ${stats.townFolkLost === 1 ? 'townsperson' : 'townsfolk'}`);
+    if (hurt.length > 0) wrap.append(el('div', { class: 'town' }, `${hurt.join(' and ')} caught in the crossfire`));
+    const angered = stats.townAngered.map((id) => factions.find((f) => f.id === id)).filter((f) => f !== undefined);
+    if (angered.length > 0) {
+      const line = el('div', { class: 'town' }, 'Towns took up arms against ');
+      angered.forEach((f, k) => {
+        if (k > 0) line.append(k === angered.length - 1 ? ' and ' : ', ');
+        const name = el('span', {}, f.name);
+        name.style.color = textHex(f.primary);
+        line.append(name);
+      });
+      wrap.append(line);
+    }
     return wrap;
   }
 

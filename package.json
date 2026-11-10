@@ -13,6 +13,7 @@
     "map": "node scripts/map.mjs",
     "bench": "node scripts/bench.mjs",
     "shot": "node scripts/shot.mjs",
+    "leaks": "node --expose-gc scripts/leaks.mjs",
     "sounds": "node scripts/sounds.mjs"
   },
   "dependencies": {

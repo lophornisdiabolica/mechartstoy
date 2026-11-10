@@ -138,6 +138,25 @@ summary, with a warning when the battles changed, which is expected for a
 balance change and a bug in a speed-up. In the browser, **P** shows the
 same numbers live, with draw calls, triangles and meshes.
 
+`npm run leaks` checks that a long battle settles down instead of piling
+up memory: it plays an Eternal battle headlessly for 90 minutes and
+prints, every 10, the live entities, the JS heap after a garbage
+collection, and every collection (Map, Set or array) reachable from the
+battle that kept growing after the first 20 minutes by more than the
+entities did, such as a cache keyed by something that never repeats. It
+exits with an error if anything did. `--minutes`, `--every`, `--warmup`,
+`--set` and `--seed` change the battle; collections with a cap in the
+code are listed in `BOUNDED` in `src/sim/leaks.ts`. It can't see inside
+closures (a system's own local state), so the heap line is the backstop
+for those. `--page` checks the page instead: it plays `--battles`
+battles back to back in headless Chromium, as ambient mode does, and
+prints the GPU geometries, textures and shader programs, scene objects,
+DOM nodes and JS heap after each. A 120-minute battle on main held at
+27-28 MB with nothing growing, and six battles in a row on the page held
+at about 40 geometries, 13 textures and 21 programs.
+`test/leaks.test.ts` plays a shorter battle (24 minutes on a small map)
+on every test run.
+
 `npm run map -- WHAT` draws the map a battle would get, top down, as a PNG
 in `maps-out/`: WHAT is a battle link or query string, or a sims seed such
 as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
@@ -217,7 +236,22 @@ battle, its exact map via `seed`).
   **towns** (none to four) and how big. Towns have districts: a harbour of
   warehouses on the waterfront, an industrial quarter, taller blocks in the
   centre, houses round them, and a paved main street; **roads** join the
-  towns, along the easiest ground. **Waterways** (on by
+  towns, along the easiest ground. **Townsfolk** (on by default, `folk=0`
+  turns them off): a few people walk each town's streets, scattering from
+  soldiers and vehicles that come near, and the town's own engineer puts
+  up a new building every four minutes on the nearest open spot of its
+  street grid, so a town grows outward over a long battle (to 1.6 times
+  its radius). Nobody aims at a town, but stray fire wrecks it: once one
+  side has razed three of a town's buildings, its people take up hunting
+  rifles against that side as a **militia** (a faction of their own, see
+  `militiaOf`), standing guard round the edge of town facing that side's
+  base and shooting its units that come within nine units, and that side
+  shoots back. They never go out to attack and leave other sides alone.
+  Lost townsfolk come back one a minute from the town's buildings.
+  Townsfolk count toward nothing: no caps, kills or strength. The end
+  screen says how many town buildings and townsfolk were caught in the
+  crossfire, and which sides the towns took up arms against.
+  **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an
   inlet dug to any that has none. Wherever water cuts the land, an
@@ -231,7 +265,13 @@ battle, its exact map via `seed`).
   blasts knock them down too, and a cleared patch is open ground again.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
-  until it's cleared away four minutes later.
+  until it's cleared away four minutes later. **Craters** (on by default):
+  a super unit blowing up leaves a small crater with a rim of churned
+  earth (a shot-down airship, where it hits the ground), so a front that's
+  been fought over for an hour is worn down and pocked. On low ground a
+  crater goes below the water and floods, so long battles by a lake or
+  river slowly turn the ground there to ponds; engineers fill them in
+  where they cut the way across (see Engineers).
 - **Placement:** a map of the battle the settings make, on the setup
   screen, where the bases, towns and outposts can be dragged to new spots.
   Dropping one fixes where every one of its kind goes (kept in the link as
@@ -456,10 +496,13 @@ src/
       places.ts        the map's key places: bases, outposts, towns, bridges, narrow crossings and high ground
       taskForces.ts    squads sent off between attacks to take outposts or save the side's own
       advice.ts        production advice (leaning each doctrine's table toward what the battle needs) and per-side styles
+      crossings.ts     whether there's still a way across wide enough for super units, and where it's cut
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
+    towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
+    craters.ts       craters where super units blow up
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there
     orders.ts        per-faction player orders (stance, rally point)
@@ -735,8 +778,29 @@ outposts and the light scenery are still placed once, at the start.
   minutes, or when enemy shells landing on it have done 600 damage, and
   anything on it goes in the water. Engineers don't build where an enemy
   unit is within 14 units, take no cap, never join an attack or a task
-  force; the rally flag and stances pause their work. Bridge repairs are
-  still to come.
+  force; the rally flag and stances pause their work. Every side's
+  engineers also keep a way open across the map (`crossings.ts`): when
+  there's no way from the base to the nearest enemy's at least 2.2 units
+  from water all the way (room for a super unit), because craters have
+  flooded it, a god power's Lower Land has cut it, or anything else, they
+  throw a timber bridge over the gap if it's short enough and raise the
+  ground in it with earth, a few metres at a time, until there's a way
+  again; that comes before every other job. Any water the battle made is
+  filled however deep (a deep hole fills faster while it's deep, so a
+  three-metre trench takes a few minutes); of the map's own water only
+  shallows up to half a unit deep, never a lake, the sea, a river or a
+  canal. Timber bridges don't count as a way across, so the gap under one
+  still gets filled. Each side picks where to cross for itself: where
+  filling costs least once enemy units near it (and enemy bases) are
+  added, and its own units near it taken off, looked at again every 20
+  seconds, so its engineers work away from the enemy's armies and two
+  sides cutting across the same water mostly do it in different places.
+  Engineers at work on a crossing and the other side's engineers don't
+  shoot one another. Engineers with
+  nothing to build **repair** their side's land vehicles that are out of
+  the fighting (below 97% health, not hit for ten seconds, no enemy within
+  14 units): they walk over and patch it up at 0.8% of its health a second
+  (2.5 at least), with welding sparks. Bridge repairs are still to come.
 - **Hunting the guns** (`game/commander/hunts.ts`, *Gun hunts* under
   Armies, on by default). A howitzer, rocket truck or other long-range
   artillery shelling a side from beyond its reach gets hunted: the side's

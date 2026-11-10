@@ -1,6 +1,6 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
-import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, MILITIA_BASE, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
 import { Goal, UnitMix } from '../game/commander/commander';
 import { STYLES } from '../game/commander/advice';
 import { describeBonus } from '../game/outposts';
@@ -547,7 +547,8 @@ export class Controls {
     const garrison = factionId === GARRISON;
     swatch.style.background = faction ? hex(faction.primary) : garrison ? hex(factionColors(GARRISON).primary) : '#b5654a';
     title.append(swatch, el('strong', {}, name));
-    this.inspect.append(title, el('div', { class: 'sub' }, faction ? faction.name : garrison ? 'Garrison (fights everyone)' : 'Civilian'));
+    const militia = factionId <= MILITIA_BASE;
+    this.inspect.append(title, el('div', { class: 'sub' }, faction ? faction.name : garrison ? 'Garrison (fights everyone)' : militia ? 'Town militia (fights those who razed its town)' : 'Civilian'));
 
     const h = w.get(e, Health);
     if (h) {
