@@ -344,6 +344,18 @@ impulse were already 50 dB down, so I cut it from 4 seconds to 2.6. The
 space measures the same (reverb time about 3 seconds), and the audio
 thread does about a third less work.
 
+Jbt then found a seed where it happened every time, about 11 seconds in.
+In my render of that battle, 11.3 seconds is the first sound of any kind:
+an engineer starting a building. Until then only the wind beds play, and
+they don't go through the reverb. A convolver whose input has been silent
+for longer than its impulse switches itself off, and the browser switches
+it back on when a sound arrives. Early in a battle, sounds come in
+scattered bursts with quiet gaps between them, so the reverb keeps
+stopping and starting, and each restart is a spike of work. Later the
+sounds are continuous and it never stops. That matches every part of what
+Jbt heard. Now a trickle of the wind, about -75 dB and far too quiet to
+hear, feeds the reverb from the start, so it never switches off.
+
 ## What still needs a person
 
 Measurements can tell me a sound is the right length, isn't clipping and
