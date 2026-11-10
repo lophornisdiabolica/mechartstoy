@@ -319,6 +319,31 @@ like fuel or ammunition catching. I measured the spread so it stays
 modest: a big blast's centroid now ranges from 190 to 290 Hz (it was 190
 to 270), and the averages are where they were.
 
+## A bug I couldn't hear: the wind cutting out
+
+After the fourth pass, Jbt still heard the wind stop and start a couple of
+times in the first ten seconds of some battles, but not every time. I
+can't listen, so I built a tool to check instead. It runs the real
+simulation and the real audio code together, one frame at a time, through
+the browser's offline audio renderer. That gives me exactly what Chrome's
+audio graph would produce for an eight-side battle's opening, sample for
+sample, with no timing noise. The wind never dropped in it. The softest
+moments, between the first shots, were still the wind at its usual level.
+A model of the mix outside the browser agreed: the compressor took at most
+2 dB off the wind, and the gusts in the loop vary by about 3 dB.
+
+Something that behaves differently from run to run, when the logic replays
+the same way every time, points at timing rather than at the sound itself.
+When the audio thread misses its deadline, the speakers get a moment of
+silence. The opening of a big battle is when the computer is busiest:
+the map is being built, eight armies start planning, and in the first
+battle of a session the sounds are still being made. The reverb was most
+of the audio thread's work (about 80% of it, measured offline), and its
+cost grows with the impulse's length. The last 1.4 seconds of the
+impulse were already 50 dB down, so I cut it from 4 seconds to 2.6. The
+space measures the same (reverb time about 3 seconds), and the audio
+thread does about a third less work.
+
 ## What still needs a person
 
 Measurements can tell me a sound is the right length, isn't clipping and

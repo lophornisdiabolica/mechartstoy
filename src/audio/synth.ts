@@ -575,7 +575,7 @@ export function variantsOf(id: SoundId): number {
  * Two channels, different noise in each, so the space is wide.
  */
 export function renderReverb(rate: number): [Float32Array, Float32Array] {
-  const n = Math.round(4 * rate);
+  const n = Math.round(2.6 * rate);
   const make = (seed: number) => {
     const rnd = noiseSource(seed);
     const out = new Float32Array(n);
@@ -589,7 +589,8 @@ export function renderReverb(rate: number): [Float32Array, Float32Array] {
       const slap = envelope(lowpass(white(len, rnd), rate, 2500 - k * 300), rate, 0.002, 0.006);
       mix(out, slap, (0.55 - k * 0.06) * (0.7 + (rnd() * 0.5 + 0.5) * 0.3), Math.round(at * rate));
     }
-    // Then a long, slow-building, dark diffuse tail (about 3.5 s to die away).
+    // Then a long, slow-building, dark diffuse tail. It is 50 dB down by 2.6 s, so the impulse
+    // stops there: the convolver is most of the audio thread's work, and its cost grows with length.
     const diffuse = lowpass(white(n, rnd), rate, (i) => 3500 * Math.exp(-i / rate / 0.8) + 300);
     for (let i = 0; i < n; i++) {
       const t = i / rate - pre;
