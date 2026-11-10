@@ -214,4 +214,9 @@ for (const id of synth.LOOP_IDS) {
   twice.set(s, s.length);
   writeFileSync(join(out, `loop-${id}.wav`), wav(twice, rate));
 }
+if (!only.length || only.includes('reverb')) {
+  const [l] = synth.renderReverb(rate);
+  writeFileSync(join(out, 'reverb-impulse.wav'), wav(l, rate));
+  report('reverb-impulse.wav', l, 0);
+}
 console.log(`\nSynthesis took ${Math.round(renderMs)} ms of ${Math.round(performance.now() - t0)} ms; files in ${out}`);

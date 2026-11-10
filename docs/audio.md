@@ -252,6 +252,34 @@ sound is in the right ballpark. The references turned vague words like
 "tinny" and "windy" into numbers I could act on, but a person still has to
 listen to the result.
 
+## Third pass: the tail of a gunshot, and the size of the space
+
+After the second pass the explosions, cannons and wind were close. Two
+things weren't. The gunshots sounded "tappy", and the friend who knows
+audio thought the reverb sounded like a space that was too small. Both
+came down to time rather than frequency, so I measured how sound decays
+over time.
+
+**Gunshots.** The recorded rifles fell into two groups. Close, dry
+recordings put about 1% of their energy after the first 100 ms. Outdoor
+recordings put 15–40% there, because the shot rolls away and comes back
+off the land for about half a second. My rifle was in the first group:
+everything happened in 100 ms, then silence. That's a tap. It now has a
+rolling "report" that darkens and swells slightly as it fades. That puts
+15–24% of its energy after 100 ms, and it drops by 40 dB at about 0.6 s,
+the same as the outdoor recordings.
+
+**The space.** Your ears judge a space's size mostly from when the echoes
+start and how they arrive. In a small room the first reflections come
+back within a few milliseconds, densely packed. Outdoors, the first echo
+off a hill or building comes back late and on its own, and the tail is
+long and sparse. My first reverb had its first echo at 15 ms and 28% of
+its energy in the first 80 ms, which is a room. The new one has nothing
+for the first 44 ms, then six separate slap-backs spread over the next
+0.4 s, then a dark tail with a reverb time of about 3 seconds. Under 1%
+of its energy is in the first 80 ms. `npm run sounds` now writes the
+reverb out as `reverb-impulse.wav`, so you can hear the space on its own.
+
 ## What still needs a person
 
 Measurements can tell me a sound is the right length, isn't clipping and

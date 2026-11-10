@@ -241,15 +241,23 @@ const SOUNDS: Record<SoundId, Render> = {
   // the crack is brief and the body broad, never a narrow ring. Measured against recordings,
   // see docs/audio.md.
   rifle: (rate, rnd, v) => {
-    const n = Math.round(0.35 * rate);
+    const n = Math.round(0.9 * rate);
     const punch = envelope(sweep(n, rate, 110 - v * 10, 42), rate, 0.001, 0.035);
     const blast = envelope(lowpass(lowpass(white(n, rnd), rate, 350), rate, 350), rate, 0.001, 0.045);
     const crack = envelope(lowpass(white(n, rnd), rate, 5000), rate, 0.0003, 0.006);
     const body = envelope(highpass(lowpass(white(n, rnd), rate, 1800 + v * 200), rate, 300), rate, 0.0008, 0.03);
-    const echo = envelope(lowpass(white(n, rnd), rate, 500), rate, 0.015, 0.12);
-    const out = mix(mix(mix(mix(punch, normalize(blast), 0.9), normalize(crack), 1.1), normalize(body), 1.6), normalize(echo), 0.2);
+    // The report: outdoors a shot doesn't stop dead, it rolls away for half a second or so,
+    // darkening and swelling a little as it comes back off the land. Recorded rifles outdoors
+    // keep 20-40% of their energy after the first tenth of a second; without it a shot is a tap.
+    const report = lowpass(white(n, rnd), rate, (i) => 900 * Math.exp(-i / rate / 0.25) + 220);
+    const swell = slowRandom(n, rate, rnd, [3, 5.5, 9], 0.45);
+    for (let i = 0; i < n; i++) {
+      const t = i / rate;
+      report[i] *= swell[i] * Math.min(1, t / 0.025) * Math.exp(-t / 0.22);
+    }
+    const out = mix(mix(mix(mix(punch, normalize(blast), 0.9), normalize(crack), 0.75), normalize(body), 1.4), normalize(report), 0.95);
     for (let i = 0; i < n; i++) out[i] -= punch[i] * 0.6;
-    return tail(saturate(normalize(out), 1.3), rate);
+    return tail(saturate(normalize(out), 1.3), rate, 0.1);
   },
   // Flamers: a soft, low roar with a little crackle, swelling in and out.
   flame: (rate, rnd, v) => {
@@ -507,18 +515,28 @@ export function variantsOf(id: SoundId): number {
  * Two channels, different noise in each, so the space is wide.
  */
 export function renderReverb(rate: number): [Float32Array, Float32Array] {
-  const n = Math.round(2.4 * rate);
+  const n = Math.round(4 * rate);
   const make = (seed: number) => {
     const rnd = noiseSource(seed);
-    const b = white(n, rnd);
-    lowpass(b, rate, (i) => 5000 * Math.exp(-i / rate / 0.5) + 400);
-    const pre = Math.round(0.012 * rate);
-    for (let i = 0; i < n; i++) b[i] = i < pre ? 0 : b[i] * Math.exp(-(i - pre) / rate / 0.32) * Math.min(1, (i - pre) / (0.04 * rate));
+    const out = new Float32Array(n);
+    // Open country: the first echo comes back late (35 ms and more), then a handful of
+    // separate slap-backs off buildings and hills over the next few tenths of a second.
+    // Small rooms are dense, early echoes; their absence is what reads as space.
+    const pre = 0.035;
     for (let k = 0; k < 6; k++) {
-      const at = Math.round((0.015 + (rnd() * 0.5 + 0.5) * 0.09) * rate);
-      b[at] += (rnd() < 0 ? -1 : 1) * (0.3 + (rnd() * 0.5 + 0.5) * 0.4) * 4;
+      const at = pre + 0.04 + (k / 6) * 0.34 + (rnd() * 0.5 + 0.5) * 0.05;
+      const len = Math.round(0.02 * rate);
+      const slap = envelope(lowpass(white(len, rnd), rate, 2500 - k * 300), rate, 0.002, 0.006);
+      mix(out, slap, (0.55 - k * 0.06) * (0.7 + (rnd() * 0.5 + 0.5) * 0.3), Math.round(at * rate));
     }
-    return lowpass(tail(b, rate, 0.2), rate, 6000);
+    // Then a long, slow-building, dark diffuse tail (about 3.5 s to die away).
+    const diffuse = lowpass(white(n, rnd), rate, (i) => 3500 * Math.exp(-i / rate / 0.8) + 300);
+    for (let i = 0; i < n; i++) {
+      const t = i / rate - pre;
+      diffuse[i] = t <= 0 ? 0 : diffuse[i] * Math.min(1, t / 0.15) * Math.exp(-t / 0.5);
+    }
+    mix(out, diffuse, 0.35);
+    return lowpass(tail(out, rate, 0.3), rate, 5000);
   };
   return [normalize(make(101)), normalize(make(202))];
 }

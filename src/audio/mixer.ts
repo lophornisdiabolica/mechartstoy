@@ -74,7 +74,7 @@ export interface Cue {
 
 /** At most this many sounds of a category start in one frame, and play at once. */
 export const BUDGET: Record<SoundCategory, { perFrame: number; playing: number }> = {
-  gunfire: { perFrame: 3, playing: 10 },
+  gunfire: { perFrame: 3, playing: 14 },
   cannons: { perFrame: 2, playing: 6 },
   explosions: { perFrame: 2, playing: 6 },
   buildings: { perFrame: 1, playing: 3 },
