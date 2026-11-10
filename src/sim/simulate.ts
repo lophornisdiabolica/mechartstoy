@@ -6,7 +6,7 @@ import { TypeStats } from '../game/stats';
 import { Building, Faction, Producer, Unit } from '../game/components';
 import { outpostsHeldBy } from '../game/outposts';
 import { applyParams, settingsToParams, UNIT_STATS } from '../ui/settingsUrl';
-import { fightingStrength } from '../game/offensive';
+import { fightingStrength, strengthOf } from '../game/offensive';
 import { UNIT_DEFS } from '../game/units';
 import * as D from '../core/dmath';
 
@@ -861,7 +861,7 @@ export function formatUnits(results: BattleResult[]): string {
     out.push(
       `${doctrine}:`,
       formatGrid(
-        ['Unit', 'Built', 'Lost', 'Kills', 'Razed', 'Dmg', 'Taken', 'Dmg/slot-min', 'Kills/slot-min', 'Firing', 'Damage to', 'Killed most', 'Killed most by'],
+        ['Unit', 'Built', 'Lost', 'Kills', 'Razed', 'Dmg', 'Taken', 'Dmg/slot-min', 'Kills/slot-min', 'Trade', 'Firing', 'Damage to', 'Killed most', 'Killed most by'],
         mine.map((r) => [
           r.unit,
           r.built ? String(r.built) : '-',
@@ -872,6 +872,7 @@ export function formatUnits(results: BattleResult[]): string {
           each(r.taken, r.built),
           perSlotMinute(r.dealt, r.alive),
           perSlotMinute(r.kills, r.alive, 2),
+          r.built ? ratio(tradeOf(r)) : '-',
           r.alive > 0 ? pct(r.firing / r.alive) : '-',
           damageSplit(r.dealtTo),
           top(r.victims),
@@ -881,7 +882,7 @@ export function formatUnits(results: BattleResult[]): string {
       '',
     );
   }
-  out.push('Dmg and Taken are per unit built. Slot-min is a minute of one cap slot spent on that unit. Firing is the share of field time spent shooting.');
+  out.push('Dmg and Taken are per unit built. Slot-min is a minute of one cap slot spent on that unit. Trade is the fighting strength of what it killed over that of its own it lost. Firing is the share of field time spent shooting.');
   return out.join('\n').trimEnd();
 }
 
@@ -1159,4 +1160,127 @@ export function formatLatin(results: BattleResult[]): string {
     '',
     mapDependent.length ? `Won by each side on some map type (the map decides): ${mapDependent.join(', ')}.` : 'No pairing changed hands between map types.',
   ].join('\n');
+}
+
+/** What a unit type is for the niche report: its cap category, with boats and engineers split out. */
+export type NicheClass = 'infantry' | 'vehicle' | 'naval' | 'air' | 'super' | 'engineer';
+export const NICHE_CLASSES: NicheClass[] = ['infantry', 'vehicle', 'naval', 'air', 'super'];
+
+const UNIT_DEF_MAP = UNIT_DEFS as Record<string, (typeof UNIT_DEFS)[keyof typeof UNIT_DEFS]>;
+
+export function nicheClass(unit: string): NicheClass | null {
+  const def = UNIT_DEF_MAP[unit];
+  if (!def) return null;
+  if ('builds' in def && def.builds) return 'engineer';
+  if (def.category === 'super') return 'super';
+  if (def.move === 'naval') return 'naval';
+  return def.category;
+}
+
+/** A fresh unit's fighting strength (see strengthOf), or 0 for buildings and unknown types. */
+export function typeStrength(unit: string): number {
+  const def = UNIT_DEF_MAP[unit];
+  return def ? strengthOf(def.hp, def.armor, def.weapon) : 0;
+}
+
+/** Strength of the enemy units a type killed, over the strength of its own units it lost: above 1 it trades up. */
+function tradeOf(r: UnitReportRow): number {
+  const killed = r.victims.reduce((a, [id, n]) => a + n * typeStrength(id), 0);
+  const lost = r.lost * typeStrength(r.unit);
+  return lost > 0 ? killed / lost : killed > 0 ? Infinity : NaN;
+}
+
+const ratio = (x: number) => (Number.isFinite(x) ? x.toFixed(2) : Number.isNaN(x) ? '-' : 'inf');
+
+/**
+ * The niche report: for each doctrine, where its army's strength comes from
+ * (what it builds, by class, weighted by fighting strength), where its damage
+ * comes from, and how its classes trade; then every super unit side by side,
+ * so one super can be compared with the others; then win rates by scenario
+ * (battle size and shape), when the results span several.
+ */
+export function formatNiche(results: BattleResult[]): string {
+  const rows = unitReport(results);
+  const sidesOf = (d: DoctrineId) => results.reduce((a, r) => a + r.sides.filter((s) => s.doctrine === d).length, 0);
+  const out: string[] = [];
+  const fieldRows: string[][] = [];
+  for (const d of ALL_DOCTRINE_IDS) {
+    const n = sidesOf(d);
+    if (n === 0) continue;
+    const mine = rows.filter((r) => r.doctrine === d && nicheClass(r.unit) && nicheClass(r.unit) !== 'engineer');
+    const by = (c: NicheClass, f: (r: UnitReportRow) => number) => mine.filter((r) => nicheClass(r.unit) === c).reduce((a, r) => a + f(r), 0);
+    const built = NICHE_CLASSES.map((c) => by(c, (r) => r.built * typeStrength(r.unit)));
+    const dealt = NICHE_CLASSES.map((c) => by(c, (r) => r.dealt));
+    const bt = built.reduce((a, b) => a + b, 0);
+    const dt = dealt.reduce((a, b) => a + b, 0);
+    const share = (xs: number[], t: number) => NICHE_CLASSES.map((c, i) => (xs[i] / t >= 0.005 ? `${c.slice(0, 3)} ${pct(xs[i] / t)}` : '')).filter(Boolean).join(' ');
+    const trades = NICHE_CLASSES.map((c) => {
+      const cls = mine.filter((r) => nicheClass(r.unit) === c);
+      const killed = cls.reduce((a, r) => a + r.victims.reduce((s, [id, k]) => s + k * typeStrength(id), 0), 0);
+      const lost = cls.reduce((a, r) => a + r.lost * typeStrength(r.unit), 0);
+      return cls.length && lost > 0 ? `${c.slice(0, 3)} ${(killed / lost).toFixed(2)}` : '';
+    }).filter(Boolean).join(' ');
+    const toBuildings = mine.reduce((a, r) => a + (r.dealtTo.building ?? 0), 0);
+    const count = (c: NicheClass) => (by(c, (r) => r.built) / n).toFixed(0);
+    fieldRows.push([d, String(n), share(built, bt), share(dealt, dt), trades, pct(toBuildings / Math.max(1, dt)), NICHE_CLASSES.map((c) => count(c)).join('/')]);
+  }
+  out.push(
+    'What each doctrine fields (per side played):',
+    formatGrid(['Doctrine', 'Sides', 'Strength built by class', 'Damage done by class', 'Trade by class', 'To bldgs', 'Built inf/veh/nav/air/sup'], fieldRows),
+    'Strength built weighs each unit built by its fighting strength. Trade is enemy strength killed over own strength lost (above 1 trades up).',
+    '',
+  );
+  const supers = rows.filter((r) => nicheClass(r.unit) === 'super' && r.built > 0);
+  out.push(
+    'Super units side by side:',
+    formatGrid(
+      ['Doctrine', 'Super', 'Per side', 'Lives (min)', 'Dmg/min alive', 'Taken/min', 'Kills each', 'Trade', 'Share of side dmg', 'Damage to'],
+      supers.map((r) => {
+        const sideDmg = rows.filter((x) => x.doctrine === r.doctrine).reduce((a, x) => a + x.dealt, 0);
+        return [
+          r.doctrine,
+          r.unit,
+          (r.built / Math.max(1, sidesOf(r.doctrine))).toFixed(2),
+          (r.alive / 60 / r.built).toFixed(1),
+          perSlotMinute(r.dealt, r.alive),
+          perSlotMinute(r.taken, r.alive),
+          each(r.kills, r.built, 1),
+          ratio(tradeOf(r)),
+          pct(r.dealt / Math.max(1, sideDmg)),
+          damageSplit(r.dealtTo),
+        ];
+      }),
+    ),
+    'Lives is minutes on the field per one built (still alive at the end counts up to then). Trade as above.',
+  );
+  const scenarios = [...new Set(results.map((r) => r.scenario))];
+  if (scenarios.length > 1) {
+    const by = scenarios.map((s) => summarizeDoctrines(results.filter((r) => r.scenario === s)));
+    const all = summarizeDoctrines(results);
+    out.push(
+      '',
+      'Wins against par by scenario (1.00x is a fair share):',
+      formatGrid(
+        ['Doctrine', ...scenarios, 'all'],
+        all.filter((d) => d.played > 0).map((d) => {
+          const i = ALL_DOCTRINE_IDS.indexOf(d.doctrine);
+          return [d.doctrine, ...by.map((b) => (b[i].played ? `${b[i].score.toFixed(2)}x ±${b[i].scoreMargin.toFixed(2)}` : '-')), `${d.score.toFixed(2)}x`];
+        }),
+      ),
+    );
+  }
+  return out.join('\n');
+}
+
+/** Length spread for a scenario: share finished by 20, 30 and 45 minutes, and the 90th percentile. */
+export function formatLengths(results: BattleResult[]): string {
+  const scenarios = [...new Set(results.map((r) => r.scenario))];
+  const rows = scenarios.map((s) => {
+    const rs = results.filter((r) => r.scenario === s);
+    const xs = rs.map((r) => r.minutes).sort((a, b) => a - b);
+    const done = (m: number) => pct(rs.filter((r) => r.decided && r.minutes <= m).length / rs.length);
+    const q = (p: number) => xs[Math.min(xs.length - 1, Math.floor(p * xs.length))];
+    return [s, String(rs.length), min(q(0.25)), min(median(xs)), min(q(0.75)), min(q(0.9)), done(20), done(30), done(45), pct(rs.filter((r) => !r.decided).length / rs.length)];
+  });
+  return ['Battle lengths:', formatGrid(['Scenario', 'Battles', 'p25', 'Median', 'p75', 'p90', 'Won by 20m', 'by 30m', 'by 45m', 'Undecided'], rows)].join('\n');
 }
