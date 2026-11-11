@@ -2,6 +2,7 @@
 // and prints a stats table. Run with `npm run sims`; `npm run sims -- --help`
 // lists the options. Results (every battle, with a replay link) are saved
 // under sims-results/.
+import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -75,6 +76,19 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      map type (--maps) once, taking turns at which is side
                      1, and the pairings are shown per map type. 28 battles
                      per map type; --battles rounds to whole passes
+  --offset N         number the battles from N+1 instead of 1, so the run
+                     plays fresh seeds (same plan of doctrines and maps,
+                     different maps and battles). Runs compare with --compare
+                     only when they used the same offset
+  --fresh            like --offset, with an offset picked at random (printed
+                     and saved with the run)
+  --pool A B ...     add up several saved runs (e.g. Latin passes on
+                     different offsets) and print their combined length,
+                     doctrine, niche and unit tables
+  --niche            also print the niche report: what each doctrine builds
+                     and kills by unit class, how its supers trade, and its
+                     win rate by map type and battle size (always on with
+                     --doctrines, --latin and --pool)
   --list             list the scenarios and stop
   --help             this text
 
@@ -107,6 +121,9 @@ function parseArgs(argv) {
     map: null,
     sweep: null,
     latin: false,
+    offset: 0,
+    pool: null,
+    niche: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -133,6 +150,13 @@ function parseArgs(argv) {
     else if (a === '--map') opts.map = argv[++i];
     else if (a === '--sweep') opts.sweep = argv[++i];
     else if (a === '--latin') opts.latin = true;
+    else if (a === '--offset') opts.offset = Math.max(0, Math.floor(Number(argv[++i])));
+    else if (a === '--fresh') opts.offset = 1000 * (1 + Math.floor(Math.random() * 99000));
+    else if (a === '--niche') opts.niche = true;
+    else if (a === '--pool') {
+      opts.pool = [];
+      while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opts.pool.push(argv[++i]);
+    }
     else throw new Error(`Unknown option ${a} (try --help)`);
   }
   return opts;
@@ -149,6 +173,7 @@ async function main() {
     });
     return console.log(sim.compareRuns(before, after));
   }
+  if (opts.pool) return pool(sim, opts.pool);
   if (opts.duel) return duels(opts);
   if (opts.battle) return oneBattle(sim, opts);
   if (opts.list) {
@@ -175,7 +200,9 @@ async function main() {
       ? sim.latinPlans(opts.battles ?? 0, opts.maps, opts.set)
       : sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap });
     const only = picked && new Set(picked);
-    return plans.filter((p) => !only || only.has(p.battle)).map((p) => ({ scenario: s.id, ...p, options: { profile: opts.profile, timeline: opts.timeline } }));
+    return plans
+      .filter((p) => !only || only.has(p.battle))
+      .map((p) => ({ scenario: s.id, ...p, battle: p.battle + opts.offset, options: { profile: opts.profile, timeline: opts.timeline } }));
   });
   // A sweep plays every battle once per value, the value first so it wins over --set.
   const jobs = variants ? variants.flatMap((v) => planned.map((j) => ({ ...j, set: [v.set, j.set].filter(Boolean).join('&'), variant: v.label }))) : planned;
@@ -188,7 +215,7 @@ async function main() {
   }));
   jobs.sort((a, b) => cost.get(b.scenario) - cost.get(a.scenario));
   const workers = Math.min(opts.workers, jobs.length);
-  console.error(`${jobs.length} battles in ${scenarios.length} scenarios, ${workers} at a time${opts.set ? `, with ${opts.set}` : ''}${opts.maps.length ? ` on ${opts.maps.join(', ')}` : ''}${variants ? `, ${variants.length} variants` : ''}…`);
+  console.error(`${jobs.length} battles in ${scenarios.length} scenarios, ${workers} at a time${opts.set ? `, with ${opts.set}` : ''}${opts.maps.length ? ` on ${opts.maps.join(', ')}` : ''}${variants ? `, ${variants.length} variants` : ''}${opts.offset ? `, battles numbered from ${opts.offset + 1}` : ''}…`);
 
   const results = [];
   const started = Date.now();
@@ -225,6 +252,8 @@ async function main() {
   } else {
     console.log(sim.formatTable(summaries, eternal));
     console.log('');
+    console.log(sim.formatLengths(results.filter((r) => !eternal.has(r.scenario))));
+    console.log('');
     if (opts.doctrines || opts.latin || opts.maps.length > 1) {
       console.log(sim.formatDoctrines(results));
       console.log('');
@@ -233,6 +262,10 @@ async function main() {
       console.log(sim.formatLatin(results));
       console.log('');
     }
+  }
+  if ((opts.doctrines || opts.latin || opts.niche) && !variants) {
+    console.log(sim.formatNiche(results));
+    console.log('');
   }
   if ((opts.doctrines || opts.latin || opts.units) && !variants) {
     console.log('Units, all battles together:');
@@ -252,7 +285,7 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
   const dir = join(root, 'sims-results');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ set: opts.set, maps: opts.maps, sweep: opts.sweep, latin: opts.latin, summaries, battles: results }, null, 2));
+  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ set: opts.set, maps: opts.maps, sweep: opts.sweep, latin: opts.latin, offset: opts.offset, commit: gitCommit(), summaries, battles: results }, null, 2));
   const csv = [
     'scenario,seed,map,variant,doctrines,minutes,winner,margin,decided,kills,razed,captured,attacks,ms_per_tick,link',
     ...results.map((r) => {
@@ -266,6 +299,60 @@ async function main() {
   const longest = summaries.filter((s) => !eternal.has(s.scenario)).sort((a, b) => b.longest - a.longest)[0];
   const replay = longest && results.find((r) => r.seed === longest.longestSeed);
   if (replay) console.log(`To watch one, run \`npm run dev\` and open its link, e.g. the longest (${replay.seed}): http://localhost:5173/?${replay.link}`);
+}
+
+/** --pool: several saved runs added up, as if they were one. */
+async function pool(sim, files) {
+  if (files.length === 0) throw new Error('--pool needs saved runs, e.g. --pool sims-results/a.json sims-results/b.json');
+  const runs = files.map((f) => ({ f, run: JSON.parse(readFileSync(resolve(f), 'utf8')) }));
+  const commits = [...new Set(runs.map((r) => r.run.commit ?? '?'))];
+  if (commits.length > 1) console.error(`Note: these runs come from different code (${commits.join(', ')}); pooling them mixes versions.`);
+  const sets = [...new Set(runs.map((r) => r.run.set ?? ''))];
+  if (sets.length > 1) console.error(`Note: these runs used different --set settings (${sets.map((x) => x || 'none').join(' | ')}).`);
+  const seen = new Map();
+  const results = [];
+  for (const { f, run } of runs) {
+    for (const b of run.battles) {
+      const key = `${b.scenario}|${b.seed}|${b.map ?? ''}|${b.set ?? ''}`;
+      if (seen.has(key)) {
+        console.error(`Note: ${b.seed}${b.map ? ` (${b.map})` : ''} is in both ${seen.get(key)} and ${f}; counting it once.`);
+        continue;
+      }
+      seen.set(key, f);
+      results.push(b);
+    }
+  }
+  const ids = [...new Set(results.map((r) => r.scenario))];
+  const scenarios = ids.map((id) => sim.SCENARIOS.find((s) => s.id === id) ?? { id, label: id });
+  const eternal = new Set(scenarios.filter((s) => s.minutes).map((s) => s.id));
+  const summaries = scenarios.map((s) => sim.summarize(s, results.filter((r) => r.scenario === s.id)));
+  console.log(`${results.length} battles from ${runs.length} runs (offsets ${[...new Set(runs.map((r) => r.run.offset ?? 0))].join(', ')}).`);
+  console.log('');
+  console.log(sim.formatTable(summaries, eternal));
+  console.log('');
+  console.log(sim.formatLengths(results.filter((r) => !eternal.has(r.scenario))));
+  console.log('');
+  console.log(sim.formatDoctrines(results));
+  console.log('');
+  if (runs.some((r) => r.run.latin)) {
+    console.log(sim.formatLatin(results));
+    console.log('');
+  }
+  console.log(sim.formatNiche(results));
+  console.log('');
+  console.log('Units, all battles together:');
+  console.log(sim.formatUnits(results));
+}
+
+/** The checked-out commit (with "+changes" if the tree is dirty), saved with each run so pooled runs can be checked. */
+function gitCommit() {
+  try {
+    const head = execSync('git rev-parse --short HEAD', { cwd: root }).toString().trim();
+    const dirty = execSync('git status --porcelain -- src', { cwd: root }).toString().trim() !== '';
+    return dirty ? `${head}+changes` : head;
+  } catch {
+    return '';
+  }
 }
 
 /** --battle: one battle on this thread, with its timeline and profile. */

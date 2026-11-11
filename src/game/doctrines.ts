@@ -83,7 +83,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
         table: [
           { unit: 'mgTruck', weight: 3, count: 2 },
           { unit: 'rocketTruck', weight: 3, count: 1 },
-          { unit: 'buggy', weight: 1.5, count: 2 },
+          { unit: 'buggy', weight: 1, count: 2 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
         interval: 14,
@@ -91,7 +91,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       motorPool: {
         table: [
           { unit: 'mgTruck', weight: 2, count: 2 },
-          { unit: 'buggy', weight: 2, count: 3 },
+          { unit: 'rocketTruck', weight: 0.5, count: 1 },
+          { unit: 'buggy', weight: 1.5, count: 2 },
         ],
       },
       mechbay: { table: [{ unit: 'landTrain', weight: 1, count: 1 }] },
@@ -103,11 +104,11 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'legion',
     name: 'Legion',
     blurb: 'Infantry masses. Bigger squads, mortar teams, squad carriers and light tanks, with a barracks block. Its engineers dig trenches behind earth berms for the squads to hold. Super unit: the Siege Crawler, which drops off squads as it goes.',
-    caps: { infantry: 1.7, vehicle: 0.8 },
+    caps: { infantry: 1.9, vehicle: 0.8 },
     production: {
       // Big squads with two AT troopers each: the Legion's answer to armour is many rockets.
-      barracks: { table: [rifleSquad(4, 3, 2), { unit: 'mortar', weight: 1, count: 2 }], interval: 12 },
-      barracksBlock: { table: [rifleSquad(5, 2, 2), { unit: 'mortar', weight: 1, count: 3 }], interval: 14 },
+      barracks: { table: [rifleSquad(4, 3, 2), { unit: 'mortar', weight: 1.6, count: 2 }], interval: 10.5 },
+      barracksBlock: { table: [rifleSquad(5, 2, 2), { unit: 'mortar', weight: 1.6, count: 3 }], interval: 12 },
       factory: {
         table: [
           { unit: 'carrier', weight: 2, count: 1 },
@@ -124,7 +125,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'skyline',
     name: 'Skyline',
     blurb: 'Aircraft. Gunships, bombers, strike jets and scout copters from its airpad, which they fly back to to rearm, flak walkers on the ground, a bigger air cap and fewer of everything else. Super unit: the Airship Carrier, which launches drones.',
-    caps: { infantry: 0.8, vehicle: 0.8, air: 2.5 },
+    caps: { infantry: 0.8, vehicle: 1.1, air: 2.5 },
     production: {
       factory: {
         table: [
@@ -175,7 +176,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'talon',
     name: 'Talon',
     blurb: 'Walkers. Packs of striders, spider walkers that take any slope, and Warhound heavy walkers from its mech forge. Super unit: the Juggernaut.',
-    caps: { infantry: 0.8, vehicle: 1.05 },
+    caps: { infantry: 0.8, vehicle: 0.95 },
     production: {
       factory: {
         table: [
@@ -199,33 +200,35 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   tidewater: {
     id: 'tidewater',
     name: 'Tidewater',
-    blurb: 'Hovers and boats. Skimmer hover tanks and amphibious transports, missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super units: the Hover Fortress from its mech bay, and the Dreadnought battleship from its dock.',
-    caps: { infantry: 0.8, vehicle: 1.35 },
+    blurb: 'Hovers and boats. Tanks with some Skimmer hover tanks and amphibious transports, and missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super units: the Hover Fortress from its mech bay, and the Dreadnought battleship from its dock.',
+    caps: { infantry: 0.8, vehicle: 1.3 },
     production: {
       factory: {
         table: [
-          { unit: 'skimmer', weight: 3, count: 2 },
-          { unit: 'tank', weight: 2.5, count: 1 },
-          { unit: 'amphib', weight: 1.5, count: 1 },
+          { unit: 'tank', weight: 3.5, count: 1 },
+          { unit: 'amphib', weight: 1, count: 1 },
+          { unit: 'skimmer', weight: 1.5, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
+        // Its vehicles come one at a time rather than in pairs of skimmers, so the factory works faster.
+        interval: 12,
       },
       // Boats launch from the dock's door into the water, and only boats: skimmers come from a hover pad,
       // which engineers put up in a base that has a dock (see commander/engineers.ts).
       // The dock also lays down a Dreadnought now and then: a second super unit, beside the Hover Fortress.
-      dock: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 28, flagship: { unit: 'dreadnought', interval: 80 } },
-      hoverPad: { table: [{ unit: 'skimmer', weight: 1, count: 2 }], interval: 30 },
+      dock: { table: [{ unit: 'missileBoat', weight: 1, count: 2 }], interval: 22, flagship: { unit: 'dreadnought', interval: 80 } },
+      hoverPad: { table: [{ unit: 'skimmer', weight: 1, count: 1 }, { unit: 'amphib', weight: 0.5, count: 1 }], interval: 26 },
       mechbay: { table: [{ unit: 'hoverFortress', weight: 1, count: 1 }] },
     },
     signature: 'dock',
     inland: 'hoverPad',
-    waves: [rifleSquad(4, 4), { unit: 'skimmer', weight: 3, count: 2 }, { unit: 'tank', weight: 1.5, count: 1 }, { unit: 'amphib', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'amphib', weight: 1.5, count: 1 }, { unit: 'skimmer', weight: 1.5, count: 1 }],
   },
   firestorm: {
     id: 'firestorm',
     name: 'Firestorm',
     blurb: 'Flamethrowers. Flame troopers in the squads, scorch buggies from its fuel depot (which blows up when destroyed), cinder walkers and light tanks. Best in towns. Super unit: the Inferno Walker.',
-    caps: { infantry: 1.25, vehicle: 1.2 },
+    caps: { infantry: 1.15, vehicle: 1 },
     production: {
       barracks: {
         table: [
@@ -235,8 +238,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       },
       factory: {
         table: [
-          { unit: 'cinderWalker', weight: 2.5, count: 1 },
-          { unit: 'lightTank', weight: 2, count: 1 },
+          { unit: 'cinderWalker', weight: 2, count: 1 },
+          { unit: 'lightTank', weight: 2.5, count: 1 },
           { unit: 'scorchBuggy', weight: 1, count: 2 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],

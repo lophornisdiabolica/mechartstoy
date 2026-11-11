@@ -59,12 +59,12 @@ describe('battle settings', () => {
   it('the infantry cap from settings is leaned by the doctrine, and dropped units ignore it', () => {
     const s = defaultSettings();
     s.armies.caps.infantry = 10;
-    s.factions[0].doctrine = 'legion'; // 1.7× infantry
+    s.factions[0].doctrine = 'legion'; // 1.9× infantry
     const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
     const base = game.field.baseSites[0];
     let placed = 0;
     for (let i = 0; i < 25; i++) if (game.spawnUnitAt('trooper', 0, base.x + (i % 5), base.z + Math.floor(i / 5))) placed++;
-    expect(capFor(game.ctx, 0, 'infantry')).toBe(17);
+    expect(capFor(game.ctx, 0, 'infantry')).toBe(19);
     // Drops are the player's call (a god power), so the cap doesn't hold them back.
     expect(placed).toBe(25);
   });

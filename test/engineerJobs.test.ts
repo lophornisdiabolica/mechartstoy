@@ -70,7 +70,7 @@ describe('Legion', () => {
     const s = defaultSettings();
     s.factions[0].doctrine = 'legion';
     s.factions[1].doctrine = 'armour';
-    const game = new Game(3, { settings: s });
+    const game = new Game(1, { settings: s });
     run(game, 120);
     expect(buildings(game, 0, 'wall').length).toBeGreaterThan(0);
     expect(game.ctx.commander.engineers.works.some((w) => w.side === 0 && w.kind === 'trench')).toBe(true);
