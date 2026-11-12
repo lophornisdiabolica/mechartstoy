@@ -179,7 +179,9 @@ export class ThreatMap {
    */
   excess(ctx: SimContext, side: number, kind: ThreatKind, share: number, x: number, z: number): number {
     const excess = this.danger(ctx, side, kind, x, z) - share * this.danger(ctx, side, 'any', x, z);
-    return kind === 'air' ? excess : Math.max(excess, this.boats(ctx, side, x, z));
+    if (kind === 'air') return excess;
+    const boats = this.boats(ctx, side, x, z);
+    return boats > 0 ? Math.max(excess, boats) : excess;
   }
 
   /** The danger to a side's land units at a point from its enemies' boats (see the notes at the top). */
