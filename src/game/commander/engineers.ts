@@ -14,6 +14,7 @@ import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
 import * as D from '../../core/dmath';
 import { Crossings, Danger, Gap } from './crossings';
+import { Shortcuts } from './shortcuts';
 
 /*
  * Engineers (Commander step 6, and the doctrine jobs after it). Every
@@ -180,7 +181,9 @@ const HELIPAD_BACK = 6;
 const HELIPAD_APART = 14;
 
 /** Engineers' bridges: most a side has standing, how far either side of a canal's middle the ends go, seconds to put one up, health and armour, and how long one lasts. */
-export const SPANS_MOST = 2;
+export const SPANS_MOST = 3;
+/** Of those, most a side has standing as shortcuts its Commander chose (see shortcuts.ts), so one's always left for a gap or a canal. */
+export const SHORTCUTS_MOST = 2;
 const SPAN_HALF = CANAL_HALF + 2.6;
 const SPAN_BUILD = 10;
 const SPAN_HP = 600;
@@ -259,6 +262,8 @@ export interface BridgeJob {
   urgent?: boolean;
   /** Bridging a gap in the way across (see crossingJobs): engineers at it don't shoot each other's crews. */
   crossing?: boolean;
+  /** A shortcut the side's Commander chose (see shortcuts.ts). */
+  shortcut?: boolean;
 }
 
 /** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
@@ -267,6 +272,8 @@ interface Span {
   side: number;
   hp: number;
   until: number;
+  /** A shortcut the side's Commander chose (see shortcuts.ts). */
+  shortcut?: boolean;
 }
 
 /** A stretch of ground being dug or raised: a canal, a trench, or a berm. */
@@ -367,6 +374,8 @@ export class Engineers {
   private chokes = new Map<string, { version: number; site: Site | null }>();
   /** Whether there's a way across for big units, and where it's cut (see crossings.ts). */
   readonly crossings = new Crossings();
+  /** Where each land army's Commander wants a bridge of its own (see shortcuts.ts). */
+  readonly shortcuts = new Shortcuts();
   /** Fills planned or done, by where they go (one stretch is never planned twice). */
   private fills = new Map<string, Earthwork>();
   /** Per side: the bridge it's throwing over a gap in the way across, kept while the gap's there so the site doesn't wander as the fill creeps on. */
@@ -422,6 +431,11 @@ export class Engineers {
   /** Engineers' bridges a side has standing. */
   spansOf(side: number): number {
     return this.spans.filter((s) => s.side === side).length;
+  }
+
+  /** Of those, the shortcuts its Commander chose (see shortcuts.ts). */
+  shortcutsOf(side: number): number {
+    return this.spans.filter((s) => s.side === side && s.shortcut).length;
   }
 
   /** Metres of canal a side has dug. */
@@ -547,6 +561,8 @@ export class Engineers {
     if (doctrine !== 'tidewater') {
       const span = this.bridgeJob(world, ctx, side);
       if (span) out.push(span);
+      const shortcut = this.shortcutJob(world, ctx, side);
+      if (shortcut) out.push(shortcut);
     }
     for (const site of sites) {
       const heading = D.atan2(-site.dz, site.dx);
@@ -1170,6 +1186,26 @@ export class Engineers {
   }
 
   /**
+   * A bridge where the side's Commander wants one (see shortcuts.ts): over
+   * narrow water that makes the way to the enemy base, or to outposts it
+   * doesn't hold, much shorter, even out past the front.
+   */
+  private shortcutJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
+    if (!ctx.settings.armies.shortcuts || this.spansOf(side) >= SPANS_MOST || this.shortcutsOf(side) >= SHORTCUTS_MOST) return null;
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const pick = this.shortcuts.pick(world, ctx, side, enemy);
+    if (!pick) return null;
+    const s = pick.spot;
+    // The engineer stands a little back from the near end.
+    const stand = { x: s.ax - s.ux * 1.5, z: s.az - s.uz * 1.5 };
+    const foot = ctx.navs.for('foot');
+    const at = foot.terrainAllowsAt(stand.x, stand.z) ? stand : { x: s.ax, z: s.az };
+    if (!this.safe(world, ctx, side, at.x, at.z)) return null;
+    return { kind: 'bridge', ax: s.ax, az: s.az, bx: s.bx, bz: s.bz, x: s.x, z: s.z, standX: at.x, standZ: at.z, urgent: true, shortcut: true };
+  }
+
+  /**
    * Where there's no way from a side's base to its nearest enemy's wide
    * enough for a super unit (see crossings.ts): the next stretch of the gap
    * to fill in, and a bridge over it meanwhile if it's short enough.
@@ -1434,8 +1470,9 @@ export class Engineers {
         this.spanWork.delete(key);
         this.jobs.delete(e);
         if (this.spansOf(side) >= SPANS_MOST || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
+        if (job.shortcut) this.shortcuts.drop(side);
         if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, { builtBy: side })) {
-          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS });
+          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS, shortcut: job.shortcut });
           ctx.events.emit('span', { faction: side, x: job.x, z: job.z, down: false });
         }
         this.open[side] = Math.max(0, this.open[side] - 1);

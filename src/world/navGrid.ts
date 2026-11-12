@@ -329,6 +329,49 @@ export class NavGrid {
     this.regionReach.clear();
   }
 
+  /**
+   * What the cheapest way from a point to every cell costs over this
+   * class's terrain (distance times ground cost, buildings aside, as
+   * `connected`), Infinity where there's none. For weighing many places at
+   * once (see commander/shortcuts.ts) without a search to each.
+   */
+  costsFrom(from: Point): Float32Array {
+    const { cols, rows, terrain, cost } = this;
+    const g = new Float32Array(cols * rows).fill(Infinity);
+    let [si, sj] = this.cellOf(from.x, from.z);
+    if (terrain[sj * cols + si] === 1) {
+      const open = this.nearestOpen(from.x, from.z);
+      if (!open) return g;
+      [si, sj] = open;
+    }
+    const done = new Uint8Array(cols * rows);
+    const heap = new Heap(g);
+    const sk = sj * cols + si;
+    g[sk] = 0;
+    heap.push(sk);
+    const free = (ci: number, cj: number) => ci >= 0 && cj >= 0 && ci < cols && cj < rows && terrain[cj * cols + ci] === 0;
+    while (heap.size > 0) {
+      const k = heap.pop();
+      if (done[k]) continue;
+      done[k] = 1;
+      const i = k % cols;
+      const j = (k - i) / cols;
+      for (let n = 0; n < 8; n++) {
+        const di = NEIGHBOUR_DI[n];
+        const dj = NEIGHBOUR_DJ[n];
+        if (!free(i + di, j + dj)) continue;
+        if (di !== 0 && dj !== 0 && (!free(i + di, j) || !free(i, j + dj))) continue;
+        const nk = (j + dj) * cols + i + di;
+        if (done[nk]) continue;
+        const ng = g[k] + NEIGHBOUR_STEP[n] * this.cellSize * cost[nk];
+        if (ng >= g[nk]) continue;
+        g[nk] = ng;
+        heap.push(nk);
+      }
+    }
+    return g;
+  }
+
   /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
   private labelRegions(): Int32Array {
     const { cols, rows } = this;

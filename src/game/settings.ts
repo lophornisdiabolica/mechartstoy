@@ -183,6 +183,11 @@ export interface BattleSettings {
     avoidance: boolean;
     /** Whether Commanders send fast squads to hunt down long-range guns shelling their side, round a flank if need be (see commander/hunts.ts). */
     hunts: boolean;
+    /**
+     * Whether land armies' Commanders have their engineers bridge narrow water where a
+     * bridge makes the way to the enemy or an outpost much shorter (see commander/shortcuts.ts).
+     */
+    shortcuts: boolean;
   };
   units: Record<UnitId, UnitTuning>;
   /** Two or more sides, up to MAX_FACTIONS. */
@@ -273,6 +278,7 @@ export function defaultSettings(): BattleSettings {
       engineers: 2,
       avoidance: true,
       hunts: true,
+      shortcuts: true,
     },
     units: defaultUnitTuning(),
     factions: [defaultFaction(0), defaultFaction(1)],
