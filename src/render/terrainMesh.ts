@@ -186,6 +186,14 @@ const SKIRT_OUT = 0.3;
 const SKIRT_DOWN = 0.12;
 /** How many samples either side of a road sample set its direction (see buildRoad). */
 const TANGENT_SPAN = 4;
+/** The farthest apart a road's rows across get, on the straight (see buildRoad). */
+const ROW_MAX = 1.5;
+/** How far a road may turn (radians) before it gets another row across. */
+const ROW_TURN = 0.1;
+/** How far a row across may bow from a straight line to follow the ground. */
+const ROW_BOW = 0.2;
+/** How steeply the lift over a bump may ease off along the road (see liftOverGround). */
+const LIFT_GRADE = 0.3;
 
 /**
  * A road as a strip draped over the ground, following its line smoothly
@@ -205,22 +213,54 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   }
   // Each one's direction is the line's heading over a couple of units round it, so the rows
   // across the road turn smoothly through a bend instead of folding over each other on its inside.
-  const samples = at.map((p, k) => {
+  const dense = at.map((p, k) => {
     const a = at[Math.max(0, k - TANGENT_SPAN)];
     const b = at[Math.min(at.length - 1, k + TANGENT_SPAN)];
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     return { x: p.x, z: p.z, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
   });
+  const dry = (p: (typeof dense)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
+  let keptLast = dense[0];
+  // Rows across the road only where they're needed: close together through a bend, so it stays
+  // round, and up to ROW_MAX apart on the straight, so on rough ground the road is a few long
+  // smooth panels rather than a sawtooth of small ones following every facet. Always where the
+  // road meets water or a bridge, so its gaps are where they were.
+  const samples = dense.filter((p, k) => {
+    const last = keptLast;
+    const turn = Math.acos(Math.max(-1, Math.min(1, p.dx * last.dx + p.dz * last.dz)));
+    const ends = k === 0 || k === dense.length - 1;
+    const shore = !ends && (dry(p) !== dry(dense[k - 1]) || dry(p) !== dry(dense[k + 1]));
+    if (!ends && !shore && Math.hypot(p.x - last.x, p.z - last.z) + 1e-6 < ROW_MAX && turn < ROW_TURN) return false;
+    keptLast = p;
+    return true;
+  });
   const fill = new THREE.Color(ROAD_COLOR);
   const edge = new THREE.Color(ROAD_EDGE);
   const half = road.width / 2;
-  const row = (p: (typeof samples)[number]) =>
-    ROAD_ACROSS.map((f) => {
+  // A row across follows the ground loosely: the straight line that best fits the ground under
+  // it, bowing towards the ground by at most ROW_BOW (the lift below then clears any bump left).
+  const row = (p: (typeof samples)[number]) => {
+    const pts = ROAD_ACROSS.map((f) => {
       const x = p.x - p.dz * half * f;
       const z = p.z + p.dx * half * f;
       return new THREE.Vector3(x, meshHeightAt(field, x, z) + 0.04, z);
     });
-  const dry = (p: (typeof samples)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
+    const n = pts.length;
+    const mf = ROAD_ACROSS.reduce((a, f) => a + f, 0) / n;
+    const my = pts.reduce((a, v) => a + v.y, 0) / n;
+    let sxy = 0;
+    let sxx = 0;
+    ROAD_ACROSS.forEach((f, q) => {
+      sxy += (f - mf) * (pts[q].y - my);
+      sxx += (f - mf) * (f - mf);
+    });
+    const slope = sxy / sxx;
+    pts.forEach((v, q) => {
+      const line = my + slope * (ROAD_ACROSS[q] - mf);
+      v.y = line + Math.max(-ROW_BOW, Math.min(ROW_BOW, v.y - line));
+    });
+    return pts;
+  };
   const lifted = samples.map(row);
   // On the inside of a bend tighter than the road is wide, the rows across would cross over each
   // other and fold the strip (a sawtooth of dark, back-facing triangles). Hold a point that would
@@ -253,14 +293,29 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   const kerb: Layer = { positions: [], colors: [], normals: [] };
   const paving: Layer = { positions: [], colors: [], normals: [] };
   const last = ROAD_ACROSS.length + 1;
+  // Smooth shading: each point's normal is the average of the road's quads round it, so long panels
+  // on rough ground shade into each other instead of showing a crease at every row. The skirts take
+  // the normal of the road edge beside them, so they read as more of the edge, not as a dark slope.
+  const faces = rows.map((r1, k) =>
+    r1.map((_, q) => {
+      if (k === 0 || q < 2 || q > last - 1) return null;
+      const r0 = rows[k - 1];
+      return up(r0[q - 1], r1[q], r1[q - 1]).add(up(r0[q - 1], r0[q], r1[q]));
+    }),
+  );
+  const normals = rows.map((r, k) =>
+    r.map((_, c) => {
+      const col = Math.max(1, Math.min(last - 1, c));
+      const n = new THREE.Vector3();
+      for (const kk of [k, k + 1]) for (const q of [col, col + 1]) if (faces[kk]?.[q]) n.add(faces[kk][q]!);
+      return n.lengthSq() > 0 ? n.normalize() : new THREE.Vector3(0, 1, 0);
+    }),
+  );
   for (let k = 1; k < samples.length; k++) {
     if (!dry(samples[k - 1]) || !dry(samples[k])) continue;
     const r0 = rows[k - 1];
     const r1 = rows[k];
     for (let q = 1; q <= last; q++) {
-      // The skirts are shaded as the road edge beside them, so they read as more of the road's
-      // edge, not as a dark slope.
-      const nq = q === 1 ? 2 : q === last ? last - 1 : q;
       // Wound anticlockwise seen from above, so only the road's top is drawn: where a strip tips
       // away past the line of sight (the far side of a crest, a skirt dropping off it) its
       // underside is culled rather than drawn dark.
@@ -268,18 +323,22 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
         [r0[q - 1], r1[q], r1[q - 1]],
         [r0[q - 1], r0[q], r1[q]],
       ];
-      const shade = [up(r0[nq - 1], r1[nq], r1[nq - 1]), up(r0[nq - 1], r0[nq], r1[nq])];
+      const shade = [
+        [normals[k - 1][q - 1], normals[k][q], normals[k][q - 1]],
+        [normals[k - 1][q - 1], normals[k - 1][q], normals[k][q]],
+      ];
       const middle = q > 2 && q < last - 1;
       tris.forEach((t, n) => {
-        for (const v of t) {
+        t.forEach((v, m) => {
+          const nv = shade[n][m];
           kerb.positions.push(v.x, v.y, v.z);
           kerb.colors.push(edge.r, edge.g, edge.b);
-          kerb.normals.push(shade[n].x, shade[n].y, shade[n].z);
-          if (!middle) continue;
+          kerb.normals.push(nv.x, nv.y, nv.z);
+          if (!middle) return;
           paving.positions.push(v.x, v.y, v.z);
           paving.colors.push(fill.r, fill.g, fill.b);
-          paving.normals.push(shade[n].x, shade[n].y, shade[n].z);
-        }
+          paving.normals.push(nv.x, nv.y, nv.z);
+        });
       });
     }
   }
@@ -325,7 +384,6 @@ function layerMesh(layer: Layer, offset: number, order: number): THREE.Mesh {
  * Each quad is drawn as two triangles split from r0[q-1] to r1[q], as below.
  */
 function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
-  const n = 4;
   for (let pass = 0; pass < 3; pass++) {
     const lift = rows.map((r) => r.map(() => 0));
     for (let k = 1; k < rows.length; k++) {
@@ -334,6 +392,8 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
         const b = rows[k][q - 1];
         const c = rows[k][q];
         const d = rows[k - 1][q];
+        // Checked at least every 0.4 or so either way, however long the panel.
+        const n = Math.max(4, Math.ceil(Math.max(a.distanceTo(b), a.distanceTo(d)) / 0.4));
         for (let su = 0; su <= n; su++) {
           for (let sv = 0; sv <= n; sv++) {
             // u across (a to d), v along (a to b).
@@ -363,9 +423,14 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
     }
     // Each row rises as one, by the most any of its points needs: raising single corners
     // crumpled the strip into a sawtooth of facets on rough ground.
+    // and the lift eases in and out along the road (rising at most LIFT_GRADE per unit), so a
+    // panel lifted over a bump doesn't stand as a step above the next.
+    const most = lift.map((l) => Math.max(...l));
+    const gap = (k: number) => rows[k][0].distanceTo(rows[k - 1][0]) + rows[k][rows[k].length - 1].distanceTo(rows[k - 1][rows[k].length - 1]);
+    for (let k = 1; k < rows.length; k++) most[k] = Math.max(most[k], most[k - 1] - (LIFT_GRADE * gap(k)) / 2);
+    for (let k = rows.length - 2; k >= 0; k--) most[k] = Math.max(most[k], most[k + 1] - (LIFT_GRADE * gap(k + 1)) / 2);
     rows.forEach((r, k) => {
-      const most = Math.max(...lift[k]);
-      for (const p of r) p.y += most;
+      for (const p of r) p.y += most[k];
     });
   }
 }
