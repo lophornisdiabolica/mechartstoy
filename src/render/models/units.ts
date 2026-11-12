@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Rng } from '../../core/rng';
 import { AnimState, box, cylinder, glowBox, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
 
 /**
@@ -16,8 +17,13 @@ interface Leg {
   knee: THREE.Group;
 }
 
+/** Which side of the body a leg hangs from (+1 or -1 along z), and whether it's at the front (+1) or back (-1). */
+const sideOf = (leg: Leg) => (leg.hip.position.z < 0 ? -1 : 1);
+const endOf = (leg: Leg) => Math.sign(leg.hip.position.x);
+
 function makeLeg(thigh: number, shin: number, thickness: number, color: number, footColor: number): Leg {
   const hip = new THREE.Group();
+  hip.name = 'leg';
   hip.add(box(thickness, thigh, thickness, color, 0, -thigh / 2, 0));
   const knee = new THREE.Group();
   knee.position.y = -thigh;
@@ -27,8 +33,92 @@ function makeLeg(thigh: number, shin: number, thickness: number, color: number, 
   return { hip, knee };
 }
 
-/** Walk cycle: legs swing in opposite phase; amplitude eases in with speed. */
+/**
+ * A walker's rig: the walk cycle, legs swinging in opposite phase with the
+ * amplitude easing in with speed, and how it falls when wrecked.
+ */
 function walker(legs: Leg[], body: THREE.Object3D, stride: number, swing: number) {
+  return { animate: walkCycle(legs, body, stride, swing), wreck: walkerWreck(legs, body) };
+}
+
+/**
+ * How a walker breaks (see render/wrecks.ts). Two-legged ones buckle onto
+ * their knees, keel over where a leg is blown off, or topple onto their
+ * side or back; four-legged ones buckle, sag onto a lost leg, or belly-flop
+ * with every leg splayed. Each leg is bent a little differently every time.
+ */
+function walkerWreck(legs: Leg[], body: THREE.Object3D) {
+  const four = legs.length > 2;
+  return (rng: Rng) => {
+    const r = (a: number, b: number) => rng.range(a, b);
+    const way = rng.int(0, 2);
+    if (way === 0) {
+      // Knees buckle and it sinks onto them, slumping forward.
+      for (const leg of legs) {
+        leg.hip.rotation.z = r(1.05, 1.5);
+        leg.knee.rotation.z = -leg.hip.rotation.z - (four ? r(1.1, 1.5) : r(1.0, 1.45));
+        leg.hip.rotation.x = -sideOf(leg) * r(0, 0.25);
+      }
+      body.rotation.z = four ? r(-0.15, 0.1) : -r(0.12, 0.42);
+      body.rotation.x = r(-0.15, 0.15);
+    } else if (way === 1) {
+      // A leg is blown away at the knee (or snapped sideways) and it keels over that way.
+      const lost = rng.pick(legs);
+      const s = sideOf(lost);
+      for (const leg of legs) {
+        if (leg === lost) continue;
+        // The others fold under it as it goes down.
+        leg.hip.rotation.z = r(0.8, 1.4);
+        leg.knee.rotation.z = -leg.hip.rotation.z - r(0.8, 1.4);
+        leg.hip.rotation.x = -sideOf(leg) * r(0.05, 0.45);
+      }
+      // What's left of it swings up out of the way as it goes over.
+      lost.hip.rotation.z = (rng.chance(0.5) ? 1 : -1) * r(1.0, 1.5);
+      if (rng.chance(0.55)) lost.knee.visible = false;
+      else {
+        lost.knee.rotation.x = s * r(1.2, 1.8);
+        lost.knee.rotation.z = -r(0, 0.8);
+      }
+      body.rotation.x = s * (four ? r(0.3, 0.55) : r(0.75, 1.25));
+      body.rotation.z = four ? -endOf(lost) * r(0.15, 0.35) : r(-0.3, 0.2);
+    } else if (!four) {
+      // Toppled: over on its side (its guns would prop it up face down) or flat on its back.
+      if (rng.chance(0.6)) {
+        const s = rng.chance(0.5) ? 1 : -1;
+        body.rotation.x = s * r(1.25, 1.5);
+        body.rotation.z = r(-0.3, 0.2);
+        body.position.z += s * body.position.y * r(0.25, 0.45);
+        for (const leg of legs) {
+          leg.hip.rotation.z = r(-0.8, 0.8);
+          leg.knee.rotation.z = -r(0, 1.3);
+        }
+      } else {
+        body.rotation.z = r(1.2, 1.45);
+        body.rotation.x = r(-0.3, 0.3);
+        body.position.x -= body.position.y * r(0.25, 0.45);
+        for (const leg of legs) {
+          // Swung on round with the fall, so they lie along the ground, not prop it up.
+          leg.hip.rotation.z = r(0, 0.5);
+          leg.knee.rotation.z = -r(0, 0.4);
+          leg.hip.rotation.x = -sideOf(leg) * r(0, 0.4);
+        }
+      }
+    } else {
+      // Belly-flop: the legs give out sideways and it comes down on its belly.
+      for (const leg of legs) {
+        leg.hip.rotation.x = -sideOf(leg) * r(1.35, 1.6);
+        leg.knee.rotation.x = sideOf(leg) * r(-0.4, 0.15);
+        leg.hip.rotation.z = endOf(leg) * r(0, 0.4);
+      }
+      body.rotation.x = r(-0.12, 0.12);
+      body.rotation.z = r(-0.15, 0.15);
+    }
+    return body;
+  };
+}
+
+/** Walk cycle: legs swing in opposite phase; amplitude eases in with speed. */
+function walkCycle(legs: Leg[], body: THREE.Object3D, stride: number, swing: number) {
   let phase = 0;
   let amount = 0;
   const bodyY = body.position.y;
@@ -68,7 +158,7 @@ registerModel('strider', (faction) => {
     return leg;
   });
 
-  return setRig(root, { turret, animate: walker(legs, body, 0.9, 0.5) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.5) });
 });
 
 registerModel('titan', (faction) => {
@@ -105,7 +195,7 @@ registerModel('titan', (faction) => {
     return leg;
   });
 
-  return setRig(root, { turret, animate: walker(legs, body, 1.6, 0.35) });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.35) });
 });
 
 function tracks(length: number, width: number, height: number, gap: number): THREE.Object3D[] {
@@ -478,7 +568,7 @@ registerModel('scout', (faction) => {
   turret.position.set(0.55, 0.05, 0);
   turret.add(box(0.35, 0.08, 0.08, DARK, 0.18, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, bank: 0.25, animate: rotors([{ group: blades, spin: 30 }]) });
+  return setRig(root, { turret, bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 30 }]) });
 });
 
 registerModel('gunship', (faction) => {
@@ -496,7 +586,7 @@ registerModel('gunship', (faction) => {
   turret.position.set(0.7, 0.05, 0);
   turret.add(box(0.4, 0.1, 0.1, DARK, 0.2, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, bank: 0.25, animate: rotors([{ group: blades, spin: 26 }]) });
+  return setRig(root, { turret, bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 26 }]) });
 });
 
 registerModel('bomber', (faction) => {
@@ -515,7 +605,7 @@ registerModel('bomber', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.1, 0.05, 0);
   root.add(turret);
-  return setRig(root, { turret, bank: 0.8 });
+  return setRig(root, { turret, bank: 0.8, flies: true });
 });
 
 // Skyline's strike jet: swept wings, twin tails, and cannon in the nose.
@@ -536,7 +626,7 @@ registerModel('jet', (faction) => {
     root.add(box(0.5, 0.05, 0.05, DARK, 1.35, 0.22, side * 0.1)); // cannon
   }
   root.add(glowBox(0.08, 0.16, 0.16, 0xffa040).translateX(-1.04).translateY(0.3)); // afterburner
-  return setRig(root, { bank: 0.6 });
+  return setRig(root, { bank: 0.6, flies: true });
 });
 
 registerModel('drone', (faction) => {
@@ -556,7 +646,7 @@ registerModel('drone', (faction) => {
   turret.position.set(0.2, 0.05, 0);
   turret.add(box(0.2, 0.05, 0.05, DARK, 0.1, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, animate: rotors(parts) });
+  return setRig(root, { turret, flies: true, animate: rotors(parts) });
 });
 
 // Skyline's anti-air walker: a flak turret on long legs.
@@ -585,7 +675,7 @@ registerModel('flakWalker', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 0.9, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45) });
 });
 
 // Skyline's super unit: a slow armoured airship with a flight deck that launches drones.
@@ -617,6 +707,7 @@ registerModel('airship', (faction) => {
   root.add(turret);
   return setRig(root, {
     turret,
+    flies: true,
     animate: (s: AnimState) => {
       for (const g of props) g.rotation.x += 20 * s.dt;
     },
@@ -661,7 +752,7 @@ registerModel('fortress', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 1.6, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3) });
 });
 
 /**
@@ -675,9 +766,11 @@ function spiderLegs(body: THREE.Group, pairs: number, length: number, spread: nu
   const splay = 0.3;
   const shin = (height + reach * Math.sin(raise)) / Math.cos(splay);
   const hips: THREE.Group[] = [];
+  const joints: { thigh: THREE.Group; knee: THREE.Group; side: number }[] = [];
   for (let i = 0; i < pairs; i++) {
     for (const side of [-1, 1]) {
       const hip = new THREE.Group();
+      hip.name = 'leg';
       hip.position.set((i - (pairs - 1) / 2) * (length / pairs), 0, side * spread);
       const thigh = new THREE.Group();
       thigh.rotation.x = -side * raise;
@@ -690,14 +783,37 @@ function spiderLegs(body: THREE.Group, pairs: number, length: number, spread: nu
       hip.add(thigh);
       body.add(hip);
       hips.push(hip);
+      joints.push({ thigh, knee, side });
     }
   }
   let phase = 0;
   let amount = 0;
-  return (s: AnimState) => {
-    phase += s.speed * s.dt * 6;
-    amount += ((s.speed > 0.05 ? 1 : 0) - amount) * Math.min(1, s.dt * 6);
-    hips.forEach((hip, k) => (hip.rotation.y = Math.sin(phase + (k % 2 === Math.floor(k / 2) % 2 ? 0 : Math.PI)) * 0.35 * amount));
+  return {
+    animate: (s: AnimState) => {
+      phase += s.speed * s.dt * 6;
+      amount += ((s.speed > 0.05 ? 1 : 0) - amount) * Math.min(1, s.dt * 6);
+      hips.forEach((hip, k) => (hip.rotation.y = Math.sin(phase + (k % 2 === Math.floor(k / 2) % 2 ? 0 : Math.PI)) * 0.35 * amount));
+    },
+    /** A dead spider: it drops onto its belly, some legs splayed flat, some curled up under it, one or two gone. */
+    wreck: (rng: Rng) => {
+      joints.forEach(({ thigh, knee, side }, k) => {
+        let net: number;
+        if (rng.chance(0.5)) {
+          thigh.rotation.x = -side * rng.range(0, 0.35);
+          net = -side * rng.range(1.3, 1.55);
+        } else {
+          // Curled: the knee up, the shin folded in under the body.
+          thigh.rotation.x = -side * rng.range(0.5, 0.9);
+          net = side * rng.range(1.35, 1.65);
+        }
+        knee.rotation.x = net - thigh.rotation.x;
+        if (rng.chance(0.15)) knee.visible = false;
+        hips[k].rotation.y = rng.range(-0.4, 0.4);
+      });
+      body.rotation.x = rng.range(-0.12, 0.12);
+      body.rotation.z = rng.range(-0.15, 0.15);
+      return body;
+    },
   };
 }
 
@@ -715,7 +831,7 @@ registerModel('spider', (faction) => {
   turret.add(box(0.4, 0.22, 0.4, METAL, 0, 0.11, 0));
   for (const side of [-1, 1]) turret.add(box(0.6, 0.07, 0.07, DARK, 0.45, 0.12, side * 0.1));
   body.add(turret);
-  return setRig(root, { turret, animate: spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11) });
+  return setRig(root, { turret, ...spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11) });
 });
 
 // Bastion's test super unit: a howitzer on a giant spider's back.
@@ -740,7 +856,7 @@ registerModel('siegeSpider', (faction) => {
   barrel.add(box(0.5, 0.42, 0.42, METAL, 3.3, 0, 0));
   turret.add(barrel);
   body.add(turret);
-  return setRig(root, { turret, animate: spiderLegs(body, 4, 3.0, 0.9, 2.3, 0.3) });
+  return setRig(root, { turret, ...spiderLegs(body, 4, 3.0, 0.9, 2.3, 0.3) });
 });
 
 registerModel('warhound', (faction) => {
@@ -766,7 +882,7 @@ registerModel('warhound', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 1.2, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 1.2, 0.45) });
 });
 
 registerModel('juggernaut', (faction) => {
@@ -797,7 +913,7 @@ registerModel('juggernaut', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 1.8, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.8, 0.3) });
 });
 
 /** Hovers bob gently on their air cushion; boats rock on the water. */
@@ -964,7 +1080,7 @@ registerModel('cinderWalker', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 0.9, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45) });
 });
 
 registerModel('inferno', (faction) => {
@@ -997,7 +1113,7 @@ registerModel('inferno', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, animate: walker(legs, body, 1.4, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.4, 0.3) });
 });
 
 registerModel('trooper', (faction) => infantry(faction, 'rifle'));

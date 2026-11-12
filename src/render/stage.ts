@@ -189,7 +189,7 @@ export class Stage {
     const props = buildProps(field, game.props, visualRng);
     this.stopProps = props.userData.dispose;
     battle.add(terrain, props, woods);
-    this.entities = new EntityView(game.world);
+    this.entities = new EntityView(game.world, (x, z) => field.surfaceAt(x, z));
     this.effects = new Effects(game.events, field);
     this.godEffects = new GodEffects(game, this.effects);
     this.godCursor.attach(field);
