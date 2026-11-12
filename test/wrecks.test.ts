@@ -58,13 +58,14 @@ describe('wrecks', () => {
   });
 
   it('gives walkers a few different ways to fall', () => {
-    for (const key of ['strider', 'titan', 'juggernaut', 'inferno', 'spider']) {
-      const heights = new Set<number>();
+    for (const key of ['strider', 'titan', 'juggernaut', 'inferno', 'warhound']) {
+      // How low the body ends up and which way it's turned over.
+      const poses = new Set<string>();
       for (let seed = 0; seed < 12; seed++) {
         const body = wreck(key, seed).children[0];
-        heights.add(Math.round(body.position.y * 20));
+        poses.add([body.position.y * 10, body.quaternion.x * 4, body.quaternion.z * 4].map(Math.round).join());
       }
-      expect(heights.size, key).toBeGreaterThan(2);
+      expect(poses.size, key).toBeGreaterThan(3);
     }
   });
 
@@ -78,5 +79,49 @@ describe('wrecks', () => {
         expect(obj.children[0].position.y, `${key} #${seed}`).toBeLessThan(standing * 0.9);
       }
     }
+  });
+
+  it('lets fallen walkers come to rest instead of balancing on a foot', () => {
+    for (const key of UNITS.filter((k) => getRig(createModel(k, 0))?.wreck)) {
+      for (let seed = 0; seed < 12; seed++) {
+        const obj = wreck(key, seed);
+        // Its weight (bulky parts count most) must be over what it rests on.
+        const touching: THREE.Vector3[] = [];
+        const weight = new THREE.Vector3();
+        let mass = 0;
+        obj.traverseVisible((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh || m.userData.noShadow) return;
+          m.geometry.computeBoundingBox();
+          const b = m.geometry.boundingBox!;
+          for (let i = 0; i < 8; i++) {
+            const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(m.matrixWorld);
+            if (p.y < 0.1) touching.push(p);
+          }
+          const size = b.getSize(new THREE.Vector3());
+          const v = size.x * size.y * size.z;
+          weight.addScaledVector(b.getCenter(new THREE.Vector3()).applyMatrix4(m.matrixWorld), v);
+          mass += v;
+        });
+        weight.divideScalar(mass);
+        const xs = touching.map((p) => p.x);
+        const zs = touching.map((p) => p.z);
+        const slack = 0.15;
+        expect(weight.x, `${key} #${seed}`).toBeGreaterThan(Math.min(...xs) - slack);
+        expect(weight.x, `${key} #${seed}`).toBeLessThan(Math.max(...xs) + slack);
+        expect(weight.z, `${key} #${seed}`).toBeGreaterThan(Math.min(...zs) - slack);
+        expect(weight.z, `${key} #${seed}`).toBeLessThan(Math.max(...zs) + slack);
+      }
+    }
+  });
+
+  it('lies along the slope it falls on', () => {
+    const obj = createModel('tank', 0);
+    obj.rotation.order = 'YXZ';
+    // Ground rising toward +x (the tank's nose) at 1 in 4.
+    const c = breakModel(obj, 3, (x) => x * 0.25);
+    stepCollapse(obj, c, 999);
+    expect(obj.rotation.z).toBeGreaterThan(Math.atan(0.25) - 0.17);
+    expect(obj.rotation.z).toBeLessThan(Math.atan(0.25) + 0.17);
   });
 });

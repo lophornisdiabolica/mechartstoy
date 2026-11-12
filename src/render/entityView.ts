@@ -61,7 +61,11 @@ export class EntityView {
   /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
   hidden: ReadonlySet<Entity> | null = null;
 
-  constructor(private readonly world: World) {
+  /** `surface` is the ground height at a world point, which wrecks lie along. */
+  constructor(
+    private readonly world: World,
+    private readonly surface?: (x: number, z: number) => number,
+  ) {
     this.root.name = 'entities';
     this.root.visible = false;
     // Its matrices are brought up to date in sync, just before batching; the renderer needn't do it again.
@@ -139,7 +143,7 @@ export class EntityView {
 
       if (!entry.wrecked && w.has(e, Wreck)) {
         entry.wrecked = true;
-        entry.collapse = breakModel(obj, e);
+        entry.collapse = breakModel(obj, e, this.surface);
       }
       if (entry.wrecked) {
         if (entry.collapse && !stepCollapse(obj, entry.collapse, dt)) entry.collapse = null;

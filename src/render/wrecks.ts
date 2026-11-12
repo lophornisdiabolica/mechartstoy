@@ -18,6 +18,9 @@ import { flatMaterial, getRig } from './models';
  * - the paint is burnt to a few shades of char, a hint of the side's colour
  *   left on some parts, and its lights go out.
  *
+ * A fallen walker then tips on over until it rests on the ground rather
+ * than balancing on a foot, and every wreck lies along the slope under it.
+ *
  * The parts then fall into that pose over a moment rather than snapping, so
  * a walker visibly crumples. Wrecks are drawn by the batcher like anything
  * else, so a broken model costs no more to draw than a whole one: every
@@ -87,6 +90,108 @@ function ground(root: THREE.Object3D, part: THREE.Object3D): void {
   if (b.isEmpty()) return;
   // In root space; the part's parent is the root or sits square in it (turrets, bodies).
   part.position.y -= b.min.y + SINK;
+}
+
+/** The corners of every visible part under `part` in `root`'s space, and roughly where its weight is (bulky parts count most). */
+function hull(root: THREE.Object3D, part: THREE.Object3D): { points: THREE.Vector3[]; weight: THREE.Vector3 } {
+  root.updateMatrixWorld(true);
+  _inv.copy(root.matrixWorld).invert();
+  const points: THREE.Vector3[] = [];
+  const weight = new THREE.Vector3();
+  let mass = 0;
+  part.traverseVisible((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || mesh.userData.noShadow) return;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    _m.multiplyMatrices(_inv, mesh.matrixWorld);
+    const b = mesh.geometry.boundingBox!;
+    for (let i = 0; i < 8; i++) points.push(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(_m));
+    const size = b.getSize(new THREE.Vector3());
+    const m = size.x * size.y * size.z;
+    weight.addScaledVector(b.getCenter(new THREE.Vector3()).applyMatrix4(_m), m);
+    mass += m;
+  });
+  if (mass > 0) weight.divideScalar(mass);
+  return { points, weight };
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The point of the footprint the contacts make on the ground (their convex
+ * hull, seen from above) nearest to `p`, or null if `p` is inside it.
+ */
+function nearestOnFootprint(contacts: THREE.Vector3[], p: THREE.Vector3): { x: number; z: number } | null {
+  const pts = contacts.map((c) => ({ x: c.x, z: c.z })).sort((a, b) => a.x - b.x || a.z - b.z);
+  const cross = (o: { x: number; z: number }, a: { x: number; z: number }, b: { x: number; z: number }) => (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
+  // Monotone chain, counter-clockwise.
+  const lower: { x: number; z: number }[] = [];
+  for (const q of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 1e-9) lower.pop();
+    lower.push(q);
+  }
+  const upper: { x: number; z: number }[] = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const q = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 1e-9) upper.pop();
+    upper.push(q);
+  }
+  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  if (hull.length === 0) hull.push(pts[0]);
+  if (hull.length >= 3 && hull.every((a, i) => cross(a, hull[(i + 1) % hull.length], p) >= 0)) return null;
+  let best = hull[0];
+  let bestD = Infinity;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2)) : 0;
+    const q = { x: a.x + dx * t, z: a.z + dz * t };
+    const d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+    if (d < bestD) [best, bestD] = [q, d];
+  }
+  return best;
+}
+
+/**
+ * Let a fallen part tip over until it rests on the ground instead of
+ * balancing on one foot or one edge. While its weight isn't over what it
+ * stands on, it rolls about the nearest point or edge of that toward its
+ * weight until another part touches down, like a toppling block.
+ */
+function settle(root: THREE.Object3D, part: THREE.Object3D): void {
+  ground(root, part);
+  for (let step = 0; step < 6; step++) {
+    const { points, weight } = hull(root, part);
+    if (points.length === 0) return;
+    const low = Math.min(...points.map((p) => p.y));
+    const span = Math.max(...points.map((p) => p.y)) - low;
+    const touch = Math.max(0.03, span * 0.02);
+    const contacts = points.filter((p) => p.y < low + touch);
+    // Where it stands (seen from above), and the nearest point of that to where its weight is.
+    const near = nearestOnFootprint(contacts, weight);
+    if (!near) return; // its weight is over what it stands on: it's down
+    const pivot = new THREE.Vector3(near.x, low, near.z);
+    const toward = new THREE.Vector3(weight.x - near.x, 0, weight.z - near.z);
+    const lean = toward.length();
+    if (lean < touch) return;
+    toward.divideScalar(lean);
+    // Roll toward the weight until the next part touches down.
+    let angle = Math.PI / 2;
+    for (const p of points) {
+      const across = (p.x - pivot.x) * toward.x + (p.z - pivot.z) * toward.z;
+      const up = p.y - pivot.y;
+      if (across <= 1e-3 || up < touch) continue;
+      angle = Math.min(angle, Math.atan2(up, across));
+    }
+    if (angle < 0.01) return;
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(UP, toward).normalize(), angle);
+    part.position.sub(pivot).applyQuaternion(q).add(pivot);
+    part.quaternion.premultiply(q);
+    ground(root, part);
+  }
 }
 
 /** Burn the paint: a shade of char for each part, the same for parts that shared a colour. */
@@ -166,9 +271,11 @@ function breakBits(meshes: THREE.Mesh[], rng: Rng, keep: Set<THREE.Object3D>): v
 /**
  * Break a model into a wreck: burn it, pose it broken, and return the fall
  * into that pose for the entity view to play (see stepCollapse). `seed` picks
- * how (the entity id, so it's the same every time).
+ * how (the entity id, so it's the same every time). `surface` is the ground
+ * height at a world point, for lying along a slope; the model must already
+ * stand where it died.
  */
-export function breakModel(obj: THREE.Object3D, seed: number): Collapse {
+export function breakModel(obj: THREE.Object3D, seed: number, surface?: (x: number, z: number) => number): Collapse {
   const rng = new Rng(Math.imul(seed + 1, 0x9e3779b1));
   const rig = getRig(obj);
   const meshes = meshesOf(obj);
@@ -202,7 +309,20 @@ export function breakModel(obj: THREE.Object3D, seed: number): Collapse {
     rig.turret.traverse((o) => keep.add(o));
   }
   breakBits(meshes, rng, keep);
-  if (fallen) ground(obj, fallen);
+  if (fallen) settle(obj, fallen);
+  // Lie along the slope it fell on (a plane through the ground round it), not level with the world.
+  if (surface && !rig?.flies) {
+    const r = Math.max(1, Math.max(extent.x, extent.z) * obj.scale.x * 0.5);
+    const { x, z } = obj.position;
+    const gx = (surface(x + r, z) - surface(x - r, z)) / (2 * r);
+    const gz = (surface(x, z + r) - surface(x, z - r)) / (2 * r);
+    // The rise along the model's nose (+x) and its left side (+z), after its heading.
+    const h = obj.rotation.y;
+    const ahead = gx * Math.cos(h) - gz * Math.sin(h);
+    const aside = gx * Math.sin(h) + gz * Math.cos(h);
+    root.z1 += Math.atan(ahead);
+    root.x1 -= Math.atan(aside);
+  }
 
   const moves: PartMove[] = [];
   parts.forEach((part, i) => {

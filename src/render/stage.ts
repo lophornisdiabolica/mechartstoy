@@ -185,7 +185,7 @@ export class Stage {
     const woods = buildWoods(field, visualRng.fork(0x77));
     this.stopWoods = woods.userData.dispose;
     battle.add(terrain, buildProps(game.props, visualRng), woods);
-    this.entities = new EntityView(game.world);
+    this.entities = new EntityView(game.world, (x, z) => field.surfaceAt(x, z));
     this.effects = new Effects(game.events, field);
     this.godEffects = new GodEffects(game, this.effects);
     this.godCursor.attach(field);
