@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeTree } from './dispose';
 import { Rng } from '../core/rng';
 import { Battlefield, Bridge, Road } from '../world/battlefield';
 import { BIOMES } from '../world/biomes';
@@ -113,13 +114,12 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   const roads = new THREE.Group();
   roads.name = 'roads';
   /** Each road's strip, by its index in field.roads (null where nothing of it is drawn). */
-  const roadMeshes: (THREE.Mesh | null)[] = [];
+  const roadMeshes: (THREE.Group | null)[] = [];
   const drawRoad = (k: number) => {
     const old = roadMeshes[k];
     if (old) {
       roads.remove(old);
-      old.geometry.dispose();
-      (old.material as THREE.Material).dispose();
+      disposeTree(old);
     }
     roadMeshes[k] = buildRoad(field, field.roads[k]);
     if (roadMeshes[k]) roads.add(roadMeshes[k]);
@@ -151,8 +151,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       const gone = roadMeshes.pop();
       if (gone) {
         roads.remove(gone);
-        gone.geometry.dispose();
-        (gone.material as THREE.Material).dispose();
+        disposeTree(gone);
       }
     }
   });
@@ -186,17 +185,14 @@ const ROAD_ACROSS = [-1, -0.6, -0.2, 0.2, 0.6, 1];
 const SKIRT_OUT = 0.3;
 const SKIRT_DOWN = 0.12;
 /** How many samples either side of a road sample set its direction (see buildRoad). */
-const TANGENT_SPAN = 2;
-/** How far down a town street's ends dip, and over how long (see buildRoad). */
-const END_DIP = 0.08;
-const END_DIP_LENGTH = 1;
+const TANGENT_SPAN = 4;
 
 /**
  * A road as a strip draped over the ground, following its line smoothly
  * rather than the cells under it. Gaps where it crosses water (a bridge
  * deck is road enough). Null if nothing's left to draw.
  */
-function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
+function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   // Points every half unit along the line.
   const at: { x: number; z: number }[] = [];
   for (let k = 1; k < road.points.length; k++) {
@@ -215,8 +211,6 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     return { x: p.x, z: p.z, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
   });
-  const positions: number[] = [];
-  const colors: number[] = [];
   const fill = new THREE.Color(ROAD_COLOR);
   const edge = new THREE.Color(ROAD_EDGE);
   const half = road.width / 2;
@@ -228,15 +222,17 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
     });
   const dry = (p: (typeof samples)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
   const lifted = samples.map(row);
+  // On the inside of a bend tighter than the road is wide, the rows across would cross over each
+  // other and fold the strip (a sawtooth of dark, back-facing triangles). Hold a point that would
+  // go backwards where the row before left it instead.
+  for (let k = 1; k < lifted.length; k++) {
+    const { dx, dz } = samples[k];
+    lifted[k].forEach((p, q) => {
+      const prev = lifted[k - 1][q];
+      if ((p.x - prev.x) * dx + (p.z - prev.z) * dz < 0) p.copy(prev);
+    });
+  }
   liftOverGround(field, lifted);
-  // A town's main street (the one straight road: links curve) dips a touch at its ends, so the
-  // link roads tucked into it there (see roads.ts) are drawn on top instead of the two fighting
-  // over the overlap.
-  const along = samples.length;
-  if (road.points.length === 2) lifted.forEach((r, k) => {
-    const fromEnd = Math.min(k, along - 1 - k) * 0.5;
-    if (fromEnd < END_DIP_LENGTH) for (const v of r) v.y -= END_DIP * (1 - fromEnd / END_DIP_LENGTH);
-  });
   // A skirt down each side, tucked just under the ground beside the road: where the road is lifted
   // over a crest it hides the gap under the road's edge (which showed as a dark line), and
   // elsewhere the ground covers it.
@@ -249,16 +245,19 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
     };
     return [skirt(r[0], -1), ...r, skirt(r[r.length - 1], 1)];
   });
-  const normals: number[] = [];
   /** The normal of the triangle a, b, c by its winding. */
   const up = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+  // Two layers: the kerb, the whole width in the edge colour, and the paving down the middle,
+  // drawn after every kerb (see layerMesh). Every road's paving then covers every road's kerb, so
+  // where roads fork, cross or overlap they read as one road, with kerb only round the outside.
+  const kerb: Layer = { positions: [], colors: [], normals: [] };
+  const paving: Layer = { positions: [], colors: [], normals: [] };
   const last = ROAD_ACROSS.length + 1;
   for (let k = 1; k < samples.length; k++) {
     if (!dry(samples[k - 1]) || !dry(samples[k])) continue;
     const r0 = rows[k - 1];
     const r1 = rows[k];
     for (let q = 1; q <= last; q++) {
-      const c = (globalThis as any).NOSH ? (q === 1 || q === last ? new THREE.Color(0xff0000) : q === 2 || q === last - 1 ? new THREE.Color(0x0000ff) : fill) : q <= 2 || q >= last - 1 ? edge : fill;
       // The skirts are shaded as the road edge beside them, so they read as more of the road's
       // edge, not as a dark slope.
       const nq = q === 1 ? 2 : q === last ? last - 1 : q;
@@ -270,26 +269,50 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
         [r0[q - 1], r0[q], r1[q]],
       ];
       const shade = [up(r0[nq - 1], r1[nq], r1[nq - 1]), up(r0[nq - 1], r0[nq], r1[nq])];
+      const middle = q > 2 && q < last - 1;
       tris.forEach((t, n) => {
         for (const v of t) {
-          positions.push(v.x, v.y, v.z);
-          colors.push(c.r, c.g, c.b);
-          normals.push(shade[n].x, shade[n].y, shade[n].z);
+          kerb.positions.push(v.x, v.y, v.z);
+          kerb.colors.push(edge.r, edge.g, edge.b);
+          kerb.normals.push(shade[n].x, shade[n].y, shade[n].z);
+          if (!middle) continue;
+          paving.positions.push(v.x, v.y, v.z);
+          paving.colors.push(fill.r, fill.g, fill.b);
+          paving.normals.push(shade[n].x, shade[n].y, shade[n].z);
         }
       });
     }
   }
-  if (positions.length === 0) return null;
+  if (kerb.positions.length === 0) return null;
+  const group = new THREE.Group();
+  group.name = 'road';
+  group.add(layerMesh(kerb, -2, 1), layerMesh(paving, -4, 2));
+  return group;
+}
+
+/** One layer of a road's strip (see buildRoad). */
+interface Layer {
+  positions: number[];
+  colors: number[];
+  normals: number[];
+}
+
+/**
+ * A layer as a mesh. Kerbs are drawn after the ground and write no depth, and
+ * pavings after them, so any road's paving covers any road's kerb wherever
+ * they overlap, even where the two strips sit at slightly different heights.
+ */
+function layerMesh(layer: Layer, offset: number, order: number): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(layer.positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(layer.colors, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(layer.normals, 3));
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset, depthWrite: order > 1 }),
   );
+  mesh.renderOrder = order;
   mesh.receiveShadow = true;
-  mesh.name = 'road';
   return mesh;
 }
 
@@ -338,7 +361,12 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
         }
       }
     }
-    rows.forEach((r, k) => r.forEach((p, q) => (p.y += lift[k][q])));
+    // Each row rises as one, by the most any of its points needs: raising single corners
+    // crumpled the strip into a sawtooth of facets on rough ground.
+    rows.forEach((r, k) => {
+      const most = Math.max(...lift[k]);
+      for (const p of r) p.y += most;
+    });
   }
 }
 
