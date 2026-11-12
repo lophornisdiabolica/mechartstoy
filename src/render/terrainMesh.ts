@@ -112,21 +112,22 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   }
   const roads = new THREE.Group();
   roads.name = 'roads';
-  const drawRoads = () => {
-    for (const child of [...roads.children]) {
-      roads.remove(child);
-      (child as THREE.Mesh).geometry.dispose();
+  /** Each road's strip, by its index in field.roads (null where nothing of it is drawn). */
+  const roadMeshes: (THREE.Mesh | null)[] = [];
+  const drawRoad = (k: number) => {
+    const old = roadMeshes[k];
+    if (old) {
+      roads.remove(old);
+      old.geometry.dispose();
+      (old.material as THREE.Material).dispose();
     }
-    for (const road of field.roads) {
-      const mesh = buildRoad(field, road);
-      if (mesh) roads.add(mesh);
-    }
+    roadMeshes[k] = buildRoad(field, field.roads[k]);
+    if (roadMeshes[k]) roads.add(roadMeshes[k]);
   };
-  drawRoads();
+  field.roads.forEach((_, k) => drawRoad(k));
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
 
   let drawnBridges = field.bridges.length;
-  let drawnRoads = field.roads.length;
   const stop = field.onChange((area: CellArea) => {
     for (let j = Math.max(0, area.j0 - 1); j <= Math.min(rows - 1, area.j1 + 1); j++) {
       for (let i = Math.max(0, area.i0 - 1); i <= Math.min(cols - 1, area.i1 + 1); i++) writeCell(i, j);
@@ -138,14 +139,21 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
     // Engineers' bridges come down.
     for (let k = 0; k < drawnBridges; k++) if (field.bridges[k]?.gone && bridges.children[k]?.visible) bridges.children[k].visible = false;
-    // Roads follow the ground, so redraw them if the ground under one moved (or there's a new one).
-    const touched = field.roads.some((r) => r.points.some((p) => {
-      const [i, j] = field.cellAt(p.x, p.z);
-      return i >= area.i0 - 2 && i <= area.i1 + 2 && j >= area.j0 - 2 && j <= area.j1 + 2;
-    }));
-    if (touched || drawnRoads !== field.roads.length) {
-      drawnRoads = field.roads.length;
-      drawRoads();
+    // Roads follow the ground, so redraw any the ground under moved (and draw new ones).
+    field.roads.forEach((r, k) => {
+      const touched = k >= roadMeshes.length || r.points.some((p) => {
+        const [i, j] = field.cellAt(p.x, p.z);
+        return i >= area.i0 - 2 && i <= area.i1 + 2 && j >= area.j0 - 2 && j <= area.j1 + 2;
+      });
+      if (touched) drawRoad(k);
+    });
+    while (roadMeshes.length > field.roads.length) {
+      const gone = roadMeshes.pop();
+      if (gone) {
+        roads.remove(gone);
+        gone.geometry.dispose();
+        (gone.material as THREE.Material).dispose();
+      }
     }
   });
   group.userData.dispose = stop;
@@ -203,10 +211,12 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
       return new THREE.Vector3(x, meshHeightAt(field, x, z) + 0.04, z);
     });
   const dry = (p: (typeof samples)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
+  const rows = samples.map(row);
+  liftOverGround(field, rows);
   for (let k = 1; k < samples.length; k++) {
     if (!dry(samples[k - 1]) || !dry(samples[k])) continue;
-    const r0 = row(samples[k - 1]);
-    const r1 = row(samples[k]);
+    const r0 = rows[k - 1];
+    const r1 = rows[k];
     for (let q = 1; q < ROAD_ACROSS.length; q++) {
       const c = q === 1 || q === ROAD_ACROSS.length - 1 ? edge : fill;
       for (const v of [r0[q - 1], r1[q - 1], r1[q], r0[q - 1], r1[q], r0[q]]) {
@@ -227,6 +237,55 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
   mesh.receiveShadow = true;
   mesh.name = 'road';
   return mesh;
+}
+
+/**
+ * The road strip's corners sit on the ground, but between them the ground
+ * can bulge up through it: over a hilltop, or a ridge between two of the
+ * ground's triangles. Raise each quad of the strip by however far the ground
+ * comes up inside it, raising the corners nearest the bulge most (a few
+ * passes, as raising one quad's corners moves its neighbours').
+ * Each quad is drawn as two triangles split from r0[q-1] to r1[q], as below.
+ */
+function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
+  const n = 4;
+  for (let pass = 0; pass < 3; pass++) {
+    const lift = rows.map((r) => r.map(() => 0));
+    for (let k = 1; k < rows.length; k++) {
+      for (let q = 1; q < rows[k].length; q++) {
+        const a = rows[k - 1][q - 1];
+        const b = rows[k][q - 1];
+        const c = rows[k][q];
+        const d = rows[k - 1][q];
+        for (let su = 0; su <= n; su++) {
+          for (let sv = 0; sv <= n; sv++) {
+            // u across (a to d), v along (a to b).
+            const u = su / n;
+            const v = sv / n;
+            const x = (a.x * (1 - u) + d.x * u) * (1 - v) + (b.x * (1 - u) + c.x * u) * v;
+            const z = (a.z * (1 - u) + d.z * u) * (1 - v) + (b.z * (1 - u) + c.z * u) * v;
+            // Which triangle, and how much each of its corners counts here.
+            const upper = v >= u;
+            const wa = upper ? 1 - v : 1 - u;
+            const wm = upper ? v - u : u - v;
+            const wc = upper ? u : v;
+            const mid = upper ? b : d;
+            const y = a.y * wa + mid.y * wm + c.y * wc;
+            const poke = meshHeightAt(field, x, z) + 0.03 - y;
+            if (poke <= 0) continue;
+            // Raise the corners in proportion to their weight here, the least that covers the ground.
+            const per = poke / (wa * wa + wm * wm + wc * wc);
+            const raise = (kk: number, qq: number, w: number) => (lift[kk][qq] = Math.max(lift[kk][qq], per * w));
+            raise(k - 1, q - 1, wa);
+            raise(k, q, wc);
+            if (upper) raise(k, q - 1, wm);
+            else raise(k - 1, q, wm);
+          }
+        }
+      }
+    }
+    rows.forEach((r, k) => r.forEach((p, q) => (p.y += lift[k][q])));
+  }
 }
 
 /** A bridge: a concrete deck on piers, with railings, from bank to bank. */

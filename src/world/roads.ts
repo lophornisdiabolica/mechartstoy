@@ -15,29 +15,36 @@ import * as D from '../core/dmath';
  */
 
 type Point = { x: number; z: number };
+/** A town's street end, and where a link road from it starts (see connectTowns). */
+type End = Point & { lead: Point | null };
 
 /** How much a road would rather go round a slope than over it (cost per unit of rise over run). */
 const SLOPE_COST = 8;
 /** Existing road is cheaper to follow, so links merge rather than run side by side. */
 const ON_ROAD = 0.4;
+/** How far past a town's street end a link road runs straight on before it turns off. */
+const LEAD_OUT = 1.5;
 
 export function connectTowns(field: Battlefield): number {
   const towns = field.townSites;
   if (towns.length < 2) return 0;
   // Each town's street ends.
+  // Each town's street ends, and a point a little way out along the street from each, so a link
+  // carries the street on out of town before it turns, rather than turning on the spot.
   const ends = towns.map((t) => {
-    const ux = D.cos(t.angle) * t.radius;
-    const uz = D.sin(t.angle) * t.radius;
-    return [
-      { x: t.x - ux, z: t.z - uz },
-      { x: t.x + ux, z: t.z + uz },
-    ];
+    const ux = D.cos(t.angle);
+    const uz = D.sin(t.angle);
+    return [-1, 1].map((side) => {
+      const end = { x: t.x + side * ux * t.radius, z: t.z + side * uz * t.radius };
+      const lead = { x: end.x + side * ux * LEAD_OUT, z: end.z + side * uz * LEAD_OUT };
+      return { ...end, lead: field.contains(lead.x, lead.z, 2) && !field.isWater(lead.x, lead.z) ? lead : null };
+    });
   });
   // Prim's: link the nearest unlinked town to the network until all are in.
   const linked = [0];
   let built = 0;
   while (linked.length < towns.length) {
-    let best: { from: Point; to: Point; town: number; d: number } | null = null;
+    let best: { from: End; to: End; town: number; d: number } | null = null;
     for (let t = 0; t < towns.length; t++) {
       if (linked.includes(t)) continue;
       for (const l of linked) {
@@ -51,7 +58,8 @@ export function connectTowns(field: Battlefield): number {
     }
     if (!best) break;
     linked.push(best.town);
-    const path = planRoad(field, best.from, best.to);
+    const { from, to } = best;
+    const path = planRoad(field, from.lead ?? from, to.lead ?? to, from.lead ? from : undefined, to.lead ? to : undefined);
     if (path) {
       field.addRoad(path, STREET_WIDTH);
       built++;
@@ -63,9 +71,12 @@ export function connectTowns(field: Battlefield): number {
 /**
  * The easiest line for a road from one point to another, smoothed, or null
  * if there's no way (water with no bridge, say). Keeps off base pads and out
- * of towns (other than to leave and reach their street ends).
+ * of towns (other than to leave and reach their street ends). `before` and
+ * `after`, if given, are where the road really starts and ends: a short
+ * straight lead-in to `from` and out of `to` that the search doesn't plan,
+ * rounded into the rest.
  */
-export function planRoad(field: Battlefield, from: Point, to: Point): Point[] | null {
+export function planRoad(field: Battlefield, from: Point, to: Point, before?: Point, after?: Point): Point[] | null {
   const { cols, rows, cellSize } = field.config;
   const n = cols * rows;
   const cx = (i: number) => field.bounds.minX + (i + 0.5) * cellSize;
@@ -145,9 +156,24 @@ export function planRoad(field: Battlefield, from: Point, to: Point): Point[] | 
     if (k === start) break;
   }
   cells.reverse();
+  // The road starts and ends at the points themselves, not the middles of their cells (which can be
+  // up to half a cell behind them, so the road would double back on itself there).
+  cells[0] = { x: from.x, z: from.z };
+  if (cells.length > 1) cells[cells.length - 1] = { x: to.x, z: to.z };
+  else cells.push({ x: to.x, z: to.z });
   // Every other cell, then rounded off, so the road curves instead of stepping.
   const sparse = cells.filter((_, k) => k % 2 === 0 || k === cells.length - 1);
-  return [from, ...smooth(sparse.slice(1, -1).length ? sparse : cells, 2).slice(1, -1), to];
+  const line = trimBacktracks(sparse);
+  return smooth([...(before ? [{ x: before.x, z: before.z }] : []), ...line, ...(after ? [{ x: after.x, z: after.z }] : [])], 2);
+}
+
+/** Drop points next to either end that the road would have to turn back past (more than a right angle). */
+function trimBacktracks(points: Point[]): Point[] {
+  const p = [...points];
+  const back = (a: Point, b: Point, c: Point) => (b.x - a.x) * (c.x - b.x) + (b.z - a.z) * (c.z - b.z) <= 0;
+  while (p.length > 2 && back(p[0], p[1], p[2])) p.splice(1, 1);
+  while (p.length > 2 && back(p[p.length - 3], p[p.length - 2], p[p.length - 1])) p.splice(p.length - 2, 1);
+  return p;
 }
 
 /** Chaikin corner cutting: each pass replaces every corner with two points a quarter of the way along its sides. */

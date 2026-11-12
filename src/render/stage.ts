@@ -105,6 +105,7 @@ export class Stage {
   private stopTerrain: (() => void) | undefined;
   /** Stops the dense forest's trees following the battle being replaced (see buildWoods). */
   private stopWoods: (() => void) | undefined;
+  private stopProps: (() => void) | undefined;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -162,6 +163,7 @@ export class Stage {
       this.scene.remove(this.battle);
       this.stopTerrain?.();
       this.stopWoods?.();
+      this.stopProps?.();
       this.entities.dispose();
       this.commanderOverlay.dispose();
       this.frontLines.dispose();
@@ -184,7 +186,9 @@ export class Stage {
     setTownStyle(biome.town);
     const woods = buildWoods(field, visualRng.fork(0x77));
     this.stopWoods = woods.userData.dispose;
-    battle.add(terrain, buildProps(game.props, visualRng), woods);
+    const props = buildProps(field, game.props, visualRng);
+    this.stopProps = props.userData.dispose;
+    battle.add(terrain, props, woods);
     this.entities = new EntityView(game.world);
     this.effects = new Effects(game.events, field);
     this.godEffects = new GodEffects(game, this.effects);
