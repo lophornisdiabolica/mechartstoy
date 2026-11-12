@@ -126,6 +126,24 @@ const bigGunShell: WeaponDef = {
   targets: 'ground',
 };
 
+/** A shore battery's gun: flat, hard-hitting shots out over the water at boats (and anything else on the ground). */
+const shoreShell: WeaponDef = {
+  name: 'Shore gun',
+  range: 24,
+  minRange: 3,
+  damage: 42,
+  cooldown: 3.2,
+  burst: 1,
+  burstGap: 0,
+  projectile: 'shell',
+  speed: 40,
+  splash: 1.2,
+  spread: 0.04,
+  arc: false,
+  muzzleHeight: 1.4,
+  targets: 'ground',
+};
+
 export const BUILDING_DEFS = {
   hq: {
     id: 'hq',
@@ -354,6 +372,23 @@ export const BUILDING_DEFS = {
     radius: 1.1,
     height: 5,
     spots: 22,
+    lasts: 900,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 12,
+  },
+  // Land armies' engineers: a gun on the shore where enemy boats are shelling the side (see commander/engineers.ts); it crumbles like the walls.
+  shoreBattery: {
+    id: 'shoreBattery',
+    name: 'Shore Battery',
+    model: 'bld:bigGun',
+    hp: 650,
+    armor: 12,
+    radius: 1.6,
+    height: 1.6,
+    weapon: shoreShell,
+    sight: 26,
+    turretTurnRate: 1.2,
     lasts: 900,
     field: true,
     rebuildDelay: 0,

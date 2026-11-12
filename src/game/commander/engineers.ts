@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Construction, Faction, Health, Hit, Mover, Rubble, Targetable, Transform, Unit } from '../components';
+import { Armed, Building, Construction, Faction, Health, Hit, Mover, Rubble, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
@@ -51,6 +51,12 @@ import { Shortcuts } from './shortcuts';
  *   from another by land.
  * - Skyline puts up forward helipads at outposts it holds out toward the
  *   enemy, where its aircraft rearm without flying all the way home.
+ * - Land armies (everyone but Tidewater) answer boats shelling them: on
+ *   their own half of the map, where enemy boats have been firing on the
+ *   side, an engineer puts up a shore battery on the nearest dry ground
+ *   toward home, a gun that fires flat and hard out over the water. The
+ *   boats are what it's there for, so they don't put the engineer off (other
+ *   enemies near do), and it may well be shelled while it goes up.
  * - Everyone else throws timber bridges across an enemy Tidewater side's
  *   canals where a bridge cuts the way to the enemy short. They come down
  *   when shelled enough, or after a while; anything on one when it goes
@@ -174,6 +180,14 @@ const BASIN_OUT = [9, 12, 15];
 /** Legion's walls in front of its trench line: how far ahead of the line, and how far either side of its middle (the gap between is for its fire). */
 const LEGION_WALL_AHEAD = 5.5;
 const LEGION_WALL_OFF = 3.2;
+
+/** Shore batteries: most a side has standing, how far inland of the water's edge one goes (tried in turn till it fits), and how near another counts as there already. */
+export const BATTERIES_MOST = 3;
+const BATTERY_INLAND = [2.5, 4, 6];
+const BATTERY_APART = 12;
+/** Boats count as shelling a side when they've fired on it this recently, and only on the side's own part of the way to the enemy (a share of it). */
+const SHELLING_WITHIN = 20;
+const BATTERY_REACH = 0.65;
 
 /** Skyline's forward helipads: most a side has standing, how far behind an outpost (toward home) one goes, and how near another counts as already there. */
 export const HELIPADS_MOST = 2;
@@ -342,6 +356,7 @@ export class Engineers {
   private towers: number[] = [];
   private arrays: number[] = [];
   private pads: number[] = [];
+  private batteries: number[] = [];
   private open: number[] = [];
   private trainAt: number[] = [];
   /** Every crumbling building standing or going up, as of the last update plus those put up since (some may be gone). */
@@ -423,6 +438,11 @@ export class Engineers {
     return this.arrays[side] ?? 0;
   }
 
+  /** Shore batteries a side has standing. */
+  batteriesOf(side: number): number {
+    return this.batteries[side] ?? 0;
+  }
+
   /** Forward helipads a side has standing. */
   padsOf(side: number): number {
     return this.pads[side] ?? 0;
@@ -459,6 +479,7 @@ export class Engineers {
     this.towers = new Array(n).fill(0);
     this.arrays = new Array(n).fill(0);
     this.pads = new Array(n).fill(0);
+    this.batteries = new Array(n).fill(0);
     this.open = new Array(n).fill(0);
     this.waits = new Array(n).fill(null);
     while (this.lines.length < n) {
@@ -482,6 +503,7 @@ export class Engineers {
       if (f < 0 || f >= n || !def.lasts) continue;
       if (def.id === 'fieldTower') this.towers[f]++;
       else if (def.id === 'commsArray') this.arrays[f]++;
+      else if (def.id === 'shoreBattery') this.batteries[f]++;
       else this.walls[f]++;
       this.crumbling.push(e);
     }
@@ -563,6 +585,8 @@ export class Engineers {
       if (span) out.push(span);
       const shortcut = this.shortcutJob(world, ctx, side);
       if (shortcut) out.push(shortcut);
+      const battery = this.batteryJob(world, ctx, side);
+      if (battery) out.push(battery);
     }
     for (const site of sites) {
       const heading = D.atan2(-site.dz, site.dx);
@@ -1435,12 +1459,69 @@ export class Engineers {
     ctx.events.emit('span', { faction: span.side, x: mx, z: mz, down: true });
   }
 
-  private safe(world: World, ctx: SimContext, side: number, x: number, z: number): boolean {
+  /** No enemy unit near a point (boats aside, with `boatsToo` false). */
+  private safe(world: World, ctx: SimContext, side: number, x: number, z: number, boatsToo = true): boolean {
     let safe = true;
     ctx.grid.forEachNear(x, z, SAFE_RADIUS, (other) => {
-      if (safe && world.get(other, Targetable)?.kind === 'unit' && ctx.sides.hostile(side, world.req(other, Faction).id)) safe = false;
+      if (!safe || world.get(other, Targetable)?.kind !== 'unit' || !ctx.sides.hostile(side, world.req(other, Faction).id)) return;
+      if (!boatsToo && world.get(other, Mover)?.move === 'naval') return;
+      safe = false;
     });
     return safe;
+  }
+
+  /**
+   * A shore battery where enemy boats are shelling the side (see the notes
+   * at the top): toward home from the nearest of them that's fired on it
+   * lately, on the first dry ground, a little inland.
+   */
+  private batteryJob(world: World, ctx: SimContext, side: number): BuildJob | null {
+    if ((this.batteries[side] ?? 0) >= BATTERIES_MOST) return null;
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const { field } = ctx;
+    const home = field.baseSites[side];
+    let boat: { x: number; z: number; d: number } | null = null;
+    for (const e of world.query(Unit, Armed, Faction, Transform, Mover)) {
+      if (world.req(e, Mover).move !== 'naval' || !ctx.sides.hostile(side, world.req(e, Faction).id)) continue;
+      const a = world.req(e, Armed);
+      if (a.firedOn === null || !ctx.sides.allied(a.firedOn, side) || world.time - a.firedAt > SHELLING_WITHIN) continue;
+      const t = world.req(e, Transform);
+      if (ctx.lanes.progress(side, enemy, t.x, t.z) > BATTERY_REACH) continue;
+      const d = D.hypot(t.x - home.x, t.z - home.z);
+      if (!boat || d < boat.d) boat = { x: t.x, z: t.z, d };
+    }
+    if (!boat || boat.d < 1) return null;
+    const ux = (home.x - boat.x) / boat.d;
+    const uz = (home.z - boat.z) / boat.d;
+    const nav = ctx.navs.land;
+    let shore = -1;
+    for (let s = 1.5; s < boat.d; s += 1) {
+      const x = boat.x + ux * s;
+      const z = boat.z + uz * s;
+      if (!field.isWater(x, z) && nav.terrainAllowsAt(x, z)) {
+        shore = s;
+        break;
+      }
+    }
+    if (shore < 0) return null;
+    const def = ctx.buildings.shoreBattery;
+    for (const e of world.query(Building, Faction, Transform)) {
+      if (world.req(e, Faction).id !== side || world.req(e, Building).def.id !== def.id) continue;
+      const t = world.req(e, Transform);
+      if (D.hypot(t.x - (boat.x + ux * shore), t.z - (boat.z + uz * shore)) < BATTERY_APART) return null;
+    }
+    // Facing out over the water, toward the boat.
+    const heading = D.atan2(uz, -ux);
+    for (const inland of BATTERY_INLAND) {
+      const x = boat.x + ux * (shore + inland);
+      const z = boat.z + uz * (shore + inland);
+      if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) continue;
+      if (!this.safe(world, ctx, side, x, z, false)) return null;
+      // The engineer works from the landward side.
+      return { kind: 'build', def, x, z, heading, standX: x + ux * STAND_BACK, standZ: z + uz * STAND_BACK, urgent: true };
+    }
+    return null;
   }
 
   /**
@@ -1493,13 +1574,24 @@ export class Engineers {
       this.jobs.delete(e);
       const id = job.def.id;
       const full =
-        id === 'fieldTower' ? this.towers[side] >= TOWERS_MOST : id === 'commsArray' ? this.arrays[side] >= ARRAYS_MOST : id === 'helipad' ? this.pads[side] >= HELIPADS_MOST : job.def.lasts ? this.walls[side] >= WALLS_MOST : false;
+        id === 'fieldTower'
+          ? this.towers[side] >= TOWERS_MOST
+          : id === 'commsArray'
+            ? this.arrays[side] >= ARRAYS_MOST
+            : id === 'helipad'
+              ? this.pads[side] >= HELIPADS_MOST
+              : id === 'shoreBattery'
+                ? this.batteries[side] >= BATTERIES_MOST
+                : job.def.lasts
+                  ? this.walls[side] >= WALLS_MOST
+                  : false;
       if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
       if (id === 'fieldTower') this.towers[side]++;
       else if (id === 'commsArray') this.arrays[side]++;
       else if (id === 'helipad') this.pads[side]++;
+      else if (id === 'shoreBattery') this.batteries[side]++;
       else if (job.def.lasts) this.walls[side]++;
       this.open[side] = Math.max(0, this.open[side] - 1);
     }
