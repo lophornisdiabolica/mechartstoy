@@ -4,6 +4,7 @@ import { defaultSettings } from '../src/game/settings';
 import { MAX_WET } from '../src/game/commander/shortcuts';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
+import { Armed, Health } from '../src/game/components';
 
 const DT = 1 / 30;
 
@@ -78,4 +79,42 @@ describe("boats' danger to land squads", () => {
     // Aircraft don't mind boats any more than the rest.
     expect(map.excess(ctx, 0, 'air', map.usualShare(ctx, 0, 'air'), b.x, b.z + 4)).toBeLessThan(byBoats);
   });
+});
+
+describe('shore batteries', () => {
+  it("a land side's engineer puts one up facing boats that are shelling it", () => {
+    const s = defaultSettings();
+    s.map.water = 1;
+    s.factions[0].doctrine = 'armour';
+    s.factions[1].doctrine = 'armour';
+    const game = new Game(16, { settings: s });
+    const { world, ctx, field } = game;
+    const home = field.baseSites[0];
+    // The nearest boat-deep water to side 0's base.
+    let spot: { x: number; z: number } | null = null;
+    for (let r = home.radius + 4; r < 45 && !spot; r += 2) {
+      for (let a = 0; a < 32 && !spot; a++) {
+        const x = home.x + Math.cos((a / 32) * Math.PI * 2) * r;
+        const z = home.z + Math.sin((a / 32) * Math.PI * 2) * r;
+        if (field.contains(x, z, 4) && ctx.navs.for('naval').fitsAt(x, z, 1)) spot = { x, z };
+      }
+    }
+    expect(spot).not.toBeNull();
+    const boat = spawnUnit(world, ctx, UNIT_DEFS.missileBoat, 1, spot!.x, spot!.z);
+    const eng = ctx.commander.engineers;
+    let built = 0;
+    for (let t = 0; t < 150 && built === 0; t += 2) {
+      // Keep it shelling side 0 (and alive).
+      if (world.isAlive(boat)) {
+        const a = world.req(boat, Armed);
+        a.firedOn = 0;
+        a.firedAt = world.time;
+        world.req(boat, Health).hp = world.req(boat, Health).max;
+      }
+      run(game, 2);
+      built = eng.batteriesOf(0);
+    }
+    expect(built).toBeGreaterThan(0);
+    expect(eng.batteriesOf(1)).toBe(0);
+  }, 120000);
 });
