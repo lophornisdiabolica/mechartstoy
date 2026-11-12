@@ -3,7 +3,7 @@ import { Entity, World } from '../core/ecs';
 import { Armed, Construction, Faction, Renderable, Transform, Wreck } from '../game/components';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
-import { CHARRED } from './models/units';
+import { breakModel, Collapse, stepCollapse } from './wrecks';
 import { SIM_HZ } from '../game/game';
 
 function lerpAngle(a: number, b: number, t: number): number {
@@ -25,6 +25,8 @@ interface ViewEntry {
   sprites: THREE.Sprite[];
   /** How far an aircraft is leaning into its turn now (see ModelRig.bank). */
   roll: number;
+  /** A wreck still falling into its broken pose. */
+  collapse: Collapse | null;
 }
 
 const _ahead = new THREE.Vector3();
@@ -59,7 +61,11 @@ export class EntityView {
   /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
   hidden: ReadonlySet<Entity> | null = null;
 
-  constructor(private readonly world: World) {
+  /** `surface` is the ground height at a world point, which wrecks lie along. */
+  constructor(
+    private readonly world: World,
+    private readonly surface?: (x: number, z: number) => number,
+  ) {
     this.root.name = 'entities';
     this.root.visible = false;
     // Its matrices are brought up to date in sync, just before batching; the renderer needn't do it again.
@@ -107,7 +113,7 @@ export class EntityView {
           if ((o as THREE.Sprite).isSprite) sprites.push(o as THREE.Sprite);
           else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
         });
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0 };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null };
         // Roll after turning, so banking leans along the model's own length.
         obj.rotation.order = 'YXZ';
         this.entries.set(e, entry);
@@ -135,8 +141,14 @@ export class EntityView {
       const scale = w.req(e, Renderable).scale;
       obj.scale.y = construction ? scale * Math.max(0.04, construction.elapsed / construction.duration) : scale;
 
-      if (!entry.wrecked && w.has(e, Wreck)) this.makeWreck(entry);
-      if (entry.wrecked) continue;
+      if (!entry.wrecked && w.has(e, Wreck)) {
+        entry.wrecked = true;
+        entry.collapse = breakModel(obj, e, this.surface);
+      }
+      if (entry.wrecked) {
+        if (entry.collapse && !stepCollapse(obj, entry.collapse, dt)) entry.collapse = null;
+        continue;
+      }
 
       if (rig?.bank) {
         // Lean into the turn: the turn rate over the last tick, eased so it doesn't twitch.
@@ -186,19 +198,6 @@ export class EntityView {
       if (e !== undefined) return e;
     }
     return null;
-  }
-
-  /** Burnt-out look: charred materials and a slight slump. */
-  private makeWreck(entry: ViewEntry): void {
-    entry.wrecked = true;
-    entry.obj.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.isMesh && !mesh.userData.noShadow) mesh.material = CHARRED;
-    });
-    entry.obj.rotation.x = (Math.random() - 0.5) * 0.25;
-    entry.obj.rotation.z = (Math.random() - 0.5) * 0.25;
-    const turret = getRig(entry.obj)?.turret;
-    if (turret) turret.rotation.y += (Math.random() - 0.5) * 0.8;
   }
 
   private remove(e: Entity): void {
