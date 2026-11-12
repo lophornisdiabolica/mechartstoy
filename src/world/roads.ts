@@ -16,7 +16,7 @@ import * as D from '../core/dmath';
 
 type Point = { x: number; z: number };
 /** A town's street end, and where a link road from it starts (see connectTowns). */
-type End = Point & { lead: Point | null };
+type End = Point & { tuck: Point; lead: Point | null };
 
 /** How much a road would rather go round a slope than over it (cost per unit of rise over run). */
 const SLOPE_COST = 8;
@@ -24,6 +24,8 @@ const SLOPE_COST = 8;
 const ON_ROAD = 0.4;
 /** How far past a town's street end a link road runs straight on before it turns off. */
 const LEAD_OUT = 1.5;
+/** How far back up the street a link road starts, under the street's own strip. */
+const TUCK_IN = 0.6;
 
 export function connectTowns(field: Battlefield): number {
   const towns = field.townSites;
@@ -37,7 +39,10 @@ export function connectTowns(field: Battlefield): number {
     return [-1, 1].map((side) => {
       const end = { x: t.x + side * ux * t.radius, z: t.z + side * uz * t.radius };
       const lead = { x: end.x + side * ux * LEAD_OUT, z: end.z + side * uz * LEAD_OUT };
-      return { ...end, lead: field.contains(lead.x, lead.z, 2) && !field.isWater(lead.x, lead.z) ? lead : null };
+      // The link starts a little way back up the street, so the two overlap rather than meeting
+      // edge to edge (where a sliver of ground could show between them on a slope).
+      const tuck = { x: end.x - side * ux * TUCK_IN, z: end.z - side * uz * TUCK_IN };
+      return { ...end, tuck, lead: field.contains(lead.x, lead.z, 2) && !field.isWater(lead.x, lead.z) ? lead : null };
     });
   });
   // Prim's: link the nearest unlinked town to the network until all are in.
@@ -59,7 +64,7 @@ export function connectTowns(field: Battlefield): number {
     if (!best) break;
     linked.push(best.town);
     const { from, to } = best;
-    const path = planRoad(field, from.lead ?? from, to.lead ?? to, from.lead ? from : undefined, to.lead ? to : undefined);
+    const path = planRoad(field, from.lead ?? from, to.lead ?? to, from.lead ? from.tuck : undefined, to.lead ? to.tuck : undefined);
     if (path) {
       field.addRoad(path, STREET_WIDTH);
       built++;

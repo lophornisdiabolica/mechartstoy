@@ -182,6 +182,14 @@ const ROAD_COLOR = 0x77736b;
 const ROAD_EDGE = 0x8f8a7e;
 /** How far across the road the strip samples the ground (it follows the ground's facets at these points). */
 const ROAD_ACROSS = [-1, -0.6, -0.2, 0.2, 0.6, 1];
+/** How far out past each edge the road's skirt reaches, and how far under the ground it ends. */
+const SKIRT_OUT = 0.3;
+const SKIRT_DOWN = 0.12;
+/** How many samples either side of a road sample set its direction (see buildRoad). */
+const TANGENT_SPAN = 2;
+/** How far down a town street's ends dip, and over how long (see buildRoad). */
+const END_DIP = 0.08;
+const END_DIP_LENGTH = 1;
 
 /**
  * A road as a strip draped over the ground, following its line smoothly
@@ -189,16 +197,24 @@ const ROAD_ACROSS = [-1, -0.6, -0.2, 0.2, 0.6, 1];
  * deck is road enough). Null if nothing's left to draw.
  */
 function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
-  // Points every half unit along the line, with their direction.
-  const samples: { x: number; z: number; dx: number; dz: number }[] = [];
+  // Points every half unit along the line.
+  const at: { x: number; z: number }[] = [];
   for (let k = 1; k < road.points.length; k++) {
     const a = road.points[k - 1];
     const b = road.points[k];
     const len = Math.hypot(b.x - a.x, b.z - a.z);
     if (len < 1e-6) continue;
     const steps = Math.max(1, Math.ceil(len / 0.5));
-    for (let s = k === 1 ? 0 : 1; s <= steps; s++) samples.push({ x: a.x + ((b.x - a.x) * s) / steps, z: a.z + ((b.z - a.z) * s) / steps, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len });
+    for (let s = at.length === 0 ? 0 : 1; s <= steps; s++) at.push({ x: a.x + ((b.x - a.x) * s) / steps, z: a.z + ((b.z - a.z) * s) / steps });
   }
+  // Each one's direction is the line's heading over a couple of units round it, so the rows
+  // across the road turn smoothly through a bend instead of folding over each other on its inside.
+  const samples = at.map((p, k) => {
+    const a = at[Math.max(0, k - TANGENT_SPAN)];
+    const b = at[Math.min(at.length - 1, k + TANGENT_SPAN)];
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: p.x, z: p.z, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
+  });
   const positions: number[] = [];
   const colors: number[] = [];
   const fill = new THREE.Color(ROAD_COLOR);
@@ -211,28 +227,66 @@ function buildRoad(field: Battlefield, road: Road): THREE.Mesh | null {
       return new THREE.Vector3(x, meshHeightAt(field, x, z) + 0.04, z);
     });
   const dry = (p: (typeof samples)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
-  const rows = samples.map(row);
-  liftOverGround(field, rows);
+  const lifted = samples.map(row);
+  liftOverGround(field, lifted);
+  // A town's main street (the one straight road: links curve) dips a touch at its ends, so the
+  // link roads tucked into it there (see roads.ts) are drawn on top instead of the two fighting
+  // over the overlap.
+  const along = samples.length;
+  if (road.points.length === 2) lifted.forEach((r, k) => {
+    const fromEnd = Math.min(k, along - 1 - k) * 0.5;
+    if (fromEnd < END_DIP_LENGTH) for (const v of r) v.y -= END_DIP * (1 - fromEnd / END_DIP_LENGTH);
+  });
+  // A skirt down each side, tucked just under the ground beside the road: where the road is lifted
+  // over a crest it hides the gap under the road's edge (which showed as a dark line), and
+  // elsewhere the ground covers it.
+  const rows = lifted.map((r, k) => {
+    const p = samples[k];
+    const skirt = (v: THREE.Vector3, side: number) => {
+      const x = v.x - p.dz * SKIRT_OUT * side;
+      const z = v.z + p.dx * SKIRT_OUT * side;
+      return new THREE.Vector3(x, Math.min(v.y, meshHeightAt(field, x, z)) - SKIRT_DOWN, z);
+    };
+    return [skirt(r[0], -1), ...r, skirt(r[r.length - 1], 1)];
+  });
+  const normals: number[] = [];
+  /** The normal of the triangle a, b, c by its winding. */
+  const up = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+  const last = ROAD_ACROSS.length + 1;
   for (let k = 1; k < samples.length; k++) {
     if (!dry(samples[k - 1]) || !dry(samples[k])) continue;
     const r0 = rows[k - 1];
     const r1 = rows[k];
-    for (let q = 1; q < ROAD_ACROSS.length; q++) {
-      const c = q === 1 || q === ROAD_ACROSS.length - 1 ? edge : fill;
-      for (const v of [r0[q - 1], r1[q - 1], r1[q], r0[q - 1], r1[q], r0[q]]) {
-        positions.push(v.x, v.y, v.z);
-        colors.push(c.r, c.g, c.b);
-      }
+    for (let q = 1; q <= last; q++) {
+      const c = (globalThis as any).NOSH ? (q === 1 || q === last ? new THREE.Color(0xff0000) : q === 2 || q === last - 1 ? new THREE.Color(0x0000ff) : fill) : q <= 2 || q >= last - 1 ? edge : fill;
+      // The skirts are shaded as the road edge beside them, so they read as more of the road's
+      // edge, not as a dark slope.
+      const nq = q === 1 ? 2 : q === last ? last - 1 : q;
+      // Wound anticlockwise seen from above, so only the road's top is drawn: where a strip tips
+      // away past the line of sight (the far side of a crest, a skirt dropping off it) its
+      // underside is culled rather than drawn dark.
+      const tris = [
+        [r0[q - 1], r1[q], r1[q - 1]],
+        [r0[q - 1], r0[q], r1[q]],
+      ];
+      const shade = [up(r0[nq - 1], r1[nq], r1[nq - 1]), up(r0[nq - 1], r0[nq], r1[nq])];
+      tris.forEach((t, n) => {
+        for (const v of t) {
+          positions.push(v.x, v.y, v.z);
+          colors.push(c.r, c.g, c.b);
+          normals.push(shade[n].x, shade[n].y, shade[n].z);
+        }
+      });
     }
   }
   if (positions.length === 0) return null;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
   );
   mesh.receiveShadow = true;
   mesh.name = 'road';
