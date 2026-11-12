@@ -224,7 +224,7 @@ function findPlaces(ctx: SimContext): Shortcut[] {
         }
         if (enter < 0 || land < 0) continue;
         const width = land - enter;
-        if (width < MIN_WET) continue;
+        if (width < MIN_WET || width > MAX_WET) continue;
         const bx = c.x + ux * (land + 1);
         const bz = c.z + uz * (land + 1);
         const spot: Shortcut = { ax: c.x, az: c.z, bx, bz, x: (c.x + bx) / 2, z: (c.z + bz) / 2, ux, uz, wet: width };
