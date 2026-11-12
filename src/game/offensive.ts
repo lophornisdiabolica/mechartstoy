@@ -1,5 +1,5 @@
 import { System, World } from '../core/ecs';
-import { Armed, Faction, Guard, Health, Transform, Unit } from './components';
+import { Armed, Faction, Guard, Health, Mover, Transform, Unit } from './components';
 import { WeaponDef } from './units';
 import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
@@ -42,6 +42,13 @@ const SPENT = 0.45;
 const MAX_ATTACK = 120;
 /** Seconds (on a medium map) after an attack before the next can set out, while the survivors get home. */
 const REGROUP = 45;
+/**
+ * A base under attack only from the water doesn't keep its army home: once
+ * at least this share of the enemy strength near it is afloat (boats
+ * shelling from offshore, where most of an army can't get at them), the
+ * side goes on massing and hits back at the enemy's base, which is on land.
+ */
+const AFLOAT = 0.6;
 
 /** What a team is doing, for the HUD. */
 export type PlanState = 'massing' | 'attacking' | 'regrouping' | 'defending';
@@ -178,7 +185,7 @@ export class Offensive {
       if (plan.state === 'regrouping' && time - plan.since < REGROUP * this.scale) continue;
       // While every one of the team's bases is under attack, it stays home and fights it out first.
       const targeted = this.targetedSides();
-      if (members.every((f) => targeted.has(f))) {
+      if (members.every((f) => targeted.has(f) && !this.shelledFromWater(world, ctx, f))) {
         plan.state = 'defending';
         continue;
       }
@@ -215,6 +222,21 @@ export class Offensive {
       if (t !== null) out.add(t);
     }
     return out;
+  }
+
+  /** Whether the enemy strength near a side's base is mostly afloat (see AFLOAT). */
+  private shelledFromWater(world: World, ctx: SimContext, side: number): boolean {
+    const base = ctx.field.baseSites[side];
+    let afloat = 0;
+    let all = 0;
+    ctx.grid.forEachNear(base.x, base.z, DEFENCE_RANGE, (e) => {
+      const f = world.get(e, Faction);
+      if (!f || !world.has(e, Unit) || !this.sides.hostile(side, f.id)) return;
+      const s = fightingStrength(world, e);
+      all += s;
+      if (world.get(e, Mover)?.move === 'naval') afloat += s;
+    });
+    return all > 0 && afloat >= all * AFLOAT;
   }
 
   /** Strength at an enemy base: its team's units nearby and its armed buildings. */
