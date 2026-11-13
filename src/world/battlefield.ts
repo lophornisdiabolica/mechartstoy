@@ -187,6 +187,22 @@ export const DECK_GRADE = 0.35;
 export interface Road {
   points: { x: number; z: number }[];
   width: number;
+  /** A town's main street, or a road out in the country (see roads.ts). Narrower kinds (alleys) can join later. */
+  kind: RoadKind;
+}
+
+export type RoadKind = 'street' | 'road';
+
+/**
+ * Where roads meet on purpose: one road (the branch) ends on another's line
+ * there, and the renderer draws every road's paving over every road's kerb
+ * so the two read as one (see roads.ts and terrainMesh.ts). Roads are named
+ * by their index in Battlefield.roads.
+ */
+export interface Junction {
+  x: number;
+  z: number;
+  roads: number[];
 }
 
 export interface Bounds {
@@ -206,6 +222,7 @@ export interface CellState {
   heights: Float32Array;
   bridges: Bridge[];
   roads: Road[];
+  junctions: Junction[];
 }
 
 /** Something that wants to know when the map changes (see Battlefield.onChange). */
@@ -219,6 +236,7 @@ export class Battlefield {
   readonly ground: Uint8Array;
   readonly bridges: Bridge[] = [];
   readonly roads: Road[] = [];
+  readonly junctions: Junction[] = [];
   /** Dense forest's trees (see woods.ts). */
   readonly woods: Woods;
   /** Per cell: 1 where a road (see addRoad) covers it, so the terrain leaves its colour to the road strip. */
@@ -307,7 +325,7 @@ export class Battlefield {
       const from = (area.j0 + j) * (cols + 1) + area.i0;
       heights.set(this.heights.subarray(from, from + w + 1), j * (w + 1));
     }
-    return { area, ground, roadCell, bridgeCell, heights, bridges: this.bridges.slice(), roads: this.roads.slice() };
+    return { area, ground, roadCell, bridgeCell, heights, bridges: this.bridges.slice(), roads: this.roads.slice(), junctions: this.junctions.slice() };
   }
 
   /** Copy cells from another copy of this map (see cellState) and tell the listeners. */
@@ -327,6 +345,7 @@ export class Battlefield {
     }
     this.bridges.splice(0, this.bridges.length, ...state.bridges);
     this.roads.splice(0, this.roads.length, ...state.roads);
+    this.junctions.splice(0, this.junctions.length, ...state.junctions);
     this.changed(area);
   }
 
@@ -405,6 +424,11 @@ export class Battlefield {
     return n;
   }
 
+  /** Note that roads meet here (see Junction). Drawing only: the roads' own cells are paved already. */
+  addJunction(junction: Junction): void {
+    this.junctions.push(junction);
+  }
+
   /** Put a bridge on the map (see waterways.ts placeBridge, which picks its ends and level and cuts the banks to fit). */
   addBridge(bridge: Bridge): void {
     const index = this.bridges.length;
@@ -465,11 +489,13 @@ export class Battlefield {
   /**
    * Pave a road along a line of points: road ground on every dry cell within
    * half the width of the line (not on bridges, which are paved already).
-   * Works mid-battle too, like paint.
+   * Works mid-battle too, like paint. Returns the road's index in `roads`
+   * (-1 for a line too short to be one).
    */
-  addRoad(points: { x: number; z: number }[], width: number): void {
-    if (points.length < 2) return;
-    this.roads.push({ points, width });
+  addRoad(points: { x: number; z: number }[], width: number, kind: RoadKind = 'road'): number {
+    if (points.length < 2) return -1;
+    const index = this.roads.length;
+    this.roads.push({ points, width, kind });
     const { cols, cellSize } = this.config;
     const code = groundCode('road');
     const xs = points.map((p) => p.x);
@@ -488,6 +514,7 @@ export class Battlefield {
       }
     }
     this.changed({ i0, j0, i1, j1 });
+    return index;
   }
 
   /** Height of a bridge deck at a point, if a bridge is there and above the ground. */
@@ -750,7 +777,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   for (const t of townSites) {
     const ux = D.cos(t.angle) * t.radius;
     const uz = D.sin(t.angle) * t.radius;
-    field.addRoad([{ x: t.x - ux, z: t.z - uz }, { x: t.x + ux, z: t.z + uz }], STREET_WIDTH);
+    field.addRoad([{ x: t.x - ux, z: t.z - uz }, { x: t.x + ux, z: t.z + uz }], STREET_WIDTH, 'street');
   }
   connectTowns(field);
 
