@@ -51,12 +51,12 @@ import { Shortcuts } from './shortcuts';
  *   from another by land.
  * - Skyline puts up forward helipads at outposts it holds out toward the
  *   enemy, where its aircraft rearm without flying all the way home.
- * - Land armies (everyone but Tidewater) answer boats shelling them: on
- *   their own half of the map, where enemy boats have been firing on the
- *   side, an engineer puts up a shore battery on the nearest dry ground
- *   toward home, a gun that fires flat and hard out over the water. The
- *   boats are what it's there for, so they don't put the engineer off (other
- *   enemies near do), and it may well be shelled while it goes up.
+ * - Land armies (everyone but Tidewater) answer boats shelling them: they
+ *   remember where on their own part of the map enemy boats have fired on
+ *   them from, and once it's quiet there again, an engineer puts up a
+ *   shore battery on the nearest dry ground toward home, a twin-barrelled
+ *   gun that fires flat and hard out over the water, waiting for the next
+ *   time the boats come.
  * - Everyone else throws timber bridges across an enemy Tidewater side's
  *   canals where a bridge cuts the way to the enemy short. They come down
  *   when shelled enough, or after a while; anything on one when it goes
@@ -188,6 +188,9 @@ const BATTERY_APART = 12;
 /** Boats count as shelling a side when they've fired on it this recently, and only on the side's own part of the way to the enemy (a share of it). */
 const SHELLING_WITHIN = 20;
 const BATTERY_REACH = 0.65;
+/** Seconds a place boats shelled the side from is remembered, and how far from a battery's site enemies (boats included) have to be before an engineer goes to put it up. */
+const SHELLED_REMEMBERED = 300;
+const CALM_REACH = 26;
 
 /** Skyline's forward helipads: most a side has standing, how far behind an outpost (toward home) one goes, and how near another counts as already there. */
 export const HELIPADS_MOST = 2;
@@ -357,6 +360,8 @@ export class Engineers {
   private arrays: number[] = [];
   private pads: number[] = [];
   private batteries: number[] = [];
+  /** Per side: places enemy boats have shelled it from, and when last (see batteryJob). */
+  private shelled: { x: number; z: number; at: number }[][] = [];
   private open: number[] = [];
   private trainAt: number[] = [];
   /** Every crumbling building standing or going up, as of the last update plus those put up since (some may be gone). */
@@ -1459,70 +1464,89 @@ export class Engineers {
     ctx.events.emit('span', { faction: span.side, x: mx, z: mz, down: true });
   }
 
-  /** No enemy unit near a point (boats aside, with `boatsToo` false). */
-  private safe(world: World, ctx: SimContext, side: number, x: number, z: number, boatsToo = true): boolean {
+  private safe(world: World, ctx: SimContext, side: number, x: number, z: number): boolean {
     let safe = true;
     ctx.grid.forEachNear(x, z, SAFE_RADIUS, (other) => {
-      if (!safe || world.get(other, Targetable)?.kind !== 'unit' || !ctx.sides.hostile(side, world.req(other, Faction).id)) return;
-      if (!boatsToo && world.get(other, Mover)?.move === 'naval') return;
-      safe = false;
+      if (safe && world.get(other, Targetable)?.kind === 'unit' && ctx.sides.hostile(side, world.req(other, Faction).id)) safe = false;
     });
     return safe;
   }
 
   /**
-   * A shore battery where enemy boats are shelling the side (see the notes
-   * at the top): toward home from the nearest of them that's fired on it
-   * lately, on the first dry ground, a little inland.
+   * A shore battery facing where enemy boats have shelled the side from
+   * (see the notes at the top). Each update the boats firing on the side are
+   * remembered by where they were; once things are quiet at a place facing
+   * one (no enemy, boats included, within CALM_REACH), an engineer goes and
+   * puts a battery up there, toward home from it on the first dry ground,
+   * a little inland, ready for the next time the boats come.
    */
   private batteryJob(world: World, ctx: SimContext, side: number): BuildJob | null {
-    if ((this.batteries[side] ?? 0) >= BATTERIES_MOST) return null;
     const enemy = this.nearestEnemy(ctx, side);
     if (enemy === null) return null;
     const { field } = ctx;
     const home = field.baseSites[side];
-    let boat: { x: number; z: number; d: number } | null = null;
+    // Remember where boats have been shelling the side from.
+    const spots = (this.shelled[side] ??= []);
     for (const e of world.query(Unit, Armed, Faction, Transform, Mover)) {
       if (world.req(e, Mover).move !== 'naval' || !ctx.sides.hostile(side, world.req(e, Faction).id)) continue;
       const a = world.req(e, Armed);
       if (a.firedOn === null || !ctx.sides.allied(a.firedOn, side) || world.time - a.firedAt > SHELLING_WITHIN) continue;
       const t = world.req(e, Transform);
       if (ctx.lanes.progress(side, enemy, t.x, t.z) > BATTERY_REACH) continue;
-      const d = D.hypot(t.x - home.x, t.z - home.z);
-      if (!boat || d < boat.d) boat = { x: t.x, z: t.z, d };
+      const near = spots.find((p) => D.hypot(p.x - t.x, p.z - t.z) < BATTERY_APART);
+      if (near) near.at = world.time;
+      else spots.push({ x: t.x, z: t.z, at: world.time });
     }
-    if (!boat || boat.d < 1) return null;
-    const ux = (home.x - boat.x) / boat.d;
-    const uz = (home.z - boat.z) / boat.d;
-    const nav = ctx.navs.land;
-    let shore = -1;
-    for (let s = 1.5; s < boat.d; s += 1) {
-      const x = boat.x + ux * s;
-      const z = boat.z + uz * s;
-      if (!field.isWater(x, z) && nav.terrainAllowsAt(x, z)) {
-        shore = s;
-        break;
-      }
-    }
-    if (shore < 0) return null;
+    for (let k = spots.length - 1; k >= 0; k--) if (world.time - spots[k].at > SHELLED_REMEMBERED) spots.splice(k, 1);
+    if ((this.batteries[side] ?? 0) >= BATTERIES_MOST || spots.length === 0) return null;
     const def = ctx.buildings.shoreBattery;
+    const nav = ctx.navs.land;
+    const standing: Point[] = [];
     for (const e of world.query(Building, Faction, Transform)) {
       if (world.req(e, Faction).id !== side || world.req(e, Building).def.id !== def.id) continue;
-      const t = world.req(e, Transform);
-      if (D.hypot(t.x - (boat.x + ux * shore), t.z - (boat.z + uz * shore)) < BATTERY_APART) return null;
+      standing.push(world.req(e, Transform));
     }
-    // Facing out over the water, toward the boat.
-    const heading = D.atan2(uz, -ux);
-    for (const inland of BATTERY_INLAND) {
-      const x = boat.x + ux * (shore + inland);
-      const z = boat.z + uz * (shore + inland);
-      if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) continue;
-      if (!this.safe(world, ctx, side, x, z, false)) return null;
-      // The engineer works from the landward side.
-      return { kind: 'build', def, x, z, heading, standX: x + ux * STAND_BACK, standZ: z + uz * STAND_BACK, urgent: true };
+    // The places shelled from most lately first.
+    for (const spot of [...spots].sort((p, q) => q.at - p.at)) {
+      const d = D.hypot(home.x - spot.x, home.z - spot.z);
+      if (d < 1) continue;
+      const ux = (home.x - spot.x) / d;
+      const uz = (home.z - spot.z) / d;
+      let shore = -1;
+      for (let s = 1.5; s < d; s += 1) {
+        const x = spot.x + ux * s;
+        const z = spot.z + uz * s;
+        if (!field.isWater(x, z) && nav.terrainAllowsAt(x, z)) {
+          shore = s;
+          break;
+        }
+      }
+      if (shore < 0) continue;
+      if (standing.some((b) => D.hypot(b.x - (spot.x + ux * shore), b.z - (spot.z + uz * shore)) < BATTERY_APART)) continue;
+      // Facing out over the water, toward where the boats were.
+      const heading = D.atan2(uz, -ux);
+      for (const inland of BATTERY_INLAND) {
+        const x = spot.x + ux * (shore + inland);
+        const z = spot.z + uz * (shore + inland);
+        if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) continue;
+        // Only once it's quiet there: not into the middle of a fight.
+        if (!this.calm(world, ctx, side, x, z)) break;
+        // The engineer works from the landward side.
+        return { kind: 'build', def, x, z, heading, standX: x + ux * STAND_BACK, standZ: z + uz * STAND_BACK, urgent: true };
+      }
     }
     return null;
   }
+
+  /** No enemy unit (boats included) within CALM_REACH of a point. */
+  private calm(world: World, ctx: SimContext, side: number, x: number, z: number): boolean {
+    let calm = true;
+    ctx.grid.forEachNear(x, z, CALM_REACH, (other) => {
+      if (calm && world.get(other, Targetable)?.kind === 'unit' && ctx.sides.hostile(side, world.req(other, Faction).id)) calm = false;
+    });
+    return calm;
+  }
+
 
   /**
    * Each tick: an engineer at its spot puts up its building or digs, a

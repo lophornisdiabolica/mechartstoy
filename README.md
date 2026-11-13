@@ -838,12 +838,13 @@ outposts and the light scenery are still placed once, at the start.
   an urgent job for an engineer, even out past the front and even where
   there's a way round already; it can be shot off the job, and the
   bridge shelled down. Up to two shortcuts a side (three bridges in all).
-- **Shore batteries** (`game/commander/engineers.ts`). Where enemy boats
-  have fired on a land side (everyone but Tidewater) in the last 20 s on
-  its own part of the map, an engineer puts up a shore battery on the
-  first dry ground toward home, facing them: a flat-firing gun (range 24,
-  42 a shot) that crumbles in 15 minutes like the walls. Up to three a
-  side; the boats don't put the engineer off, other enemies do.
+- **Shore batteries** (`game/commander/engineers.ts`). A land side
+  (everyone but Tidewater) remembers, for five minutes, where on its own
+  part of the map enemy boats have fired on it from. Once it's quiet there
+  (no enemy, boats included, within 26 units), an engineer puts up a shore
+  battery on the first dry ground toward home, facing the water: a squat,
+  twin-barrelled gun (range 24, 42 a shot) waiting for the next time the
+  boats come. It crumbles in 15 minutes like the walls. Up to three a side.
 - **Not pinned by boats** (`game/offensive.ts`). A base under attack
   only from the water (at least 60% of the enemy strength near it
   afloat) doesn't keep its army home: the side goes on massing and hits

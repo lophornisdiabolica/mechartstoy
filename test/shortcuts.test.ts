@@ -82,7 +82,7 @@ describe("boats' danger to land squads", () => {
 });
 
 describe('shore batteries', () => {
-  it("a land side's engineer puts one up facing boats that are shelling it", () => {
+  it("a land side's engineer puts one up facing where boats shelled it from, once it's quiet", () => {
     const s = defaultSettings();
     s.map.water = 1;
     s.factions[0].doctrine = 'armour';
@@ -102,15 +102,19 @@ describe('shore batteries', () => {
     expect(spot).not.toBeNull();
     const boat = spawnUnit(world, ctx, UNIT_DEFS.missileBoat, 1, spot!.x, spot!.z);
     const eng = ctx.commander.engineers;
+    // It shells side 0 for a while: no battery goes up in the middle of that.
+    for (let t = 0; t < 20; t += 2) {
+      const a = world.req(boat, Armed);
+      a.firedOn = 0;
+      a.firedAt = world.time;
+      world.req(boat, Health).hp = world.req(boat, Health).max;
+      run(game, 2);
+      expect(eng.batteriesOf(0)).toBe(0);
+    }
+    // Then it's gone, and once it's quiet an engineer puts one up facing where it was.
+    world.req(boat, Health).hp = 0;
     let built = 0;
     for (let t = 0; t < 150 && built === 0; t += 2) {
-      // Keep it shelling side 0 (and alive).
-      if (world.isAlive(boat)) {
-        const a = world.req(boat, Armed);
-        a.firedOn = 0;
-        a.firedAt = world.time;
-        world.req(boat, Health).hp = world.req(boat, Health).max;
-      }
       run(game, 2);
       built = eng.batteriesOf(0);
     }

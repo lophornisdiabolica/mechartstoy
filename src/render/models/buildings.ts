@@ -315,6 +315,26 @@ registerModel('bld:bigGun', (faction) => {
   return setRig(g, { turret });
 });
 
+/** Land armies' shore battery: a low sandbagged ring with a squat, wide turret behind a shield plate and two short barrels side by side. */
+registerModel('bld:shoreBattery', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.1, 1.25, 0.45, 8, 0x8f8a7c, 0, 0.22, 0)); // sandbag ring
+  g.add(cylinder(1.12, 1.12, 0.08, 8, secondary, 0, 0.48, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.52;
+  turret.add(box(1.0, 0.42, 1.1, primary, -0.15, 0.21, 0));
+  turret.add(box(0.14, 0.5, 1.2, METAL, 0.38, 0.27, 0)); // shield plate
+  for (const z of [-0.24, 0.24]) {
+    const barrel = box(0.95, 0.16, 0.16, DARK, 0.85, 0.3, z);
+    barrel.rotation.z = 0.08;
+    turret.add(barrel);
+    turret.add(box(0.14, 0.22, 0.22, METAL, 1.3, 0.33, z)); // muzzle brake
+  }
+  g.add(turret);
+  return setRig(g, { turret });
+});
+
 /** A comms relay: a guyed lattice mast with dishes, and a radio hut at its foot. */
 registerModel('bld:relayMast', (faction) => {
   const { primary, secondary } = factionColors(faction);
