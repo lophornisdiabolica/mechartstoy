@@ -177,6 +177,27 @@ function meshHeightAt(field: Battlefield, x: number, z: number): number {
   return fx + fz < 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
 }
 
+/** The up-facing normal of the ground mesh's facet at (x, z) (the facet meshHeightAt reads). */
+function groundNormal(field: Battlefield, x: number, z: number): THREE.Vector3 {
+  const { cellSize, cols, rows } = field.config;
+  const gx = Math.max(0, Math.min(cols - 1e-6, (x - field.bounds.minX) / cellSize));
+  const gz = Math.max(0, Math.min(rows - 1e-6, (z - field.bounds.minZ) / cellSize));
+  const i = Math.floor(gx);
+  const j = Math.floor(gz);
+  const fx = gx - i;
+  const fz = gz - j;
+  const h00 = field.vertexHeight(i, j);
+  const h10 = field.vertexHeight(i + 1, j);
+  const h01 = field.vertexHeight(i, j + 1);
+  const h11 = field.vertexHeight(i + 1, j + 1);
+  // The facet's rise per cell across x and z, by the same diagonals as meshHeightAt.
+  let sx: number;
+  let sz: number;
+  if ((i + j) % 2 === 0) [sx, sz] = fx < fz ? [h11 - h01, h01 - h00] : [h10 - h00, h11 - h10];
+  else [sx, sz] = fx + fz < 1 ? [h10 - h00, h01 - h00] : [h11 - h01, h11 - h10];
+  return new THREE.Vector3(-sx / cellSize, 1, -sz / cellSize).normalize();
+}
+
 const ROAD_COLOR = 0x77736b;
 const ROAD_EDGE = 0x8f8a7e;
 /** How far across the road the strip samples the ground (it follows the ground's facets at these points). */
@@ -283,45 +304,30 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
     });
   }
   liftOverGround(field, lifted);
-  /** The normal of the triangle a, b, c by its winding. */
-  const up = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
   // Two layers: the kerb, the whole width in the edge colour, and the paving down the middle,
   // drawn after every kerb (see layerMesh). Every road's paving then covers every road's kerb, so
   // where roads fork, cross or overlap they read as one road, with kerb only round the outside.
   const kerb: Layer = { positions: [], colors: [], normals: [] };
   const paving: Layer = { positions: [], colors: [], normals: [] };
   const last = ROAD_ACROSS.length - 1;
-  // Smooth shading: each point's normal is the average of the road's quads round it, so long panels
-  // on rough ground shade into each other instead of showing a crease at every row.
-  const faces = lifted.map((r1, k) =>
-    r1.map((_, q) => {
-      if (k === 0 || q < 1) return null;
-      const r0 = lifted[k - 1];
-      return up(r0[q - 1], r1[q], r1[q - 1]).add(up(r0[q - 1], r0[q], r1[q]));
-    }),
-  );
-  const normals = lifted.map((r, k) =>
-    r.map((_, c) => {
-      const n = new THREE.Vector3();
-      for (const kk of [k, k + 1]) for (const q of [c, c + 1]) if (faces[kk]?.[q]) n.add(faces[kk][q]!);
-      return n.lengthSq() > 0 ? n.normalize() : new THREE.Vector3(0, 1, 0);
-    }),
-  );
   /**
    * A quad from row a (earlier) to row b (later), 0 the left-hand corner and 1 the right.
    * Wound anticlockwise seen from above, so only its top is drawn: where the strip tips away past
    * the line of sight (the far side of a crest, an embankment dropping off it) its underside is
    * culled rather than drawn dark.
+   * Each triangle is lit as the ground facet under its middle is, flat: the road takes the light
+   * and shade of the ground it lies on, facet for facet, so it reads as part of the low-poly
+   * ground rather than a smooth ribbon laid over it (smoothed normals, or the strip's own, gave
+   * raised roads and their banks a rounded look with a shaded edge of their own).
    */
-  const quad = (a0: THREE.Vector3, a1: THREE.Vector3, b0: THREE.Vector3, b1: THREE.Vector3, n: THREE.Vector3[], paved: boolean) => {
-    const tris = [
-      [a0, b1, b0, n[0], n[3], n[2]],
-      [a0, a1, b1, n[0], n[1], n[3]],
-    ];
-    for (const t of tris) {
-      for (let m = 0; m < 3; m++) {
-        const v = t[m];
-        const nv = t[m + 3];
+  const quad = (a0: THREE.Vector3, a1: THREE.Vector3, b0: THREE.Vector3, b1: THREE.Vector3, paved: boolean) => {
+    for (const t of [
+      [a0, b1, b0],
+      [a0, a1, b1],
+    ]) {
+      const own = new THREE.Vector3().subVectors(t[1], t[0]).cross(new THREE.Vector3().subVectors(t[2], t[0])).normalize();
+      const nv = groundNormal(field, (t[0].x + t[1].x + t[2].x) / 3, (t[0].z + t[1].z + t[2].z) / 3).add(own).normalize();
+      for (const v of t) {
         kerb.positions.push(v.x, v.y, v.z);
         kerb.colors.push(edge.r, edge.g, edge.b);
         kerb.normals.push(nv.x, nv.y, nv.z);
@@ -348,15 +354,13 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   // rows from these (measured at every step, it jumped about with the ground's facets and gave the
   // bank a ragged foot).
   const rises = lifted.map((r) => [r[0], r[last]].map((v) => Math.max(0, v.y - meshHeightAt(field, v.x, v.z))));
-  /** An embankment face's normal: halfway between its slope's own and the road edge's above it, so it reads as more of the kerb, shaded a little as a bank. */
-  const bank = (edgeN: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => up(a, b, c).add(edgeN).normalize();
   const drawn = (k: number) => k >= 1 && k < samples.length && dry(samples[k - 1]) && dry(samples[k]);
   for (let k = 1; k < samples.length; k++) {
     if (!drawn(k)) continue;
     const r0 = lifted[k - 1];
     const r1 = lifted[k];
     for (let q = 1; q <= last; q++) {
-      quad(r0[q - 1], r0[q], r1[q - 1], r1[q], [normals[k - 1][q - 1], normals[k - 1][q], normals[k][q - 1], normals[k][q]], q > 1 && q < last);
+      quad(r0[q - 1], r0[q], r1[q - 1], r1[q], q > 1 && q < last);
     }
     // An embankment down each side, its foot following the ground every half unit or so (between
     // rows up to ROW_MAX apart the ground can dip away under the road's straight edge, and a foot
@@ -368,7 +372,6 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
       const steps = Math.max(1, Math.ceil(r0[e].distanceTo(r1[e]) / 0.5));
       let prevTop = r0[e];
       let prevFoot: THREE.Vector3 | null = null;
-      let prevN = normals[k - 1][e];
       for (let s = 0; s <= steps; s++) {
         const t = s / steps;
         const top = new THREE.Vector3().lerpVectors(r0[e], r1[e], t);
@@ -377,16 +380,12 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
         const len = Math.hypot(dx, dz) || 1;
         const ri = side < 0 ? 0 : 1;
         const f = foot(top, (-dz / len) * side, (dx / len) * side, rises[k - 1][ri] + (rises[k][ri] - rises[k - 1][ri]) * t);
-        const n = new THREE.Vector3().lerpVectors(normals[k - 1][e], normals[k][e], t).normalize();
         if (prevFoot) {
-          const nf = bank(n, prevFoot, top, f);
-          const nfPrev = bank(prevN, prevFoot, top, f);
-          if (side < 0) quad(prevFoot, prevTop, f, top, [nfPrev, prevN, nf, n], false);
-          else quad(prevTop, prevFoot, top, f, [prevN, nfPrev, n, nf], false);
+          if (side < 0) quad(prevFoot, prevTop, f, top, false);
+          else quad(prevTop, prevFoot, top, f, false);
         }
         prevTop = top;
         prevFoot = f;
-        prevN = n;
       }
     }
   }
@@ -403,13 +402,9 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
     // The end's own row with the side feet at its corners, and the feet out beyond it.
     const row = [foot(r[0], dz, -dx), ...r, foot(r[last], -dz, dx)];
     const toe = row.map((v, c) => (c === 0 || c === row.length - 1 ? v : foot(v, dx * sign, dz * sign)));
-    const n = normals[k];
-    const rowN = [n[0], ...n, n[last]];
     for (let q = 1; q < row.length; q++) {
       const [a0, a1, b0, b1] = start ? [toe[q - 1], toe[q], row[q - 1], row[q]] : [row[q - 1], row[q], toe[q - 1], toe[q]];
-      const faceN = up(a0, b1, b0);
-      const toeN = [rowN[q - 1], rowN[q]].map((m) => faceN.clone().add(m).normalize());
-      quad(a0, a1, b0, b1, start ? [toeN[0], toeN[1], rowN[q - 1], rowN[q]] : [rowN[q - 1], rowN[q], toeN[0], toeN[1]], false);
+      quad(a0, a1, b0, b1, false);
     }
   }
   if (kerb.positions.length === 0) return null;
