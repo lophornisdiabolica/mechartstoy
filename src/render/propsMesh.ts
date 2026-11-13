@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
+import { Battlefield } from '../world/battlefield';
 import { Prop, PropKind } from '../world/props';
 
 interface PropStyle {
@@ -125,8 +126,17 @@ function mergeNonIndexed(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
-/** Scenery is drawn with one InstancedMesh per prop kind, so hundreds cost a couple of draw calls. */
-export function buildProps(props: Prop[], rng: Rng): THREE.Group {
+/** How far the ground can drop under a plant before it's torn out (a quake, the land brush, a crater). */
+const UPROOT_DROP = 0.3;
+
+/**
+ * Scenery is drawn with one InstancedMesh per prop kind, so hundreds cost a
+ * couple of draw calls. When the ground under a prop moves, rocks go with it
+ * (sinking into a crater or under the water); plants follow ground that rises
+ * but are gone once the ground drops away from them or floods. Stops listening
+ * when `dispose` (on the returned group's userData) is called.
+ */
+export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.Group {
   // Geometry is built only for the kinds this map has.
   const styles: Record<PropKind, () => PropStyle> = {
     tree: () => ({ geometry: treeGeometry(), color: 0x4f7a3c, baseOffset: -0.05 }),
@@ -140,6 +150,27 @@ export function buildProps(props: Prop[], rng: Rng): THREE.Group {
   const group = new THREE.Group();
   group.name = 'props';
   const dummy = new THREE.Object3D();
+  /** Each drawn prop: its mesh and instance, the height it stands at now, and whether it's been torn out. */
+  interface Drawn {
+    prop: Prop;
+    mesh: THREE.InstancedMesh;
+    instance: number;
+    offset: number;
+    y: number;
+    /** The highest the ground under it has been (a land brush lowers it a little at a time). */
+    root: number;
+    gone: boolean;
+  }
+  /** The drawn props by map cell, so a change to some cells finds its props quickly. */
+  const byCell = new Map<number, Drawn[]>();
+  const { cols } = field.config;
+  const place = (d: Drawn) => {
+    dummy.position.set(d.prop.x, d.y + d.offset * d.prop.scale, d.prop.z);
+    dummy.rotation.set(0, d.prop.rotation, 0);
+    dummy.scale.setScalar(d.gone ? 0 : d.prop.scale);
+    dummy.updateMatrix();
+    d.mesh.setMatrixAt(d.instance, dummy.matrix);
+  };
 
   for (const kind of Object.keys(styles) as PropKind[]) {
     const list = props.filter((p) => p.kind === kind);
@@ -149,17 +180,44 @@ export function buildProps(props: Prop[], rng: Rng): THREE.Group {
     const mesh = new THREE.InstancedMesh(style.geometry, material, list.length);
     const base = new THREE.Color(style.color);
     list.forEach((p, i) => {
-      dummy.position.set(p.x, p.y + style.baseOffset * p.scale, p.z);
-      dummy.rotation.set(0, p.rotation, 0);
-      dummy.scale.setScalar(p.scale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
+      const d: Drawn = { prop: p, mesh, instance: i, offset: style.baseOffset, y: p.y, root: p.y, gone: false };
+      place(d);
       mesh.setColorAt(i, base.clone().offsetHSL(rng.range(-0.03, 0.03), 0, rng.range(-0.06, 0.06)));
+      const [ci, cj] = field.cellAt(p.x, p.z);
+      const key = cj * cols + ci;
+      let cell = byCell.get(key);
+      if (!cell) byCell.set(key, (cell = []));
+      cell.push(d);
     });
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
   }
+
+  const stop = field.onChange((area) => {
+    const moved = new Set<THREE.InstancedMesh>();
+    // A cell's corners are shared with its neighbours, so look one cell further out.
+    for (let j = area.j0 - 1; j <= area.j1 + 1; j++) {
+      for (let i = area.i0 - 1; i <= area.i1 + 1; i++) {
+        if (i < 0 || i >= cols) continue;
+        for (const d of byCell.get(j * cols + i) ?? []) {
+          if (d.gone) continue;
+          const h = field.heightAt(d.prop.x, d.prop.z);
+          if (Math.abs(h - d.y) < 1e-4) continue;
+          if (d.prop.kind !== 'rock' && (h < d.root - UPROOT_DROP || h < field.seaLevel + 0.05)) d.gone = true;
+          d.y = h;
+          d.root = Math.max(d.root, h);
+          place(d);
+          moved.add(d.mesh);
+        }
+      }
+    }
+    for (const mesh of moved) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  });
+  group.userData.dispose = stop;
   return group;
 }
 

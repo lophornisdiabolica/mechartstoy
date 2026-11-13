@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GARRISON } from '../game/components';
+import type { Rng } from '../core/rng';
 import { FACTIONS, FactionDef } from '../game/factions';
 
 /**
@@ -30,7 +31,15 @@ export interface ModelRig {
   faceVelocity?: boolean;
   /** Aircraft: lean into turns, this many radians of roll per radian a second of turning (planes most). */
   bank?: number;
+  /** Aircraft: shot down, they come down nose first (see render/wrecks.ts). */
+  flies?: boolean;
   animate?(state: AnimState): void;
+  /**
+   * Walkers: pose the legs and body broken, for a wreck (buckled, keeled
+   * over, toppled), and return the part to drop until the wreck rests on the
+   * ground. The entity view eases the parts from where they were.
+   */
+  wreck?(rng: Rng): THREE.Object3D;
 }
 
 export function setRig(obj: THREE.Object3D, rig: ModelRig): THREE.Object3D {
