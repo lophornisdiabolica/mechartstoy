@@ -647,6 +647,16 @@ export class SetupScreen {
     row(armies, 'Gun hunts', huntLabel);
     armies.append(el('p', { class: 'hint' }, 'A howitzer or rocket truck shelling a side from far behind the enemy’s lines gets hunted: the Commander sends its fastest squads to kill it, swinging round a flank first if the enemy’s army is in the way.'));
     this.sync.push(() => (hunt.checked = this.settings.armies.hunts));
+    const span = el('input', { type: 'checkbox', 'aria-label': 'Bridge shortcuts' });
+    span.addEventListener('change', () => {
+      this.settings.armies.shortcuts = span.checked;
+      this.changed();
+    });
+    const spanLabel = el('label', { class: 'check' });
+    spanLabel.append(span, document.createTextNode(' Bridge shortcuts over water'));
+    row(armies, 'Shortcuts', spanLabel);
+    armies.append(el('p', { class: 'hint' }, 'Land armies’ Commanders look along the shores for narrow water where a bridge would make the way to the enemy, or to an outpost on the next island, much shorter, and send an engineer to throw one across, even out past the front.'));
+    this.sync.push(() => (span.checked = this.settings.armies.shortcuts));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
     slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);

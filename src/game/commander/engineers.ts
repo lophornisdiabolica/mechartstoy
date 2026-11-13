@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Construction, Faction, Health, Hit, Mover, Rubble, Targetable, Transform, Unit } from '../components';
+import { Armed, Building, Construction, Faction, Health, Hit, Mover, Rubble, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { spawnSpot } from '../systems/production';
 import { spawnBuilding, spawnUnit } from '../spawn';
@@ -14,6 +14,7 @@ import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
 import * as D from '../../core/dmath';
 import { Crossings, Danger, Gap } from './crossings';
+import { Shortcuts } from './shortcuts';
 
 /*
  * Engineers (Commander step 6, and the doctrine jobs after it). Every
@@ -50,6 +51,12 @@ import { Crossings, Danger, Gap } from './crossings';
  *   from another by land.
  * - Skyline puts up forward helipads at outposts it holds out toward the
  *   enemy, where its aircraft rearm without flying all the way home.
+ * - Land armies (everyone but Tidewater) answer boats shelling them: they
+ *   remember where on their own part of the map enemy boats have fired on
+ *   them from, and once it's quiet there again, an engineer puts up a
+ *   shore battery on the nearest dry ground toward home, a twin-barrelled
+ *   gun that fires flat and hard out over the water, waiting for the next
+ *   time the boats come.
  * - Everyone else throws timber bridges across an enemy Tidewater side's
  *   canals where a bridge cuts the way to the enemy short. They come down
  *   when shelled enough, or after a while; anything on one when it goes
@@ -174,13 +181,26 @@ const BASIN_OUT = [9, 12, 15];
 const LEGION_WALL_AHEAD = 5.5;
 const LEGION_WALL_OFF = 3.2;
 
+/** Shore batteries: most a side has standing, how far inland of the water's edge one goes (tried in turn till it fits), and how near another counts as there already. */
+export const BATTERIES_MOST = 3;
+const BATTERY_INLAND = [2.5, 4, 6];
+const BATTERY_APART = 12;
+/** Boats count as shelling a side when they've fired on it this recently, and only on the side's own part of the way to the enemy (a share of it). */
+const SHELLING_WITHIN = 20;
+const BATTERY_REACH = 0.65;
+/** Seconds a place boats shelled the side from is remembered, and how far from a battery's site enemies (boats included) have to be before an engineer goes to put it up. */
+const SHELLED_REMEMBERED = 300;
+const CALM_REACH = 26;
+
 /** Skyline's forward helipads: most a side has standing, how far behind an outpost (toward home) one goes, and how near another counts as already there. */
 export const HELIPADS_MOST = 2;
 const HELIPAD_BACK = 6;
 const HELIPAD_APART = 14;
 
 /** Engineers' bridges: most a side has standing, how far either side of a canal's middle the ends go, seconds to put one up, health and armour, and how long one lasts. */
-export const SPANS_MOST = 2;
+export const SPANS_MOST = 3;
+/** Of those, most a side has standing as shortcuts its Commander chose (see shortcuts.ts), so one's always left for a gap or a canal. */
+export const SHORTCUTS_MOST = 2;
 const SPAN_HALF = CANAL_HALF + 2.6;
 const SPAN_BUILD = 10;
 const SPAN_HP = 600;
@@ -259,6 +279,8 @@ export interface BridgeJob {
   urgent?: boolean;
   /** Bridging a gap in the way across (see crossingJobs): engineers at it don't shoot each other's crews. */
   crossing?: boolean;
+  /** A shortcut the side's Commander chose (see shortcuts.ts). */
+  shortcut?: boolean;
 }
 
 /** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
@@ -267,6 +289,8 @@ interface Span {
   side: number;
   hp: number;
   until: number;
+  /** A shortcut the side's Commander chose (see shortcuts.ts). */
+  shortcut?: boolean;
 }
 
 /** A stretch of ground being dug or raised: a canal, a trench, or a berm. */
@@ -335,6 +359,9 @@ export class Engineers {
   private towers: number[] = [];
   private arrays: number[] = [];
   private pads: number[] = [];
+  private batteries: number[] = [];
+  /** Per side: places enemy boats have shelled it from, and when last (see batteryJob). */
+  private shelled: { x: number; z: number; at: number }[][] = [];
   private open: number[] = [];
   private trainAt: number[] = [];
   /** Every crumbling building standing or going up, as of the last update plus those put up since (some may be gone). */
@@ -367,6 +394,8 @@ export class Engineers {
   private chokes = new Map<string, { version: number; site: Site | null }>();
   /** Whether there's a way across for big units, and where it's cut (see crossings.ts). */
   readonly crossings = new Crossings();
+  /** Where each land army's Commander wants a bridge of its own (see shortcuts.ts). */
+  readonly shortcuts = new Shortcuts();
   /** Fills planned or done, by where they go (one stretch is never planned twice). */
   private fills = new Map<string, Earthwork>();
   /** Per side: the bridge it's throwing over a gap in the way across, kept while the gap's there so the site doesn't wander as the fill creeps on. */
@@ -414,6 +443,11 @@ export class Engineers {
     return this.arrays[side] ?? 0;
   }
 
+  /** Shore batteries a side has standing. */
+  batteriesOf(side: number): number {
+    return this.batteries[side] ?? 0;
+  }
+
   /** Forward helipads a side has standing. */
   padsOf(side: number): number {
     return this.pads[side] ?? 0;
@@ -422,6 +456,11 @@ export class Engineers {
   /** Engineers' bridges a side has standing. */
   spansOf(side: number): number {
     return this.spans.filter((s) => s.side === side).length;
+  }
+
+  /** Of those, the shortcuts its Commander chose (see shortcuts.ts). */
+  shortcutsOf(side: number): number {
+    return this.spans.filter((s) => s.side === side && s.shortcut).length;
   }
 
   /** Metres of canal a side has dug. */
@@ -445,6 +484,7 @@ export class Engineers {
     this.towers = new Array(n).fill(0);
     this.arrays = new Array(n).fill(0);
     this.pads = new Array(n).fill(0);
+    this.batteries = new Array(n).fill(0);
     this.open = new Array(n).fill(0);
     this.waits = new Array(n).fill(null);
     while (this.lines.length < n) {
@@ -468,6 +508,7 @@ export class Engineers {
       if (f < 0 || f >= n || !def.lasts) continue;
       if (def.id === 'fieldTower') this.towers[f]++;
       else if (def.id === 'commsArray') this.arrays[f]++;
+      else if (def.id === 'shoreBattery') this.batteries[f]++;
       else this.walls[f]++;
       this.crumbling.push(e);
     }
@@ -547,6 +588,10 @@ export class Engineers {
     if (doctrine !== 'tidewater') {
       const span = this.bridgeJob(world, ctx, side);
       if (span) out.push(span);
+      const shortcut = this.shortcutJob(world, ctx, side);
+      if (shortcut) out.push(shortcut);
+      const battery = this.batteryJob(world, ctx, side);
+      if (battery) out.push(battery);
     }
     for (const site of sites) {
       const heading = D.atan2(-site.dz, site.dx);
@@ -1170,6 +1215,26 @@ export class Engineers {
   }
 
   /**
+   * A bridge where the side's Commander wants one (see shortcuts.ts): over
+   * narrow water that makes the way to the enemy base, or to outposts it
+   * doesn't hold, much shorter, even out past the front.
+   */
+  private shortcutJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
+    if (!ctx.settings.armies.shortcuts || this.spansOf(side) >= SPANS_MOST || this.shortcutsOf(side) >= SHORTCUTS_MOST) return null;
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const pick = this.shortcuts.pick(world, ctx, side, enemy);
+    if (!pick) return null;
+    const s = pick.spot;
+    // The engineer stands a little back from the near end.
+    const stand = { x: s.ax - s.ux * 1.5, z: s.az - s.uz * 1.5 };
+    const foot = ctx.navs.for('foot');
+    const at = foot.terrainAllowsAt(stand.x, stand.z) ? stand : { x: s.ax, z: s.az };
+    if (!this.safe(world, ctx, side, at.x, at.z)) return null;
+    return { kind: 'bridge', ax: s.ax, az: s.az, bx: s.bx, bz: s.bz, x: s.x, z: s.z, standX: at.x, standZ: at.z, urgent: true, shortcut: true };
+  }
+
+  /**
    * Where there's no way from a side's base to its nearest enemy's wide
    * enough for a super unit (see crossings.ts): the next stretch of the gap
    * to fill in, and a bridge over it meanwhile if it's short enough.
@@ -1408,6 +1473,82 @@ export class Engineers {
   }
 
   /**
+   * A shore battery facing where enemy boats have shelled the side from
+   * (see the notes at the top). Each update the boats firing on the side are
+   * remembered by where they were; once things are quiet at a place facing
+   * one (no enemy, boats included, within CALM_REACH), an engineer goes and
+   * puts a battery up there, toward home from it on the first dry ground,
+   * a little inland, ready for the next time the boats come.
+   */
+  private batteryJob(world: World, ctx: SimContext, side: number): BuildJob | null {
+    const enemy = this.nearestEnemy(ctx, side);
+    if (enemy === null) return null;
+    const { field } = ctx;
+    const home = field.baseSites[side];
+    // Remember where boats have been shelling the side from.
+    const spots = (this.shelled[side] ??= []);
+    for (const e of world.query(Unit, Armed, Faction, Transform, Mover)) {
+      if (world.req(e, Mover).move !== 'naval' || !ctx.sides.hostile(side, world.req(e, Faction).id)) continue;
+      const a = world.req(e, Armed);
+      if (a.firedOn === null || !ctx.sides.allied(a.firedOn, side) || world.time - a.firedAt > SHELLING_WITHIN) continue;
+      const t = world.req(e, Transform);
+      if (ctx.lanes.progress(side, enemy, t.x, t.z) > BATTERY_REACH) continue;
+      const near = spots.find((p) => D.hypot(p.x - t.x, p.z - t.z) < BATTERY_APART);
+      if (near) near.at = world.time;
+      else spots.push({ x: t.x, z: t.z, at: world.time });
+    }
+    for (let k = spots.length - 1; k >= 0; k--) if (world.time - spots[k].at > SHELLED_REMEMBERED) spots.splice(k, 1);
+    if ((this.batteries[side] ?? 0) >= BATTERIES_MOST || spots.length === 0) return null;
+    const def = ctx.buildings.shoreBattery;
+    const nav = ctx.navs.land;
+    const standing: Point[] = [];
+    for (const e of world.query(Building, Faction, Transform)) {
+      if (world.req(e, Faction).id !== side || world.req(e, Building).def.id !== def.id) continue;
+      standing.push(world.req(e, Transform));
+    }
+    // The places shelled from most lately first.
+    for (const spot of [...spots].sort((p, q) => q.at - p.at)) {
+      const d = D.hypot(home.x - spot.x, home.z - spot.z);
+      if (d < 1) continue;
+      const ux = (home.x - spot.x) / d;
+      const uz = (home.z - spot.z) / d;
+      let shore = -1;
+      for (let s = 1.5; s < d; s += 1) {
+        const x = spot.x + ux * s;
+        const z = spot.z + uz * s;
+        if (!field.isWater(x, z) && nav.terrainAllowsAt(x, z)) {
+          shore = s;
+          break;
+        }
+      }
+      if (shore < 0) continue;
+      if (standing.some((b) => D.hypot(b.x - (spot.x + ux * shore), b.z - (spot.z + uz * shore)) < BATTERY_APART)) continue;
+      // Facing out over the water, toward where the boats were.
+      const heading = D.atan2(uz, -ux);
+      for (const inland of BATTERY_INLAND) {
+        const x = spot.x + ux * (shore + inland);
+        const z = spot.z + uz * (shore + inland);
+        if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) continue;
+        // Only once it's quiet there: not into the middle of a fight.
+        if (!this.calm(world, ctx, side, x, z)) break;
+        // The engineer works from the landward side.
+        return { kind: 'build', def, x, z, heading, standX: x + ux * STAND_BACK, standZ: z + uz * STAND_BACK, urgent: true };
+      }
+    }
+    return null;
+  }
+
+  /** No enemy unit (boats included) within CALM_REACH of a point. */
+  private calm(world: World, ctx: SimContext, side: number, x: number, z: number): boolean {
+    let calm = true;
+    ctx.grid.forEachNear(x, z, CALM_REACH, (other) => {
+      if (calm && world.get(other, Targetable)?.kind === 'unit' && ctx.sides.hostile(side, world.req(other, Faction).id)) calm = false;
+    });
+    return calm;
+  }
+
+
+  /**
    * Each tick: an engineer at its spot puts up its building or digs, a
    * side's HQ trains an engineer when there's work and room, and walls
    * crumble.
@@ -1434,8 +1575,9 @@ export class Engineers {
         this.spanWork.delete(key);
         this.jobs.delete(e);
         if (this.spansOf(side) >= SPANS_MOST || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
+        if (job.shortcut) this.shortcuts.drop(side);
         if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, { builtBy: side })) {
-          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS });
+          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS, shortcut: job.shortcut });
           ctx.events.emit('span', { faction: side, x: job.x, z: job.z, down: false });
         }
         this.open[side] = Math.max(0, this.open[side] - 1);
@@ -1456,13 +1598,24 @@ export class Engineers {
       this.jobs.delete(e);
       const id = job.def.id;
       const full =
-        id === 'fieldTower' ? this.towers[side] >= TOWERS_MOST : id === 'commsArray' ? this.arrays[side] >= ARRAYS_MOST : id === 'helipad' ? this.pads[side] >= HELIPADS_MOST : job.def.lasts ? this.walls[side] >= WALLS_MOST : false;
+        id === 'fieldTower'
+          ? this.towers[side] >= TOWERS_MOST
+          : id === 'commsArray'
+            ? this.arrays[side] >= ARRAYS_MOST
+            : id === 'helipad'
+              ? this.pads[side] >= HELIPADS_MOST
+              : id === 'shoreBattery'
+                ? this.batteries[side] >= BATTERIES_MOST
+                : job.def.lasts
+                  ? this.walls[side] >= WALLS_MOST
+                  : false;
       if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
       if (id === 'fieldTower') this.towers[side]++;
       else if (id === 'commsArray') this.arrays[side]++;
       else if (id === 'helipad') this.pads[side]++;
+      else if (id === 'shoreBattery') this.batteries[side]++;
       else if (job.def.lasts) this.walls[side]++;
       this.open[side] = Math.max(0, this.open[side] - 1);
     }

@@ -824,7 +824,31 @@ outposts and the light scenery are still placed once, at the start.
   counters that outgun it swings out to whichever side is safer, then
   carries on (aircraft go round flak the same way). Squads already
   fighting don't detour. *Keep out of where they're weak* under Armies
-  turns it off (URL `avoid=0`).
+  turns it off (URL `avoid=0`). Enemy boats count as a counter of their
+  own to anything on land (a shore they cover is ground a land squad can
+  be shelled on without closing with what's shelling it): their danger
+  counts in full, so squads march inland of shores the boats are working.
+- **Shortcuts over water** (`game/commander/shortcuts.ts`, *Bridge
+  shortcuts over water* under Armies, URL `span=0` turns it off). Every
+  side but Tidewater looks along the shores for water 3 to 18 m wide that
+  a timber bridge could span, and weighs each place by how much shorter
+  it makes the way from its rally point to the enemy base and to the four
+  nearest outposts it doesn't hold (an island no land unit could reach
+  counts for a lot), less where enemy units are about. The best place is
+  an urgent job for an engineer, even out past the front and even where
+  there's a way round already; it can be shot off the job, and the
+  bridge shelled down. Up to two shortcuts a side (three bridges in all).
+- **Shore batteries** (`game/commander/engineers.ts`). A land side
+  (everyone but Tidewater) remembers, for five minutes, where on its own
+  part of the map enemy boats have fired on it from. Once it's quiet there
+  (no enemy, boats included, within 26 units), an engineer puts up a shore
+  battery on the first dry ground toward home, facing the water: a squat,
+  twin-barrelled gun (range 24, 42 a shot) waiting for the next time the
+  boats come. It crumbles in 15 minutes like the walls. Up to three a side.
+- **Not pinned by boats** (`game/offensive.ts`). A base under attack
+  only from the water (at least 60% of the enemy strength near it
+  afloat) doesn't keep its army home: the side goes on massing and hits
+  back at the enemy's base, which is on land.
 - *Show plans on the map* (Commanders section of the panel) draws each
   side's goals as arrows (fainter the less ready it is) and each task
   force's arrow to its outpost; the list under it says each side's plan

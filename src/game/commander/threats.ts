@@ -23,6 +23,12 @@ import * as D from '../../core/dmath';
  *   safer, then carries on (aircraft go round flak the same way).
  * Squads already fighting don't detour. The rally flag and stances override
  * it, like every other Commander job.
+ *
+ * Boats are a counter of their own to anything on land: a shore they cover
+ * is ground a land squad can be shelled on without being able to close with
+ * what's shelling it. So the danger from enemy boats always counts in full
+ * toward a land squad's excess (not less its usual share), and squads march
+ * inland of a shore the enemy's boats are working, rather than along it.
  */
 
 export type ThreatKind = 'infantry' | 'vehicle' | 'air';
@@ -79,6 +85,8 @@ export class ThreatMap {
   readonly rows: number;
   /** Per kind (and 'any'), per side: the danger that side's weapons pose there (row-major cells). */
   readonly layers: Record<Layer, Float32Array[]>;
+  /** Per side: the part of its danger to things on land that comes from its boats (see the notes at the top). */
+  readonly afloat: Float32Array[];
 
   constructor(
     private readonly field: Battlefield,
@@ -89,6 +97,7 @@ export class ThreatMap {
     const n = this.cols * this.rows;
     const make = () => Array.from({ length: sides }, () => new Float32Array(n));
     this.layers = { infantry: make(), vehicle: make(), air: make(), any: make() };
+    this.afloat = make();
     const zeros = () => new Array<number>(sides).fill(0);
     this.totals = { infantry: zeros(), vehicle: zeros(), air: zeros(), any: zeros() };
   }
@@ -100,6 +109,7 @@ export class ThreatMap {
   update(world: World): void {
     for (const k of LAYERS) for (const l of this.layers[k]) l.fill(0);
     for (const k of LAYERS) this.totals[k].fill(0);
+    for (const l of this.afloat) l.fill(0);
     const { minX, minZ } = this.field.bounds;
     for (const e of world.query(Armed, Health, Faction, Transform)) {
       const f = world.req(e, Faction).id;
@@ -110,6 +120,7 @@ export class ThreatMap {
       const s = fightingStrength(world, e);
       if (s <= 0) continue;
       const t = world.req(e, Transform);
+      const boat = world.get(e, Mover)?.move === 'naval' ? s * Math.max(m.infantry, m.vehicle) : 0;
       const reach = Math.min(MOST_REACH, w.range + REACH_PAD);
       const i0 = Math.max(0, Math.floor((t.x - reach - minX) / STRENGTH_CELL));
       const i1 = Math.min(this.cols - 1, Math.floor((t.x + reach - minX) / STRENGTH_CELL));
@@ -119,6 +130,7 @@ export class ThreatMap {
       const veh = this.layers.vehicle[f];
       const air = this.layers.air[f];
       const any = this.layers.any[f];
+      const afloat = this.afloat[f];
       for (const k of THREAT_KINDS) this.totals[k][f] += s * m[k];
       this.totals.any[f] += s;
       for (let j = j0; j <= j1; j++) {
@@ -131,6 +143,7 @@ export class ThreatMap {
           veh[k] += s * m.vehicle;
           air[k] += s * m.air;
           any[k] += s;
+          if (boat > 0) afloat[k] += boat;
         }
       }
     }
@@ -165,7 +178,22 @@ export class ThreatMap {
    * danger there. Positive where its counters are gathered.
    */
   excess(ctx: SimContext, side: number, kind: ThreatKind, share: number, x: number, z: number): number {
-    return this.danger(ctx, side, kind, x, z) - share * this.danger(ctx, side, 'any', x, z);
+    const excess = this.danger(ctx, side, kind, x, z) - share * this.danger(ctx, side, 'any', x, z);
+    if (kind === 'air') return excess;
+    const boats = this.boats(ctx, side, x, z);
+    return boats > 0 ? Math.max(excess, boats) : excess;
+  }
+
+  /** The danger to a side's land units at a point from its enemies' boats (see the notes at the top). */
+  boats(ctx: SimContext, side: number, x: number, z: number): number {
+    const { minX, minZ } = this.field.bounds;
+    const i = Math.floor((x - minX) / STRENGTH_CELL);
+    const j = Math.floor((z - minZ) / STRENGTH_CELL);
+    if (i < 0 || j < 0 || i >= this.cols || j >= this.rows) return 0;
+    const k = j * this.cols + i;
+    let sum = 0;
+    for (const g of ctx.sides.enemiesOf(side)) sum += this.afloat[g]?.[k] ?? 0;
+    return sum;
   }
 
   /** The worst excess danger (see excess) along the way from one point to another, looking every SAMPLE_STEP. */

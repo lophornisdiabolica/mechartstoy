@@ -60,6 +60,25 @@ describe('readiness', () => {
     expect(offensive.plan(1 - attackers[0]).state).toBe('defending');
   });
 
+  it("doesn't stay home while it's only shelled from the water, and does while enemy land units are there", () => {
+    const game = emptyGame();
+    const { offensive } = game.ctx;
+    army(game, 1, 50);
+    run(game, 2);
+    expect(offensive.attacking(1, game.world.time)).toBe(true);
+    expect(offensive.plan(0).state).toBe('defending');
+    // Boats offshore of side 0's base (stance hold: they stay put).
+    const b = game.field.baseSites[0];
+    const boats = Array.from({ length: 6 }, (_, i) => spawnUnit(game.world, game.ctx, UNIT_DEFS.missileBoat, 1, b.x + 20, b.z + i * 3 - 8));
+    run(game, 2);
+    expect(offensive.plan(0).state).toBe('massing');
+    // Tanks at the base as well: that's an attack it has to meet.
+    for (let i = 0; i < 8; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, b.x + 14, b.z + i * 2.5 - 9);
+    run(game, 2);
+    expect(offensive.plan(0).state).toBe('defending');
+    expect(boats.length).toBe(6);
+  });
+
   it('falls back once the attack is spent, and regroups before the next', () => {
     const game = emptyGame();
     const { offensive } = game.ctx;
