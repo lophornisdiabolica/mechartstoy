@@ -38,6 +38,7 @@ export function groundPicture(field: Battlefield): Picture {
       }
       const ground = GROUND_IDS[field.ground[j * cols + i]];
       if (ground === 'thicket') c = c.map((v) => v * 0.55);
+      else if (ground === 'felled') c = c.map((v) => v * 0.8);
       else if (ground === 'road') c = [150, 144, 132];
       if (field.deckAt(x, z) !== null) c = [170, 165, 155];
       data.set([c[0], c[1], c[2], 255], (j * cols + i) * 4);

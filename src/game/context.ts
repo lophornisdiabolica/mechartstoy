@@ -1,3 +1,4 @@
+import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
 import { Rng } from '../core/rng';
@@ -140,4 +141,6 @@ export interface SimContext {
   fire: FireField;
   /** The towns' people (see towns.ts). */
   towns: Towns;
+  /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */
+  traffic: Traffic;
 }

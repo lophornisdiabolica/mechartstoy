@@ -1,6 +1,6 @@
 import { Battlefield } from './battlefield';
 import { CellArea, GroundDef } from './ground';
-import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
+import { MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows } from './moveClasses';
 import * as D from '../core/dmath';
 
 export interface Point {
@@ -16,6 +16,8 @@ const MAX_EXPANSIONS = 8000;
  * the buildings, so this stays small.
  */
 const CLEARANCE_MARGIN = 0.1;
+/** Route cost multiplier on a bridge deck's edge cells, for vehicles: they keep to the middle. */
+const DECK_EDGE = 1.6;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -45,6 +47,8 @@ class CellSamples {
   readonly depth: Float64Array;
   readonly slope: Float64Array;
   readonly deck: Uint8Array;
+  /** 1 just outside a bridge deck's railings (see Battlefield.railAt). */
+  readonly rail: Uint8Array;
   readonly settled: Uint8Array;
   readonly ground: GroundDef[];
 
@@ -58,6 +62,7 @@ class CellSamples {
     this.depth = new Float64Array(n);
     this.slope = new Float64Array(n);
     this.deck = new Uint8Array(n);
+    this.rail = new Uint8Array(n);
     this.settled = new Uint8Array(n);
     this.ground = new Array<GroundDef>(n);
     this.sample(0, 0, cols - 1, rows - 1);
@@ -73,6 +78,7 @@ class CellSamples {
         const x = field.bounds.minX + (i + 0.5) * this.cellSize;
         const z = field.bounds.minZ + (j + 0.5) * this.cellSize;
         this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
+        this.rail[k] = this.deck[k] === 0 && field.bridges.length > 0 && field.railAt(x, z) ? 1 : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
         this.settled[k] = settled.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
@@ -161,6 +167,16 @@ export class NavObstacles {
   readonly tall: Uint16Array;
   /** Always empty: what climbers see, since they go over every building. */
   readonly none: Uint16Array;
+  /**
+   * Extra route cost per cell from traffic: how busy the narrow passages
+   * there are (see game/traffic.ts), for classes that queue on them (see
+   * MoveRules.queues). Changing it doesn't re-plan anything; routes planned
+   * from then on see it, so a group setting off together spreads over the
+   * crossings there are.
+   */
+  readonly traffic: Float32Array;
+  /** Always zero: what classes that don't queue see. */
+  readonly calm: Float32Array;
 
   constructor(
     readonly cols: number,
@@ -169,6 +185,8 @@ export class NavObstacles {
     this.occupied = new Uint16Array(cols * rows);
     this.tall = new Uint16Array(cols * rows);
     this.none = new Uint16Array(cols * rows);
+    this.traffic = new Float32Array(cols * rows);
+    this.calm = new Float32Array(cols * rows);
   }
 
   /** The obstacle counts a class with these rules is kept out by. */
@@ -225,6 +243,8 @@ export class NavGrid {
   private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
   private readonly occupied: Uint16Array;
+  /** Extra cost per cell from busy narrow passages (NavObstacles.traffic), or zeros for a class that doesn't queue. */
+  private readonly traffic: Float32Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   /** The obstacles' blockVersion and this grid's terrainVersion the clearance map was built for. */
@@ -268,6 +288,7 @@ export class NavGrid {
     this.terrain = new Uint8Array(n);
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.for(this.rules.over);
+    this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
     this.clearance = new Float32Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
@@ -295,11 +316,32 @@ export class NavGrid {
     this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
+    // Beside a deck, over its railings: vehicles take the ramps instead,
+    // and keep off the deck's edge cells where they can, down the middle.
+    if (!rules.flies && rules.minDepth === 0) {
+      if (samples.rail[k] === 1) cost *= rules.rail;
+      else if (onDeck && rules.queues && this.besideRail(k)) cost *= DECK_EDGE;
+    }
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
     if (rules.town !== 1 && samples.settled[k] === 1) cost *= rules.town;
     if (!rules.flies && depth <= 0) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
+  }
+
+  /** Whether a cell has a railing cell next to it (see CellSamples.rail). */
+  private besideRail(k: number): boolean {
+    const { cols, rows } = this;
+    const i = k % cols;
+    const j = (k - i) / cols;
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && this.samples.rail[nj * cols + ni] === 1) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -495,6 +537,23 @@ export class NavGrid {
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
   }
 
+  /**
+   * Whether going from a to b means climbing over a bridge's railings (one
+   * end on a deck, the other just outside its side), for a class that can't
+   * (see RAIL_WALL). Movement and shoves check it, so vehicles only get on
+   * and off bridges by the ramps.
+   */
+  railCrossing(ax: number, az: number, bx: number, bz: number): boolean {
+    if (this.rules.rail < RAIL_WALL || this.rules.flies || this.rules.minDepth > 0) return false;
+    const [ai, aj] = this.cellOf(ax, az);
+    const [bi, bj] = this.cellOf(bx, bz);
+    // By cells, as routes see the map: a route along the deck's edge cells stays on the deck.
+    const { rail, deck } = this.samples;
+    const a = aj * this.cols + ai;
+    const b = bj * this.cols + bi;
+    return (deck[a] === 1 && rail[b] === 1) || (rail[a] === 1 && deck[b] === 1);
+  }
+
   /** Whether any building stands on a point's cell (whatever this class goes over). */
   builtAt(x: number, z: number): boolean {
     const [i, j] = this.cellOf(x, z);
@@ -602,7 +661,8 @@ export class NavGrid {
   /** Route cost of the cell under a point (1 is plain open ground; see MoveRules). */
   costAt(x: number, z: number): number {
     const [i, j] = this.cellOf(x, z);
-    return this.cost[j * this.cols + i];
+    const k = j * this.cols + i;
+    return this.cost[k] + this.traffic[k];
   }
 
   /**
@@ -618,7 +678,8 @@ export class NavGrid {
       const t = s / steps;
       const [i, j] = this.cellOf(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
       if (!this.fits(i, j, radius)) return false;
-      if (this.cost[j * this.cols + i] > maxCost + 1e-6) return false;
+      const k = j * this.cols + i;
+      if (this.cost[k] + this.traffic[k] > maxCost + 1e-6) return false;
     }
     return true;
   }
@@ -701,7 +762,7 @@ export class NavGrid {
     let closestH = Infinity;
     // The search's inner loop, with fits() and blocked() written out over the raw arrays (same answers, far fewer calls).
     const rows = this.rows;
-    const { terrain, occupied, clearance, cost, closed, stamp, g, f, parent, open } = this;
+    const { terrain, occupied, clearance, cost, traffic, closed, stamp, g, f, parent, open } = this;
     if (radius > 0) this.updateClearance();
     const need = radius + CLEARANCE_MARGIN;
     const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
@@ -731,7 +792,7 @@ export class NavGrid {
         // No squeezing diagonally between two blocked cells.
         if (di !== 0 && dj !== 0 && (isBlocked(i + di, j) || isBlocked(i, j + dj))) continue;
         if (closed[nk] === id) continue;
-        const ng = g[k] + NEIGHBOUR_STEP[n] * cost[nk];
+        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
         g[nk] = ng;

@@ -55,7 +55,7 @@ export function blastCrater(world: World, ctx: SimContext, x: number, z: number,
   });
   if (moved === 0) return 0;
   // Churned earth in the bowl, over open ground (roads, trenches and scrap keep theirs).
-  field.paint(x, z, radius * 0.8, 'earth', (current) => current === 'plain' || current === 'thicket');
+  field.paint(x, z, radius * 0.8, 'earth', (current) => current === 'plain' || current === 'thicket' || current === 'felled');
   // Trees in the blast come down, falling away from it.
   field.woods.crush(x, z, radius, { x, z });
   settle(world, ctx, x, z, reach);

@@ -22,6 +22,7 @@ import { aiSystem } from './systems/ai';
 import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
+import { Traffic, trafficSystem } from './traffic';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
 import { territorySystem } from './territory';
@@ -133,6 +134,7 @@ export class Game {
       god: new Divine(),
       fire: new FireField(this.field),
       towns: new Towns(this.field.townSites, seed),
+      traffic: new Traffic(nav),
     };
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
@@ -151,6 +153,7 @@ export class Game {
       ...(autoSpawn ? [productionSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
+      trafficSystem(ctx),
       movementSystem(ctx),
       separationSystem(ctx),
       groundFollowSystem(this.field, ctx),
