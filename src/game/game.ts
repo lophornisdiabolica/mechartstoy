@@ -33,6 +33,7 @@ import { snapshotSystem } from './systems/snapshot';
 import { spatialIndexSystem } from './systems/spatialIndex';
 import { targetingSystem } from './systems/targeting';
 import { weaponSystem } from './systems/weapons';
+import { tiltSystem } from './systems/tilt';
 import { escalationSystem, tideForMap } from './tide';
 import { UnitId } from './units';
 import { Commander, commanderSystem } from './commander/commander';
@@ -153,6 +154,7 @@ export class Game {
       movementSystem(ctx),
       separationSystem(ctx),
       groundFollowSystem(this.field, ctx),
+      tiltSystem(ctx),
       weaponSystem(ctx),
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
       godSystem(ctx),

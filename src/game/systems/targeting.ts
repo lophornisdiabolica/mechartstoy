@@ -2,7 +2,8 @@ import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
 import { Ai, Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { damageThrough } from './projectiles';
-import { clearShot, muzzlePoint, Point3 } from '../lineOfFire';
+import { aimPoint, clearShot, elevationFor, mountFor, Point3, weaponMuzzle } from '../lineOfFire';
+import { pivotHeight } from '../mounts';
 import { SimContext } from '../context';
 import type { WeaponDef } from '../units';
 import * as D from '../../core/dmath';
@@ -63,11 +64,19 @@ export function volleyWeapon(weapon: WeaponDef, armor: number): WeaponDef {
 /** How many of the best-scoring targets to check for a clear shot before settling for one behind cover. */
 const SIGHT_CHECKS = 3;
 
-/** Muzzle position for a shot at `target`, with the weapon swung round to face it. */
-function muzzleToward(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity): Point3 {
+/**
+ * Muzzle position for a shot at `target`, with the weapon swung round to
+ * face it and its barrels pitched to bear, or null if they can't pitch
+ * far enough (see elevationFor).
+ */
+function muzzleToward(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity): Point3 | null {
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
-  return muzzlePoint(world, e, D.atan2(-(tt.z - t.z), tt.x - t.x), armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
+  const aim = D.atan2(-(tt.z - t.z), tt.x - t.x);
+  const mount = mountFor(world, e);
+  const pitch = mount ? elevationFor(world, e, mount, armed, aim, target) : null;
+  if (pitch && !pitch.reach) return null;
+  return weaponMuzzle(world, e, armed, aim, pitch?.elev ?? armed.elev, armed.shot, ctx);
 }
 
 /**
@@ -115,7 +124,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   candidates.sort((a, b) => a.score - b.score || a.e - b.e);
   if (armed.weapon.arc || armed.weapon.projectile === 'flame') return candidates[0].e;
   for (const c of candidates.slice(0, SIGHT_CHECKS)) {
-    if (clearShot(world, ctx, muzzleToward(world, ctx, e, armed, c.e), c.e, e, faction)) return c.e;
+    const muzzle = muzzleToward(world, ctx, e, armed, c.e);
+    if (muzzle && clearShot(world, ctx, muzzle, c.e, e, faction)) return c.e;
   }
   armed.blocked = true;
   return candidates[0].e;
@@ -142,13 +152,19 @@ export function firingSpot(world: World, ctx: SimContext, e: Entity, armed: Arme
   const dist = D.hypot(t.x - tt.x, t.z - tt.z);
   const ring = Math.max(armed.weapon.minRange + 1, Math.min(dist, armed.weapon.range * 0.7));
   const base = D.atan2(t.z - tt.z, t.x - tt.x);
+  const mount = mountFor(world, e);
   for (const da of SPOT_ANGLES) {
     const a = base + da;
     const x = tt.x + D.cos(a) * ring;
     const z = tt.z + D.sin(a) * ring;
     if (!grid.terrainAllowsAt(x, z) || !grid.fitsAt(x, z, radius)) continue;
     const ground = grid.rules.flies ? t.y : ctx.field.surfaceAt(x, z);
-    const from = { x, y: ground + armed.weapon.muzzleHeight, z };
+    const from = { x, y: ground + (mount ? pivotHeight(mount) : armed.weapon.muzzleHeight), z };
+    // Not perched so high above it (or so far below) that the barrels can't pitch to bear.
+    if (mount?.elev && !armed.weapon.arc) {
+      const climb = D.atan2(aimPoint(world, target).y - from.y, ring);
+      if (climb < mount.elev[0] || climb > mount.elev[1]) continue;
+    }
     if (clearShot(world, ctx, from, target, e, faction, SPOT_ROOM)) return { x, z };
   }
   return null;

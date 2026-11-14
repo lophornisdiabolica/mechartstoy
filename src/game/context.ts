@@ -23,7 +23,8 @@ import { ProjectileKind, UnitDef, UnitId } from './units';
 /** Events systems publish for other layers (effects, audio, UI) to react to. */
 export type GameEvents = {
   spawned: { entity: Entity; def: UnitDef; faction: number };
-  fired: { entity: Entity; x: number; y: number; z: number; heading: number; kind: ProjectileKind };
+  /** `heading` and `climb` are which way the barrel points. */
+  fired: { entity: Entity; x: number; y: number; z: number; heading: number; climb: number; kind: ProjectileKind };
   impact: { x: number; y: number; z: number; kind: ProjectileKind; splash: number };
   /** `killer` is whoever landed the last blow, if anyone did. */
   unitDestroyed: { entity: Entity; x: number; y: number; z: number; def: UnitDef; faction: number; killer: Hit | null };
