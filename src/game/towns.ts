@@ -54,6 +54,8 @@ const FOLK_BASE = 2;
 const FOLK_PER_RADIUS = 5;
 /** In a city, one more townsperson per this many lots. */
 const CITY_FOLK_LOTS = 6;
+/** Most townspeople a city keeps (a city covering the map has hundreds of lots). */
+const CITY_FOLK_MOST = 16;
 /** Seconds between someone new coming out of a building, while a town is short of people. */
 const SPAWN_EVERY = 60;
 /** Seconds between the town engineer's new buildings (and before its first). */
@@ -147,7 +149,7 @@ export class Towns {
     this.towns = sites.map((site) => ({
       site,
       // A city keeps one person per few lots.
-      wanted: site.city ? FOLK_BASE + Math.round(site.city.lots.length / CITY_FOLK_LOTS) : FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
+      wanted: site.city ? Math.min(CITY_FOLK_MOST, FOLK_BASE + Math.round(site.city.lots.length / CITY_FOLK_LOTS)) : FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
       spawnAt: 0,
       buildAt: BUILD_EVERY,
       plan: null,
@@ -363,7 +365,7 @@ export class Towns {
     if (site.city) {
       // A city fills its empty lots, the middle first.
       const open = site.city.lots
-        .filter((l) => !ctx.navs.land.builtAt(l.x, l.z) && !ctx.field.outpostSites.some((o) => D.hypot(o.x - l.x, o.z - l.z) < o.radius + 1.5))
+        .filter((l) => l.use === 'building' && !ctx.navs.land.builtAt(l.x, l.z) && !ctx.field.outpostSites.some((o) => D.hypot(o.x - l.x, o.z - l.z) < o.radius + 1.5))
         .sort((a, b) => a.out - b.out);
       for (const l of open) {
         const building = cityBuilding(this.rng, l.out);
