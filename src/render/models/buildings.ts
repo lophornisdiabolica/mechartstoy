@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cylinder, factionColors, gableRoof, glowBox, registerModel, setRig } from '../models';
+import { barrelPivot, box, cylinder, factionColors, gableRoof, glowBox, mounted, registerModel, setRig } from '../models';
 import { TownStyle } from '../../world/biomes';
 
 /**
@@ -231,10 +231,10 @@ registerModel('bld:tower', (faction) => {
   const turret = new THREE.Group();
   turret.position.y = 1.75;
   turret.add(box(0.9, 0.55, 0.8, primary, 0, 0.3, 0));
-  turret.add(box(1.0, 0.12, 0.12, DARK, 0.85, 0.35, 0.15));
-  turret.add(box(1.0, 0.12, 0.12, DARK, 0.85, 0.35, -0.15));
+  const guns = barrelPivot('bld:tower', turret);
+  for (const side of [-1, 1]) guns.add(box(1.0, 0.12, 0.12, DARK, 0.5, 0, side * 0.15));
   g.add(turret);
-  return setRig(g, { turret });
+  return setRig(g, { turret, ...mounted('bld:tower', g, turret, [guns]) });
 });
 
 /** An outpost's post: a small hut on a round pad, with a radio mast flying its holder's flag. */
@@ -307,12 +307,11 @@ registerModel('bld:bigGun', (faction) => {
   turret.position.y = 0.8;
   turret.add(box(1.4, 0.7, 1.2, primary, -0.1, 0.35, 0));
   turret.add(box(0.5, 0.5, 1.3, METAL, -0.6, 0.3, 0));
-  const barrel = box(2.6, 0.22, 0.22, DARK, 1.6, 0.55, 0);
-  barrel.rotation.z = 0.25;
-  turret.add(barrel);
-  turret.add(box(0.4, 0.34, 0.34, METAL, 0.6, 0.45, 0)); // breech
+  const barrel = barrelPivot('bld:bigGun', turret);
+  barrel.add(box(2.6, 0.22, 0.22, DARK, 1.3, 0, 0));
+  barrel.add(box(0.4, 0.34, 0.34, METAL, 0.2, -0.05, 0)); // breech
   g.add(turret);
-  return setRig(g, { turret });
+  return setRig(g, { turret, ...mounted('bld:bigGun', g, turret, [barrel]) });
 });
 
 /** Land armies' shore battery: a low sandbagged ring with a squat, wide turret behind a shield plate and two short barrels side by side. */
@@ -325,14 +324,13 @@ registerModel('bld:shoreBattery', (faction) => {
   turret.position.y = 0.52;
   turret.add(box(1.0, 0.42, 1.1, primary, -0.15, 0.21, 0));
   turret.add(box(0.14, 0.5, 1.2, METAL, 0.38, 0.27, 0)); // shield plate
+  const barrels = barrelPivot('bld:shoreBattery', turret);
   for (const z of [-0.24, 0.24]) {
-    const barrel = box(0.95, 0.16, 0.16, DARK, 0.85, 0.3, z);
-    barrel.rotation.z = 0.08;
-    turret.add(barrel);
-    turret.add(box(0.14, 0.22, 0.22, METAL, 1.3, 0.33, z)); // muzzle brake
+    barrels.add(box(0.95, 0.16, 0.16, DARK, 0.47, 0, z));
+    barrels.add(box(0.14, 0.22, 0.22, METAL, 0.92, 0, z)); // muzzle brake
   }
   g.add(turret);
-  return setRig(g, { turret });
+  return setRig(g, { turret, ...mounted('bld:shoreBattery', g, turret, [barrels]) });
 });
 
 /** A comms relay: a guyed lattice mast with dishes, and a radio hut at its foot. */

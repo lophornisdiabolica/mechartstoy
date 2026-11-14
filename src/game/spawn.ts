@@ -19,11 +19,13 @@ import {
   Producer,
   Renderable,
   Targetable,
+  Tilt,
   Transform,
   Unit,
 } from './components';
 import { SimContext } from './context';
-import { MOVE_RULES } from '../world/moveClasses';
+import { MoveClass, MOVE_RULES } from '../world/moveClasses';
+import { mountOf } from './mounts';
 import { UnitDef, WeaponDef } from './units';
 import * as D from '../core/dmath';
 
@@ -36,6 +38,7 @@ export function armed(
   muzzleOffset: number,
   aim: number,
   siege = false,
+  model?: string,
 ): Armed {
   return {
     weapon,
@@ -50,6 +53,8 @@ export function armed(
     spotX: null,
     spotZ: null,
     aim,
+    elev: (model !== undefined ? mountOf(model)?.rest : undefined) ?? 0,
+    shot: 0,
     cooldown: ctx.rng.range(0, weapon.cooldown),
     burstLeft: 0,
     burstTimer: 0,
@@ -57,6 +62,9 @@ export function armed(
     firedOn: null,
   };
 }
+
+/** Movement classes whose hulls tilt with the ground (see tiltSystem). */
+const TILTS = new Set<MoveClass>(['tracked', 'hover', 'amphibious']);
 
 /** A fresh squad id, for a group of units that should move together. */
 export function newSquad(ctx: SimContext): number {
@@ -110,6 +118,8 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   world.add(e, Targetable, { kind: 'unit' });
   world.add(e, Renderable, { model: def.model, scale: 1 });
   world.add(e, GroundFollow, { offset: MOVE_RULES[def.move].altitude });
+  // Vehicles on tracks, wheels or an air cushion lie along the ground; walkers' legs take the slope.
+  if (TILTS.has(def.move)) world.add(e, Tilt, { pitch: 0, roll: 0, ppitch: 0, proll: 0, sx: NaN, sz: NaN, sheading: NaN, wantPitch: 0, wantRoll: 0, lift: 0 });
   world.add(e, Mover, {
     speed: def.speed,
     turnRate: def.turnRate,
@@ -126,7 +136,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   world.add(
     e,
     Armed,
-    armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege),
+    armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege, def.model),
   );
   const offset = rallyOffset(ctx, def, squad);
   world.add(e, Ai, {
@@ -172,7 +182,7 @@ export function spawnBuilding(
   world.add(e, Health, { hp: construct ? def.hp * 0.3 : def.hp, max: def.hp, armor: def.armor, lastHit: null, hurtAt: -Infinity });
   world.add(e, Collider, { radius: def.radius });
   if (def.weapon && faction !== NEUTRAL) {
-    world.add(e, Armed, armed(ctx, def.weapon, def.sight ?? def.weapon.range, true, def.turretTurnRate ?? 2, 0.4, heading));
+    world.add(e, Armed, armed(ctx, def.weapon, def.sight ?? def.weapon.range, true, def.turretTurnRate ?? 2, 0.4, heading, false, def.model));
   }
   const production = faction !== NEUTRAL ? productionFor(ctx, def, faction) : undefined;
   if (production) {

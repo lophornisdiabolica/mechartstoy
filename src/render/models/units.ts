@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
-import { AnimState, box, cylinder, glowBox, factionColors, flatMaterial, markShared, registerModel, setRig } from '../models';
+import { AnimState, barrelPivot, box, cylinder, glowBox, factionColors, flatMaterial, markShared, mounted, registerModel, setRig } from '../models';
 
 /**
  * Low-poly unit models. Each is a handful of boxes built facing +x, with
@@ -158,7 +158,7 @@ registerModel('strider', (faction) => {
     return leg;
   });
 
-  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.5) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.5), ...mounted('strider', root, turret) });
 });
 
 registerModel('titan', (faction) => {
@@ -195,7 +195,7 @@ registerModel('titan', (faction) => {
     return leg;
   });
 
-  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.35) });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.35), ...mounted('titan', root, turret) });
 });
 
 function tracks(length: number, width: number, height: number, gap: number): THREE.Object3D[] {
@@ -213,10 +213,11 @@ registerModel('tank', (faction) => {
   turret.position.set(-0.1, 0.83, 0);
   turret.add(box(1.0, 0.4, 0.85, primary, 0, 0.2, 0));
   turret.add(box(0.4, 0.12, 0.6, secondary, -0.2, 0.45, 0));
-  turret.add(box(1.3, 0.14, 0.14, DARK, 1.05, 0.22, 0));
+  const gun = barrelPivot('tank', turret);
+  gun.add(box(1.3, 0.14, 0.14, DARK, 0.65, 0, 0));
   root.add(turret);
 
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('tank', root, turret, [gun]) });
 });
 
 registerModel('howitzer', (faction) => {
@@ -229,15 +230,12 @@ registerModel('howitzer', (faction) => {
   turret.position.set(-0.3, 0.75, 0);
   turret.add(box(1.1, 0.55, 0.95, secondary, 0, 0.27, 0));
   // Long barrel elevated for lobbed shots.
-  const barrel = new THREE.Group();
-  barrel.position.set(0.45, 0.4, 0);
-  barrel.rotation.z = 0.5;
+  const barrel = barrelPivot('howitzer', turret);
   barrel.add(box(2.0, 0.16, 0.16, DARK, 1.0, 0, 0));
   barrel.add(box(0.3, 0.24, 0.24, METAL, 1.9, 0, 0));
-  turret.add(barrel);
   root.add(turret);
 
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('howitzer', root, turret, [barrel]) });
 });
 
 /** Four (or more) block wheels down each side of a wheeled vehicle. */
@@ -256,10 +254,11 @@ registerModel('lancer', (faction) => {
   turret.position.set(-0.15, 1.03, 0);
   turret.add(box(1.3, 0.5, 1.1, primary, 0, 0.25, 0));
   turret.add(box(0.6, 0.14, 0.7, secondary, -0.25, 0.57, 0));
-  turret.add(box(1.9, 0.18, 0.18, DARK, 1.4, 0.28, 0));
-  turret.add(box(0.25, 0.26, 0.26, METAL, 2.35, 0.28, 0)); // muzzle brake
+  const gun = barrelPivot('lancer', turret);
+  gun.add(box(1.9, 0.18, 0.18, DARK, 0.85, 0, 0));
+  gun.add(box(0.25, 0.26, 0.26, METAL, 1.8, 0, 0)); // muzzle brake
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('lancer', root, turret, [gun]) });
 });
 
 // Raiders doctrine: trucks.
@@ -274,10 +273,11 @@ registerModel('mgTruck', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.35, 0.82, 0);
   turret.add(box(0.12, 0.4, 0.12, DARK, 0, 0.2, 0));
-  turret.add(box(0.8, 0.1, 0.1, DARK, 0.35, 0.42, 0));
-  turret.add(box(0.08, 0.3, 0.5, primary, 0.12, 0.42, 0)); // gun shield
+  const gun = barrelPivot('mgTruck', turret);
+  gun.add(box(0.8, 0.1, 0.1, DARK, 0.35, 0, 0));
+  gun.add(box(0.08, 0.3, 0.5, primary, 0.12, 0, 0)); // gun shield
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('mgTruck', root, turret, [gun]) });
 });
 
 registerModel('buggy', (faction) => {
@@ -289,9 +289,10 @@ registerModel('buggy', (faction) => {
   root.add(box(0.62, 0.05, 0.6, DARK, 0, 0.955, 0));
   const turret = new THREE.Group();
   turret.position.set(-0.25, 0.98, 0);
-  turret.add(box(0.6, 0.08, 0.08, DARK, 0.25, 0.08, 0));
+  const gun = barrelPivot('buggy', turret);
+  gun.add(box(0.6, 0.08, 0.08, DARK, 0.25, 0, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('buggy', root, turret, [gun]) });
 });
 
 registerModel('rocketTruck', (faction) => {
@@ -305,14 +306,11 @@ registerModel('rocketTruck', (faction) => {
   turret.position.set(-0.4, 0.62, 0);
   turret.add(box(0.5, 0.2, 0.5, primary, 0, 0.1, 0));
   // The rack tilts up for lobbed rockets.
-  const rack = new THREE.Group();
-  rack.position.set(0, 0.45, 0);
-  rack.rotation.z = 0.45;
+  const rack = barrelPivot('rocketTruck', turret);
   rack.add(box(1.2, 0.45, 0.8, secondary));
   rack.add(box(0.05, 0.35, 0.65, DARK, 0.6, 0, 0));
-  turret.add(rack);
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('rocketTruck', root, turret, [rack]) });
 });
 
 // The Land-train: an armoured tractor hauling two armoured cars, rocket batteries on the first.
@@ -333,7 +331,7 @@ registerModel('landTrain', (faction) => {
   turret.add(box(0.9, 0.45, 0.9, primary, 0, 0.23, 0));
   turret.add(box(0.05, 0.32, 0.7, DARK, 0.47, 0.25, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('landTrain', root, turret) });
 });
 
 // Legion doctrine.
@@ -346,9 +344,10 @@ registerModel('lightTank', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.05, 0.71, 0);
   turret.add(box(0.8, 0.32, 0.7, primary, 0, 0.16, 0));
-  turret.add(box(1.0, 0.11, 0.11, DARK, 0.85, 0.18, 0));
+  const gun = barrelPivot('lightTank', turret);
+  gun.add(box(1.0, 0.11, 0.11, DARK, 0.47, 0, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('lightTank', root, turret, [gun]) });
 });
 
 registerModel('carrier', (faction) => {
@@ -361,9 +360,10 @@ registerModel('carrier', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.3, 1.1, 0);
   turret.add(box(0.5, 0.25, 0.45, secondary, 0, 0.12, 0));
-  turret.add(box(0.7, 0.08, 0.08, DARK, 0.5, 0.15, 0));
+  const gun = barrelPivot('carrier', turret);
+  gun.add(box(0.7, 0.08, 0.08, DARK, 0.3, 0, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('carrier', root, turret, [gun]) });
 });
 
 // The Siege Crawler: a slab of a fortress on four track pods, with twin siege mortars on top.
@@ -377,13 +377,10 @@ registerModel('siegeCrawler', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.3, 1.9, 0);
   turret.add(box(1.2, 0.5, 1.2, primary, 0, 0.25, 0));
-  const tubes = new THREE.Group();
-  tubes.position.set(0.2, 0.55, 0);
-  tubes.rotation.z = 0.8;
+  const tubes = barrelPivot('siegeCrawler', turret);
   for (const z of [-0.3, 0.3]) tubes.add(box(1.2, 0.3, 0.3, DARK, 0.4, 0, z));
-  turret.add(tubes);
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('siegeCrawler', root, turret, [tubes]) });
 });
 
 // Infantry are camera-facing sprites: cheap to draw in crowds.
@@ -525,16 +522,13 @@ registerModel('flakTank', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.1, 0.85, 0);
   turret.add(box(0.95, 0.42, 0.9, secondary, 0, 0.21, 0));
+  const guns = barrelPivot('flakTank', turret);
   for (const side of [-1, 1]) {
-    const barrel = new THREE.Group();
-    barrel.position.set(0.35, 0.3, side * 0.22);
-    barrel.rotation.z = 0.45;
-    barrel.add(box(1.1, 0.1, 0.1, DARK, 0.55, 0, 0));
-    barrel.add(box(0.2, 0.15, 0.15, METAL, 1.05, 0, 0));
-    turret.add(barrel);
+    guns.add(box(1.1, 0.1, 0.1, DARK, 0.55, 0, side * 0.22));
+    guns.add(box(0.2, 0.15, 0.15, METAL, 1.05, 0, side * 0.22));
   }
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('flakTank', root, turret, [guns]) });
 });
 
 /** Spins rotor groups round their mast: `spin` is radians per second. */
@@ -566,9 +560,10 @@ registerModel('scout', (faction) => {
   root.add(blades);
   const turret = new THREE.Group();
   turret.position.set(0.55, 0.05, 0);
-  turret.add(box(0.35, 0.08, 0.08, DARK, 0.18, 0, 0));
+  const gun = barrelPivot('scout', turret);
+  gun.add(box(0.35, 0.08, 0.08, DARK, 0.18, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 30 }]) });
+  return setRig(root, { turret, ...mounted('scout', root, turret, [gun]), bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 30 }]) });
 });
 
 registerModel('gunship', (faction) => {
@@ -586,7 +581,7 @@ registerModel('gunship', (faction) => {
   turret.position.set(0.7, 0.05, 0);
   turret.add(box(0.4, 0.1, 0.1, DARK, 0.2, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 26 }]) });
+  return setRig(root, { turret, ...mounted('gunship', root, turret), bank: 0.25, flies: true, animate: rotors([{ group: blades, spin: 26 }]) });
 });
 
 registerModel('bomber', (faction) => {
@@ -605,7 +600,7 @@ registerModel('bomber', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.1, 0.05, 0);
   root.add(turret);
-  return setRig(root, { turret, bank: 0.8, flies: true });
+  return setRig(root, { turret, ...mounted('bomber', root, turret), bank: 0.8, flies: true });
 });
 
 // Skyline's strike jet: swept wings, twin tails, and cannon in the nose.
@@ -626,7 +621,7 @@ registerModel('jet', (faction) => {
     root.add(box(0.5, 0.05, 0.05, DARK, 1.35, 0.22, side * 0.1)); // cannon
   }
   root.add(glowBox(0.08, 0.16, 0.16, 0xffa040).translateX(-1.04).translateY(0.3)); // afterburner
-  return setRig(root, { bank: 0.6, flies: true });
+  return setRig(root, { ...mounted('jet', root, null), bank: 0.6, flies: true });
 });
 
 registerModel('drone', (faction) => {
@@ -644,9 +639,10 @@ registerModel('drone', (faction) => {
   }
   const turret = new THREE.Group();
   turret.position.set(0.2, 0.05, 0);
-  turret.add(box(0.2, 0.05, 0.05, DARK, 0.1, 0, 0));
+  const gun = barrelPivot('drone', turret);
+  gun.add(box(0.2, 0.05, 0.05, DARK, 0.1, 0, 0));
   root.add(turret);
-  return setRig(root, { turret, flies: true, animate: rotors(parts) });
+  return setRig(root, { turret, ...mounted('drone', root, turret, [gun]), flies: true, animate: rotors(parts) });
 });
 
 // Skyline's anti-air walker: a flak turret on long legs.
@@ -659,15 +655,8 @@ registerModel('flakWalker', (faction) => {
   const turret = new THREE.Group();
   turret.add(box(1.0, 0.5, 0.9, primary, 0, 0.15, 0));
   turret.add(box(0.5, 0.15, 0.95, secondary, -0.2, 0.47, 0));
-  for (const side of [-1, 1]) {
-    for (const up of [0, 1]) {
-      const barrel = new THREE.Group();
-      barrel.position.set(0.4, 0.25 + up * 0.18, side * 0.25);
-      barrel.rotation.z = 0.5;
-      barrel.add(box(0.9, 0.08, 0.08, DARK, 0.45, 0, 0));
-      turret.add(barrel);
-    }
-  }
+  const guns = barrelPivot('flakWalker', turret);
+  for (const side of [-1, 1]) for (const up of [-1, 1]) guns.add(box(0.9, 0.08, 0.08, DARK, 0.45, up * 0.09, side * 0.25));
   body.add(turret);
   const legs = [-1, 1].map((side) => {
     const leg = makeLeg(0.8, 0.85, 0.18, METAL, DARK);
@@ -675,7 +664,7 @@ registerModel('flakWalker', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45), ...mounted('flakWalker', root, turret, [guns]) });
 });
 
 // Skyline's super unit: a slow armoured airship with a flight deck that launches drones.
@@ -702,11 +691,12 @@ registerModel('airship', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(1.0, 0.1, 0);
   turret.add(box(0.5, 0.25, 0.5, secondary, 0, 0, 0));
-  turret.add(box(0.6, 0.08, 0.08, DARK, 0.4, 0.05, 0.1));
-  turret.add(box(0.6, 0.08, 0.08, DARK, 0.4, 0.05, -0.1));
+  const guns = barrelPivot('airship', turret);
+  for (const side of [-1, 1]) guns.add(box(0.6, 0.08, 0.08, DARK, 0.3, 0, side * 0.1));
   root.add(turret);
   return setRig(root, {
     turret,
+    ...mounted('airship', root, turret, [guns]),
     flies: true,
     animate: (s: AnimState) => {
       for (const g of props) g.rotation.x += 20 * s.dt;
@@ -723,11 +713,12 @@ registerModel('railgun', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.3, 0.81, 0);
   turret.add(box(1.0, 0.45, 0.9, secondary, 0, 0.22, 0));
-  turret.add(box(0.5, 0.18, 0.36, METAL, 0.65, 0.3, 0)); // capacitor housing
-  for (const side of [-1, 1]) turret.add(box(2.6, 0.1, 0.08, DARK, 1.6, 0.3, side * 0.12)); // twin rails
-  turret.add(box(0.2, 0.08, 0.34, METAL, 2.75, 0.3, 0)); // muzzle brace
+  const gun = barrelPivot('railgun', turret);
+  gun.add(box(0.5, 0.18, 0.36, METAL, 0.35, 0, 0)); // capacitor housing
+  for (const side of [-1, 1]) gun.add(box(2.6, 0.1, 0.08, DARK, 1.3, 0, side * 0.12)); // twin rails
+  gun.add(box(0.2, 0.08, 0.34, METAL, 2.52, 0, 0)); // muzzle brace, across the rails' ends
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('railgun', root, turret, [gun]) });
 });
 
 registerModel('fortress', (faction) => {
@@ -752,7 +743,7 @@ registerModel('fortress', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('fortress', root, turret) });
 });
 
 /**
@@ -829,9 +820,10 @@ registerModel('spider', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.25, 0.18, 0);
   turret.add(box(0.4, 0.22, 0.4, METAL, 0, 0.11, 0));
-  for (const side of [-1, 1]) turret.add(box(0.6, 0.07, 0.07, DARK, 0.45, 0.12, side * 0.1));
+  const guns = barrelPivot('spider', turret);
+  for (const side of [-1, 1]) guns.add(box(0.6, 0.07, 0.07, DARK, 0.25, 0, side * 0.1));
   body.add(turret);
-  return setRig(root, { turret, ...spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11) });
+  return setRig(root, { turret, ...spiderLegs(body, 3, 1.0, 0.35, 0.7, 0.11), ...mounted('spider', root, turret, [guns]) });
 });
 
 // Bastion's test super unit: a howitzer on a giant spider's back.
@@ -849,14 +841,11 @@ registerModel('siegeSpider', (faction) => {
   turret.position.set(-0.3, 0.75, 0);
   turret.add(box(1.5, 0.8, 1.4, METAL, 0, 0.4, 0));
   turret.add(box(1.2, 0.2, 1.5, secondary, -0.1, 0.9, 0));
-  const barrel = new THREE.Group();
-  barrel.position.set(0.6, 0.55, 0);
-  barrel.rotation.z = 0.55;
+  const barrel = barrelPivot('siegeSpider', turret);
   barrel.add(box(3.4, 0.3, 0.3, DARK, 1.7, 0, 0));
   barrel.add(box(0.5, 0.42, 0.42, METAL, 3.3, 0, 0));
-  turret.add(barrel);
   body.add(turret);
-  return setRig(root, { turret, ...spiderLegs(body, 4, 3.0, 0.9, 2.3, 0.3) });
+  return setRig(root, { turret, ...spiderLegs(body, 4, 3.0, 0.9, 2.3, 0.3), ...mounted('siegeSpider', root, turret, [barrel]) });
 });
 
 registerModel('warhound', (faction) => {
@@ -882,7 +871,7 @@ registerModel('warhound', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 1.2, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 1.2, 0.45), ...mounted('warhound', root, turret) });
 });
 
 registerModel('juggernaut', (faction) => {
@@ -913,7 +902,7 @@ registerModel('juggernaut', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 1.8, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.8, 0.3), ...mounted('juggernaut', root, turret) });
 });
 
 /** Hovers bob gently on their air cushion; boats rock on the water. */
@@ -940,9 +929,10 @@ registerModel('skimmer', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.05, 0.62, 0);
   turret.add(box(0.7, 0.28, 0.6, secondary, 0, 0.14, 0));
-  turret.add(box(0.9, 0.1, 0.1, DARK, 0.7, 0.15, 0));
+  const gun = barrelPivot('skimmer', turret);
+  gun.add(box(0.9, 0.1, 0.1, DARK, 0.4, 0, 0));
   hull.add(turret);
-  return setRig(root, { turret, animate: bob(hull, 0.04, 0) });
+  return setRig(root, { turret, ...mounted('skimmer', root, turret, [gun]), animate: bob(hull, 0.04, 0) });
 });
 
 registerModel('missileBoat', (faction) => {
@@ -957,14 +947,11 @@ registerModel('missileBoat', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.55, 0.3, 0);
   turret.add(box(0.6, 0.3, 0.6, secondary, 0, 0.15, 0));
-  const rack = new THREE.Group();
-  rack.position.set(0, 0.45, 0);
-  rack.rotation.z = 0.3;
+  const rack = barrelPivot('missileBoat', turret);
   rack.add(box(0.7, 0.35, 0.55, METAL));
   rack.add(box(0.05, 0.28, 0.45, DARK, 0.35, 0, 0));
-  turret.add(rack);
   hull.add(turret);
-  return setRig(root, { turret, animate: bob(hull, 0.05, 0.05) });
+  return setRig(root, { turret, ...mounted('missileBoat', root, turret, [rack]), animate: bob(hull, 0.05, 0.05) });
 });
 
 registerModel('amphib', (faction) => {
@@ -977,9 +964,10 @@ registerModel('amphib', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.2, 1.1, 0);
   turret.add(box(0.4, 0.2, 0.4, secondary, 0, 0.1, 0));
-  turret.add(box(0.6, 0.07, 0.07, DARK, 0.4, 0.12, 0));
+  const gun = barrelPivot('amphib', turret);
+  gun.add(box(0.6, 0.07, 0.07, DARK, 0.25, 0, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('amphib', root, turret, [gun]) });
 });
 
 registerModel('hoverFortress', (faction) => {
@@ -995,12 +983,13 @@ registerModel('hoverFortress', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.6, 1.0, 0);
   turret.add(box(1.1, 0.4, 1.3, secondary, 0, 0.2, 0));
+  const batteries = barrelPivot('hoverFortress', turret);
   for (const side of [-1, 1]) {
-    turret.add(box(0.9, 0.45, 0.45, METAL, 0.15, 0.55, side * 0.4));
-    turret.add(box(0.05, 0.36, 0.36, DARK, 0.6, 0.55, side * 0.4));
+    batteries.add(box(0.9, 0.45, 0.45, METAL, 0.15, 0, side * 0.4));
+    batteries.add(box(0.05, 0.36, 0.36, DARK, 0.6, 0, side * 0.4));
   }
   hull.add(turret);
-  return setRig(root, { turret, animate: bob(hull, 0.05, 0) });
+  return setRig(root, { turret, ...mounted('hoverFortress', root, turret, [batteries]), animate: bob(hull, 0.05, 0) });
 });
 
 /** The Dreadnought: a long grey-hulled battleship in the side's colours, twin-gun turrets fore and aft, and a funnel. */
@@ -1024,15 +1013,17 @@ registerModel('dreadnought', (faction) => {
     const t = new THREE.Group();
     t.position.set(x, 0.5, 0);
     t.add(box(0.75, 0.32, 0.7, secondary, 0, 0.16, 0));
-    for (const side of [-1, 1]) t.add(box(1.0, 0.09, 0.09, DARK, 0.75, 0.22, side * 0.16));
+    const barrels = barrelPivot('dreadnought', t);
+    for (const side of [-1, 1]) barrels.add(box(1.0, 0.09, 0.09, DARK, 0.45, 0, side * 0.16));
     hull.add(t);
-    return t;
+    return [t, barrels] as const;
   };
-  const turret = gun(1.15);
-  const aft = gun(-1.75);
+  const [turret, fore] = gun(1.15);
+  const [aft, aftBarrels] = gun(-1.75);
   const rock = bob(hull, 0.04, 0.03);
   return setRig(root, {
     turret,
+    ...mounted('dreadnought', root, turret, [fore, aftBarrels]),
     animate(s) {
       rock(s);
       aft.rotation.y = turret.rotation.y;
@@ -1053,10 +1044,11 @@ registerModel('scorchBuggy', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(0.25, 0.56, 0);
   turret.add(box(0.3, 0.2, 0.3, DARK, 0, 0.1, 0));
-  turret.add(box(0.6, 0.09, 0.09, METAL, 0.35, 0.12, 0));
-  turret.add(box(0.1, 0.14, 0.14, FLAME_TIP, 0.68, 0.12, 0));
+  const nozzle = barrelPivot('scorchBuggy', turret);
+  nozzle.add(box(0.6, 0.09, 0.09, METAL, 0.25, 0, 0));
+  nozzle.add(box(0.1, 0.14, 0.14, FLAME_TIP, 0.58, 0, 0));
   root.add(turret);
-  return setRig(root, { turret });
+  return setRig(root, { turret, ...mounted('scorchBuggy', root, turret, [nozzle]) });
 });
 
 registerModel('cinderWalker', (faction) => {
@@ -1080,7 +1072,7 @@ registerModel('cinderWalker', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45) });
+  return setRig(root, { turret, ...walker(legs, body, 0.9, 0.45), ...mounted('cinderWalker', root, turret) });
 });
 
 registerModel('inferno', (faction) => {
@@ -1113,7 +1105,7 @@ registerModel('inferno', (faction) => {
     body.add(leg.hip);
     return leg;
   });
-  return setRig(root, { turret, ...walker(legs, body, 1.4, 0.3) });
+  return setRig(root, { turret, ...walker(legs, body, 1.4, 0.3), ...mounted('inferno', root, turret) });
 });
 
 registerModel('trooper', (faction) => infantry(faction, 'rifle'));

@@ -488,6 +488,7 @@ src/
     units.ts         unit and weapon definitions (stats are data)
     buildings.ts     building definitions: production, defences, civic
     spawn.ts         assembles unit and building entities from definitions
+    mounts.ts        where each armed model's turret, barrel pivot and muzzles are, shared by the sim and the models
     tide.ts          production tide, the tide's attack clock, and the ramps
     offensive.ts     when each team attacks: readiness, or the tide's clock
     commander/       each side's planner above the squads (see "The Commander" below)
@@ -554,6 +555,30 @@ src/
     remoteSim.ts     the page's end of the worker: asks for ticks, applies frames
   app.ts     session flow: one renderer and loop, a battle at a time, setup in between
 ```
+
+### Guns, muzzles and slopes
+
+Every armed model with guns has a **mount** in `game/mounts.ts`: where its
+turret turns, where its barrels pitch, and where each muzzle is. Shots,
+muzzle flashes and smoke leave from the muzzle, and the models in
+`render/models` are built round the same points (`test/mounts.test.ts`
+poses every model and checks its muzzles are where the sim fires from, at
+the end of a barrel). With several barrels, a burst takes turns along them
+(a tower's twin guns go left, right, left) or, with `salvo: 'together'`,
+fires them all at once (the Fortress Walker's siege guns, the
+Dreadnought's broadside, flame lances).
+
+Tanks, trucks and hovers **lie along the ground** (`systems/tilt.ts`): a
+plane through the ground on a ring round the hull gives its pitch and
+roll, so it noses up a hill and leans along the side of one without
+rocking over every bump or teetering on a peak narrower than itself, and
+it rides on the rims of a dip rather than sinking into them. Walkers keep
+their bodies level. Turrets turn on the tilted deck and barrels pitch
+toward their target within the mount's limits: a tank perched above a
+soldier at the foot of a slope can't dip its gun that far, so it holds
+fire and moves to where it can (`elevationFor`, and the firing spots in
+`systems/targeting.ts`). Lobbed weapons raise their barrels and racks
+further the further they're shooting.
 
 ### Changing the map mid-battle
 

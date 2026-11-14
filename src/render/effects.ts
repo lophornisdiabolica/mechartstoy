@@ -196,7 +196,7 @@ export class Effects {
     );
     this.root.add(this.smoke.mesh, this.debris.mesh, this.shocks.mesh, this.flashes.mesh);
 
-    events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.kind));
+    events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.climb ?? 0, e.kind));
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
     events.on('buildingDamaged', (e) => {
@@ -324,19 +324,24 @@ export class Effects {
     this.debris.update(dt);
   }
 
-  private muzzleFlash(x: number, y: number, z: number, heading: number, kind: ProjectileKind): void {
+  /** A flash just out of the muzzle, and for big guns a puff of smoke blown on along the barrel. */
+  private muzzleFlash(x: number, y: number, z: number, heading: number, climb: number, kind: ProjectileKind): void {
     const big = kind === 'shell' || kind === 'artillery';
+    const flat = Math.cos(climb);
+    const dx = Math.cos(heading) * flat;
+    const dy = Math.sin(climb);
+    const dz = -Math.sin(heading) * flat;
     this.flashes.spawn({
-      x: x + Math.cos(heading) * 0.2,
-      y,
-      z: z - Math.sin(heading) * 0.2,
+      x: x + dx * 0.2,
+      y: y + dy * 0.2,
+      z: z + dz * 0.2,
       life: big ? 0.15 : 0.07,
       size: big ? 0.55 : 0.2,
       color: 0xffd38a,
       endColor: 0x000000,
     });
     if (big) {
-      this.smoke.spawn({ x, y, z, vx: Math.cos(heading) * 1.5, vy: 0.5, vz: -Math.sin(heading) * 1.5, life: 1.2, size: 0.3, endSize: 0.7, color: 0xb8b2a8, drag: 1.5 });
+      this.smoke.spawn({ x, y, z, vx: dx * 1.5, vy: dy * 1.5 + 0.5, vz: dz * 1.5, life: 1.2, size: 0.3, endSize: 0.7, color: 0xb8b2a8, drag: 1.5 });
     }
   }
 

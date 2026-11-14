@@ -1,5 +1,6 @@
 import { Entity, World } from '../core/ecs';
-import { Building, Collider, Faction, Targetable, Transform, Unit } from './components';
+import { Armed, Building, Collider, Faction, Renderable, Targetable, Tilt, Transform, Unit } from './components';
+import { HullPose, Mount, mountOf, muzzleWorld, pivotHeight, toHull, hullMatrix } from './mounts';
 import { SimContext } from './context';
 import { UnitDef } from './units';
 import * as D from '../core/dmath';
@@ -168,4 +169,61 @@ export function clearShot(world: World, ctx: SimContext, from: Point3, target: E
   const flat = D.hypot(to.x - from.x, to.z - from.z);
   const trace = traceShot(world, ctx, from, to, flat, shooter, faction, target, pad);
   return trace.hit === target || trace.stoppedBy === 'unit' || trace.stoppedBy === 'nothing';
+}
+
+/** How an entity's hull sits now: level unless it's a vehicle lying along a slope (see Tilt). */
+export function hullPose(world: World, e: Entity): HullPose {
+  const t = world.req(e, Transform);
+  const tilt = world.get(e, Tilt);
+  return { x: t.x, y: t.y, z: t.z, heading: t.heading, pitch: tilt?.pitch ?? 0, roll: tilt?.roll ?? 0 };
+}
+
+/** The mount an entity's model carries its guns on, if it has one (see mounts.ts). */
+export function mountFor(world: World, e: Entity): Mount | undefined {
+  const r = world.get(e, Renderable);
+  return r ? mountOf(r.model) : undefined;
+}
+
+/**
+ * Where a weapon's shot `index` leaves from, pointing at world heading
+ * `aim` with the barrels pitched `elev`: the end of that barrel on the
+ * model (see mounts.ts), or for soldiers, just in front of them at the
+ * weapon's height.
+ */
+export function weaponMuzzle(world: World, e: Entity, armed: Armed, aim: number, elev: number, index: number, ctx?: SimContext): Point3 {
+  const mount = mountFor(world, e);
+  if (!mount) return muzzlePoint(world, e, aim, armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
+  return muzzleWorld(mount, hullPose(world, e), aim, elev, index);
+}
+
+const _hull: number[] = new Array(9);
+
+/** Barrels within this of their reach still count as on target (rounding, and a hull still settling). */
+const ELEV_SLACK = 0.06;
+
+/**
+ * How far up off the turret the barrels pitch to shoot at `target` from
+ * heading `aim`, and whether the mount reaches that far (a tank perched
+ * above a soldier at the foot of the slope can't dip its gun enough, and
+ * one nosed into a hollow can't lift it). Lobbed weapons raise their
+ * barrels higher the further out they're shooting, and always reach.
+ */
+export function elevationFor(world: World, e: Entity, mount: Mount, armed: Armed, aim: number, target: Entity): { elev: number; reach: boolean } {
+  if (!mount.pivot || !mount.elev) return { elev: 0, reach: true };
+  const [lo, hi] = mount.elev;
+  const t = world.req(e, Transform);
+  const tt = world.req(target, Transform);
+  const flat = D.hypot(tt.x - t.x, tt.z - t.z);
+  const w = armed.weapon;
+  let climb: number;
+  if (w.arc) {
+    climb = 0.35 + 0.5 * Math.min(1, flat / Math.max(1, w.range));
+  } else {
+    const to = aimPoint(world, target);
+    climb = D.atan2(to.y - (t.y + pivotHeight(mount)), Math.max(0.5, flat));
+  }
+  const tilt = world.get(e, Tilt);
+  const want = !tilt || (tilt.pitch === 0 && tilt.roll === 0) ? climb : toHull(hullMatrix(t.heading, tilt.pitch, tilt.roll, _hull), aim, climb).elev;
+  const elev = want < lo ? lo : want > hi ? hi : want;
+  return { elev, reach: w.arc || (want >= lo - ELEV_SLACK && want <= hi + ELEV_SLACK) };
 }

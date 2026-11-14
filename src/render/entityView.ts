@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Construction, Faction, Renderable, Transform, Wreck } from '../game/components';
+import { Armed, Construction, Faction, Renderable, Tilt, Transform, Wreck } from '../game/components';
+import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
 import { breakModel, Collapse, stepCollapse } from './wrecks';
@@ -30,6 +31,7 @@ interface ViewEntry {
 }
 
 const _ahead = new THREE.Vector3();
+const _m: number[] = new Array(9);
 /** Most an aircraft leans into a turn, radians. */
 const MAX_BANK = 0.75;
 
@@ -114,8 +116,8 @@ export class EntityView {
           else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
         });
         entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null };
-        // Roll after turning, so banking leans along the model's own length.
-        obj.rotation.order = 'YXZ';
+        // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
+        obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
         this.owners.set(obj, e);
         this.root.add(obj);
@@ -150,6 +152,13 @@ export class EntityView {
         continue;
       }
 
+      // Tanks and trucks lie along the ground under them.
+      const tilt = w.get(e, Tilt);
+      if (tilt) {
+        obj.rotation.z = tilt.ppitch + (tilt.pitch - tilt.ppitch) * alpha;
+        obj.rotation.x = tilt.proll + (tilt.roll - tilt.proll) * alpha;
+      }
+
       if (rig?.bank) {
         // Lean into the turn: the turn rate over the last tick, eased so it doesn't twitch.
         const turn = lerpAngle(0, t.heading - t.pheading, 1) * SIM_HZ;
@@ -159,7 +168,12 @@ export class EntityView {
       }
 
       const armed = w.get(e, Armed);
-      if (rig?.turret && armed) rig.turret.rotation.y = armed.aim - obj.rotation.y;
+      if (rig?.turret && armed) {
+        // The turret turns on the hull's deck, tilted or not, and the barrels pitch on the turret.
+        const tilted = obj.rotation.x !== 0 || obj.rotation.z !== 0;
+        rig.turret.rotation.y = tilted && mountOf(w.req(e, Renderable).model) ? turretYaw(hullMatrix(obj.rotation.y, obj.rotation.z, obj.rotation.x, _m), armed.aim) : armed.aim - obj.rotation.y;
+        if (rig.barrels) for (const b of rig.barrels) b.rotation.z = armed.elev;
+      }
       if (rig?.animate) {
         const moved = Math.hypot(x - entry.lastX, z - entry.lastZ);
         rig.animate({ dt, speed: dt > 0 ? moved / dt : 0 });

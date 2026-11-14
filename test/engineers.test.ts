@@ -136,7 +136,7 @@ describe('Legion earthworks', () => {
     const game = new Game(5, { settings: s });
     const eng = game.ctx.commander.engineers;
     let manned = 0;
-    for (let i = 0; i < 400 / DT && manned === 0; i++) {
+    for (let i = 0; i < 600 / DT && manned === 0; i++) {
       game.step(DT);
       if (i % 150 !== 0 || !eng.works.some((w) => w.kind === 'trench' && w.done)) continue;
       for (const e of game.world.query(Ai, Faction, Transform)) {

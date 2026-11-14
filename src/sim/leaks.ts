@@ -110,6 +110,8 @@ export const BOUNDED: Record<string, string> = {
   // A ring of the last CHANGE_LOG map and obstacle changes (NavObstacles).
   'game.ctx.nav.obstacles.log': 'NavObstacles.record',
   'game.ctx.navs.land.obstacles.log': 'NavObstacles.record',
+  // The units in a team's attack, cleared when it's spent (Offensive): no bigger than the army. Empty at the first sample and full at the last, it looks like growth.
+  'game.ctx.offensive.plans[*].roster': 'Offensive.plans',
 };
 
 export interface Grower {

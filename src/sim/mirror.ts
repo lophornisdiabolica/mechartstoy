@@ -1,5 +1,5 @@
 import { ComponentType, Entity } from '../core/ecs';
-import { Armed, Building, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
+import { Armed, Building, Tilt, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
 import { GameEvents } from '../game/context';
 import { Command, Game, SIM_HZ } from '../game/game';
 import { BattleSettings } from '../game/settings';
@@ -35,8 +35,12 @@ import { GodState } from '../game/god';
  * packed separately.
  */
 const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer];
-/** Numbers per entity in a Pose: id, x, y, z, heading, and Armed.aim (NaN if unarmed). */
-const P_FIELDS = 6;
+/**
+ * Numbers per entity in a Pose: id, x, y, z, heading, Armed.aim and
+ * Armed.elev (NaN if unarmed), and Tilt.pitch and Tilt.roll (NaN for what
+ * doesn't tilt).
+ */
+const P_FIELDS = 9;
 
 /** Where everything with a Transform was after one tick, packed P_FIELDS numbers per entity. */
 export interface Pose {
@@ -306,7 +310,12 @@ export class SimHost {
       data[n + 2] = t.y;
       data[n + 3] = t.z;
       data[n + 4] = t.heading;
-      data[n + 5] = world.get(e, Armed)?.aim ?? NaN;
+      const armed = world.get(e, Armed);
+      data[n + 5] = armed?.aim ?? NaN;
+      data[n + 6] = armed?.elev ?? NaN;
+      const tilt = world.get(e, Tilt);
+      data[n + 7] = tilt?.pitch ?? NaN;
+      data[n + 8] = tilt?.roll ?? NaN;
       n += P_FIELDS;
     }
     return { time: world.time, data: n === data.length ? data : data.subarray(0, n) };
@@ -618,7 +627,22 @@ export class SimView {
       if (aim === aim) {
         const armed = world.get(e, Armed);
         const from = da[ka + 5];
-        if (armed) armed.aim = from === from ? from + wrapAngle(aim - from) * alpha : aim;
+        if (armed) {
+          armed.aim = from === from ? from + wrapAngle(aim - from) * alpha : aim;
+          const elev = d[k2 + 6];
+          const was = da[ka + 6];
+          armed.elev = was === was ? was + (elev - was) * alpha : elev;
+        }
+      }
+      const pitch = d[k2 + 7];
+      if (pitch === pitch) {
+        let tilt = world.get(e, Tilt);
+        if (!tilt) tilt = world.add(e, Tilt, { pitch: 0, roll: 0, ppitch: 0, proll: 0, sx: 0, sz: 0, sheading: 0, wantPitch: 0, wantRoll: 0, lift: 0 });
+        const was = da[ka + 7];
+        tilt.ppitch = was === was ? was : pitch;
+        tilt.proll = was === was ? da[ka + 8] : d[k2 + 8];
+        tilt.pitch = pitch;
+        tilt.roll = d[k2 + 8];
       }
     }
     return alpha;
