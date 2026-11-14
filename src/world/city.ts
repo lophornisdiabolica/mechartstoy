@@ -186,6 +186,32 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng)
   return { x, z, rx, rz, lots, square, avenues, alleys };
 }
 
+/**
+ * A city's avenues as straight stretches from one crossing to the next (and
+ * on to its ends), for traffic (see game/traffic.ts): each is a narrow that
+ * vehicles take turns on when they'd meet head-on.
+ */
+export function cityStreets(plan: CityPlan): { ax: number; az: number; bx: number; bz: number; width: number }[] {
+  const out: { ax: number; az: number; bx: number; bz: number; width: number }[] = [];
+  // Avenues running along z sit at fixed x, and the other way round.
+  const alongZ = plan.avenues.filter((a) => a.points[0].x === a.points[1].x);
+  const alongX = plan.avenues.filter((a) => a.points[0].z === a.points[1].z);
+  for (const [list, cross, zAxis] of [[alongZ, alongX, true], [alongX, alongZ, false]] as const) {
+    for (const a of list) {
+      const [p, q] = a.points;
+      const lo = zAxis ? Math.min(p.z, q.z) : Math.min(p.x, q.x);
+      const hi = zAxis ? Math.max(p.z, q.z) : Math.max(p.x, q.x);
+      const cuts = cross.map((c) => (zAxis ? c.points[0].z : c.points[0].x)).filter((v) => v > lo + 1 && v < hi - 1);
+      const stops = [lo, ...cuts.sort((m, n) => m - n), hi];
+      for (let k = 1; k < stops.length; k++) {
+        const fixed = zAxis ? p.x : p.z;
+        out.push(zAxis ? { ax: fixed, az: stops[k - 1], bx: fixed, bz: stops[k], width: a.width } : { ax: stops[k - 1], az: fixed, bx: stops[k], bz: fixed, width: a.width });
+      }
+    }
+  }
+  return out;
+}
+
 /** The middle of the route cell a point is in, for a map whose left and top edges are at minX, minZ. */
 export function snapToCell(x: number, z: number, minX: number, minZ: number): { x: number; z: number } {
   return {

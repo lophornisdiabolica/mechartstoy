@@ -23,6 +23,7 @@ import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
 import { Traffic, trafficSystem } from './traffic';
+import { cityStreets } from '../world/city';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
 import { territorySystem } from './territory';
@@ -136,6 +137,8 @@ export class Game {
       towns: new Towns(this.field.townSites, seed),
       traffic: new Traffic(nav),
     };
+    // A city's avenues are narrows too: vehicles take turns on them, as on bridges.
+    for (const t of this.field.townSites) for (const s of t.city ? cityStreets(t.city) : []) this.ctx.traffic.add({ ...s, kind: 'street' });
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
     const ctx = this.ctx;

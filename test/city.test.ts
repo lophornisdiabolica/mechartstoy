@@ -4,7 +4,7 @@ import { Game } from '../src/game/game';
 import { battlefieldConfig, defaultSettings } from '../src/game/settings';
 import { UNIT_DEFS } from '../src/game/units';
 import { generateBattlefield } from '../src/world/battlefield';
-import { CITY_CELL, cityOut } from '../src/world/city';
+import { CITY_CELL, cityOut, cityStreets } from '../src/world/city';
 import { Rng } from '../src/core/rng';
 import * as D from '../src/core/dmath';
 
@@ -152,4 +152,20 @@ describe('cities', () => {
     expect(seen).toBeGreaterThan(0);
     expect(wedged).toBe(0);
   }, 120_000);
+});
+
+describe('city traffic', () => {
+  it('registers each avenue stretch between crossings as a narrow street', () => {
+    const game = quietCity(1);
+    const city = game.field.townSites[0].city!;
+    const streets = cityStreets(city);
+    expect(streets.length).toBeGreaterThan(city.avenues.length);
+    for (const s of streets) {
+      expect(s.width).toBeCloseTo(4.5);
+      // Straight, along one axis.
+      expect(s.ax === s.bx || s.az === s.bz).toBe(true);
+      const mid = { x: (s.ax + s.bx) / 2, z: (s.az + s.bz) / 2 };
+      expect(game.ctx.traffic.at(mid.x, mid.z, 0)).toBeGreaterThanOrEqual(0);
+    }
+  });
 });
