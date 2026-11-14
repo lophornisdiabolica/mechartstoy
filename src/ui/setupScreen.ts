@@ -553,6 +553,18 @@ export class SetupScreen {
     );
     row(map, 'Town size', townSize.row);
     this.sync.push(() => townSize.set(this.settings.map.townSize));
+    const city = el('input', { type: 'checkbox', 'aria-label': 'City' });
+    city.addEventListener('change', () => {
+      this.settings.map.city = city.checked;
+      this.changed();
+    });
+    const cityLabel = el('label', { class: 'check' });
+    cityLabel.append(city, document.createTextNode(' The first town is a city'));
+    row(map, 'City', cityLabel);
+    this.sync.push(() => {
+      city.checked = this.settings.map.city;
+      city.disabled = this.settings.map.towns === 0;
+    });
     const folk = el('input', { type: 'checkbox', 'aria-label': 'Townsfolk' });
     folk.addEventListener('change', () => {
       this.settings.map.townLife = folk.checked;
@@ -562,7 +574,7 @@ export class SetupScreen {
     folkLabel.append(folk, document.createTextNode(' People in the towns'));
     row(map, 'Townsfolk', folkLabel);
     this.sync.push(() => (folk.checked = this.settings.map.townLife));
-    map.append(el('p', { class: 'hint' }, 'A few townsfolk walk each town’s streets and scatter from the fighting, and the town’s engineer puts up a new building every four minutes. A side that razes three of a town’s buildings turns its people into a militia that guards the town’s edge and shoots that side’s units that come close.'));
+    map.append(el('p', { class: 'hint' }, 'A few townsfolk walk each town’s streets and scatter from the fighting, and the town’s engineer puts up a new building every four minutes. A side that razes three of a town’s buildings turns its people into a militia that guards the town’s edge and shoots that side’s units that come close. A city is a big town of blocks with alleys between the buildings that only infantry and the smallest vehicles fit down, so vehicles keep to its avenues, single file; an outpost takes its square.'));
 
     // Armies
     const armies = section('Armies', false);

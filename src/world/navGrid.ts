@@ -46,6 +46,10 @@ class CellSamples {
   readonly slope: Float64Array;
   readonly deck: Uint8Array;
   readonly settled: Uint8Array;
+  /** 1 in a city's cells, where a gap one cell wide is an alley (see NavGrid.updateClearance). */
+  readonly city: Uint8Array;
+  /** Whether the map has a city at all. */
+  readonly hasCity: boolean;
   readonly ground: GroundDef[];
 
   constructor(
@@ -59,14 +63,16 @@ class CellSamples {
     this.slope = new Float64Array(n);
     this.deck = new Uint8Array(n);
     this.settled = new Uint8Array(n);
+    this.city = new Uint8Array(n);
     this.ground = new Array<GroundDef>(n);
+    this.hasCity = field.townSites.some((t) => t.city);
     this.sample(0, 0, cols - 1, rows - 1);
     field.onChange((area) => this.sample(Math.max(0, area.i0 - 1), Math.max(0, area.j0 - 1), Math.min(cols - 1, area.i1 + 1), Math.min(rows - 1, area.j1 + 1)));
   }
 
   private sample(i0: number, j0: number, i1: number, j1: number): void {
     const field = this.field;
-    const settled = [...field.townSites, ...field.outpostSites];
+    const outposts = field.outpostSites;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
         const k = j * this.cols + i;
@@ -75,7 +81,8 @@ class CellSamples {
         this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
-        this.settled[k] = settled.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
+        this.settled[k] = field.townSites.some((t) => field.inTown(t, x, z)) || outposts.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
+        this.city[k] = field.inCity(x, z) ? 1 : 0;
         this.ground[k] = field.groundAt(x, z);
       }
     }
@@ -574,6 +581,30 @@ export class NavGrid {
         c[k] = v;
       }
     }
+    this.capAlleys();
+  }
+
+  /**
+   * In a city, a free cell between two blocked ones (east and west, or north
+   * and south) is an alley: the buildings either side stand only a cell
+   * apart, 1.5 units, though the cell centres are further apart than that.
+   * Its room is half a cell, so infantry and the tiniest vehicles fit and
+   * everything else keeps to the avenues. Once a building beside it is
+   * razed, the gap opens up and it's ordinary ground again.
+   */
+  private capAlleys(): void {
+    const city = this.samples.city;
+    if (!this.samples.hasCity) return;
+    const { cols, rows } = this;
+    const c = this.clearance;
+    const half = this.cellSize * 0.5;
+    for (let j = 1; j < rows - 1; j++) {
+      for (let i = 1; i < cols - 1; i++) {
+        const k = j * cols + i;
+        if (city[k] === 0 || c[k] <= half) continue;
+        if ((c[k - 1] === 0 && c[k + 1] === 0) || (c[k - cols] === 0 && c[k + cols] === 0)) c[k] = half;
+      }
+    }
   }
 
   /**
@@ -657,8 +688,9 @@ export class NavGrid {
    * tighter fit, and finally to any open cell.
    */
   findPath(from: Point, to: Point, radius = 0): Point[] | null {
-    // Every open cell has at least a cell's width of room, so small units need no special treatment.
-    const wide = radius + CLEARANCE_MARGIN > this.cellSize;
+    // Every open cell has at least a cell's width of room, so small units need no special treatment,
+    // except in a city, where an alley has only half that (see capAlleys).
+    const wide = radius + CLEARANCE_MARGIN > (this.samples.hasCity ? this.cellSize * 0.5 : this.cellSize);
     for (const r of wide ? [radius, radius * 0.5] : []) {
       const route = this.route(from, to, r);
       if (route?.found) return route.points;

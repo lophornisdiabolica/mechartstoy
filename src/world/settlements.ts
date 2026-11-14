@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import { BUILDING_DEFS, BuildingDef, BuildingId, DECORATIVE_BUILDINGS } from '../game/buildings';
 import { Battlefield, BaseSite, TownSite } from './battlefield';
+import { CityPlan } from './city';
 import * as D from '../core/dmath';
 
 /** Radius of the clear ground kept in front of a production building's door. */
@@ -127,6 +128,7 @@ export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras:
 
 /** A civilian town laid out on a loose street grid, with a few gaps for squares. */
 export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): BuildingPlacement[] {
+  if (site.city) return layoutCity(field, site.city, rng);
   const layout = new Layout(field);
   const spacing = 4.4;
   const angle = site.angle;
@@ -145,6 +147,25 @@ export function layoutTown(field: Battlefield, site: TownSite, rng: Rng): Buildi
       const building = townBuilding(field, site, rng, x, z, industry);
       layout.tryPlace({ building, faction: -1, x, z, heading: -angle + rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) }, 0.6);
     }
+  }
+  return layout.placements;
+}
+
+/** What goes up on a city lot, by how far out it is: apartment blocks in the middle, townhouses further out, houses on the outskirts. */
+export function cityBuilding(rng: Rng, out: number): BuildingId {
+  if (out < 0.4) return rng.pick(['tenement', 'tenement', 'tenement', 'block', 'terrace', 'spire']);
+  if (out < 0.75) return rng.pick(['terrace', 'terrace', 'tenement', 'block']);
+  return rng.pick(['terrace', 'terrace', 'house', 'house']);
+}
+
+/** A city (see world/city.ts): one building on each lot, square to the map. */
+function layoutCity(field: Battlefield, plan: CityPlan, rng: Rng): BuildingPlacement[] {
+  const layout = new Layout(field);
+  for (const lot of plan.lots) {
+    // An outpost in the city (its square's, or one placed by hand) keeps its pad clear.
+    if (field.outpostSites.some((o) => D.hypot(o.x - lot.x, o.z - lot.z) < o.radius + 1.5)) continue;
+    const building = cityBuilding(rng, lot.out);
+    layout.tryPlace({ building, faction: -1, x: lot.x, z: lot.z, heading: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) }, 0.3);
   }
   return layout.placements;
 }

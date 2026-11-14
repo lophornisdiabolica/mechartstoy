@@ -26,6 +26,8 @@ import { BuildingId } from './buildings';
 import { UnitDef } from './units';
 import { TownSite } from '../world/battlefield';
 import { MOVE_RULES } from '../world/moveClasses';
+import { cityNorm, cityOut } from '../world/city';
+import { cityBuilding } from '../world/settlements';
 
 /*
  * Town life (the map's townsfolk setting): each civilian town has a few
@@ -50,6 +52,8 @@ import { MOVE_RULES } from '../world/moveClasses';
 /** Townsfolk per town: this many, plus one per this much radius. */
 const FOLK_BASE = 2;
 const FOLK_PER_RADIUS = 5;
+/** In a city, one more townsperson per this many lots. */
+const CITY_FOLK_LOTS = 6;
 /** Seconds between someone new coming out of a building, while a town is short of people. */
 const SPAWN_EVERY = 60;
 /** Seconds between the town engineer's new buildings (and before its first). */
@@ -142,7 +146,8 @@ export class Towns {
     this.rng = new Rng(seed ^ 0x666f6c6b);
     this.towns = sites.map((site) => ({
       site,
-      wanted: FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
+      // A city keeps one person per few lots.
+      wanted: site.city ? FOLK_BASE + Math.round(site.city.lots.length / CITY_FOLK_LOTS) : FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
       spawnAt: 0,
       buildAt: BUILD_EVERY,
       plan: null,
@@ -311,7 +316,8 @@ export class Towns {
     const base = ctx.field.baseSites[enemy];
     const toward = base ? D.atan2(base.z - site.z, base.x - site.x) : 0;
     const a = toward + (((f.post * 0.618034) % 1) - 0.5) * 1.6;
-    const r = site.radius * POST_OUT;
+    // A city's edge is squarish, and may be longer one way.
+    const r = site.city ? POST_OUT / cityNorm(D.cos(a) / site.city.rx, D.sin(a) / site.city.rz) : site.radius * POST_OUT;
     const post = this.inTown(ctx, site, site.x + D.cos(a) * r, site.z + D.sin(a) * r) ?? { x: site.x, z: site.z };
     const close = D.hypot(post.x - t.x, post.z - t.z) < 1.5;
     m.targetX = close ? null : post.x;
@@ -354,6 +360,17 @@ export class Towns {
   /** The next spot for a town building: the open spot on the town's street grid nearest its middle, out to GROW_REACH of its radius. */
   private buildSpot(ctx: SimContext, town: Town): Town['plan'] {
     const site = town.site;
+    if (site.city) {
+      // A city fills its empty lots, the middle first.
+      const open = site.city.lots
+        .filter((l) => !ctx.navs.land.builtAt(l.x, l.z) && !ctx.field.outpostSites.some((o) => D.hypot(o.x - l.x, o.z - l.z) < o.radius + 1.5))
+        .sort((a, b) => a.out - b.out);
+      for (const l of open) {
+        const building = cityBuilding(this.rng, l.out);
+        if (this.fits(ctx, l.x, l.z, ctx.buildings[building].radius)) return { x: l.x, z: l.z, heading: this.rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), building };
+      }
+      return null;
+    }
     const cells = Math.ceil((site.radius * GROW_REACH) / SPACING);
     const building = GROWTH[this.rng.int(0, GROWTH.length - 1)];
     const r = ctx.buildings[building].radius;
@@ -402,7 +419,7 @@ export class Towns {
   /** A point pulled inside a town's ground, if people can stand there. */
   private inTown(ctx: SimContext, site: TownSite, x: number, z: number): { x: number; z: number } | null {
     const d = D.hypot(x - site.x, z - site.z);
-    const most = site.radius * 1.1;
+    const most = site.city ? (1.1 * d) / Math.max(0.01, cityOut(site.city, x, z)) : site.radius * 1.1;
     if (d > most) {
       x = site.x + ((x - site.x) / d) * most;
       z = site.z + ((z - site.z) / d) * most;

@@ -95,6 +95,12 @@ export interface BattleSettings {
     /** Civilian towns in no-man's land, and how big they are. */
     towns: number;
     townSize: TownSize;
+    /**
+     * The first town is a city instead (see world/city.ts): blocks of
+     * buildings with alleys only infantry fit down, and avenues vehicles
+     * take single file. Needs at least one town.
+     */
+    city: boolean;
     /** Townsfolk: people in the towns, a town engineer who grows each town, and a militia once a side razes too much of it (see towns.ts). */
     townLife: boolean;
     /** Join the bases' water with channels and bridge them (see waterways.ts). */
@@ -257,7 +263,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', townLife: true, waterways: true, forest: 0.2, scrap: true, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: false, townLife: true, waterways: true, forest: 0.2, scrap: true, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -428,6 +434,8 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     forest: s.map.forest,
     towns: s.map.towns,
     townRadius: TOWN_SIZES[s.map.townSize].radius,
+    // At most about two thirds of the map's depth, if it fits between the bases.
+    cityRadius: s.map.city ? Math.round(Math.min(cols * scale, rows * scale) * cellSize * 0.32) : 0,
     townPlaces: placed.towns,
     outpostPlaces: placed.outposts,
   };
