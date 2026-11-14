@@ -6,8 +6,8 @@ import { cactusGeometry, pineGeometry, treeGeometry } from './propsMesh';
 
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
 const GEOMETRY_HEIGHT = 1.4;
-/** How far a fallen trunk sinks into the ground before it's worn away, at size 1. */
-const SINK_DEPTH = 0.5;
+/** How far a fallen trunk sinks into the ground once it's well trodden, at size 1. */
+const SINK_DEPTH = 0.35;
 /** Height of the cactus geometry at scale 1. */
 const CACTUS_HEIGHT = 1.2;
 
@@ -58,17 +58,22 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
     } else {
       // Lying along the ground, foot at the stump, top pointing the way it fell, pressed
       // further into the ground the more it's been driven over (see Woods.trample).
+      // Laid along the slope: tipped up or down to meet the ground where its top lies.
+      const reach = heightAtScale1 * scale * 0.8;
+      const tip = field.heightAt(t.x + p.dx + Math.cos(t.fell) * reach, t.z + p.dz + Math.sin(t.fell) * reach);
+      const pitch = Math.atan2(tip - foot, reach);
       dummy.position.set(t.x + p.dx, foot + 0.15 - t.sunk * SINK_DEPTH * t.size, t.z + p.dz);
-      dummy.rotation.set(0, -t.fell, -Math.PI / 2 + 0.08 - t.sunk * 0.06, 'YXZ');
+      dummy.rotation.set(0, -t.fell, -Math.PI / 2 + 0.06 + pitch - t.sunk * 0.04, 'YXZ');
     }
-    // Big cacti grow tall rather than fat: scaled up evenly they'd be barrels.
-    // Trodden down, the smaller plants of a clump go first, then the trunk itself is gone.
-    const gone = t.fell !== null && (t.sunk >= 1 || (p.scale < 1 && t.sunk >= 0.5));
+    // Trodden down, a fallen forest keeps its trunks, pressed part way into the ground and a
+    // little flatter, so it still reads as a forest that was knocked flat. Every third trunk (and
+    // a desert clump's smaller cacti) wears away, so the rest read as fallen trees, not a pile.
+    const gone = t.fell !== null && ((p.tree % 3 === 0 && t.sunk >= 0.6) || (p.scale < 1 && t.sunk >= 0.5));
     if (gone) dummy.scale.set(0, 0, 0);
-    // Lying down, its height runs along the ground and its girth stands up: trodden, it's
-    // squashed flatter and broken shorter, so it stops hiding what's driving through.
+    // Big cacti grow tall rather than fat: scaled up evenly they'd be barrels.
     else if (t.fell === null) dummy.scale.set(scale * slim, scale, scale * slim);
-    else dummy.scale.set(scale * slim * (1 - t.sunk * 0.55), scale * (1 - t.sunk * 0.3), scale * slim * (1 - t.sunk * 0.4));
+    // Lying down, its height runs along the ground and its girth stands up.
+    else dummy.scale.set(scale * slim * (1 - t.sunk * 0.35), scale * (1 - t.sunk * 0.12), scale * slim * (1 - t.sunk * 0.2));
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   };

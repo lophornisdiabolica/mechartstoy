@@ -17,10 +17,11 @@ import * as D from '../core/dmath';
  *
  * Once a map cell has no trees standing, its ground turns to fallen forest:
  * a tangle of trunks, still rougher going for vehicles than open ground.
- * Vehicles driving over the fallen trunks press them into the ground (see
- * trample) until they're gone, and a cell with nothing left of its trees is
- * open ground again, so a fought-over forest gets worn down to tracks over a
- * battle.
+ * Vehicles driving over the fallen trunks press them part way into the
+ * ground (see trample), and once a cell's trunks are all well trodden it's
+ * open going again, though the trunks still lie there half sunk (see
+ * render/woodsMesh.ts), so a fought-over forest wears into tracks over a
+ * battle and still reads as a forest that was knocked flat.
  *
  * The trees are plain data rather than entities: there can be hundreds, and
  * they only matter where something is shooting through them or driving
@@ -56,7 +57,7 @@ export interface Tree {
   fell: number | null;
   /** Size, for looks (0.85 to 1.2). */
   size: number;
-  /** Once fallen: how far it's been pressed into the ground by traffic, 0 to 1 (gone). */
+  /** Once fallen: how far it's been pressed into the ground by traffic, 0 to 1 (well trodden). */
   sunk: number;
 }
 
@@ -169,7 +170,7 @@ export class Woods {
   /**
    * A vehicle of `radius` driving `distance` over the fallen trunks round
    * (x, z): presses each one it's on a little further into the ground (see
-   * WEAR). A fallen-forest cell whose trunks are all gone is open ground.
+   * WEAR). A fallen-forest cell whose trunks are all well trodden is open ground.
    */
   trample(x: number, z: number, radius: number, distance: number): void {
     const { cols } = this.field.config;

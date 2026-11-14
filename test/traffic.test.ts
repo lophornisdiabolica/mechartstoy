@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Ai, Mover, Transform } from '../src/game/components';
+import { Ai, Mover, Tilt, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
@@ -98,6 +98,8 @@ describe('bridge traffic', () => {
     let headOn = 0;
     let held = 0;
     let busiest = 0;
+    let overhang = -Infinity;
+    let roll = 0;
     for (let i = 0; i < 90 / DT; i++) {
       game.step(DT);
       // Which ways the tanks on the deck are heading.
@@ -111,9 +113,19 @@ describe('bridge traffic', () => {
       if (ways.size > 1) headOn++;
       // While they queue, the bridge costs more to plan a route over.
       busiest = Math.max(busiest, ctx.nav.costAt(0, 0));
+      // On the deck, hulls stay on it and lie flat across it.
+      for (const { e } of tanks) {
+        const t = world.req(e, Transform);
+        if (field.deckAt(t.x, t.z) === null || Math.abs(t.x) > 4.5) continue;
+        // (Roll on the level middle: on a ramp a hull turning onto it rolls with the ramp, as it should.)
+        if (Math.abs(t.x) < 2) roll = Math.max(roll, Math.abs(world.req(e, Tilt).roll));
+        overhang = Math.max(overhang, Math.abs(t.z) + UNIT_DEFS.tank.radius - 2.5);
+      }
     }
     expect(held).toBeGreaterThan(0);
     expect(busiest).toBeGreaterThan(2);
+    expect(overhang).toBeLessThan(0.5);
+    expect(roll).toBeLessThan(0.05);
     // A moment's overlap as one rolls off while the next rolls on, at most.
     expect(headOn * DT).toBeLessThan(1.5);
     for (const { e, to } of tanks) {

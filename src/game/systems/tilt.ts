@@ -49,8 +49,14 @@ export function tiltSystem(ctx: SimContext): System {
           let gx = 0;
           let gz = 0;
           let mean = 0;
+          // On a bridge deck it lies along the deck, even where it hangs over the side (or cuts a
+          // ramp's corner): the ground or water beside a deck isn't what it's resting on.
+          const bridge = field.deckAt(t.x, t.z) !== null ? field.bridgeAt(t.x, t.z) : -1;
           for (let k = 0; k < RING; k++) {
-            const h = field.surfaceAt(t.x + RING_COS[k] * r, t.z + RING_SIN[k] * r);
+            const px = t.x + RING_COS[k] * r;
+            const pz = t.z + RING_SIN[k] * r;
+            const deck = bridge >= 0 ? field.deckLevelBeside(bridge, px, pz) : null;
+            const h = deck !== null ? Math.max(deck, field.heightAt(px, pz)) : field.surfaceAt(px, pz);
             gx += h * RING_COS[k];
             gz += h * RING_SIN[k];
             mean += h;
