@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GARRISON } from '../game/components';
 import type { Rng } from '../core/rng';
 import { FACTIONS, FactionDef } from '../game/factions';
+import { mountOf } from '../game/mounts';
 
 /**
  * Model registry: maps a Renderable.model key to a factory that builds a
@@ -27,6 +28,10 @@ export interface AnimState {
 export interface ModelRig {
   /** Rotated around y to point the weapon (relative to the hull). */
   turret?: THREE.Object3D;
+  /** Pitched round z to point the guns up or down (relative to the turret), at the mount's pivot (see game/mounts.ts). */
+  barrels?: THREE.Object3D[];
+  /** Empty markers at each muzzle in the mount's order, for tests and tools. */
+  muzzles?: THREE.Object3D[];
   /** Orient the whole model along its velocity (projectiles). Build these facing +z. */
   faceVelocity?: boolean;
   /** Aircraft: lean into turns, this many radians of roll per radian a second of turning (planes most). */
@@ -199,4 +204,38 @@ function boxGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
     geometryCache.set(key, markShared(g));
   }
   return g;
+}
+
+/**
+ * The group a mount's barrels pitch in (see game/mounts.ts), placed at its
+ * pivot in the turret: build the barrels into it, level, along +x.
+ */
+export function barrelPivot(model: string, turret: THREE.Object3D): THREE.Group {
+  const pivot = mountOf(model)?.pivot;
+  if (!pivot) throw new Error(`No barrel pivot in the mount for "${model}"`);
+  const g = new THREE.Group();
+  g.position.set(...pivot);
+  g.rotation.z = mountOf(model)?.rest ?? 0;
+  turret.add(g);
+  return g;
+}
+
+/**
+ * The rig parts for a model's mount: its pitching barrels (if any) and a
+ * marker at each muzzle, in the barrels, the turret, or the hull (`root`)
+ * as the mount says. Extra `barrels` pitch along (the Dreadnought's aft guns).
+ */
+export function mounted(model: string, root: THREE.Object3D, turret: THREE.Object3D | null, barrels: THREE.Object3D[] = []): Pick<ModelRig, 'barrels' | 'muzzles'> {
+  const mount = mountOf(model);
+  if (!mount) throw new Error(`No mount for "${model}"`);
+  const parent = mount.hull ? root : (mount.pivot ? barrels[0] : turret);
+  if (!parent) throw new Error(`Mount for "${model}" needs ${mount.pivot ? 'its barrels' : 'a turret'}`);
+  const muzzles = mount.muzzles.map(([x, y, z]) => {
+    const m = new THREE.Object3D();
+    m.name = 'muzzle';
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+  });
+  return { muzzles, ...(barrels.length > 0 ? { barrels } : {}) };
 }

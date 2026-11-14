@@ -74,6 +74,29 @@ export interface GroundFollow {
 }
 export const GroundFollow = defineComponent<GroundFollow>('GroundFollow');
 
+/**
+ * A vehicle's hull lying along the ground under it (see tiltSystem): its
+ * pitch (nose up) and roll (toward its left side), radians, and the last
+ * tick's, for drawing in between. Tanks, trucks and hovers have one;
+ * walkers' legs take the slope and keep their bodies level.
+ */
+export interface Tilt {
+  pitch: number;
+  roll: number;
+  ppitch: number;
+  proll: number;
+  /** Where the ground was last looked at, and when: a vehicle standing still needn't look again. */
+  sx: number;
+  sz: number;
+  sheading: number;
+  /** Where the hull is easing toward. */
+  wantPitch: number;
+  wantRoll: number;
+  /** How far the hull rides above the ground at its middle, on the rims of a dip narrower than it. */
+  lift: number;
+}
+export const Tilt = defineComponent<Tilt>('Tilt');
+
 /** Movement toward a target point. AI systems set the target; the movement system finds the way. */
 export interface Mover {
   speed: number;
@@ -238,6 +261,10 @@ export interface Armed {
   spotZ: number | null;
   /** World-space heading the weapon/turret currently points. */
   aim: number;
+  /** How far up the barrels are pitched off the turret, radians (see mounts.ts). */
+  elev: number;
+  /** Shots fired, to take turns along a mount's muzzles. */
+  shot: number;
   /** Seconds until the next trigger pull. */
   cooldown: number;
   /** Shots left in the current burst and time until the next one. */
