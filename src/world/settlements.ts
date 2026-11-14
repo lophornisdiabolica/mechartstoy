@@ -162,6 +162,8 @@ export function cityBuilding(rng: Rng, out: number): BuildingId {
 function layoutCity(field: Battlefield, plan: CityPlan, rng: Rng): BuildingPlacement[] {
   const layout = new Layout(field);
   for (const lot of plan.lots) {
+    // Parks and ponds stay open.
+    if (lot.use !== 'building') continue;
     // An outpost in the city (its square's, or one placed by hand) keeps its pad clear.
     if (field.outpostSites.some((o) => D.hypot(o.x - lot.x, o.z - lot.z) < o.radius + 1.5)) continue;
     const building = cityBuilding(rng, lot.out);

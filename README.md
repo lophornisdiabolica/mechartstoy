@@ -251,7 +251,8 @@ battle, its exact map via `seed`).
   Townsfolk count toward nothing: no caps, kills or strength. The end
   screen says how many town buildings and townsfolk were caught in the
   crossfire, and which sides the towns took up arms against.
-  **City** (off by default, `city=1`): the first town is a city instead,
+  **City** (off by default; `city=1` for one town, `city=2` for the whole
+  map): with **One town**, the first town is a city instead,
   as big as fits between the bases (about 35 by 50 units on a medium map,
   75 square on a large one; small maps have no room and keep a town),
   laid out square to the map's route grid (`world/city.ts`). Its blocks
@@ -261,7 +262,13 @@ battle, its exact map via `seed`).
   everything else keeps to the 4.5-unit avenues, single file (the nav
   grid caps an alley cell's clearance at half a cell; a razed building
   opens its alleys up). The first outpost takes the city's paved square,
-  and the city's engineer fills empty lots, the middle first.
+  and the city's engineer fills empty lots, the middle first. Some blocks
+  are **parks** (clumps of dense forest) or **ponds**, and the odd lot a
+  pocket park; a lot's `use` is where more kinds (a city's vehicle depot,
+  say) would go. With **Whole map**, one city covers the map instead of
+  any towns: blocks wherever the ground is dry and gentle enough, kept
+  off the base pads and bridges, each block levelled so hills become
+  terraces with the avenues ramping between them.
   **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an

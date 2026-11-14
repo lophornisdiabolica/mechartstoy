@@ -49,8 +49,42 @@ export interface CityLot {
   /** Lot index along each axis, and the block on each. */
   bi: number;
   bj: number;
-  /** How far out it is: 0 in the middle, 1 at the city's edge (see CityPlan.outAt). */
+  /** How far out it is: 0 in the middle, 1 at the city's edge (see cityOut). */
   out: number;
+  /**
+   * What the lot is for: a building, or part of a park or a pond. More uses
+   * (a vehicle depot the city's own side runs, say) are more entries here,
+   * picked in pickUses and built in settlements.ts or the map generator.
+   */
+  use: LotUse;
+}
+
+export type LotUse = 'building' | 'park' | 'pond';
+
+/** Something special on a block (or one lot) of a city, in place of buildings: its kind and the ground it covers (world units). */
+export interface CityFeature {
+  kind: Exclude<LotUse, 'building'>;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+
+/** Chances a block (of at least FEATURE_LOTS lots) is a park or a pond, and a lone lot a pocket park. */
+const BLOCK_PARK = 0.08;
+const BLOCK_POND = 0.035;
+const LOT_PARK = 0.03;
+const FEATURE_LOTS = 4;
+
+export interface CityOptions {
+  /** Whether a lot can go here: dry, gentle, off base pads and bridges (the map decides). All of them, if left out. */
+  keep?: (x: number, z: number) => boolean;
+  /**
+   * The central avenues run right out to the city's edge, where country
+   * roads join (a city in part of the map). Otherwise every avenue runs only
+   * where there are lots beside it (a city covering the map).
+   */
+  centralToEdge?: boolean;
 }
 
 export interface CityPlan {
@@ -60,8 +94,10 @@ export interface CityPlan {
   /** Half its width (along x) and half its depth (along z): a city can be longer one way, to fit between bases. */
   rx: number;
   rz: number;
-  /** Lots with a building on them, at the start. */
+  /** Its lots: each a building, or part of a park or pond (see CityLot.use). */
   lots: CityLot[];
+  /** Parks and ponds, block by block. */
+  features: CityFeature[];
   /** Centre of the city square, left open for an outpost (or just open). */
   square: { x: number; z: number; hx: number; hz: number };
   /** Avenue and alley centre lines (world units), with widths. */
@@ -113,7 +149,8 @@ function planAxis(rng: Rng, cells: number): AxisPlan {
  * should be the middle of a route cell (see snapToCell). Pure: the same
  * random stream gives the same city.
  */
-export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng): CityPlan {
+export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng, options: CityOptions = {}): CityPlan {
+  const { keep = () => true, centralToEdge = true } = options;
   const ax = planAxis(rng, Math.floor(rx / CITY_CELL));
   const az = planAxis(rng, Math.floor(rz / CITY_CELL));
   const shape = { x, z, rx, rz };
@@ -136,10 +173,14 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng)
       const lz = wz(lj.at + 0.5);
       const out = cityOut(shape, lx, lz);
       if (out > 1) continue;
-      if (out > FRINGE && rng.chance(FRINGE_GAP)) continue;
-      lots.push({ x: lx, z: lz, bi: li.block, bj: lj.block, out });
+      // (A city over the whole map has no outskirts to thin out.)
+      if (centralToEdge && out > FRINGE && rng.chance(FRINGE_GAP)) continue;
+      if (!keep(lx, lz)) continue;
+      lots.push({ x: lx, z: lz, bi: li.block, bj: lj.block, out, use: 'building' });
     }
   }
+  const features = pickUses(lots, rng);
+  const built = lots.filter((l) => l.use === 'building');
 
   // Avenues run the length of the built-up area, the central ones right out to the edge (where country roads join).
   const avenues: CityPlan['avenues'] = [];
@@ -148,18 +189,27 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng)
   for (const [axis, plan] of [['x', ax], ['z', az]] as const) {
     for (const [a0, a1] of plan.avenues) {
       const mid = (a0 + a1) / 2;
-      // How far along this avenue there are lots beside it.
+      // Where along this avenue there are lots beside it (or the square).
       const side = lots.filter((l) => Math.abs((axis === 'x' ? l.x - wx(mid) : l.z - wz(mid))) < (AVENUE / 2 + LOT) * CITY_CELL);
-      const along0 = axis === 'x' ? side.map((l) => l.z - z) : side.map((l) => l.x - x);
+      const along0 = (axis === 'x' ? side.map((l) => l.z - z) : side.map((l) => l.x - x)).sort((m, n) => m - n);
       if (along0.length === 0) continue;
       const central = a0 === -1;
       // (An avenue at fixed x runs along z, out to rz.)
       const r = axis === 'x' ? rz : rx;
-      const lo = central ? -r : Math.min(...along0) - CITY_CELL * 1.5;
-      const hi = central ? r : Math.max(...along0) + CITY_CELL * 1.5;
-      // An avenue across x (fixed x) runs along z, and the other way round.
-      const points = axis === 'x' ? along(mid, false, z + lo, z + hi) : along(mid, true, x + lo, x + hi);
-      avenues.push({ points, width: AVENUE * CITY_CELL });
+      // In runs, broken where there's a long gap with no lots (water, a base, a hill).
+      const runs: [number, number][] = [];
+      for (const v of along0) {
+        const last = runs[runs.length - 1];
+        if (last && v - last[1] <= RUN_GAP) last[1] = v;
+        else runs.push([v, v]);
+      }
+      if (central && centralToEdge) runs.splice(0, runs.length, [-r, r]);
+      for (const [lo, hi] of runs) {
+        const pad = central && centralToEdge ? 0 : CITY_CELL * 1.5;
+        // An avenue across x (fixed x) runs along z, and the other way round.
+        const points = axis === 'x' ? along(mid, false, z + lo - pad, z + hi + pad) : along(mid, true, x + lo - pad, x + hi + pad);
+        avenues.push({ points, width: AVENUE * CITY_CELL });
+      }
     }
   }
 
@@ -169,7 +219,7 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng)
     for (const alley of plan.alleys) {
       for (let b = 0; b < other.blocks.length; b++) {
         const [o0, o1] = other.blocks[b];
-        const beside = lots.some((l) => {
+        const beside = built.some((l) => {
           const across = axis === 'x' ? l.x - wx(alley.at) : l.z - wz(alley.at);
           const [mine, theirs] = axis === 'x' ? [l.bi, l.bj] : [l.bj, l.bi];
           return mine === alley.block && theirs === b && Math.abs(across) < LOT * CITY_CELL;
@@ -183,7 +233,45 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng)
       }
     }
   }
-  return { x, z, rx, rz, lots, square, avenues, alleys };
+  return { x, z, rx, rz, lots, features, square, avenues, alleys };
+}
+
+/** Longest stretch of an avenue with no lots beside it before it's broken in two (about three lots). */
+const RUN_GAP = 13;
+
+/**
+ * Some blocks are parks or ponds instead of buildings, and the odd lot a
+ * pocket park. Sets each lot's use, and returns the features.
+ */
+function pickUses(lots: CityLot[], rng: Rng): CityFeature[] {
+  const blocks = new Map<string, CityLot[]>();
+  for (const l of lots) {
+    const key = `${l.bi},${l.bj}`;
+    const list = blocks.get(key);
+    if (list) list.push(l);
+    else blocks.set(key, [l]);
+  }
+  const features: CityFeature[] = [];
+  const cover = (kind: CityFeature['kind'], list: CityLot[]) => {
+    for (const l of list) l.use = kind;
+    const h = LOT * CITY_CELL * 0.5;
+    features.push({
+      kind,
+      x0: Math.min(...list.map((l) => l.x)) - h,
+      x1: Math.max(...list.map((l) => l.x)) + h,
+      z0: Math.min(...list.map((l) => l.z)) - h,
+      z1: Math.max(...list.map((l) => l.z)) + h,
+    });
+  };
+  for (const list of blocks.values()) {
+    // Rolled for every block, so a block's use doesn't change what the others get.
+    const roll = rng.next();
+    if (list.length < FEATURE_LOTS) continue;
+    if (roll < BLOCK_POND) cover('pond', list);
+    else if (roll < BLOCK_POND + BLOCK_PARK) cover('park', list);
+  }
+  for (const l of lots) if (rng.chance(LOT_PARK) && l.use === 'building') cover('park', [l]);
+  return features;
 }
 
 /** The middle of the route cell a point is in, for a map whose left and top edges are at minX, minZ. */
