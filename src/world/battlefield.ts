@@ -534,6 +534,23 @@ export class Battlefield {
     return false;
   }
 
+  /**
+   * The height of bridge `index`'s deck level with a point, as if the deck
+   * ran on out sideways: for laying a hull that's on the deck flat along it,
+   * however far it hangs over the side (see systems/tilt.ts). Null off
+   * either end, or once the bridge is gone.
+   */
+  deckLevelBeside(index: number, x: number, z: number): number | null {
+    const b = this.bridges[index];
+    if (!b || b.gone) return null;
+    const dx = b.bx - b.ax;
+    const dz = b.bz - b.az;
+    const length = D.hypot(dx, dz);
+    const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
+    if (t < 0 || t > 1) return null;
+    return this.deckOf(b, b.ax + dx * t, b.az + dz * t);
+  }
+
   /** Whether a point is on or within `margin` of a bridge (buildings keep off them). */
   nearBridge(x: number, z: number, margin = 0): boolean {
     return this.bridges.some((b) => !b.gone && distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz) < b.width / 2 + margin);

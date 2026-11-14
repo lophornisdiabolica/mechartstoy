@@ -22,7 +22,7 @@ import { aiSystem } from './systems/ai';
 import { conquestSystem } from './systems/conquest';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
-import { Traffic, trafficSystem } from './traffic';
+import { laneKeepSystem, Traffic, trafficSystem } from './traffic';
 import { cityStreets } from '../world/city';
 import { groundFollowSystem, movementSystem, navObstacleSystem, separationSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
@@ -159,6 +159,7 @@ export class Game {
       trafficSystem(ctx),
       movementSystem(ctx),
       separationSystem(ctx),
+      laneKeepSystem(ctx),
       groundFollowSystem(this.field, ctx),
       tiltSystem(ctx),
       weaponSystem(ctx),

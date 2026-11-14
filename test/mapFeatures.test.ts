@@ -136,7 +136,7 @@ describe('dense forest', () => {
     const cellTrees = woods.treesNear(tree.x, tree.z);
     let passes = 0;
     while (g.field.groundAt(tree.x, tree.z).id === 'felled' && passes < 200) {
-      for (const t of cellTrees) woods.trample(woods.trees[t].x, woods.trees[t].z, 1.1, 2);
+      for (const t of cellTrees) woods.trample(woods.trees[t].x, woods.trees[t].z, 1.1, 0.5);
       passes++;
     }
     expect(passes).toBeGreaterThan(5);

@@ -58,6 +58,10 @@ const LANE_CHECK = 0.6;
 const BUSY_COST = 0.35;
 /** Busy cost stops growing past this many vehicles. */
 const BUSY_MOST = 10;
+/** How much of a vehicle's radius has to stay on a narrow (see keepOn), how much of its overhang one tick takes back, and how far in from each end that starts. */
+const KEEP_ON = 0.85;
+const KEEP_EASE = 0.3;
+const END_ROOM = 1;
 /** Vehicles smaller than this radius slip past like infantry. */
 const MIN_RADIUS = 0.55;
 
@@ -378,6 +382,25 @@ export class Traffic {
     }
   }
 
+  /**
+   * Where a vehicle of radius `r` on a narrow should be to keep its whole
+   * hull on it: nudged in toward the middle if it's hanging over the side
+   * (part of the overhang per call, so it eases in), or null if it's fine
+   * or not on one. Leaves the ends alone, where vehicles turn on and off.
+   */
+  keepOn(x: number, z: number, r: number): { x: number; z: number } | null {
+    const id = this.at(x, z);
+    if (id < 0) return null;
+    const lane = this.lanes[id]!;
+    const { s, off } = local(lane, x, z);
+    if (s < END_ROOM || s > lane.length - END_ROOM) return null;
+    const allowed = Math.max(0, lane.narrow.width / 2 - r * KEEP_ON);
+    const over = Math.abs(off) - allowed;
+    if (over <= 0.01) return null;
+    const move = -Math.sign(off) * over * KEEP_EASE;
+    return { x: x - lane.uz * move, z: z + lane.ux * move };
+  }
+
   /** Which way along a narrow a heading points (1 toward b). */
   private wayFromHeading(id: number, heading: number): number {
     const lane = this.lanes[id]!;
@@ -439,6 +462,31 @@ export function trafficSystem(ctx: SimContext): System {
         queuers.push({ e, t: world.req(e, Transform), m, r });
       }
       traffic.update(world, queuers);
+    },
+  };
+}
+
+/**
+ * Keeps vehicles on a narrow (a bridge) from hanging over its side: after
+ * they've moved and been shoved, each one on a narrow is eased back in
+ * toward its middle. Runs after separation.
+ */
+export function laneKeepSystem(ctx: SimContext): System {
+  return {
+    name: 'laneKeep',
+    update(world) {
+      for (const e of world.query(Mover, Transform, Collider)) {
+        const m = world.req(e, Mover);
+        if (!MOVE_RULES[m.move].queues || m.cruise) continue;
+        const t = world.req(e, Transform);
+        // On a bridge's deck, that is: not on the ground beside a ramp.
+        const id = ctx.traffic.at(t.x, t.z);
+        if (id < 0 || (ctx.traffic.get(id)!.kind === 'bridge' && ctx.field.deckAt(t.x, t.z) === null)) continue;
+        const to = ctx.traffic.keepOn(t.x, t.z, world.req(e, Collider).radius);
+        if (!to || !ctx.navs.for(m.move).terrainAllowsAt(to.x, to.z)) continue;
+        t.x = to.x;
+        t.z = to.z;
+      }
     },
   };
 }
