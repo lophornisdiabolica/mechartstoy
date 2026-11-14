@@ -615,13 +615,16 @@ registerModel('bld:terrace', (faction) => {
     let h = stepped(1.4, 2.0, 4);
     if (h === last) h = h >= 2 ? 1.4 : h + 0.2;
     last = h;
-    // A hair narrower than its share, so neighbours' walls never share a plane.
-    house.add(box(2.7, h, w - 0.04, wallColor(faction), 0, h / 2, 0));
-    roofOn(house, 2.7, w - 0.04, h, faction);
-    house.add(box(0.05, 0.6, 0.3, DARK, 1.375, 0.3, 0)); // door (proud of the windows above it)
+    // A hair narrower than its share, so neighbours' walls never share a plane, and every other
+    // house a little shallower, so neighbours' overhanging roofs never end in the same plane.
+    const deep = k % 2 === 0 ? 2.7 : 2.56;
+    const face = deep / 2;
+    house.add(box(deep, h, w - 0.04, wallColor(faction), 0, h / 2, 0));
+    roofOn(house, deep, w - 0.04, h, faction);
+    house.add(box(0.05, 0.6, 0.3, DARK, face + 0.025, 0.3, 0)); // door (proud of the windows above it)
     for (const y of [h * 0.45, h * 0.8].filter((y) => y < h - 0.25)) {
-      house.add(box(0.05, 0.28, 0.32, WINDOW, 1.36, y, 0));
-      house.add(box(0.05, 0.28, 0.32, WINDOW, -1.36, y, 0));
+      house.add(box(0.05, 0.28, 0.32, WINDOW, face + 0.01, y, 0));
+      house.add(box(0.05, 0.28, 0.32, WINDOW, -face - 0.01, y, 0));
     }
     g.add(house);
   }
