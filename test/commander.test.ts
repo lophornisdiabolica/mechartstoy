@@ -81,7 +81,8 @@ describe('task forces', () => {
       expect(tf.squads.length).toBeLessThan(8);
     }
     expect(game.ctx.commander.sides[forces[0].side].goals.some((g) => g.kind === 'take' && g.force === forces[0].id)).toBe(true);
-    run(game, 90);
+    // Long enough for a fight over it: the other side's force contests it too.
+    run(game, 150);
     expect(game.ctx.outposts.some((o) => o.owner >= 0)).toBe(true);
   });
 

@@ -6,6 +6,8 @@ import { cactusGeometry, pineGeometry, treeGeometry } from './propsMesh';
 
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
 const GEOMETRY_HEIGHT = 1.4;
+/** How far a fallen trunk sinks into the ground before it's worn away, at size 1. */
+const SINK_DEPTH = 0.4;
 /** Height of the cactus geometry at scale 1. */
 const CACTUS_HEIGHT = 1.2;
 
@@ -54,12 +56,16 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       dummy.position.set(t.x + p.dx, y - 0.05, t.z + p.dz);
       dummy.rotation.set(0, p.spin, 0);
     } else {
-      // Lying along the ground, foot at the stump, top pointing the way it fell.
-      dummy.position.set(t.x + p.dx, foot + 0.15, t.z + p.dz);
-      dummy.rotation.set(0, -t.fell, -Math.PI / 2 + 0.08, 'YXZ');
+      // Lying along the ground, foot at the stump, top pointing the way it fell, pressed
+      // further into the ground the more it's been driven over (see Woods.trample).
+      dummy.position.set(t.x + p.dx, foot + 0.15 - t.sunk * SINK_DEPTH * t.size, t.z + p.dz);
+      dummy.rotation.set(0, -t.fell, -Math.PI / 2 + 0.08 - t.sunk * 0.06, 'YXZ');
     }
     // Big cacti grow tall rather than fat: scaled up evenly they'd be barrels.
-    dummy.scale.set(scale * slim, scale, scale * slim);
+    // Trodden down, the smaller plants of a clump go first, then the trunk itself is gone.
+    const gone = t.fell !== null && (t.sunk >= 1 || (p.scale < 1 && t.sunk >= 0.5));
+    if (gone) dummy.scale.set(0, 0, 0);
+    else dummy.scale.set(scale * slim, scale * (1 - t.sunk * 0.35), scale * slim);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   };
@@ -96,6 +102,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   addChunk(trees.map((_, k) => k));
 
   const stopFell = field.woods.onFell((k) => redraw(k, true));
+  const stopTrod = field.woods.onTrod((k) => redraw(k, false));
   // Planted trees come a batch at a time (one brush dab), drawn together once the dab is done.
   let planted: number[] = [];
   const stopGrow = field.woods.onGrow((k) => {
@@ -118,6 +125,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   });
   group.userData.dispose = () => {
     stopFell();
+    stopTrod();
     stopGrow();
     stopMoves();
   };

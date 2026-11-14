@@ -15,8 +15,12 @@ import * as D from '../core/dmath';
  * - vehicles and big walkers push through slowly (the ground's speed) and
  *   flatten the trees they drive into.
  *
- * Once a map cell has no trees standing, its ground goes back to open
- * ground, so a fought-over forest gets cleared over a battle.
+ * Once a map cell has no trees standing, its ground turns to fallen forest:
+ * a tangle of trunks, still rougher going for vehicles than open ground.
+ * Vehicles driving over the fallen trunks press them into the ground (see
+ * trample) until they're gone, and a cell with nothing left of its trees is
+ * open ground again, so a fought-over forest gets worn down to tracks over a
+ * battle.
  *
  * The trees are plain data rather than entities: there can be hundreds, and
  * they only matter where something is shooting through them or driving
@@ -28,7 +32,17 @@ export const TREE_RADIUS = 0.45;
 /** Height of a tree: shots above it pass over. */
 export const TREE_HEIGHT = 3.4;
 /** Damage a tree takes before it falls. */
-const TREE_HP = 70;
+const TREE_HP = 105;
+/** How far a fallen trunk reaches from its foot, at size 1 (it lies the way it fell). */
+const LOG_LENGTH = TREE_HEIGHT * 0.8;
+/**
+ * How much of a fallen trunk one metre of driving over it presses into the
+ * ground, per unit of the vehicle's radius: a tank (radius about 1.1) wears
+ * one away in about fifteen passes, a Titan in a few.
+ */
+const WEAR = 0.03;
+/** Steps a trunk's sinking is shown in (listeners hear about each step, not every tick). */
+const SINK_STEPS = 4;
 /** Trees per map cell of dense forest. */
 const PER_CELL = 2;
 
@@ -42,6 +56,8 @@ export interface Tree {
   fell: number | null;
   /** Size, for looks (0.85 to 1.2). */
   size: number;
+  /** Once fallen: how far it's been pressed into the ground by traffic, 0 to 1 (gone). */
+  sunk: number;
 }
 
 /** Something that wants to hear about trees falling (the renderer). */
@@ -53,6 +69,7 @@ export class Woods {
   private readonly byCell = new Map<number, number[]>();
   private readonly listeners: TreeListener[] = [];
   private readonly growers: TreeListener[] = [];
+  private readonly treaders: TreeListener[] = [];
 
   constructor(private readonly field: Battlefield) {}
 
@@ -64,7 +81,7 @@ export class Woods {
 
   add(x: number, z: number, size: number): void {
     const index = this.trees.length;
-    this.trees.push({ x, z, y: this.field.heightAt(x, z), hp: TREE_HP, fell: null, size });
+    this.trees.push({ x, z, y: this.field.heightAt(x, z), hp: TREE_HP, fell: null, size, sunk: 0 });
     const cell = this.cellOf(x, z);
     const list = this.byCell.get(cell);
     if (list) list.push(index);
@@ -87,6 +104,12 @@ export class Woods {
   onFell(listener: TreeListener): () => void {
     this.listeners.push(listener);
     return () => this.listeners.splice(this.listeners.indexOf(listener), 1);
+  }
+
+  /** Hear about fallen trees being pressed further into the ground (see trample), a step at a time. Returns an unsubscribe. */
+  onTrod(listener: TreeListener): () => void {
+    this.treaders.push(listener);
+    return () => this.treaders.splice(this.treaders.indexOf(listener), 1);
   }
 
   /** Standing trees in the cells round a point (within `radius` plus a cell). */
@@ -138,9 +161,56 @@ export class Woods {
     const away = D.atan2(tree.z - from.z, tree.x - from.x);
     tree.fell = Number.isFinite(away) ? away : 0;
     for (const l of [...this.listeners]) l(t);
-    // A cell with no trees left standing is open ground again.
+    // A cell with no trees left standing is fallen forest.
     const cell = this.cellOf(tree.x, tree.z);
-    if (this.standingIn(cell).length === 0 && this.field.ground[cell] === groundCode('thicket')) this.field.setGround([cell], 'plain');
+    if (this.standingIn(cell).length === 0 && this.field.ground[cell] === groundCode('thicket')) this.field.setGround([cell], 'felled');
+  }
+
+  /**
+   * A vehicle of `radius` driving `distance` over the fallen trunks round
+   * (x, z): presses each one it's on a little further into the ground (see
+   * WEAR). A fallen-forest cell whose trunks are all gone is open ground.
+   */
+  trample(x: number, z: number, radius: number, distance: number): void {
+    const { cols } = this.field.config;
+    const reach = radius + 0.3;
+    const [i0, j0] = this.field.cellAt(x - reach - LOG_LENGTH, z - reach - LOG_LENGTH);
+    const [i1, j1] = this.field.cellAt(x + reach + LOG_LENGTH, z + reach + LOG_LENGTH);
+    const felled = groundCode('felled');
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const cell = j * cols + i;
+        const list = this.byCell.get(cell);
+        if (!list) continue;
+        let worn = false;
+        for (const t of list) {
+          const tree = this.trees[t];
+          if (tree.fell === null || tree.sunk >= 1) continue;
+          // The trunk as a line from its foot the way it fell.
+          const len = LOG_LENGTH * tree.size;
+          const ex = tree.x + D.cos(tree.fell) * len;
+          const ez = tree.z + D.sin(tree.fell) * len;
+          if (segmentDistance(x, z, tree.x, tree.z, ex, ez) > reach) continue;
+          const was = Math.floor(tree.sunk * SINK_STEPS);
+          tree.sunk = Math.min(1, tree.sunk + WEAR * radius * distance);
+          if (Math.floor(tree.sunk * SINK_STEPS) !== was) {
+            for (const l of [...this.treaders]) l(t);
+            if (tree.sunk >= 1) worn = true;
+          }
+        }
+        if (worn && this.field.ground[cell] === felled && list.every((t) => this.trees[t].fell !== null && this.trees[t].sunk >= 1)) {
+          this.field.setGround([cell], 'plain');
+        }
+      }
+    }
+  }
+
+  /** Show a fallen tree pressed into the ground the way another copy of this map saw it (see sim/mirror.ts). */
+  showSunk(t: number, sunk: number): void {
+    const tree = this.trees[t];
+    if (tree.sunk === sunk) return;
+    tree.sunk = sunk;
+    for (const l of [...this.treaders]) l(t);
   }
 
   /**
@@ -204,6 +274,15 @@ export class Woods {
     }
     return best;
   }
+}
+
+/** Distance from (x, z) to the segment from (ax, az) to (bx, bz). */
+function segmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+  return D.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
 /**

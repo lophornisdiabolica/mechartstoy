@@ -184,6 +184,13 @@ export interface Bridge {
 export const BRIDGE_CLEARANCE = 1.3;
 /** Steepest a bridge's ramps get (rise over run). */
 export const DECK_GRADE = 0.35;
+/**
+ * How far out from a bridge deck's edge its railings count (see railAt), and
+ * how high the deck has to stand above the ground beside it for that to be a
+ * railing rather than the open mouth of a ramp.
+ */
+export const RAIL_REACH = 1.6;
+export const RAIL_DROP = 0.3;
 
 /**
  * A paved road: a strip of road ground along a line of points (see
@@ -451,7 +458,7 @@ export class Battlefield {
     const index = this.bridges.length;
     this.bridges.push(bridge);
     const { cols, cellSize } = this.config;
-    const pad = bridge.width / 2;
+    const pad = bridge.width / 2 + RAIL_REACH;
     const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + pad);
     for (let j = area.j0; j <= area.j1; j++) {
       for (let i = area.i0; i <= area.i1; i++) {
@@ -472,7 +479,7 @@ export class Battlefield {
     if (!bridge || bridge.gone) return;
     this.bridges[index] = { ...bridge, gone: true };
     const { cols } = this.config;
-    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + bridge.width / 2 + 1);
+    const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + bridge.width / 2 + RAIL_REACH + 1);
     for (let j = area.j0; j <= area.j1; j++) for (let i = area.i0; i <= area.i1; i++) if (this.bridgeCell[j * cols + i] === index) this.bridgeCell[j * cols + i] = -1;
     this.changed(area);
   }
@@ -496,6 +503,32 @@ export class Battlefield {
     const ha = this.heightAt(b.ax, b.az);
     const hb = this.heightAt(b.bx, b.bz);
     return Math.min(b.level, ha + DECK_GRADE * t * length, hb + DECK_GRADE * (1 - t) * length);
+  }
+
+  /**
+   * Whether a point is just outside a bridge deck's railings: beside the
+   * deck (not off either end), within RAIL_REACH of its edge, where the deck
+   * stands at least RAIL_DROP above the ground (or over water). Getting on or
+   * off a bridge there means going over the railing, so routes keep to the
+   * ramps at its ends (see NavGrid).
+   */
+  railAt(x: number, z: number): boolean {
+    if (this.deckAt(x, z) !== null) return false;
+    for (const b of this.bridges) {
+      if (b.gone) continue;
+      const dx = b.bx - b.ax;
+      const dz = b.bz - b.az;
+      const length = D.hypot(dx, dz);
+      const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
+      if (t < 0 || t > 1) continue;
+      const off = Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length;
+      if (off <= b.width / 2 - 0.01 || off > b.width / 2 + RAIL_REACH) continue;
+      // The deck's height level with the point, against the ground (or water) there.
+      const deck = this.deckOf(b, b.ax + dx * t, b.az + dz * t);
+      if (deck === null) continue;
+      if (deck - Math.max(this.heightAt(x, z), this.seaLevel) >= RAIL_DROP || this.isWater(x, z)) return true;
+    }
+    return false;
   }
 
   /** Whether a point is on or within `margin` of a bridge (buildings keep off them). */
