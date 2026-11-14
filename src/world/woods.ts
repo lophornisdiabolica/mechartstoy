@@ -38,9 +38,9 @@ const LOG_LENGTH = TREE_HEIGHT * 0.8;
 /**
  * How much of a fallen trunk one metre of driving over it presses into the
  * ground, per unit of the vehicle's radius: a tank (radius about 1.1) wears
- * one away in about fifteen passes, a Titan in a few.
+ * one away in about eight passes, a Titan in two or three.
  */
-const WEAR = 0.03;
+const WEAR = 0.06;
 /** Steps a trunk's sinking is shown in (listeners hear about each step, not every tick). */
 const SINK_STEPS = 4;
 /** Trees per map cell of dense forest. */

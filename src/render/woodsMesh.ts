@@ -7,7 +7,7 @@ import { cactusGeometry, pineGeometry, treeGeometry } from './propsMesh';
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
 const GEOMETRY_HEIGHT = 1.4;
 /** How far a fallen trunk sinks into the ground before it's worn away, at size 1. */
-const SINK_DEPTH = 0.4;
+const SINK_DEPTH = 0.5;
 /** Height of the cactus geometry at scale 1. */
 const CACTUS_HEIGHT = 1.2;
 
@@ -65,7 +65,10 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
     // Trodden down, the smaller plants of a clump go first, then the trunk itself is gone.
     const gone = t.fell !== null && (t.sunk >= 1 || (p.scale < 1 && t.sunk >= 0.5));
     if (gone) dummy.scale.set(0, 0, 0);
-    else dummy.scale.set(scale * slim, scale * (1 - t.sunk * 0.35), scale * slim);
+    // Lying down, its height runs along the ground and its girth stands up: trodden, it's
+    // squashed flatter and broken shorter, so it stops hiding what's driving through.
+    else if (t.fell === null) dummy.scale.set(scale * slim, scale, scale * slim);
+    else dummy.scale.set(scale * slim * (1 - t.sunk * 0.55), scale * (1 - t.sunk * 0.3), scale * slim * (1 - t.sunk * 0.4));
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   };
