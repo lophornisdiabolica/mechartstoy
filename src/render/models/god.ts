@@ -24,7 +24,7 @@ function bomb(length: number, width: number): THREE.Object3D {
   const root = new THREE.Group();
   root.add(box(width, width, length, 0x2b2b2e, 0, 0, 0));
   root.add(box(width * 1.8, 0.04, width * 0.6, 0x5d6066, 0, 0, -length * 0.45)); // fins
-  root.add(box(0.04, width * 1.8, width * 0.6, 0x5d6066, 0, 0, -length * 0.45));
+  root.add(box(0.04, width * 1.8, width * 0.56, 0x5d6066, 0, 0, -length * 0.45)); // a touch shorter, so the fins' ends don't sit flush
   return setRig(root, { faceVelocity: true });
 }
 
