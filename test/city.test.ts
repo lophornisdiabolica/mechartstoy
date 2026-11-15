@@ -238,3 +238,44 @@ describe('parks and ponds', () => {
     }
   });
 });
+
+describe('cities in map variety', () => {
+  it('rolls Metropolis as its own style, and a city for other styles with towns now and then', async () => {
+    const { rollBattle, CITY_ODDS } = await import('../src/game/variety');
+    const s = defaultSettings();
+    s.variety.roll.style = true;
+    const rng = new Rng(11);
+    let metropolis = 0;
+    let district = 0;
+    let withTowns = 0;
+    for (let n = 0; n < 400; n++) {
+      const { settings, label } = rollBattle(s, rng);
+      if (label.startsWith('Metropolis')) {
+        metropolis++;
+        expect(settings.map.city).toBe('sprawl');
+        continue;
+      }
+      expect(settings.map.city).not.toBe('sprawl');
+      if (settings.map.towns === 0) expect(settings.map.city).toBe('off');
+      else {
+        withTowns++;
+        if (settings.map.city === 'district') district++;
+      }
+    }
+    expect(metropolis).toBeGreaterThan(10);
+    expect(district / withTowns).toBeGreaterThan(CITY_ODDS - 0.1);
+    expect(district / withTowns).toBeLessThan(CITY_ODDS + 0.1);
+  });
+
+  it('puts the square on any corner of the central crossing', () => {
+    const corners = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = defaultSettings();
+      s.map.city = 'district';
+      const field = generateBattlefield(new Rng(seed).fork(1), battlefieldConfig(s));
+      const city = field.townSites[0].city;
+      if (city) corners.add(`${Math.sign(city.square.x - city.x)},${Math.sign(city.square.z - city.z)}`);
+    }
+    expect(corners.size).toBeGreaterThanOrEqual(3);
+  });
+});

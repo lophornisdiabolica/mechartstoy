@@ -203,6 +203,8 @@ export const RAIL_DROP = 0.3;
 export interface Road {
   points: { x: number; z: number }[];
   width: number;
+  /** Its width at each point, where it changes along the way (a city's avenue tapering to a country road); `width` throughout if left out. */
+  widths?: number[];
   /** A town's main street (or a city's avenue), a road out in the country (see roads.ts), or a city's alley. */
   kind: RoadKind;
 }
@@ -562,10 +564,10 @@ export class Battlefield {
    * Works mid-battle too, like paint. Returns the road's index in `roads`
    * (-1 for a line too short to be one).
    */
-  addRoad(points: { x: number; z: number }[], width: number, kind: RoadKind = 'road'): number {
+  addRoad(points: { x: number; z: number }[], width: number, kind: RoadKind = 'road', widths?: number[]): number {
     if (points.length < 2) return -1;
     const index = this.roads.length;
-    this.roads.push({ points, width, kind });
+    this.roads.push(widths ? { points, width, kind, widths } : { points, width, kind });
     const { cols, cellSize } = this.config;
     const code = groundCode('road');
     const xs = points.map((p) => p.x);
@@ -576,9 +578,13 @@ export class Battlefield {
       for (let i = i0; i <= i1; i++) {
         const cx = this.bounds.minX + (i + 0.5) * cellSize;
         const cz = this.bounds.minZ + (j + 0.5) * cellSize;
-        let d = Infinity;
-        for (let k = 1; k < points.length; k++) d = Math.min(d, distanceToSegment(cx, cz, points[k - 1].x, points[k - 1].z, points[k].x, points[k].z));
-        if (d > width / 2 || this.isWater(cx, cz) || this.deckAt(cx, cz) !== null) continue;
+        // Inside any stretch's half-width (a tapering stretch counts as its narrower end).
+        let inside = false;
+        for (let k = 1; k < points.length && !inside; k++) {
+          const w = widths ? Math.min(widths[k - 1], widths[k]) : width;
+          inside = distanceToSegment(cx, cz, points[k - 1].x, points[k - 1].z, points[k].x, points[k].z) <= w / 2;
+        }
+        if (!inside || this.isWater(cx, cz) || this.deckAt(cx, cz) !== null) continue;
         this.ground[j * cols + i] = code;
         this.roadCell[j * cols + i] = 1;
       }
@@ -907,7 +913,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   // Each town's main street is paved (a city's avenues and alleys), and roads join the towns.
   for (const t of townSites) {
     if (t.city) {
-      for (const a of t.city.avenues) field.addRoad(a.points, a.width, 'street');
+      for (const a of t.city.avenues) field.addRoad(a.points, a.width, 'street', a.widths);
       for (const a of t.city.alleys) field.addRoad(a.points, a.width, 'alley');
       // The square is paved right across (as road ground: a strip that wide would round off its corners over the lots round it).
       const sq = t.city.square;

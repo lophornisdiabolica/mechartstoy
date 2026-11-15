@@ -61,7 +61,8 @@ registerModel('bld:factory', (faction) => {
   g.add(box(5, 2.4, 4.2, METAL, -0.2, 1.45, 0));
   // Sawtooth roof: three slanted panels.
   for (let i = 0; i < 3; i++) {
-    const panel = box(1.7, 0.12, 4.2, i % 2 ? primary : secondary, -1.75 + i * 1.6, 2.95, 0);
+    // A touch deeper than the walls so their ends overhang rather than sit flush with them.
+    const panel = box(1.7, 0.12, 4.3, i % 2 ? primary : secondary, -1.75 + i * 1.6, 2.95, 0);
     panel.rotation.z = 0.35;
     g.add(panel);
   }
@@ -290,7 +291,8 @@ registerModel('bld:airstrip', (faction) => {
   g.add(box(5.6, 0.18, 2.0, 0x6f6c66, 0, 0.09, 0.9));
   for (const x of [-2, -0.7, 0.6, 1.9]) g.add(box(0.7, 0.04, 0.14, 0xe8e4da, x, 0.2, 0.9));
   g.add(box(2.2, 1.1, 1.6, METAL, -1.2, 0.55, -1.1));
-  g.add(cylinder(0.8, 0.8, 2.2, 8, secondary, -1.2, 1.1, -1.1).rotateZ(Math.PI / 2));
+  // The roof is a touch shorter than the hangar so its end caps don't sit flush with the end walls.
+  g.add(cylinder(0.8, 0.8, 2.1, 8, secondary, -1.2, 1.1, -1.1).rotateZ(Math.PI / 2));
   g.add(box(0.05, 0.8, 1.0, DARK, -0.08, 0.5, -1.1)); // hangar door
   g.add(box(0.1, 1.6, 0.1, DARK, 2.3, 0.8, -1.4));
   g.add(box(0.5, 0.18, 0.18, primary, 2.6, 1.5, -1.4));
@@ -309,7 +311,7 @@ registerModel('bld:bigGun', (faction) => {
   turret.add(box(0.5, 0.5, 1.3, METAL, -0.6, 0.3, 0));
   const barrel = barrelPivot('bld:bigGun', turret);
   barrel.add(box(2.6, 0.22, 0.22, DARK, 1.3, 0, 0));
-  barrel.add(box(0.4, 0.34, 0.34, METAL, 0.2, -0.05, 0)); // breech
+  barrel.add(box(0.4, 0.34, 0.34, METAL, 0.15, -0.05, 0)); // breech, sticking out behind the barrel's end
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:bigGun', g, turret, [barrel]) });
 });
