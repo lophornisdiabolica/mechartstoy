@@ -80,6 +80,104 @@ describe('bridge railings', () => {
   });
 });
 
+/** A bridge whose ends stand well back from the water, over a low shore that runs on beside it: its ramps climb over dry land. */
+function shored(): Game {
+  const game = bridged();
+  const f = game.field;
+  f.removeBridge(0);
+  expect(placeBridge(f, { x: -12, z: 0 }, { x: 12, z: 0 }, true)).toBe(true);
+  return game;
+}
+
+/** Every short step along a route from `from`, as [before, after] points. */
+function steps(from: { x: number; z: number }, route: { x: number; z: number }[]): [{ x: number; z: number }, { x: number; z: number }][] {
+  const out: [{ x: number; z: number }, { x: number; z: number }][] = [];
+  const pts = [from, ...route];
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1];
+    const b = pts[k];
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.2);
+    for (let s = 1; s <= n; s++) {
+      out.push([
+        { x: a.x + ((b.x - a.x) * (s - 1)) / n, z: a.z + ((b.z - a.z) * (s - 1)) / n },
+        { x: a.x + ((b.x - a.x) * s) / n, z: a.z + ((b.z - a.z) * s) / n },
+      ]);
+    }
+  }
+  return out;
+}
+
+describe('bridge ramps', () => {
+  it('are open, with wings, for a stretch at each end, even where the deck is level with the banks', () => {
+    const game = bridged();
+    const f = game.field;
+    const b = f.bridges[0];
+    const [ea, eb] = f.openRamps(b);
+    expect(ea).toBeGreaterThan(1.5);
+    expect(eb).toBeGreaterThan(1.5);
+    expect(f.railedAt(b, 0.05)).toBe(false);
+    expect(f.railedAt(b, 0.5)).toBe(true);
+    // Beside the foot of a ramp, its wing slopes from the deck's edge down to the ground.
+    const near = f.wingAt(-5.5, 2.7)!;
+    const far = f.wingAt(-5.5, 3.4)!;
+    expect(near).toBeGreaterThan(far);
+    expect(far).toBeGreaterThan(f.heightAt(-5.5, 3.4));
+    expect(f.surfaceAt(-5.5, 2.7)).toBeCloseTo(near);
+    // Narrowing to nothing where the railing starts.
+    expect(f.wingAt(-6 + ea - 0.2, 3.0)).toBeNull();
+    expect(f.wingAt(0, 3)).toBeNull();
+  });
+
+  it("keep tanks on a shore beside the deck from climbing on over the railing: they go back round to the ramp's foot", () => {
+    const game = shored();
+    const f = game.field;
+    const b = f.bridges[1];
+    const [ea] = f.openRamps(b);
+    expect(ea).toBeLessThan(6);
+    // Beside the railed stretch of the ramp, over dry land.
+    const from = { x: -6, z: 3.4 };
+    expect(f.isWater(from.x, from.z)).toBe(false);
+    expect(f.railKind(from.x, from.z)).toBe(1);
+    const nav = game.ctx.nav;
+    const route = nav.findPath(from, { x: 6, z: 0 }, 1.1)!;
+    expect(route).not.toBeNull();
+    let boarded: number | null = null;
+    for (const [p0, p1] of steps(from, route)) {
+      expect(nav.railCrossing(p0.x, p0.z, p1.x, p1.z)).toBe(false);
+      if (boarded === null && f.deckAt(p1.x, p1.z) !== null && f.deckAt(p0.x, p0.z) === null) boarded = p1.x;
+    }
+    // Got on within the open ramp at the a end.
+    expect(boarded).not.toBeNull();
+    expect(boarded!).toBeLessThan(b.ax + ea + 0.5);
+    // A walker just steps up.
+    expect(game.ctx.navs.for('walker').railCrossing(from.x, from.z, -6, 2.4)).toBe(false);
+  });
+
+  it('drive a tank from that shore round onto the ramp and over', () => {
+    const game = shored();
+    const { world, ctx, field } = game;
+    const e = spawnUnit(world, ctx, UNIT_DEFS.tank, 0, -6, 4.2);
+    world.remove(e, Ai);
+    const m = world.req(e, Mover);
+    m.targetX = 16;
+    m.targetZ = 0;
+    const [ea] = field.openRamps(field.bridges[1]);
+    let boardedAt: number | null = null;
+    let wasOn = false;
+    for (let i = 0; i < 40 / DT; i++) {
+      game.step(DT);
+      const t = world.req(e, Transform);
+      const on = field.deckAt(t.x, t.z) !== null;
+      if (on && !wasOn && boardedAt === null) boardedAt = t.x;
+      wasOn = on;
+    }
+    const t = world.req(e, Transform);
+    expect(Math.hypot(t.x - 16, t.z)).toBeLessThan(3);
+    expect(boardedAt).not.toBeNull();
+    expect(boardedAt!).toBeLessThan(field.bridges[1].ax + ea + 1);
+  }, 60000);
+});
+
 describe('bridge traffic', () => {
   it('tanks meeting at a bridge take turns instead of meeting in the middle, and all get across', () => {
     const game = bridged();

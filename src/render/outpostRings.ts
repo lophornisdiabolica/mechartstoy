@@ -8,9 +8,74 @@ import { meshHeightAt } from './terrainMesh';
 const SEGMENTS = 64;
 const WIDTH = 0.45;
 
-const down = new THREE.Vector3(0, -1, 0);
-const caster = new THREE.Raycaster();
-const from = new THREE.Vector3();
+/** Bucket size for RoadTops' triangles. */
+const BUCKET = 1;
+
+/**
+ * The tops of the road strips round one outpost, for looking up the height a
+ * road is drawn at. It used to cast a ray down onto every road mesh for each
+ * of a ring's ~1,200 samples, but a city has hundreds of roads and its long
+ * avenues pass every bounding check, so one ring took seconds to rebuild
+ * (and a Legion trench near an outpost rebuilds it). This keeps only the
+ * triangles near the outpost, bucketed on the ground plane.
+ */
+export class RoadTops {
+  private readonly tris: number[] = [];
+  private readonly buckets = new Map<number, number[]>();
+
+  constructor(surfaces: THREE.Object3D[], x: number, z: number, reach: number) {
+    const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    for (const root of surfaces) {
+      root.updateMatrixWorld(true);
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        const pos = mesh.isMesh ? (mesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined) : undefined;
+        if (!pos) return;
+        const index = mesh.geometry.getIndex();
+        const count = index ? index.count : pos.count;
+        for (let t = 0; t + 2 < count; t += 3) {
+          for (let c = 0; c < 3; c++) v[c].fromBufferAttribute(pos, index ? index.getX(t + c) : t + c).applyMatrix4(mesh.matrixWorld);
+          const x0 = Math.min(v[0].x, v[1].x, v[2].x);
+          const x1 = Math.max(v[0].x, v[1].x, v[2].x);
+          const z0 = Math.min(v[0].z, v[1].z, v[2].z);
+          const z1 = Math.max(v[0].z, v[1].z, v[2].z);
+          if (x1 < x - reach || x0 > x + reach || z1 < z - reach || z0 > z + reach) continue;
+          const k = this.tris.length;
+          for (const p of v) this.tris.push(p.x, p.y, p.z);
+          for (let bj = Math.floor(z0 / BUCKET); bj <= Math.floor(z1 / BUCKET); bj++) {
+            for (let bi = Math.floor(x0 / BUCKET); bi <= Math.floor(x1 / BUCKET); bi++) {
+              const key = bj * 100003 + bi;
+              let list = this.buckets.get(key);
+              if (!list) this.buckets.set(key, (list = []));
+              list.push(k);
+            }
+          }
+        }
+      });
+    }
+  }
+
+  /** The highest road top drawn straight above or below (x, z), or -Infinity where there's none. */
+  at(x: number, z: number): number {
+    const list = this.buckets.get(Math.floor(z / BUCKET) * 100003 + Math.floor(x / BUCKET));
+    let best = -Infinity;
+    if (!list) return best;
+    const t = this.tris;
+    for (const k of list) {
+      const ax = t[k], ay = t[k + 1], az = t[k + 2];
+      const bx = t[k + 3], by = t[k + 4], bz = t[k + 5];
+      const cx = t[k + 6], cy = t[k + 7], cz = t[k + 8];
+      const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(det) < 1e-9) continue;
+      const l1 = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / det;
+      const l2 = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / det;
+      const l3 = 1 - l1 - l2;
+      if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+      best = Math.max(best, l1 * ay + l2 * by + l3 * cy);
+    }
+    return best;
+  }
+}
 
 /**
  * The height of whatever is drawn at (x, z): the ground (or water) or a road on it,
@@ -18,12 +83,8 @@ const from = new THREE.Vector3();
  * the ground mesh's triangles don't quite follow surfaceAt, so a ring at a
  * fixed height over surfaceAt dipped in and out of them and flickered.
  */
-function drawnHeight(field: Battlefield, roads: THREE.Object3D[], x: number, z: number): number {
-  from.set(x, 1000, z);
-  caster.set(from, down);
-  const ground = Math.max(meshHeightAt(field, x, z), field.surfaceAt(x, z));
-  const hit = caster.intersectObjects(roads, true)[0];
-  return hit ? Math.max(hit.point.y, ground) : ground;
+function drawnHeight(field: Battlefield, roads: RoadTops, x: number, z: number): number {
+  return Math.max(meshHeightAt(field, x, z), field.surfaceAt(x, z), roads.at(x, z));
 }
 
 /**
@@ -35,7 +96,8 @@ function drawnHeight(field: Battlefield, roads: THREE.Object3D[], x: number, z: 
 function groundRing(field: Battlefield, surfaces: THREE.Object3D[], x: number, z: number, radius: number, lift: number): THREE.BufferGeometry {
   const pos: number[] = [];
   const index: number[] = [];
-  const at = (a: number, r: number) => drawnHeight(field, surfaces, x + Math.cos(a) * r, z + Math.sin(a) * r);
+  const roads = new RoadTops(surfaces, x, z, radius + WIDTH);
+  const at = (a: number, r: number) => drawnHeight(field, roads, x + Math.cos(a) * r, z + Math.sin(a) * r);
   const step = (Math.PI * 2) / SEGMENTS;
   for (let i = 0; i <= SEGMENTS; i++) {
     // Clockwise from the top, as seen from above, like a clock filling up.
