@@ -71,11 +71,11 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   /**
    * Hovercraft: skim water as easily as land, but steep ground is the worst
    * going of any class. Running down a river they hop a bridge's deck rather
-   * than pass under it, so its railings only put them off a little.
+   * than pass under it, so its railings don't put them off at all.
    */
-  hover: { ...land, maxDepth: Infinity, steep: 6, town: 1.5, rail: 4, waterSpeed: 1.1 },
+  hover: { ...land, maxDepth: Infinity, steep: 6, town: 1.5, rail: 1, waterSpeed: 1.1 },
   /** Amphibious vehicles: drive on land, swim slowly. */
-  amphibious: { ...land, maxDepth: Infinity, town: 1.8, rail: 4, waterCost: 2, waterSpeed: 0.5 },
+  amphibious: { ...land, maxDepth: Infinity, town: 1.8, rail: 1, waterCost: 2, waterSpeed: 0.5 },
   /** Boats: water only, and not the shallowest of it. */
   naval: { ...land, maxDepth: Infinity, minDepth: 0.2, steep: 1, town: 1, rail: 1, queues: false },
   /** Aircraft: fly straight over everything. */

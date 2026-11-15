@@ -18,10 +18,10 @@ import * as D from '../core/dmath';
  * Once a map cell has no trees standing, its ground turns to fallen forest:
  * a tangle of trunks, still rougher going for vehicles than open ground.
  * Vehicles driving over the fallen trunks press them part way into the
- * ground (see trample), and once a cell's trunks are all well trodden it's
- * open going again, though the trunks still lie there half sunk (see
- * render/woodsMesh.ts), so a fought-over forest wears into tracks over a
- * battle and still reads as a forest that was knocked flat.
+ * ground (see trample). However well trodden, it stays fallen forest, a
+ * little rougher going than open ground, and the trunks still lie there half
+ * sunk (see render/woodsMesh.ts), so a fought-over forest wears into tracks
+ * over a battle and still reads as a forest that was knocked flat.
  *
  * The trees are plain data rather than entities: there can be hundreds, and
  * they only matter where something is shooting through them or driving
@@ -170,20 +170,19 @@ export class Woods {
   /**
    * A vehicle of `radius` driving `distance` over the fallen trunks round
    * (x, z): presses each one it's on a little further into the ground (see
-   * WEAR). A fallen-forest cell whose trunks are all well trodden is open ground.
+   * WEAR). However well trodden, it stays fallen forest: a little rougher
+   * going than open ground for good.
    */
   trample(x: number, z: number, radius: number, distance: number): void {
     const { cols } = this.field.config;
     const reach = radius + 0.3;
     const [i0, j0] = this.field.cellAt(x - reach - LOG_LENGTH, z - reach - LOG_LENGTH);
     const [i1, j1] = this.field.cellAt(x + reach + LOG_LENGTH, z + reach + LOG_LENGTH);
-    const felled = groundCode('felled');
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
         const cell = j * cols + i;
         const list = this.byCell.get(cell);
         if (!list) continue;
-        let worn = false;
         for (const t of list) {
           const tree = this.trees[t];
           if (tree.fell === null || tree.sunk >= 1) continue;
@@ -194,13 +193,7 @@ export class Woods {
           if (segmentDistance(x, z, tree.x, tree.z, ex, ez) > reach) continue;
           const was = Math.floor(tree.sunk * SINK_STEPS);
           tree.sunk = Math.min(1, tree.sunk + WEAR * radius * distance);
-          if (Math.floor(tree.sunk * SINK_STEPS) !== was) {
-            for (const l of [...this.treaders]) l(t);
-            if (tree.sunk >= 1) worn = true;
-          }
-        }
-        if (worn && this.field.ground[cell] === felled && list.every((t) => this.trees[t].fell !== null && this.trees[t].sunk >= 1)) {
-          this.field.setGround([cell], 'plain');
+          if (Math.floor(tree.sunk * SINK_STEPS) !== was) for (const l of [...this.treaders]) l(t);
         }
       }
     }

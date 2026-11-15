@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../core/ecs';
-import { MOVE_RULES } from '../world/moveClasses';
+import { MOVE_RULES, RAIL_WALL } from '../world/moveClasses';
 import { NavGrid, Point } from '../world/navGrid';
 import { Collider, Mover, Transform } from './components';
 import { SimContext } from './context';
@@ -477,7 +477,9 @@ export function laneKeepSystem(ctx: SimContext): System {
     update(world) {
       for (const e of world.query(Mover, Transform, Collider)) {
         const m = world.req(e, Mover);
-        if (!MOVE_RULES[m.move].queues || m.cruise) continue;
+        // Hovers and amphibians come and go over a deck's sides off the water, so they're left be.
+        const rules = MOVE_RULES[m.move];
+        if (!rules.queues || rules.rail < RAIL_WALL || m.cruise) continue;
         const t = world.req(e, Transform);
         // On a bridge's deck, that is: not on the ground beside a ramp.
         const id = ctx.traffic.at(t.x, t.z);

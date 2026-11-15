@@ -47,7 +47,7 @@ class CellSamples {
   readonly depth: Float64Array;
   readonly slope: Float64Array;
   readonly deck: Uint8Array;
-  /** 1 just outside a bridge deck's railings (see Battlefield.railAt). */
+  /** 1 just outside a bridge deck's railings, 2 beside its ramps' open sides, 0 elsewhere (see Battlefield.railKind). */
   readonly rail: Uint8Array;
   readonly settled: Uint8Array;
   readonly ground: GroundDef[];
@@ -78,7 +78,7 @@ class CellSamples {
         const x = field.bounds.minX + (i + 0.5) * this.cellSize;
         const z = field.bounds.minZ + (j + 0.5) * this.cellSize;
         this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
-        this.rail[k] = this.deck[k] === 0 && field.bridges.length > 0 && field.railAt(x, z) ? 1 : 0;
+        this.rail[k] = this.deck[k] === 0 && field.bridges.length > 0 ? field.railKind(x, z) : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
         this.settled[k] = settled.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
@@ -319,8 +319,8 @@ export class NavGrid {
     // Beside a deck, over its railings: vehicles take the ramps instead,
     // and keep off the deck's edge cells where they can, down the middle.
     if (!rules.flies && rules.minDepth === 0) {
-      if (samples.rail[k] === 1) cost *= rules.rail;
-      else if (onDeck && rules.queues && this.besideRail(k)) cost *= DECK_EDGE;
+      if (samples.rail[k] !== 0) cost *= rules.rail;
+      else if (onDeck && rules.rail >= RAIL_WALL && this.besideRail(k)) cost *= DECK_EDGE;
     }
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
@@ -338,7 +338,7 @@ export class NavGrid {
       for (let di = -1; di <= 1; di++) {
         const ni = i + di;
         const nj = j + dj;
-        if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && this.samples.rail[nj * cols + ni] === 1) return true;
+        if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && this.samples.rail[nj * cols + ni] !== 0) return true;
       }
     }
     return false;

@@ -23,6 +23,10 @@ function bridged(): Game {
   return game;
 }
 
+function run(game: Game, seconds: number): void {
+  for (let i = 0; i < seconds / DT; i++) game.step(DT);
+}
+
 describe('bridge railings', () => {
   it('mark the ground just beside a raised deck, and cost vehicles a lot to route over', () => {
     const game = bridged();
@@ -151,4 +155,23 @@ describe('bridge traffic', () => {
     expect(ctx.traffic.get(street)).toBeNull();
     expect(before).toBeLessThan(1.5);
   });
+
+  it("lets a hovercraft running down the channel hop straight over the bridge's deck", () => {
+    const game = bridged();
+    const { world, ctx } = game;
+    // Side by side down the channel, a little apart.
+    const boats = (['skimmer', 'amphib', 'hoverFortress'] as const).map((id, n) => {
+      const e = spawnUnit(world, ctx, UNIT_DEFS[id], 0, n * 2 - 2, -14 - n * 6);
+      world.remove(e, Ai);
+      const m = world.req(e, Mover);
+      m.targetX = n * 2 - 2;
+      m.targetZ = 14 + n * 6;
+      return { e, to: { x: n * 2 - 2, z: 14 + n * 6 } };
+    });
+    run(game, 90);
+    for (const { e, to } of boats) {
+      const t = world.req(e, Transform);
+      expect(Math.hypot(t.x - to.x, t.z - to.z)).toBeLessThan(3);
+    }
+  }, 60000);
 });
