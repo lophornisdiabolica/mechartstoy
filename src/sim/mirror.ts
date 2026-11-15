@@ -400,7 +400,7 @@ export class SimHost {
     });
 
     const cells = this.areas.map((a) => field.cellState(a));
-    for (const c of cells) transfer.push(c.ground.buffer as ArrayBuffer, c.roadCell.buffer as ArrayBuffer, c.bridgeCell.buffer as ArrayBuffer, c.heights.buffer as ArrayBuffer);
+    for (const c of cells) transfer.push(c.ground.buffer as ArrayBuffer, c.roadCell.buffer as ArrayBuffer, c.bridgeCell.buffer as ArrayBuffer, c.wingCell.buffer as ArrayBuffer, c.heights.buffer as ArrayBuffer);
 
     const frame: Frame = {
       ...base,

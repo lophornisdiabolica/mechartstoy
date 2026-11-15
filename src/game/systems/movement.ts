@@ -369,8 +369,8 @@ export function movementSystem(ctx: SimContext): System {
         const nx = t.x + D.cos(t.heading) * stepLen;
         const nz = t.z - D.sin(t.heading) * stepLen;
         const grid = ctx.navs.for(m.move);
-        // No going over a bridge's railings, unless wriggling free of being wedged against one.
-        if (rules.flies || (grid.terrainAllowsAt(nx, nz) && (world.time < m.nav.detourUntil || !grid.railCrossing(t.x, t.z, nx, nz)))) {
+        // No going over a bridge's railings; wriggling free of being wedged on a deck may drop off its side, but nothing climbs up one.
+        if (rules.flies || (grid.terrainAllowsAt(nx, nz) && !(world.time < m.nav.detourUntil ? grid.railBoarding(t.x, t.z, nx, nz) : grid.railCrossing(t.x, t.z, nx, nz)))) {
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.

@@ -185,6 +185,18 @@ export const DECK_GRADE = 0.35;
  */
 export const RAIL_REACH = 1.6;
 export const RAIL_DROP = 0.3;
+/**
+ * A bridge's ramps are open (no railing) from each end until the deck stands
+ * WING_DROP above the ground under it, reaches its level or meets the water,
+ * but at least RAMP_MIN along, so even a bridge that's level with its banks
+ * gets a ramp to meet ground that slopes across it. Along an open ramp,
+ * wings slope from the deck's edges down to the ground, RAMP_FLARE out to
+ * each side at its foot and narrowing to nothing where the railing starts:
+ * a funnel that steers vehicles onto the middle (see wingAt).
+ */
+export const WING_DROP = 0.8;
+export const RAMP_MIN = 3;
+export const RAMP_FLARE = 1.6;
 
 /**
  * A paved road: a strip of road ground along a line of points (see
@@ -225,6 +237,7 @@ export interface CellState {
   ground: Uint8Array;
   roadCell: Uint8Array;
   bridgeCell: Int16Array;
+  wingCell: Int16Array;
   /** The area's vertex heights, (w + 1) * (h + 1). */
   heights: Float32Array;
   bridges: Bridge[];
@@ -250,6 +263,10 @@ export class Battlefield {
   readonly roadCell: Uint8Array;
   /** Per cell: the index of the bridge over it, or -1. */
   private readonly bridgeCell: Int16Array;
+  /** Per cell: the index of the bridge whose ramp wings might be over it (see wingAt), or -1. */
+  private readonly wingCell: Int16Array;
+  /** Each bridge's open ramp lengths, as of a map version (see openRamps). */
+  private readonly rampCache = new WeakMap<Bridge, { version: number; ends: [number, number] }>();
   private readonly listeners: MapChangeListener[] = [];
   /** Bumps on every change, for anything that caches what the map looked like. */
   version = 0;
@@ -274,6 +291,7 @@ export class Battlefield {
     };
     this.ground = new Uint8Array(config.cols * config.rows);
     this.bridgeCell = new Int16Array(config.cols * config.rows).fill(-1);
+    this.wingCell = new Int16Array(config.cols * config.rows).fill(-1);
     this.roadCell = new Uint8Array(config.cols * config.rows);
     this.woods = new Woods(this);
   }
@@ -321,18 +339,20 @@ export class Battlefield {
     const ground = new Uint8Array(w * h);
     const roadCell = new Uint8Array(w * h);
     const bridgeCell = new Int16Array(w * h);
+    const wingCell = new Int16Array(w * h);
     const heights = new Float32Array((w + 1) * (h + 1));
     for (let j = 0; j < h; j++) {
       const from = (area.j0 + j) * cols + area.i0;
       ground.set(this.ground.subarray(from, from + w), j * w);
       roadCell.set(this.roadCell.subarray(from, from + w), j * w);
       bridgeCell.set(this.bridgeCell.subarray(from, from + w), j * w);
+      wingCell.set(this.wingCell.subarray(from, from + w), j * w);
     }
     for (let j = 0; j <= h; j++) {
       const from = (area.j0 + j) * (cols + 1) + area.i0;
       heights.set(this.heights.subarray(from, from + w + 1), j * (w + 1));
     }
-    return { area, ground, roadCell, bridgeCell, heights, bridges: this.bridges.slice(), roads: this.roads.slice(), junctions: this.junctions.slice() };
+    return { area, ground, roadCell, bridgeCell, wingCell, heights, bridges: this.bridges.slice(), roads: this.roads.slice(), junctions: this.junctions.slice() };
   }
 
   /** Copy cells from another copy of this map (see cellState) and tell the listeners. */
@@ -346,6 +366,7 @@ export class Battlefield {
       this.ground.set(state.ground.subarray(j * w, j * w + w), to);
       this.roadCell.set(state.roadCell.subarray(j * w, j * w + w), to);
       this.bridgeCell.set(state.bridgeCell.subarray(j * w, j * w + w), to);
+      this.wingCell.set(state.wingCell.subarray(j * w, j * w + w), to);
     }
     for (let j = 0; j <= h; j++) {
       this.heights.set(state.heights.subarray(j * (w + 1), (j + 1) * (w + 1)), (area.j0 + j) * (cols + 1) + area.i0);
@@ -448,6 +469,7 @@ export class Battlefield {
         const cx = this.bounds.minX + (i + 0.5) * cellSize;
         const cz = this.bounds.minZ + (j + 0.5) * cellSize;
         if (this.deckOf(bridge, cx, cz) !== null) this.bridgeCell[j * cols + i] = index;
+        else if (this.besideDeck(bridge, cx, cz) <= RAMP_FLARE + cellSize) this.wingCell[j * cols + i] = index;
       }
     }
     this.changed(area);
@@ -463,7 +485,12 @@ export class Battlefield {
     this.bridges[index] = { ...bridge, gone: true };
     const { cols } = this.config;
     const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + bridge.width / 2 + RAIL_REACH + 1);
-    for (let j = area.j0; j <= area.j1; j++) for (let i = area.i0; i <= area.i1; i++) if (this.bridgeCell[j * cols + i] === index) this.bridgeCell[j * cols + i] = -1;
+    for (let j = area.j0; j <= area.j1; j++) {
+      for (let i = area.i0; i <= area.i1; i++) {
+        if (this.bridgeCell[j * cols + i] === index) this.bridgeCell[j * cols + i] = -1;
+        if (this.wingCell[j * cols + i] === index) this.wingCell[j * cols + i] = -1;
+      }
+    }
     this.changed(area);
   }
 
@@ -529,13 +556,92 @@ export class Battlefield {
     return kind;
   }
 
-  /** Whether a bridge has railings at `t` along it (0 at a, 1 at b): along its level middle, and wherever it's over water; not on its ramps. */
+  /** Whether a bridge has railings at `t` along it (0 at a, 1 at b): everywhere but its open ramps (see openRamps), and always over water. */
   railedAt(b: Bridge, t: number): boolean {
     const x = b.ax + (b.bx - b.ax) * t;
     const z = b.az + (b.bz - b.az) * t;
     if (this.isWater(x, z)) return true;
-    const deck = this.deckOf(b, x, z);
-    return deck !== null && deck >= b.level - 0.05;
+    const length = D.hypot(b.bx - b.ax, b.bz - b.az);
+    const [ea, eb] = this.openRamps(b);
+    return t * length >= ea && (1 - t) * length >= eb;
+  }
+
+  /**
+   * How far each of a bridge's ramps is open, from its a end and its b end
+   * (see WING_DROP): no railing there, and wings to the sides.
+   */
+  openRamps(b: Bridge): [number, number] {
+    const hit = this.rampCache.get(b);
+    if (hit && hit.version === this.version) return hit.ends;
+    const length = D.hypot(b.bx - b.ax, b.bz - b.az);
+    const open = (end: 0 | 1) => {
+      for (let s = 0; s < length / 2; s += 0.5) {
+        const t = end === 0 ? s / length : 1 - s / length;
+        const x = b.ax + (b.bx - b.ax) * t;
+        const z = b.az + (b.bz - b.az) * t;
+        if (this.isWater(x, z)) return s;
+        if (s < RAMP_MIN) continue;
+        const deck = this.deckOf(b, x, z) ?? b.level;
+        if (deck >= b.level - 0.05 || deck - this.heightAt(x, z) >= WING_DROP) return s;
+      }
+      return length / 2;
+    };
+    const ends: [number, number] = [open(0), open(1)];
+    this.rampCache.set(b, { version: this.version, ends });
+    return ends;
+  }
+
+  /** A bridge's deck height on its centreline, `t` along it (0 at a, 1 at b). */
+  deckAlong(b: Bridge, t: number): number {
+    return this.deckOf(b, b.ax + (b.bx - b.ax) * t, b.az + (b.bz - b.az) * t) ?? b.level;
+  }
+
+  /** How far a point is out beside a bridge deck's edge (negative on the deck; Infinity off either end). */
+  private besideDeck(b: Bridge, x: number, z: number): number {
+    const dx = b.bx - b.ax;
+    const dz = b.bz - b.az;
+    const length = D.hypot(dx, dz);
+    const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
+    if (t < 0 || t > 1) return Infinity;
+    return Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length - b.width / 2;
+  }
+
+  /**
+   * The height of a ramp's wing over a point beside it (see RAMP_FLARE), or
+   * null where there's none: sloping from the deck's edge down to the ground
+   * at its outer edge, so what drives up it rides up onto the deck.
+   */
+  wingAt(x: number, z: number): number | null {
+    const [i, j] = this.cellAt(x, z);
+    // A deck's own edge cells reach a little past its edge too.
+    const k = j * this.config.cols + i;
+    const index = this.wingCell[k] >= 0 ? this.wingCell[k] : this.bridgeCell[k];
+    if (index < 0) return null;
+    const b = this.bridges[index];
+    if (b.gone) return null;
+    const dx = b.bx - b.ax;
+    const dz = b.bz - b.az;
+    const length = D.hypot(dx, dz);
+    const t = ((x - b.ax) * dx + (z - b.az) * dz) / (length * length);
+    if (t < 0 || t > 1) return null;
+    const signed = ((x - b.ax) * dz - (z - b.az) * dx) / length;
+    const out = Math.abs(signed) - b.width / 2;
+    if (out <= 0) return null;
+    const [ea, eb] = this.openRamps(b);
+    // Along whichever ramp the point is beside, from that ramp's foot.
+    const [s, open] = t * length < ea ? [t * length, ea] : (1 - t) * length < eb ? [(1 - t) * length, eb] : [0, 0];
+    if (open <= 0) return null;
+    const flare = RAMP_FLARE * (1 - s / open);
+    if (out >= flare) return null;
+    const cx = b.ax + dx * t;
+    const cz = b.az + dz * t;
+    const deck = this.deckOf(b, cx, cz);
+    if (deck === null) return null;
+    // Out across the deck's line to the wing's outer edge (dz, -dx is the side `signed` measures).
+    const side = signed > 0 ? 1 : -1;
+    const reach = (b.width / 2 + flare) / length;
+    const ground = Math.max(this.heightAt(cx + dz * reach * side, cz - dx * reach * side), this.seaLevel);
+    return deck + (ground - deck) * (out / flare);
   }
 
   /**
@@ -664,7 +770,10 @@ export class Battlefield {
   /** Height a unit should stand at: ground, a bridge deck, or the water surface for anything over water. */
   surfaceAt(x: number, z: number): number {
     const deck = this.deckAt(x, z);
-    return Math.max(this.heightAt(x, z), this.seaLevel, deck ?? -Infinity);
+    const ground = Math.max(this.heightAt(x, z), this.seaLevel, deck ?? -Infinity);
+    if (deck !== null) return ground;
+    const wing = this.wingAt(x, z);
+    return wing !== null && wing > ground ? wing : ground;
   }
 
   /** Height a boat floats at: the water surface (or the ground, if it's run aground), passing under bridges. */

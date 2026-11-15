@@ -62,7 +62,7 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
    * by land is a long way further (a bridge is a tight squeeze for a Titan).
    * They step straight over walls.
    */
-  walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, bridge: 3, waterCost: 2, waterSpeed: 0.6, over: 'low' },
+  walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, bridge: 3, rail: 3, waterCost: 2, waterSpeed: 0.6, over: 'low' },
   /**
    * Spider walkers: many legs take any slope as easily as flat ground, they're
    * small enough for town streets, and they climb straight over buildings and walls.
