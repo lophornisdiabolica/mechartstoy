@@ -307,11 +307,12 @@ function pickUses(lots: CityLot[], rng: Rng): CityFeature[] {
 export function cityStreets(plan: CityPlan): { ax: number; az: number; bx: number; bz: number; width: number }[] {
   const out: { ax: number; az: number; bx: number; bz: number; width: number }[] = [];
   // Avenues running along z sit at fixed x, and the other way round.
-  const alongZ = plan.avenues.filter((a) => a.points[0].x === a.points[1].x);
-  const alongX = plan.avenues.filter((a) => a.points[0].z === a.points[1].z);
+  const alongZ = plan.avenues.filter((a) => a.points[0].x === a.points[a.points.length - 1].x);
+  const alongX = plan.avenues.filter((a) => a.points[0].z === a.points[a.points.length - 1].z);
   for (const [list, cross, zAxis] of [[alongZ, alongX, true], [alongX, alongZ, false]] as const) {
     for (const a of list) {
-      const [p, q] = a.points;
+      const p = a.points[0];
+      const q = a.points[a.points.length - 1];
       const lo = zAxis ? Math.min(p.z, q.z) : Math.min(p.x, q.x);
       const hi = zAxis ? Math.max(p.z, q.z) : Math.max(p.x, q.x);
       const cuts = cross.map((c) => (zAxis ? c.points[0].z : c.points[0].x)).filter((v) => v > lo + 1 && v < hi - 1);
