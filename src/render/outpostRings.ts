@@ -3,14 +3,11 @@ import { Game } from '../game/game';
 import { CAPTURE_RADIUS } from '../game/outposts';
 import { Battlefield } from '../world/battlefield';
 import { factionColors } from './models';
+import { RoadTops } from './roadTops';
 import { meshHeightAt } from './terrainMesh';
 
 const SEGMENTS = 64;
 const WIDTH = 0.45;
-
-const down = new THREE.Vector3(0, -1, 0);
-const caster = new THREE.Raycaster();
-const from = new THREE.Vector3();
 
 /**
  * The height of whatever is drawn at (x, z): the ground (or water) or a road on it,
@@ -18,12 +15,8 @@ const from = new THREE.Vector3();
  * the ground mesh's triangles don't quite follow surfaceAt, so a ring at a
  * fixed height over surfaceAt dipped in and out of them and flickered.
  */
-function drawnHeight(field: Battlefield, roads: THREE.Object3D[], x: number, z: number): number {
-  from.set(x, 1000, z);
-  caster.set(from, down);
-  const ground = Math.max(meshHeightAt(field, x, z), field.surfaceAt(x, z));
-  const hit = caster.intersectObjects(roads, true)[0];
-  return hit ? Math.max(hit.point.y, ground) : ground;
+function drawnHeight(field: Battlefield, roads: RoadTops, x: number, z: number): number {
+  return Math.max(meshHeightAt(field, x, z), field.surfaceAt(x, z), roads.at(x, z));
 }
 
 /**
@@ -32,10 +25,10 @@ function drawnHeight(field: Battlefield, roads: THREE.Object3D[], x: number, z: 
  * highest point from it to halfway to its neighbours, so the straight edges
  * between corners don't cut through a bump or a road's crown.
  */
-function groundRing(field: Battlefield, surfaces: THREE.Object3D[], x: number, z: number, radius: number, lift: number): THREE.BufferGeometry {
+function groundRing(field: Battlefield, roads: RoadTops, x: number, z: number, radius: number, lift: number): THREE.BufferGeometry {
   const pos: number[] = [];
   const index: number[] = [];
-  const at = (a: number, r: number) => drawnHeight(field, surfaces, x + Math.cos(a) * r, z + Math.sin(a) * r);
+  const at = (a: number, r: number) => drawnHeight(field, roads, x + Math.cos(a) * r, z + Math.sin(a) * r);
   const step = (Math.PI * 2) / SEGMENTS;
   for (let i = 0; i <= SEGMENTS; i++) {
     // Clockwise from the top, as seen from above, like a clock filling up.
@@ -70,8 +63,7 @@ export class OutpostRings {
   /** `terrain` is the drawn ground and roads (see buildTerrain), whose roads the rings sit on. */
   constructor(private readonly game: Game, terrain: THREE.Object3D) {
     this.root.name = 'outpost-rings';
-    const roads = terrain.getObjectByName('roads');
-    const surfaces = roads ? [roads] : [];
+    const surfaces: RoadTops = terrain.userData.roadTops ?? new RoadTops();
     const ownerRing = (o: { x: number; z: number }) => groundRing(game.field, surfaces, o.x, o.z, CAPTURE_RADIUS, 0.08);
     const progressRing = (o: { x: number; z: number }) => groundRing(game.field, surfaces, o.x, o.z, CAPTURE_RADIUS + WIDTH * 1.2, 0.1);
     this.rings = game.ctx.outposts.map((o) => {

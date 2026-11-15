@@ -33,7 +33,7 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      died to most (always on with --doctrines; saved as a
                      -units.csv either way)
   --maps a,b         play on these map types: medium, wet, dry, hilly,
-                     rugged, small, large, notown, or your own as
+                     rugged, small, large, notown, city, metropolis, or your own as
                      name:settings (e.g. "flat:hills=0"). With --doctrines
                      the map type is one more column of the array, so every
                      doctrine meets every map type equally often in the same

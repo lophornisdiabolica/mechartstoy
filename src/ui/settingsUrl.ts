@@ -1,7 +1,7 @@
 import { isStyle } from '../game/commander/advice';
 import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
-import { BattleSettings, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
+import { BattleSettings, CITY_MODES, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
@@ -76,6 +76,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
   if (s.map.scrap !== d.map.scrap) p.set('scrap', s.map.scrap ? '1' : '0');
   if (s.map.townLife !== d.map.townLife) p.set('folk', s.map.townLife ? '1' : '0');
+  if (s.map.city !== d.map.city) p.set('city', String(CITY_MODES.indexOf(s.map.city)));
   if (s.map.craters !== d.map.craters) p.set('crater', s.map.craters ? '1' : '0');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
@@ -155,6 +156,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (scrap === '0' || scrap === '1') s.map.scrap = scrap === '1';
   const folk = p.get('folk');
   if (folk === '0' || folk === '1') s.map.townLife = folk === '1';
+  const city = p.get('city');
+  if (city === '0' || city === '1' || city === '2') s.map.city = CITY_MODES[Number(city)];
   const crater = p.get('crater');
   if (crater === '0' || crater === '1') s.map.craters = crater === '1';
   const outposts = p.get('outposts');

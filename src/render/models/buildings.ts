@@ -599,6 +599,88 @@ registerModel('bld:silo', (faction) => {
   return g;
 });
 
+/**
+ * A city lot's row of townhouses (see world/city.ts): two or three narrow
+ * houses side by side filling the 3-unit lot, each its own height and roof,
+ * gable ends to the street.
+ */
+registerModel('bld:terrace', (faction) => {
+  const g = new THREE.Group();
+  const n = Math.random() < 0.5 ? 2 : 3;
+  const span = 2.8;
+  const w = span / n;
+  let last = 0;
+  for (let k = 0; k < n; k++) {
+    const house = new THREE.Group();
+    house.position.z = -span / 2 + w * (k + 0.5);
+    // Never the same height as the house next door: their roofs overhang each other.
+    let h = stepped(1.4, 2.0, 4);
+    if (h === last) h = h >= 2 ? 1.4 : h + 0.2;
+    last = h;
+    // A hair narrower than its share, so neighbours' walls never share a plane, and every other
+    // house a little shallower, so neighbours' overhanging roofs never end in the same plane.
+    const deep = k % 2 === 0 ? 2.7 : 2.56;
+    const face = deep / 2;
+    house.add(box(deep, h, w - 0.04, wallColor(faction), 0, h / 2, 0));
+    roofOn(house, deep, w - 0.04, h, faction);
+    house.add(box(0.05, 0.6, 0.3, DARK, face + 0.025, 0.3, 0)); // door (proud of the windows above it)
+    for (const y of [h * 0.45, h * 0.8].filter((y) => y < h - 0.25)) {
+      house.add(box(0.05, 0.28, 0.32, WINDOW, face + 0.01, y, 0));
+      house.add(box(0.05, 0.28, 0.32, WINDOW, -face - 0.01, y, 0));
+    }
+    g.add(house);
+  }
+  return g;
+});
+
+/** A city lot's apartment block: four to seven storeys in brick towns, stepped terraces in adobe ones, tall halls under steep roofs in alpine and timber ones. */
+registerModel('bld:tenement', (faction) => {
+  const g = new THREE.Group();
+  const walls = wallColor(faction);
+  const style = faction < 0 ? townStyle : 'brick';
+  if (style === 'adobe') {
+    const tiers = 3 + Math.floor(Math.random() * 2);
+    for (let t = 0; t < tiers; t++) {
+      const w = 2.8 - t * 0.5;
+      g.add(box(w, 0.9, w, walls, -t * 0.12, t * 0.9 + 0.45, 0));
+      g.add(box(w + 0.04, 0.2, 0.6, WINDOW, -t * 0.12, t * 0.9 + 0.5, 0));
+      g.add(box(0.6, 0.2, w + 0.04, WINDOW, -t * 0.12, t * 0.9 + 0.5, 0));
+    }
+    g.add(box(0.06, 0.7, 0.5, DARK, 1.41, 0.35, 0));
+    return g;
+  }
+  if (style === 'alpine' || style === 'timber') {
+    const floors = 3 + Math.floor(Math.random() * 2);
+    const h = floors * 0.8;
+    g.add(box(2.7, h, 2.7, walls, 0, h / 2, 0));
+    for (let f = 0; f < floors; f++) {
+      for (const z of [-0.7, 0, 0.7]) {
+        g.add(box(0.05, 0.32, 0.3, WINDOW, 1.36, f * 0.8 + 0.5, z));
+        g.add(box(0.05, 0.32, 0.3, WINDOW, -1.36, f * 0.8 + 0.5, z));
+      }
+      if (f > 0) g.add(box(2.76, 0.1, 2.76, TOWN_COLORS[style].trim, 0, f * 0.8, 0)); // floor beams
+    }
+    roofOn(g, 2.7, 2.7, h, faction);
+    g.add(box(0.06, 0.6, 0.5, DARK, 1.38, 0.3, 0));
+    return g;
+  }
+  const floors = 4 + Math.floor(Math.random() * 4);
+  const floorH = 0.7;
+  const h = floors * floorH;
+  g.add(box(2.7, h, 2.7, walls, 0, h / 2, 0));
+  for (let f = 0; f < floors; f++) g.add(box(2.74, 0.26, 2.74, WINDOW, 0, f * floorH + 0.42, 0));
+  g.add(box(2.8, 0.15, 2.8, 0x8a8478, 0, h + 0.07, 0)); // parapet
+  g.add(box(0.06, 0.5, 0.8, DARK, 1.38, 0.25, 0)); // shop door
+  if (Math.random() < 0.4) {
+    // A water tank on legs.
+    g.add(cylinder(0.4, 0.4, 0.6, 8, 0x7a5a48, -0.5, h + 0.75, 0.5));
+    g.add(box(0.06, 0.4, 0.06, METAL, -0.5, h + 0.33, 0.5));
+  } else {
+    g.add(box(0.8, 0.45, 0.6, METAL, -0.5, h + 0.37, -0.5)); // rooftop unit
+  }
+  return g;
+});
+
 /** A long, low warehouse with a loading door, for a town's industrial district and harbour. */
 registerModel('bld:warehouse', (faction) => {
   const g = new THREE.Group();

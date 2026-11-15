@@ -547,6 +547,33 @@ export const BUILDING_DEFS = {
     rebuildDelay: 80,
     buildTime: 8,
   },
+  /**
+   * A city's row of narrow townhouses on one lot (see world/city.ts): two
+   * storeys under the town's roofs, filling the lot right up to the alleys.
+   */
+  terrace: {
+    id: 'terrace',
+    name: 'Townhouses',
+    model: 'bld:terrace',
+    hp: 260,
+    armor: 3,
+    radius: 1.5,
+    height: 2,
+    rebuildDelay: 75,
+    buildTime: 7,
+  },
+  /** A city's tall apartment block on one lot: four to seven storeys. */
+  tenement: {
+    id: 'tenement',
+    name: 'Apartment Block',
+    model: 'bld:tenement',
+    hp: 420,
+    armor: 4,
+    radius: 1.5,
+    height: 4,
+    rebuildDelay: 90,
+    buildTime: 9,
+  },
 } satisfies Record<string, BuildingDef>;
 
 export type BuildingId = keyof typeof BUILDING_DEFS;

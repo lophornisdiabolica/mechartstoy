@@ -251,6 +251,30 @@ battle, its exact map via `seed`).
   Townsfolk count toward nothing: no caps, kills or strength. The end
   screen says how many town buildings and townsfolk were caught in the
   crossfire, and which sides the towns took up arms against.
+  **City** (off by default; `city=1` for one town, `city=2` for the whole
+  map): with **One town**, the first town is a city instead,
+  as big as fits between the bases (about 35 by 50 units on a medium map,
+  75 square on a large one; small maps have no room and keep a town),
+  laid out square to the map's route grid (`world/city.ts`). Its blocks
+  are rows of lots, one building filling each 3-unit lot (townhouses,
+  apartment blocks, houses on the outskirts), with 1.5-unit alleys
+  between them: infantry and the smallest vehicles slip down the alleys,
+  everything else keeps to the 4.5-unit avenues, single file (the nav
+  grid caps an alley cell's clearance at half a cell; a razed building
+  opens its alleys up). The first outpost takes the city's paved square,
+  and the city's engineer fills empty lots, the middle first. Some blocks
+  are **parks** (clumps of dense forest) or **ponds**, and the odd lot a
+  pocket park; a lot's `use` is where more kinds (a city's vehicle depot,
+  say) would go. With **Whole map**, one city covers the map instead of
+  any towns: blocks wherever the ground is dry and gentle enough, kept
+  off the base pads and bridges, each block levelled so hills become
+  terraces with the avenues ramping between them.
+  The square sits on a random corner of the central crossing. A city's
+  central avenues run on past its edge, narrowing to a town street's
+  width where country roads join them. Re-rolled map styles include
+  **Metropolis** (a city over the whole map); other styles with towns
+  make the first one a city 30% of the time (`CITY_ODDS`). For sims,
+  `--maps` takes `city` and `metropolis`.
   **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an

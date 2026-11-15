@@ -95,6 +95,13 @@ export interface BattleSettings {
     /** Civilian towns in no-man's land, and how big they are. */
     towns: number;
     townSize: TownSize;
+    /**
+     * The first town is a city instead (see world/city.ts): blocks of
+     * buildings with alleys only infantry fit down, and avenues vehicles
+     * take single file. 'district' makes the first town a city (it needs at
+     * least one town); 'sprawl' covers the whole map in one, instead of towns.
+     */
+    city: CityMode;
     /** Townsfolk: people in the towns, a town engineer who grows each town, and a militia once a side razes too much of it (see towns.ts). */
     townLife: boolean;
     /** Join the bases' water with channels and bridge them (see waterways.ts). */
@@ -204,6 +211,10 @@ export interface BattleSettings {
 export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = OUTPOST_KIND_IDS.filter((k) => k !== 'relay');
 
 /** Town radius per size. */
+/** A city: none, one in place of the first town, or one over the whole map (see BattleSettings.map.city). */
+export type CityMode = 'off' | 'district' | 'sprawl';
+export const CITY_MODES: CityMode[] = ['off', 'district', 'sprawl'];
+
 export const TOWN_SIZES: Record<TownSize, { radius: number; label: string }> = {
   small: { radius: 8, label: 'Small' },
   medium: { radius: 11, label: 'Medium' },
@@ -257,7 +268,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', townLife: true, waterways: true, forest: 0.2, scrap: true, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -426,9 +437,13 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     biome: s.map.biome,
     waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',
     forest: s.map.forest,
-    towns: s.map.towns,
+    // A city over the whole map has no towns besides.
+    towns: s.map.city === 'sprawl' ? 0 : s.map.towns,
     townRadius: TOWN_SIZES[s.map.townSize].radius,
-    townPlaces: placed.towns,
+    // At most about two thirds of the map's depth, if it fits between the bases.
+    cityRadius: s.map.city === 'district' ? Math.round(Math.min(cols * scale, rows * scale) * cellSize * 0.32) : 0,
+    citySprawl: s.map.city === 'sprawl',
+    townPlaces: s.map.city === 'sprawl' ? null : placed.towns,
     outpostPlaces: placed.outposts,
   };
 }

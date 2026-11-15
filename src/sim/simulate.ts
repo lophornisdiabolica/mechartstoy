@@ -161,6 +161,10 @@ export const MAP_TYPES: Record<string, string> = {
   small: 'size=small',
   large: 'size=large',
   notown: 'town=0',
+  /** The first town is a city. */
+  city: 'city=1',
+  /** One city over the whole map. */
+  metropolis: 'city=2',
 };
 
 /** A map type's settings: a name from MAP_TYPES, or a name and settings written as `name:query` (e.g. `flat:hills=0`). */

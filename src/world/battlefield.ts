@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import { BiomeId } from './biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } from './ground';
 import { connectTowns } from './roads';
+import { CITY_CELL, CityPlan, inCityPlan, planCity, snapToCell } from './city';
 import { growWoods, Woods } from './woods';
 import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
 import * as D from '../core/dmath';
@@ -50,6 +51,10 @@ export interface BattlefieldConfig {
   /** Civilian towns in no-man's land, and their radius. */
   towns: number;
   townRadius: number;
+  /** The first town is a city instead (see city.ts), reaching at most this far from its middle each way; 0 for none. */
+  cityRadius: number;
+  /** One city covering the whole map instead of any towns (see city.ts): blocks wherever the ground allows. */
+  citySprawl: boolean;
   /**
    * Base positions per seat as fractions of the half-width and half-depth
    * (-1 to 1), or null to place them round the map's edge (see seatPoint).
@@ -75,6 +80,8 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   forest: 0,
   towns: 1,
   townRadius: 11,
+  cityRadius: 0,
+  citySprawl: false,
   places: null,
   townPlaces: null,
   outpostPlaces: null,
@@ -134,6 +141,8 @@ export interface TownSite {
   height: number;
   /** Which way its streets run: the main street runs along this angle (radians from +x). */
   angle: number;
+  /** A city's plan (see city.ts): its lots, avenues and alleys. Cities run square to the map (angle 0). */
+  city?: CityPlan;
 }
 
 /**
@@ -206,11 +215,13 @@ export const RAMP_FLARE = 1.6;
 export interface Road {
   points: { x: number; z: number }[];
   width: number;
-  /** A town's main street, or a road out in the country (see roads.ts). Narrower kinds (alleys) can join later. */
+  /** Its width at each point, where it changes along the way (a city's avenue tapering to a country road); `width` throughout if left out. */
+  widths?: number[];
+  /** A town's main street (or a city's avenue), a road out in the country (see roads.ts), or a city's alley. */
   kind: RoadKind;
 }
 
-export type RoadKind = 'street' | 'road';
+export type RoadKind = 'street' | 'road' | 'alley';
 
 /**
  * Where roads meet on purpose: one road (the branch) ends on another's line
@@ -294,6 +305,17 @@ export class Battlefield {
     this.wingCell = new Int16Array(config.cols * config.rows).fill(-1);
     this.roadCell = new Uint8Array(config.cols * config.rows);
     this.woods = new Woods(this);
+  }
+
+  /** Whether a point is in a city (see city.ts): its blocks, alleys and avenues. */
+  inCity(x: number, z: number, margin = 0): boolean {
+    for (const t of this.townSites) if (t.city && inCityPlan(t.city, x, z, margin)) return true;
+    return false;
+  }
+
+  /** Whether a point is inside a town (a city's squarish outline, or a town's circle). */
+  inTown(t: TownSite, x: number, z: number): boolean {
+    return t.city ? inCityPlan(t.city, x, z) : D.hypot(t.x - x, t.z - z) < t.radius;
   }
 
   /** The map cell (i, j) a point is in, clamped to the map. */
@@ -672,10 +694,10 @@ export class Battlefield {
    * Works mid-battle too, like paint. Returns the road's index in `roads`
    * (-1 for a line too short to be one).
    */
-  addRoad(points: { x: number; z: number }[], width: number, kind: RoadKind = 'road'): number {
+  addRoad(points: { x: number; z: number }[], width: number, kind: RoadKind = 'road', widths?: number[]): number {
     if (points.length < 2) return -1;
     const index = this.roads.length;
-    this.roads.push({ points, width, kind });
+    this.roads.push(widths ? { points, width, kind, widths } : { points, width, kind });
     const { cols, cellSize } = this.config;
     const code = groundCode('road');
     const xs = points.map((p) => p.x);
@@ -686,9 +708,13 @@ export class Battlefield {
       for (let i = i0; i <= i1; i++) {
         const cx = this.bounds.minX + (i + 0.5) * cellSize;
         const cz = this.bounds.minZ + (j + 0.5) * cellSize;
-        let d = Infinity;
-        for (let k = 1; k < points.length; k++) d = Math.min(d, distanceToSegment(cx, cz, points[k - 1].x, points[k - 1].z, points[k].x, points[k].z));
-        if (d > width / 2 || this.isWater(cx, cz) || this.deckAt(cx, cz) !== null) continue;
+        // Inside any stretch's half-width (a tapering stretch counts as its narrower end).
+        let inside = false;
+        for (let k = 1; k < points.length && !inside; k++) {
+          const w = widths ? Math.min(widths[k - 1], widths[k]) : width;
+          inside = distanceToSegment(cx, cz, points[k - 1].x, points[k - 1].z, points[k].x, points[k].z) <= w / 2;
+        }
+        if (!inside || this.isWater(cx, cz) || this.deckAt(cx, cz) !== null) continue;
         this.ground[j * cols + i] = code;
         this.roadCell[j * cols + i] = 1;
       }
@@ -898,7 +924,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = config.townRadius;
-  const townSpot = (x: number, z: number) => {
+  const townSpot = (x: number, z: number, townRadius = config.townRadius) => {
     let score = 0;
     for (let a = 0; a < 8; a++) {
       const px = x + D.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
@@ -925,13 +951,58 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     const inside = (v: number, half: number) => Math.max(-(half - radius - 2), Math.min(half - radius - 2, v * half));
     return { x: inside(p.x, width / 2), z: inside(p.z, depth / 2) };
   };
+  // A city instead of the first town: as near the middle as it can be, as big as fits between the
+  // bases (longer one way if need be), on its own stream so maps without one don't change.
+  const cityRng = rng.fork(0x63697479);
+  let city: { x: number; z: number; rx: number; rz: number } | null = null;
+  if (config.cityRadius > 0 && config.towns > 0) {
+    const first = config.townPlaces?.[0];
+    let best: { x: number; z: number; rx: number; rz: number; score: number } | null = null;
+    for (let n = 0; n < (first ? 1 : 60); n++) {
+      // The middle first, then a line down the middle, then anywhere near it.
+      const line = [0, 0.1, -0.1, 0.2, -0.2];
+      const at = first
+        ? placedAt(first, 10)
+        : n < line.length
+          ? { x: 0, z: line[n] * depth }
+          : { x: cityRng.range(-width * 0.2, width * 0.2), z: cityRng.range(-depth * 0.3, depth * 0.3) };
+      const size = citySize(at.x, at.z, config.cityRadius, width, depth, baseSites);
+      if (!size) continue;
+      const r = Math.sqrt(size.rx * size.rz);
+      // Big, flat, dry and central; clear of bridges, which levelling would bury.
+      const score = townSpot(at.x, at.z, r) - r * 1.5 + (Math.abs(at.z) / (depth / 2)) * 30 + (Math.abs(at.x) / (width / 2)) * 30;
+      if (!best || score < best.score) best = { ...at, ...size, score };
+    }
+    if (best && best.score < 50) city = best;
+  }
+  if (city) {
+    const at = snapToCell(city.x, city.z, field.bounds.minX, field.bounds.minZ);
+    const height = Math.max(seaLevel + 1, field.heightAt(at.x, at.z));
+    const plan = planCity(at.x, at.z, city.rx, city.rz, cityRng.fork(0x706c616e));
+    // The main avenue (where roads join) runs the long way.
+    townSites.push({ ...at, radius: Math.max(city.rx, city.rz), height, angle: city.rz > city.rx ? Math.PI / 2 : 0, city: plan });
+    // Level right out to the edge (towns only level most of the way): lots sit square on the ground.
+    for (let j = 0; j <= rows; j++) {
+      for (let i = 0; i <= cols; i++) {
+        const dx = Math.max(0, Math.abs(field.vertexX(i) - at.x) - city.rx);
+        const dz = Math.max(0, Math.abs(field.vertexZ(j) - at.z) - city.rz);
+        const t = 1 - smoothstep(1.5, 8, D.hypot(dx, dz));
+        if (t <= 0) continue;
+        const k = j * (cols + 1) + i;
+        heights[k] = heights[k] * (1 - t) + height * t;
+      }
+    }
+    carvePonds(field, plan);
+  }
   if (config.townPlaces) {
-    for (const p of config.townPlaces) {
+    for (const p of config.townPlaces.slice(city ? 1 : 0)) {
       const at = placedAt(p, townRadius);
       const height = Math.max(seaLevel + 1, field.heightAt(at.x, at.z));
       townSites.push({ ...at, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
       flatten(at.x, at.z, townRadius, height);
     }
+  } else if (city) {
+    // The city took the first town's place.
   } else if (best && config.towns > 0) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
     townSites.push({ x: best.x, z: best.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
@@ -943,7 +1014,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     for (let n = 0; n < 60; n++) {
       const x = townRng.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
       const z = townRng.range(-depth / 2 + townRadius + 3, depth / 2 - townRadius - 3);
-      const gap = townSites.reduce((m, s) => Math.min(m, D.hypot(s.x - x, s.z - z) - s.radius - townRadius), Infinity);
+      // (A city's corners reach a fifth further out than its radius.)
+      const gap = townSites.reduce((m, s) => Math.min(m, D.hypot(s.x - x, s.z - z) - s.radius * (s.city ? 1.2 : 1) - townRadius), Infinity);
       if (gap < 6) continue;
       // Contested ground: about as far from the nearest base as the next.
       const near = baseSites.map((b) => D.hypot(b.x - x, b.z - z)).sort((a, b) => a - b);
@@ -956,8 +1028,38 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     townSites.push({ x: pick.x, z: pick.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(pick.x, pick.z, townRadius, height);
   }
-  // Each town's main street is paved, and roads join the towns.
+  // Or a city over the whole map: blocks wherever the ground is dry and gentle enough, round the
+  // bases and bridges, each block levelled (so hills become terraces, avenues ramping between them).
+  if (config.citySprawl) {
+    const at = snapToCell(0, 0, field.bounds.minX, field.bounds.minZ);
+    const keep = (x: number, z: number) => {
+      if (!field.contains(x, z, 2) || field.nearBridge(x, z, 3) || field.slopeAt(x, z) > SPRAWL_SLOPE) return false;
+      for (const [dx, dz] of [[0, 0], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5]]) if (field.heightAt(x + dx, z + dz) < seaLevel + 0.3) return false;
+      return baseSites.every((b) => D.hypot(b.x - x, b.z - z) > b.radius + 6);
+    };
+    const plan = planCity(at.x, at.z, width / 2 - 3, depth / 2 - 3, cityRng.fork(0x7370726c), { keep, centralToEdge: false });
+    townSites.push({ ...at, radius: Math.max(width, depth) / 2, height: field.heightAt(at.x, at.z), angle: 0, city: plan });
+    levelBlocks(field, plan);
+    carvePonds(field, plan);
+  }
+
+  // Each town's main street is paved (a city's avenues and alleys), and roads join the towns.
   for (const t of townSites) {
+    if (t.city) {
+      for (const a of t.city.avenues) field.addRoad(a.points, a.width, 'street', a.widths);
+      for (const a of t.city.alleys) field.addRoad(a.points, a.width, 'alley');
+      // The square is paved right across (as road ground: a strip that wide would round off its corners over the lots round it).
+      const sq = t.city.square;
+      const paved: number[] = [];
+      for (let z = sq.z - sq.hz + CITY_CELL / 2; z < sq.z + sq.hz; z += CITY_CELL) {
+        for (let x = sq.x - sq.hx + CITY_CELL / 2; x < sq.x + sq.hx; x += CITY_CELL) {
+          const [i, j] = field.cellAt(x, z);
+          if (!field.isWater(x, z)) paved.push(j * cols + i);
+        }
+      }
+      field.setGround(paved, 'road');
+      continue;
+    }
     const ux = D.cos(t.angle) * t.radius;
     const uz = D.sin(t.angle) * t.radius;
     field.addRoad([{ x: t.x - ux, z: t.z - uz }, { x: t.x + ux, z: t.z + uz }], STREET_WIDTH, 'street');
@@ -965,7 +1067,13 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   connectTowns(field);
 
   // Outposts come last, so a map with none is the same map as before outposts existed.
-  const spots = config.outpostPlaces ? config.outpostPlaces.map((p) => placedAt(p, OUTPOST_RADIUS)) : placeOutposts(field, rng, config.outposts);
+  // A city's square takes the first outpost: holding the middle of the city.
+  const square = townSites.find((t) => t.city)?.city?.square;
+  const spots = config.outpostPlaces
+    ? config.outpostPlaces.map((p) => placedAt(p, OUTPOST_RADIUS))
+    : square && config.outposts > 0
+      ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
+      : placeOutposts(field, rng, config.outposts);
   const kinds = dealOutpostKinds(spots, config.outpostKinds, rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
   spots.forEach((p, k) => {
     const height = Math.max(seaLevel + 1, field.heightAt(p.x, p.z));
@@ -976,10 +1084,152 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);
+  // Cities' parks get their trees.
+  for (const t of townSites) if (t.city) plantParks(field, t.city, rng.fork(0x7061726b));
   field.markMade();
 
   return field;
 }
+
+/**
+ * How far a city centred at (x, z) can reach along x and z: up to `most`
+ * each way, inside the map, and clear of every base pad by CITY_GAP (on one
+ * axis or the other, whichever leaves the bigger city). Null if it would be
+ * smaller than CITY_LEAST either way, or more than twice as long as wide.
+ */
+function citySize(x: number, z: number, most: number, width: number, depth: number, bases: BaseSite[]): { rx: number; rz: number } | null {
+  let rx = Math.min(most, width / 2 - Math.abs(x) - 4);
+  let rz = Math.min(most, depth / 2 - Math.abs(z) - 4);
+  for (const b of bases) {
+    const gx = Math.abs(b.x - x) - b.radius - CITY_GAP;
+    const gz = Math.abs(b.z - z) - b.radius - CITY_GAP;
+    if (rx <= gx || rz <= gz) continue;
+    // Pull in whichever side keeps more of the city.
+    if (Math.max(gx, 0) * rz >= rx * Math.max(gz, 0)) rx = gx;
+    else rz = gz;
+  }
+  if (rx < CITY_LEAST || rz < CITY_LEAST) return null;
+  // Not too long and thin.
+  rx = Math.min(rx, rz * 2);
+  rz = Math.min(rz, rx * 2);
+  return { rx, rz };
+}
+
+/** Steepest ground a sprawling city puts a lot on. */
+const SPRAWL_SLOPE = 0.7;
+/** How far past a levelled block the ground eases back to what it was. */
+const BLOCK_EASE = 2.2;
+/** A pond's water depth, and how wide its banks are. */
+const POND_DEPTH = 0.7;
+const POND_BANK = 2;
+/** A block higher than this above the sea is a park instead of a pond (it would be a pit). */
+const POND_HIGHEST = 2.5;
+
+/** The ground each block of a city covers (its lots, and the alleys between them), as rectangles. */
+function cityBlocks(plan: CityPlan): { x0: number; z0: number; x1: number; z1: number }[] {
+  const blocks = new Map<string, { x0: number; z0: number; x1: number; z1: number }>();
+  const h = CITY_CELL;
+  for (const l of plan.lots) {
+    const key = `${l.bi},${l.bj}`;
+    const b = blocks.get(key);
+    if (!b) blocks.set(key, { x0: l.x - h, x1: l.x + h, z0: l.z - h, z1: l.z + h });
+    else {
+      b.x0 = Math.min(b.x0, l.x - h);
+      b.x1 = Math.max(b.x1, l.x + h);
+      b.z0 = Math.min(b.z0, l.z - h);
+      b.z1 = Math.max(b.z1, l.z + h);
+    }
+  }
+  return [...blocks.values()];
+}
+
+/** Level each block of a city to its average height, easing back to the ground round it (a sprawling city on hills). */
+function levelBlocks(field: Battlefield, plan: CityPlan): void {
+  const { cols, rows } = field.config;
+  const heights = field.heights;
+  for (const b of cityBlocks(plan)) {
+    let sum = 0;
+    let n = 0;
+    for (let j = 0; j <= rows; j++) {
+      const z = field.vertexZ(j);
+      if (z < b.z0 || z > b.z1) continue;
+      for (let i = 0; i <= cols; i++) {
+        const x = field.vertexX(i);
+        if (x < b.x0 || x > b.x1) continue;
+        sum += heights[j * (cols + 1) + i];
+        n++;
+      }
+    }
+    if (n === 0) continue;
+    const level = Math.max(field.seaLevel + 0.4, sum / n);
+    for (let j = 0; j <= rows; j++) {
+      const dz = Math.max(0, b.z0 - field.vertexZ(j), field.vertexZ(j) - b.z1);
+      if (dz > BLOCK_EASE) continue;
+      for (let i = 0; i <= cols; i++) {
+        const dx = Math.max(0, b.x0 - field.vertexX(i), field.vertexX(i) - b.x1);
+        const t = 1 - smoothstep(0, BLOCK_EASE, D.hypot(dx, dz));
+        if (t <= 0) continue;
+        const k = j * (cols + 1) + i;
+        heights[k] = heights[k] * (1 - t) + level * t;
+      }
+    }
+  }
+}
+
+/** Dig a city's ponds: water below sea level, with banks easing down from the street. */
+function carvePonds(field: Battlefield, plan: CityPlan): void {
+  const { cols, rows } = field.config;
+  const heights = field.heights;
+  const floor = field.seaLevel - POND_DEPTH;
+  for (const f of plan.features) {
+    if (f.kind !== 'pond') continue;
+    if (field.heightAt((f.x0 + f.x1) / 2, (f.z0 + f.z1) / 2) > field.seaLevel + POND_HIGHEST) {
+      f.kind = 'park';
+      for (const l of plan.lots) if (l.use === 'pond' && l.x > f.x0 && l.x < f.x1 && l.z > f.z0 && l.z < f.z1) l.use = 'park';
+      continue;
+    }
+    for (let j = 0; j <= rows; j++) {
+      for (let i = 0; i <= cols; i++) {
+        const x = field.vertexX(i);
+        const z = field.vertexZ(j);
+        // How far inside the pond's edge (a little in from its block's edge), negative outside.
+        const d = Math.min(x - f.x0, f.x1 - x, z - f.z0, f.z1 - z) - 0.4;
+        if (d <= 0) continue;
+        const k = j * (cols + 1) + i;
+        const t = smoothstep(0, POND_BANK, d);
+        heights[k] = heights[k] * (1 - t) + Math.min(heights[k], floor) * t;
+      }
+    }
+  }
+}
+
+/** Trees in a city's parks: clumps of dense forest that infantry hide in, with open lawns between. */
+function plantParks(field: Battlefield, plan: CityPlan, rng: Rng): void {
+  const { cols, cellSize } = field.config;
+  const cells: number[] = [];
+  for (const f of plan.features) {
+    if (f.kind !== 'park') continue;
+    let first = true;
+    for (let z = f.z0 + cellSize / 2; z < f.z1; z += cellSize) {
+      for (let x = f.x0 + cellSize / 2; x < f.x1; x += cellSize) {
+        // (Every park gets a tree or two, even a lone lot's.)
+        const plant = first || rng.chance(0.55);
+        first = false;
+        if (!plant || field.isWater(x, z)) continue;
+        const [i, j] = field.cellAt(x, z);
+        if (field.roadCell[j * cols + i]) continue;
+        cells.push(j * cols + i);
+        const n = rng.chance(0.5) ? 1 : 2;
+        for (let k = 0; k < n; k++) field.woods.add(x + rng.range(-0.4, 0.4), z + rng.range(-0.4, 0.4), rng.range(0.8, 1.15));
+      }
+    }
+  }
+  field.setGround(cells, 'thicket');
+}
+
+/** Ground kept between a city's edge and a base pad, and the least a city reaches from its middle. */
+const CITY_GAP = 7;
+const CITY_LEAST = 10;
 
 /**
  * Which kind each outpost is: the allowed kinds in a shuffled order (cycling
@@ -1011,7 +1261,7 @@ function dealOutpostKinds<P>(sites: P[], allowed: OutpostKind[], rng: Rng, heigh
  * the bases can walk to, and spread out from the town and each other. Picked
  * greedily, best spot first, from random candidates.
  */
-function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number; z: number }[] {
+function placeOutposts(field: Battlefield, rng: Rng, count: number, taken: { x: number; z: number; r: number }[] = []): { x: number; z: number }[] {
   if (count <= 0) return [];
   // Land the bases can reach (over bridges too).
   const reach = landReach(field);
@@ -1036,7 +1286,9 @@ function placeOutposts(field: Battlefield, rng: Rng, count: number): { x: number
   }
 
   // The town's edge counts as close as it can get: an outpost by a town is fine, two outposts together aren't.
-  const placed: { x: number; z: number; r: number }[] = field.townSites.map((t) => ({ x: t.x, z: t.z, r: t.radius - 6 }));
+  // (A city covering the map leaves room anywhere: its square is in `taken`, and other outposts clear lots.)
+  const towns = field.config.citySprawl ? [] : field.townSites;
+  const placed: { x: number; z: number; r: number }[] = [...towns.map((t) => ({ x: t.x, z: t.z, r: t.radius - 6 })), ...taken];
   const out: { x: number; z: number }[] = [];
   const cap = Math.max(field.width, field.depth) * 0.5;
   for (let k = 0; k < count; k++) {

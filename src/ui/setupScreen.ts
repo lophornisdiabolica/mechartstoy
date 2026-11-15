@@ -1,4 +1,4 @@
-import { AttackTiming, BaseLayout, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BaseLayout, CityMode, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
@@ -14,7 +14,7 @@ import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, Variet
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual' },
   biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
-  style: { label: 'Map style', title: 'Water, hills, dense forest and towns together, from one of the map styles' },
+  style: { label: 'Map style', title: 'Water, hills, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
 };
@@ -553,6 +553,19 @@ export class SetupScreen {
     );
     row(map, 'Town size', townSize.row);
     this.sync.push(() => townSize.set(this.settings.map.townSize));
+    const city = segmented<CityMode>(
+      [
+        { label: 'None', value: 'off' },
+        { label: 'One town', value: 'district' },
+        { label: 'Whole map', value: 'sprawl' },
+      ],
+      (v) => {
+        this.settings.map.city = v;
+        this.changed();
+      },
+    );
+    row(map, 'City', city.row);
+    this.sync.push(() => city.set(this.settings.map.city));
     const folk = el('input', { type: 'checkbox', 'aria-label': 'Townsfolk' });
     folk.addEventListener('change', () => {
       this.settings.map.townLife = folk.checked;
@@ -562,7 +575,7 @@ export class SetupScreen {
     folkLabel.append(folk, document.createTextNode(' People in the towns'));
     row(map, 'Townsfolk', folkLabel);
     this.sync.push(() => (folk.checked = this.settings.map.townLife));
-    map.append(el('p', { class: 'hint' }, 'A few townsfolk walk each town’s streets and scatter from the fighting, and the town’s engineer puts up a new building every four minutes. A side that razes three of a town’s buildings turns its people into a militia that guards the town’s edge and shoots that side’s units that come close.'));
+    map.append(el('p', { class: 'hint' }, 'A few townsfolk walk each town’s streets and scatter from the fighting, and the town’s engineer puts up a new building every four minutes. A side that razes three of a town’s buildings turns its people into a militia that guards the town’s edge and shoots that side’s units that come close. A city is a big town of blocks with alleys between the buildings that only infantry and the smallest vehicles fit down, so vehicles keep to its avenues, single file; an outpost takes its square, and some blocks are parks or ponds. One town makes the first town a city (as big as fits between the bases; it needs a town); Whole map covers the map in one, round the bases, instead of towns.'));
 
     // Armies
     const armies = section('Armies', false);
