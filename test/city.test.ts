@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Building, Faction, NEUTRAL, Transform, Unit } from '../src/game/components';
+import { Building, Faction, NEUTRAL, Townsfolk, Transform, Unit } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { battlefieldConfig, defaultSettings } from '../src/game/settings';
 import { UNIT_DEFS } from '../src/game/units';
@@ -262,4 +262,56 @@ describe('cities in map variety', () => {
     }
     expect(corners.size).toBeGreaterThanOrEqual(3);
   });
+});
+
+describe('city people', () => {
+  const folk = (game: Game, role: string) => [...game.world.query(Townsfolk)].filter((e) => game.world.req(e, Townsfolk).role === role);
+  const start = (city: 'district' | 'sprawl', seed = 3) => {
+    const s = defaultSettings();
+    s.map.city = city;
+    s.map.size = 'large';
+    s.armies.startingArmy = 0;
+    const game = new Game(seed, { settings: s, autoSpawn: false });
+    run(game, 1);
+    return game;
+  };
+
+  it('keeps more people than a town, most in a city covering the map, with several engineers', () => {
+    const district = start('district');
+    const sprawl = start('sprawl');
+    expect(folk(district, 'civilian').length).toBeGreaterThan(15);
+    expect(folk(sprawl, 'civilian').length).toBeGreaterThan(folk(district, 'civilian').length);
+    for (const g of [district, sprawl]) {
+      expect(folk(g, 'engineer').length).toBeGreaterThan(1);
+      expect(folk(g, 'engineer').length).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('fills back up over a few minutes after its people die, and keeps fewer once half razed', () => {
+    const game = start('sprawl');
+    const full = folk(game, 'civilian').length;
+    for (const e of folk(game, 'civilian')) game.world.destroy(e);
+    run(game, 60);
+    expect(folk(game, 'civilian').length).toBeLessThan(full * 0.5);
+    run(game, 240);
+    expect(folk(game, 'civilian').length).toBeGreaterThan(full * 0.7);
+    // Raze most of it: it keeps fewer.
+    const civic = [...game.world.query(Building, Faction)].filter((e) => game.world.req(e, Faction).id === NEUTRAL);
+    civic.forEach((e, k) => k % 4 !== 0 && game.world.destroy(e));
+    for (const e of folk(game, 'civilian')) game.world.destroy(e);
+    run(game, 300);
+    expect(folk(game, 'civilian').length).toBeLessThan(full * 0.6);
+    expect(folk(game, 'civilian').length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('has its engineers fill different empty lots', () => {
+    const game = start('district');
+    const civic = () => [...game.world.query(Building, Faction, Transform)].filter((e) => game.world.req(e, Faction).id === NEUTRAL);
+    // Clear a few lots for them.
+    civic().slice(0, 12).forEach((e) => game.world.destroy(e));
+    run(game, 1);
+    const before = civic().length;
+    run(game, 300);
+    expect(civic().length - before).toBeGreaterThanOrEqual(3);
+  }, 60_000);
 });

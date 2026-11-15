@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoadTops } from './roadTops';
 import { disposeTree } from './dispose';
 import { Rng } from '../core/rng';
 import { Battlefield, Bridge, RAMP_FLARE, Road } from '../world/battlefield';
@@ -115,6 +116,8 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   roads.name = 'roads';
   /** Each road's strip, by its index in field.roads (null where nothing of it is drawn). */
   const roadMeshes: (THREE.Group | null)[] = [];
+  /** How high the roads are drawn, for units standing on them and rings lying over them. */
+  const tops = new RoadTops();
   const drawRoad = (k: number) => {
     const old = roadMeshes[k];
     if (old) {
@@ -122,12 +125,16 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       disposeTree(old);
     }
     roadMeshes[k] = buildRoad(field, field.roads[k]);
-    if (roadMeshes[k]) roads.add(roadMeshes[k]);
+    if (roadMeshes[k]) {
+      roads.add(roadMeshes[k]);
+      tops.add(k, roadMeshes[k]);
+    } else tops.remove(k);
   };
   field.roads.forEach((_, k) => drawRoad(k));
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
 
   let drawnBridges = field.bridges.length;
+  const { cellSize } = field.config;
   const stop = field.onChange((area: CellArea) => {
     for (let j = Math.max(0, area.j0 - 1); j <= Math.min(rows - 1, area.j1 + 1); j++) {
       for (let i = Math.max(0, area.i0 - 1); i <= Math.min(cols - 1, area.i1 + 1); i++) writeCell(i, j);
@@ -141,13 +148,19 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     for (let k = 0; k < drawnBridges; k++) if (field.bridges[k]?.gone && bridges.children[k]?.visible) bridges.children[k].visible = false;
     // Roads follow the ground, so redraw any the ground under moved (and draw new ones).
     field.roads.forEach((r, k) => {
-      const touched = k >= roadMeshes.length || r.points.some((p) => {
-        const [i, j] = field.cellAt(p.x, p.z);
-        return i >= area.i0 - 2 && i <= area.i1 + 2 && j >= area.j0 - 2 && j <= area.j1 + 2;
+      // (Along the whole road, not just its points: a city avenue is one long straight.)
+      const x0 = field.bounds.minX + (area.i0 - 2) * cellSize - r.width;
+      const x1 = field.bounds.minX + (area.i1 + 3) * cellSize + r.width;
+      const z0 = field.bounds.minZ + (area.j0 - 2) * cellSize - r.width;
+      const z1 = field.bounds.minZ + (area.j1 + 3) * cellSize + r.width;
+      const touched = k >= roadMeshes.length || r.points.some((p, q) => {
+        const o = r.points[Math.max(0, q - 1)];
+        return Math.max(o.x, p.x) >= x0 && Math.min(o.x, p.x) <= x1 && Math.max(o.z, p.z) >= z0 && Math.min(o.z, p.z) <= z1;
       });
       if (touched) drawRoad(k);
     });
     while (roadMeshes.length > field.roads.length) {
+      tops.remove(roadMeshes.length - 1);
       const gone = roadMeshes.pop();
       if (gone) {
         roads.remove(gone);
@@ -156,6 +169,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     }
   });
   group.userData.dispose = stop;
+  group.userData.roadTops = tops;
   return group;
 }
 
