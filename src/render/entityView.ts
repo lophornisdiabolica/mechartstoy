@@ -31,12 +31,16 @@ interface ViewEntry {
   /** Boats: the model's height above its waterline, and how far it's ducked under a bridge now (see the deck check). */
   top: number;
   duck: number;
+  /** Goes on the ground, so is drawn standing on any road there (see the road check). */
+  grounded: boolean;
 }
 
 const _ahead = new THREE.Vector3();
 /** Where round a boat to look for a deck overhead (scaled by its size), and the gap it keeps under one. */
 const DUCK_RING: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
 const DUCK_GAP = 0.2;
+/** A ground unit up to this far under a drawn road is drawn on top of it (further under, it's in a cutting or tunnel of some kind: leave it be). */
+const ROAD_REACH = 1.5;
 const _m: number[] = new Array(9);
 /** Most an aircraft leans into a turn, radians. */
 const MAX_BANK = 0.75;
@@ -71,10 +75,12 @@ export class EntityView {
 
   /** `surface` is the ground height at a world point, which wrecks lie along. */
   /** `deck` is the height of a bridge deck over a world point, or null: tall boats duck under them. */
+  /** `road` is the height a road is drawn at over a world point (-Infinity off roads; see RoadTops): units stand on them. */
   constructor(
     private readonly world: World,
     private readonly surface?: (x: number, z: number) => number,
     private readonly deck?: (x: number, z: number) => number | null,
+    private readonly road?: (x: number, z: number) => number,
   ) {
     this.root.name = 'entities';
     this.root.visible = false;
@@ -123,9 +129,11 @@ export class EntityView {
           if ((o as THREE.Sprite).isSprite) sprites.push(o as THREE.Sprite);
           else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
         });
-        const naval = w.get(e, Unit)?.def.move === 'naval';
+        const move = w.get(e, Unit)?.def.move;
+        const naval = move === 'naval';
+        const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0 };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -136,8 +144,14 @@ export class EntityView {
       const rig = getRig(obj);
 
       const x = t.px + (t.x - t.px) * alpha;
-      const y = t.py + (t.y - t.py) * alpha;
       const z = t.pz + (t.z - t.pz) * alpha;
+      let y = t.py + (t.y - t.py) * alpha;
+      // The sim's ground runs under the drawn roads, which are lifted over bumps and banked on
+      // slopes: stand on the road instead of sinking into it (looks only).
+      if (entry.grounded && this.road) {
+        const top = this.road(x, z);
+        if (top > y && top - y < ROAD_REACH) y = top;
+      }
       if (rig?.faceVelocity) {
         // Point along the path from the previous to current sim position.
         _ahead.set(t.x - t.px, t.y - t.py, t.z - t.pz);

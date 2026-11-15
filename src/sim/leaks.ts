@@ -112,6 +112,8 @@ export const BOUNDED: Record<string, string> = {
   'game.ctx.navs.land.obstacles.log': 'NavObstacles.record',
   // The units in a team's attack, cleared when it's spent (Offensive): no bigger than the army. Empty at the first sample and full at the last, it looks like growth.
   'game.ctx.offensive.plans[*].roster': 'Offensive.plans',
+  // A route search's open cells, emptied when the next search starts: what's left is whatever the last search left, no more than the grid's cells.
+  'game.ctx.navs.grids[*].open.items': 'NavGrid.findPath',
 };
 
 export interface Grower {

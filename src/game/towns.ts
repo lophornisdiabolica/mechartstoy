@@ -36,6 +36,10 @@ import { cityBuilding } from '../world/settlements';
  * battle. Townsfolk keep away from the fighting, scattering from soldiers
  * and vehicles that come near.
  *
+ * A city keeps more: one person per few buildings still standing (most of
+ * all in a city covering the map), who come back out over a few minutes
+ * after a loss, and several engineers, each filling empty lots.
+ *
  * Nobody aims at the town, but stray fire wrecks it. Once one side has
  * razed MILITIA_AT of a town's buildings, its people take up rifles against
  * that side: the militia stand guard round the edge of their town and shoot
@@ -52,12 +56,19 @@ import { cityBuilding } from '../world/settlements';
 /** Townsfolk per town: this many, plus one per this much radius. */
 const FOLK_BASE = 2;
 const FOLK_PER_RADIUS = 5;
-/** In a city, one more townsperson per this many lots. */
-const CITY_FOLK_LOTS = 6;
-/** Most townspeople a city keeps (a city covering the map has hundreds of lots). */
-const CITY_FOLK_MOST = 16;
+/** In a city, one more townsperson per this many buildings standing (so a city half razed keeps half its people). */
+const CITY_FOLK_HOMES = 4;
+/** Most townspeople a city keeps: one city among the countryside, and one covering the map (which has hundreds of lots). */
+const CITY_FOLK_MOST = 24;
+const SPRAWL_FOLK_MOST = 48;
 /** Seconds between someone new coming out of a building, while a town is short of people. */
 const SPAWN_EVERY = 60;
+/** A city short of people fills back up in about this many seconds (someone new every REFILL / wanted), but no faster than one every CITY_SPAWN_LEAST. */
+const REFILL = 240;
+const CITY_SPAWN_LEAST = 6;
+/** A city has one engineer, and one more per this many lots, up to CITY_ENGINEERS_MOST. */
+const CITY_ENGINEER_LOTS = 50;
+const CITY_ENGINEERS_MOST = 6;
 /** Seconds between the town engineer's new buildings (and before its first). */
 export const BUILD_EVERY = 240;
 /** How far round a town new buildings can go, as a share of its radius. */
@@ -122,17 +133,29 @@ export const TOWNSFOLK = {
 
 interface Town {
   site: TownSite;
-  /** How many people it keeps. */
+  /** How many people it keeps (a city: fewer as its buildings come down; see folkFor). */
   wanted: number;
-  /** When someone new may come out, and when the engineer starts its next building. */
+  /** How many engineers it keeps. */
+  engineers: number;
+  /** When someone new may come out. */
   spawnAt: number;
-  buildAt: number;
-  /** Where the engineer's next building goes, once it's picked a spot. */
-  plan: { x: number; z: number; heading: number; building: BuildingId } | null;
   /** Town buildings razed, per side. */
   razed: Map<number, number>;
   /** The sides its militia fight, in the order they made it angry. */
   grudges: number[];
+}
+
+/** Where a town engineer's next building goes. */
+interface BuildPlan {
+  x: number;
+  z: number;
+  heading: number;
+  building: BuildingId;
+}
+
+/** How many people a city keeps with this many buildings standing. */
+function folkFor(sprawl: boolean, homes: number): number {
+  return Math.min(sprawl ? SPRAWL_FOLK_MOST : CITY_FOLK_MOST, FOLK_BASE + Math.round(homes / CITY_FOLK_HOMES));
 }
 
 /** Every town's people (see the notes at the top). */
@@ -143,16 +166,17 @@ export class Towns {
   private acc = 0;
   /** Town buildings razed since the last update: where, and by which side. */
   readonly pending: { x: number; z: number; by: number }[] = [];
+  /** Each town engineer's work: when it starts its next building, and where that goes once it's picked a spot. */
+  private readonly jobs = new Map<Entity, { buildAt: number; plan: BuildPlan | null }>();
 
-  constructor(sites: TownSite[], seed: number) {
+  /** `sprawl`: the one town is a city covering the map, which keeps more people. */
+  constructor(sites: TownSite[], seed: number, private readonly sprawl = false) {
     this.rng = new Rng(seed ^ 0x666f6c6b);
     this.towns = sites.map((site) => ({
       site,
-      // A city keeps one person per few lots.
-      wanted: site.city ? Math.min(CITY_FOLK_MOST, FOLK_BASE + Math.round(site.city.lots.length / CITY_FOLK_LOTS)) : FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
+      wanted: site.city ? folkFor(sprawl, site.city.lots.filter((l) => l.use === 'building').length) : FOLK_BASE + Math.round(site.radius / FOLK_PER_RADIUS),
+      engineers: site.city ? Math.min(CITY_ENGINEERS_MOST, 1 + Math.round(site.city.lots.length / CITY_ENGINEER_LOTS)) : 1,
       spawnAt: 0,
-      buildAt: BUILD_EVERY,
-      plan: null,
       razed: new Map(),
       grudges: [],
     }));
@@ -197,34 +221,55 @@ export class Towns {
     if (!this.started) {
       this.started = true;
       this.towns.forEach((town, k) => {
-        this.spawn(world, ctx, k, 'engineer');
+        for (let n = 0; n < town.engineers; n++) this.spawn(world, ctx, k, 'engineer');
         for (let n = 0; n < town.wanted; n++) this.spawn(world, ctx, k, 'civilian');
-        town.spawnAt = world.time + SPAWN_EVERY;
+        town.spawnAt = world.time + this.spawnGap(town);
       });
     }
     for (const r of this.pending.splice(0)) this.razed(world, ctx, r.x, r.z, r.by);
     this.acc += dt;
     if (this.acc < TICK) return;
     this.acc = 0;
-    const people = new Map<number, { count: number; engineer: boolean }>();
+    const people = new Map<number, { count: number; engineers: number }>();
     for (const e of world.query(Townsfolk, Transform, Mover)) {
       const f = world.req(e, Townsfolk);
-      const p = people.get(f.town) ?? { count: 0, engineer: false };
-      if (f.role === 'engineer') p.engineer = true;
+      const p = people.get(f.town) ?? { count: 0, engineers: 0 };
+      if (f.role === 'engineer') p.engineers++;
       else p.count++;
       people.set(f.town, p);
       if (f.role === 'engineer') this.engineer(world, ctx, e, f);
       else if (f.role === 'militia') this.guard(world, ctx, e, f);
       else this.wander(world, ctx, e, f);
     }
-    // Someone new comes out of a building when a town's short of people (the engineer first).
+    // Someone new comes out of a building when a town's short of people (engineers first).
+    let homes: Map<number, number> | null = null;
     this.towns.forEach((town, k) => {
       if (world.time < town.spawnAt) return;
-      const p = people.get(k) ?? { count: 0, engineer: false };
-      if (p.engineer && p.count >= town.wanted) return;
-      town.spawnAt = world.time + SPAWN_EVERY;
-      this.spawn(world, ctx, k, p.engineer ? 'civilian' : 'engineer');
+      // A city keeps as many people as its standing buildings house.
+      if (town.site.city) town.wanted = folkFor(this.sprawl, (homes ??= this.homes(world)).get(k) ?? 0);
+      const p = people.get(k) ?? { count: 0, engineers: 0 };
+      if (p.engineers >= town.engineers && p.count >= town.wanted) return;
+      town.spawnAt = world.time + this.spawnGap(town);
+      this.spawn(world, ctx, k, p.engineers < town.engineers ? 'engineer' : 'civilian');
     });
+    for (const e of this.jobs.keys()) if (!world.isAlive(e)) this.jobs.delete(e);
+  }
+
+  /** Seconds between someone new coming out in a town: a city refills in about REFILL seconds. */
+  private spawnGap(town: Town): number {
+    return town.site.city ? Math.max(CITY_SPAWN_LEAST, REFILL / Math.max(1, town.wanted)) : SPAWN_EVERY;
+  }
+
+  /** Each town's standing (finished) buildings. */
+  private homes(world: World): Map<number, number> {
+    const out = new Map<number, number>();
+    for (const e of world.query(Building, Faction, Transform)) {
+      if (world.req(e, Faction).id !== NEUTRAL || world.has(e, Construction)) continue;
+      const t = world.req(e, Transform);
+      const k = this.townAt(t.x, t.z);
+      if (k >= 0) out.set(k, (out.get(k) ?? 0) + 1);
+    }
+    return out;
   }
 
   /** Someone comes out of one of a town's buildings (or stands in its square, if they're all down). Returns the new entity, or null. */
@@ -333,12 +378,15 @@ export class Towns {
     const town = this.towns[f.town];
     const t = world.req(e, Transform);
     const m = world.req(e, Mover);
-    if (!town.plan && world.time >= town.buildAt) {
-      town.plan = this.buildSpot(ctx, town);
+    let job = this.jobs.get(e);
+    // The first building comes BUILD_EVERY in (a city's later engineers start a little apart).
+    if (!job) this.jobs.set(e, (job = { buildAt: world.time + BUILD_EVERY * (town.site.city ? this.rng.range(0.6, 1.2) : 1), plan: null }));
+    if (!job.plan && world.time >= job.buildAt) {
+      job.plan = this.buildSpot(ctx, town);
       // Nowhere to build: try again later.
-      if (!town.plan) town.buildAt = world.time + BUILD_EVERY / 4;
+      if (!job.plan) job.buildAt = world.time + BUILD_EVERY / 4;
     }
-    const plan = town.plan;
+    const plan = job.plan;
     if (!plan) {
       this.wander(world, ctx, e, f);
       return;
@@ -353,19 +401,19 @@ export class Towns {
       m.faceZ = plan.z;
       return;
     }
-    town.plan = null;
-    town.buildAt = world.time + BUILD_EVERY;
+    job.plan = null;
+    job.buildAt = world.time + BUILD_EVERY;
     if (!this.fits(ctx, plan.x, plan.z, def.radius) || this.nearestArmed(world, ctx, plan.x, plan.z)) return;
     spawnBuilding(world, ctx, def, NEUTRAL, plan.x, plan.z, plan.heading, true);
   }
 
   /** The next spot for a town building: the open spot on the town's street grid nearest its middle, out to GROW_REACH of its radius. */
-  private buildSpot(ctx: SimContext, town: Town): Town['plan'] {
+  private buildSpot(ctx: SimContext, town: Town): BuildPlan | null {
     const site = town.site;
     if (site.city) {
       // A city fills its empty lots, the middle first.
       const open = site.city.lots
-        .filter((l) => l.use === 'building' && !ctx.navs.land.builtAt(l.x, l.z) && !ctx.field.outpostSites.some((o) => D.hypot(o.x - l.x, o.z - l.z) < o.radius + 1.5))
+        .filter((l) => l.use === 'building' && !ctx.navs.land.builtAt(l.x, l.z) && !ctx.field.outpostSites.some((o) => D.hypot(o.x - l.x, o.z - l.z) < o.radius + 1.5) && !this.planned(l.x, l.z))
         .sort((a, b) => a.out - b.out);
       for (const l of open) {
         const building = cityBuilding(this.rng, l.out);
@@ -392,6 +440,12 @@ export class Towns {
     }
     if (!best) return null;
     return { x: best.x, z: best.z, heading: -site.angle + this.rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), building };
+  }
+
+  /** Whether another town engineer means to build here. */
+  private planned(x: number, z: number): boolean {
+    for (const j of this.jobs.values()) if (j.plan && D.hypot(j.plan.x - x, j.plan.z - z) < 0.5) return true;
+    return false;
   }
 
   /** Whether a town building fits at a spot: dry, gentle, clear of buildings, bridges, bases and outposts. */

@@ -134,7 +134,7 @@ export class Game {
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
       god: new Divine(),
       fire: new FireField(this.field),
-      towns: new Towns(this.field.townSites, seed),
+      towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
     // A city's avenues are narrows too: vehicles take turns on them, as on bridges.
