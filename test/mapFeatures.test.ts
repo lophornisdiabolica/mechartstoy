@@ -1,3 +1,4 @@
+import { GROUND_DEFS } from '../src/world/ground';
 import { describe, expect, it } from 'vitest';
 import { applyDamage } from '../src/game/systems/projectiles';
 import { Building, GARRISON, Health, Producer, Transform, Unit } from '../src/game/components';
@@ -106,7 +107,7 @@ describe('bridges', () => {
 });
 
 describe('dense forest', () => {
-  it('stops shots, falls to them, and turns back into open ground once cleared', () => {
+  it('stops shots, falls to them, and leaves fallen forest that stays rough going', () => {
     const g = game(9, (s) => (s.map.forest = 0.5));
     const woods = g.field.woods;
     expect(woods.trees.length).toBeGreaterThan(50);
@@ -126,7 +127,25 @@ describe('dense forest', () => {
     for (let n = 0; n < 5; n++) for (const t of woods.standingIn(cell)) woods.damage(woods.trees[t].x, woods.trees[t].z, woods.trees[t].y + 1, 1, 100);
     expect(tree.fell).not.toBeNull();
     expect(woods.standingIn(cell)).toEqual([]);
-    expect(g.field.groundAt(tree.x, tree.z).id).toBe('plain');
+    // Knocked down, it's fallen forest: rougher going than open ground, but easier than standing trees.
+    expect(g.field.groundAt(tree.x, tree.z).id).toBe('felled');
+    const nav = g.ctx.nav;
+    expect(nav.costAt(tree.x, tree.z)).toBeGreaterThan(1.2);
+    expect(nav.costAt(tree.x, tree.z)).toBeLessThan(GROUND_DEFS.thicket.cost.tracked!);
+    // Driven over again and again, the trunks are pressed into the ground, but it stays fallen forest.
+    const cellTrees = woods.treesNear(tree.x, tree.z);
+    for (let pass = 0; pass < 200; pass++) for (const t of cellTrees) woods.trample(woods.trees[t].x, woods.trees[t].z, 1.1, 0.5);
+    expect(cellTrees.every((t) => woods.trees[t].sunk >= 1)).toBe(true);
+    expect(g.field.groundAt(tree.x, tree.z).id).toBe('felled');
+    expect(nav.costAt(tree.x, tree.z)).toBeGreaterThan(1.2);
+  });
+
+  it('takes more shooting to knock down than a single light shell', () => {
+    const g = game(9, (s) => (s.map.forest = 0.5));
+    const woods = g.field.woods;
+    const tree = woods.trees.find((t) => g.field.contains(t.x, t.z, 10))!;
+    woods.damage(tree.x, tree.z, tree.y + 1, 0.3, 80);
+    expect(tree.fell).toBeNull();
   });
 
   it('slows vehicles, which flatten the trees they drive into; infantry slip between', () => {

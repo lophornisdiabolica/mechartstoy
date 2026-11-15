@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled';
 
 export interface GroundDef {
   id: GroundId;
@@ -42,14 +42,14 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     tint: 0.75,
   },
   /**
-   * Dense forest. Vehicles push through slowly; infantry and spiders slip
-   * between the trunks. (Trees that block shots and get knocked flat come
-   * with destructible props, later.)
+   * Dense forest (see woods.ts). Vehicles push through slowly, knocking the
+   * trees flat, so routes go round it where they can; infantry and spiders
+   * slip between the trunks.
    */
   thicket: {
     id: 'thicket',
     label: 'Dense forest',
-    cost: { tracked: 3, amphibious: 3, hover: 3, walker: 2, foot: 1.1, climber: 1.1 },
+    cost: { tracked: 4, amphibious: 4, hover: 4, walker: 2.5, foot: 1.1, climber: 1.1 },
     speed: { tracked: 0.5, amphibious: 0.5, hover: 0.5, walker: 0.7, foot: 0.9 },
     color: 0x3c5a2c,
     tint: 0.5,
@@ -76,10 +76,23 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x8f6c45,
     tint: 0.75,
   },
+  /**
+   * Dense forest that's been knocked down: a tangle of fallen trunks, still
+   * rougher going than open ground for wheels and tracks, however much it's
+   * driven over (the trunks only sink part way: see Woods.trample).
+   */
+  felled: {
+    id: 'felled',
+    label: 'Fallen forest',
+    cost: { tracked: 1.6, amphibious: 1.6, hover: 1.8, walker: 1.15, foot: 1.05 },
+    speed: { tracked: 0.8, amphibious: 0.8, hover: 0.75, walker: 0.95 },
+    color: 0x4f4a30,
+    tint: 0.45,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

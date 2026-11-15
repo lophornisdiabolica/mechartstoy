@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Construction, Faction, Renderable, Tilt, Transform, Wreck } from '../game/components';
+import { Armed, Construction, Faction, Unit, Renderable, Tilt, Transform, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
@@ -28,9 +28,15 @@ interface ViewEntry {
   roll: number;
   /** A wreck still falling into its broken pose. */
   collapse: Collapse | null;
+  /** Boats: the model's height above its waterline, and how far it's ducked under a bridge now (see the deck check). */
+  top: number;
+  duck: number;
 }
 
 const _ahead = new THREE.Vector3();
+/** Where round a boat to look for a deck overhead (scaled by its size), and the gap it keeps under one. */
+const DUCK_RING: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+const DUCK_GAP = 0.2;
 const _m: number[] = new Array(9);
 /** Most an aircraft leans into a turn, radians. */
 const MAX_BANK = 0.75;
@@ -64,9 +70,11 @@ export class EntityView {
   hidden: ReadonlySet<Entity> | null = null;
 
   /** `surface` is the ground height at a world point, which wrecks lie along. */
+  /** `deck` is the height of a bridge deck over a world point, or null: tall boats duck under them. */
   constructor(
     private readonly world: World,
     private readonly surface?: (x: number, z: number) => number,
+    private readonly deck?: (x: number, z: number) => number | null,
   ) {
     this.root.name = 'entities';
     this.root.visible = false;
@@ -115,7 +123,9 @@ export class EntityView {
           if ((o as THREE.Sprite).isSprite) sprites.push(o as THREE.Sprite);
           else if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
         });
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null };
+        const naval = w.get(e, Unit)?.def.move === 'naval';
+        const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0 };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -136,6 +146,18 @@ export class EntityView {
       } else {
         obj.position.set(x, y, z);
         obj.rotation.y = lerpAngle(t.pheading, t.heading, alpha);
+      }
+      // A boat taller than the room under a bridge settles lower in the water while it passes
+      // under (looks only), so its top doesn't show through the deck.
+      if (entry.top > 0 && this.deck) {
+        let want = 0;
+        const reach = entry.top * 0.8;
+        for (const [ox, oz] of DUCK_RING) {
+          const d = this.deck(x + ox * reach, z + oz * reach);
+          if (d !== null) want = Math.max(want, y + entry.top + DUCK_GAP - d);
+        }
+        entry.duck += (want - entry.duck) * (want > entry.duck ? 0.5 : 0.1);
+        if (entry.duck > 0.001) obj.position.y -= entry.duck;
       }
 
       // Construction sites rise out of the ground.

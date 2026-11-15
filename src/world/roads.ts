@@ -145,6 +145,8 @@ export function planRoad(field: Battlefield, from: Point, to: Point, options: Ro
     const z = cz((k - i) / cols);
     if (!field.contains(x, z, 2)) return true;
     if (field.isWater(x, z) && field.deckAt(x, z) === null) return true;
+    // Onto a bridge only by its ends, not over its railings.
+    if (field.bridges.length > 0 && field.railAt(x, z)) return true;
     if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + 2)) return true;
     // Into a town only near the street ends it's heading for or leaving.
     for (const t of field.townSites) {
@@ -245,7 +247,7 @@ export function planRoad(field: Battlefield, from: Point, to: Point, options: Ro
   else cells.push(last);
   // Every other cell, then rounded off, so the road curves instead of stepping.
   const sparse = cells.filter((_, k) => k % 2 === 0 || k === cells.length - 1);
-  const line = trimBacktracks(sparse);
+  const line = alongBridges(field, trimBacktracks(sparse));
   const points = smooth([...(before ? [{ x: before.x, z: before.z }] : []), ...line, ...(after ? [{ x: after.x, z: after.z }] : [])], 2);
   return { points, joins };
 }
@@ -273,6 +275,61 @@ export function joinable(field: Battlefield): Int16Array {
       }
     }
   });
+  return out;
+}
+
+/** How far either side of a bridge a road runs straight in line with it. */
+const BRIDGE_LEAD = 2.5;
+
+/**
+ * Line a road up with the bridges it crosses: the stretch over each one
+ * becomes the bridge's own centreline, end to end, carried straight on a
+ * little way beyond each end before the road turns off, so the road meets
+ * the bridge head on rather than at an angle or off to one side. (Corner
+ * cutting afterwards keeps points that are in line, in line.)
+ */
+function alongBridges(field: Battlefield, points: Point[]): Point[] {
+  if (field.bridges.length === 0) return points;
+  const out: Point[] = [];
+  let k = 0;
+  while (k < points.length) {
+    const index = field.bridgeAt(points[k].x, points[k].z);
+    const bridge = index >= 0 ? field.bridges[index] : null;
+    if (!bridge || bridge.gone || k === 0) {
+      out.push(points[k++]);
+      continue;
+    }
+    // The run of points on this bridge.
+    let e = k;
+    while (e + 1 < points.length && field.bridgeAt(points[e + 1].x, points[e + 1].z) === index) e++;
+    if (e === points.length - 1) {
+      // The road ends on the bridge (shouldn't happen): leave it be.
+      out.push(...points.slice(k));
+      break;
+    }
+    // Which end it comes on at.
+    const fromA = D.hypot(points[k].x - bridge.ax, points[k].z - bridge.az) <= D.hypot(points[k].x - bridge.bx, points[k].z - bridge.bz);
+    const on = fromA ? { x: bridge.ax, z: bridge.az } : { x: bridge.bx, z: bridge.bz };
+    const off = fromA ? { x: bridge.bx, z: bridge.bz } : { x: bridge.ax, z: bridge.az };
+    const len = D.hypot(off.x - on.x, off.z - on.z);
+    const ux = (off.x - on.x) / len;
+    const uz = (off.z - on.z) / len;
+    const lead = (p: Point, d: number) => ({ x: p.x + ux * d, z: p.z + uz * d });
+    // Drop the points leading up to it that are too close to the lead-in, and those after it near the lead-out.
+    const reach = BRIDGE_LEAD * 2 + 1;
+    while (out.length > 1 && D.hypot(out[out.length - 1].x - on.x, out[out.length - 1].z - on.z) < reach) out.pop();
+    let next = e + 1;
+    while (next < points.length - 1 && D.hypot(points[next].x - off.x, points[next].z - off.z) < reach) next++;
+    // Straight on as far as there's dry land for it (a bridge can land on a narrow spit).
+    const dry = (p: Point) => field.contains(p.x, p.z, 2) && !field.isWater(p.x, p.z);
+    const leadIn = [lead(on, -BRIDGE_LEAD * 2), lead(on, -BRIDGE_LEAD)];
+    const leadOut = [lead(off, BRIDGE_LEAD), lead(off, BRIDGE_LEAD * 2)];
+    while (leadIn.length > 0 && !dry(leadIn[0])) leadIn.shift();
+    while (leadOut.length > 0 && !dry(leadOut[leadOut.length - 1])) leadOut.pop();
+    // With no room to run on, the end is doubled so the corner cutting keeps the deck's line to its end.
+    out.push(...leadIn, ...(leadIn.length === 0 ? [on] : []), on, off, ...(leadOut.length === 0 ? [off] : []), ...leadOut);
+    k = next;
+  }
   return out;
 }
 

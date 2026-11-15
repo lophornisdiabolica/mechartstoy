@@ -1,6 +1,6 @@
 import { Battlefield } from './battlefield';
 import { CellArea, GroundDef } from './ground';
-import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE, terrainAllows } from './moveClasses';
+import { MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows } from './moveClasses';
 import * as D from '../core/dmath';
 
 export interface Point {
@@ -16,6 +16,8 @@ const MAX_EXPANSIONS = 8000;
  * the buildings, so this stays small.
  */
 const CLEARANCE_MARGIN = 0.1;
+/** Route cost multiplier on a bridge deck's edge cells, for vehicles: they keep to the middle. */
+const DECK_EDGE = 1.6;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -45,6 +47,8 @@ class CellSamples {
   readonly depth: Float64Array;
   readonly slope: Float64Array;
   readonly deck: Uint8Array;
+  /** 1 just outside a bridge deck's railings, 2 beside its ramps' open sides, 0 elsewhere (see Battlefield.railKind). */
+  readonly rail: Uint8Array;
   readonly settled: Uint8Array;
   /** 1 in a city's cells, where a gap one cell wide is an alley (see NavGrid.updateClearance). */
   readonly city: Uint8Array;
@@ -62,6 +66,7 @@ class CellSamples {
     this.depth = new Float64Array(n);
     this.slope = new Float64Array(n);
     this.deck = new Uint8Array(n);
+    this.rail = new Uint8Array(n);
     this.settled = new Uint8Array(n);
     this.city = new Uint8Array(n);
     this.ground = new Array<GroundDef>(n);
@@ -79,6 +84,7 @@ class CellSamples {
         const x = field.bounds.minX + (i + 0.5) * this.cellSize;
         const z = field.bounds.minZ + (j + 0.5) * this.cellSize;
         this.deck[k] = field.deckAt(x, z) !== null ? 1 : 0;
+        this.rail[k] = this.deck[k] === 0 && field.bridges.length > 0 ? field.railKind(x, z) : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
         this.settled[k] = field.townSites.some((t) => field.inTown(t, x, z)) || outposts.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
@@ -168,6 +174,16 @@ export class NavObstacles {
   readonly tall: Uint16Array;
   /** Always empty: what climbers see, since they go over every building. */
   readonly none: Uint16Array;
+  /**
+   * Extra route cost per cell from traffic: how busy the narrow passages
+   * there are (see game/traffic.ts), for classes that queue on them (see
+   * MoveRules.queues). Changing it doesn't re-plan anything; routes planned
+   * from then on see it, so a group setting off together spreads over the
+   * crossings there are.
+   */
+  readonly traffic: Float32Array;
+  /** Always zero: what classes that don't queue see. */
+  readonly calm: Float32Array;
 
   constructor(
     readonly cols: number,
@@ -176,6 +192,8 @@ export class NavObstacles {
     this.occupied = new Uint16Array(cols * rows);
     this.tall = new Uint16Array(cols * rows);
     this.none = new Uint16Array(cols * rows);
+    this.traffic = new Float32Array(cols * rows);
+    this.calm = new Float32Array(cols * rows);
   }
 
   /** The obstacle counts a class with these rules is kept out by. */
@@ -232,6 +250,8 @@ export class NavGrid {
   private readonly terrain: Uint8Array;
   private readonly cost: Float32Array;
   private readonly occupied: Uint16Array;
+  /** Extra cost per cell from busy narrow passages (NavObstacles.traffic), or zeros for a class that doesn't queue. */
+  private readonly traffic: Float32Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   /** The obstacles' blockVersion and this grid's terrainVersion the clearance map was built for. */
@@ -275,6 +295,7 @@ export class NavGrid {
     this.terrain = new Uint8Array(n);
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.for(this.rules.over);
+    this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
     this.clearance = new Float32Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
@@ -302,11 +323,32 @@ export class NavGrid {
     this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
+    // Beside a deck, over its railings: vehicles take the ramps instead,
+    // and keep off the deck's edge cells where they can, down the middle.
+    if (!rules.flies && rules.minDepth === 0) {
+      if (samples.rail[k] !== 0) cost *= rules.rail;
+      else if (onDeck && rules.rail >= RAIL_WALL && this.besideRail(k)) cost *= DECK_EDGE;
+    }
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
     if (rules.town !== 1 && samples.settled[k] === 1) cost *= rules.town;
     if (!rules.flies && depth <= 0) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
+  }
+
+  /** Whether a cell has a railing cell next to it (see CellSamples.rail). */
+  private besideRail(k: number): boolean {
+    const { cols, rows } = this;
+    const i = k % cols;
+    const j = (k - i) / cols;
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && this.samples.rail[nj * cols + ni] !== 0) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -357,6 +399,7 @@ export class NavGrid {
     g[sk] = 0;
     heap.push(sk);
     const free = (ci: number, cj: number) => ci >= 0 && cj >= 0 && ci < cols && cj < rows && terrain[cj * cols + ci] === 0;
+    const walls = this.railWalls();
     while (heap.size > 0) {
       const k = heap.pop();
       if (done[k]) continue;
@@ -370,6 +413,7 @@ export class NavGrid {
         if (di !== 0 && dj !== 0 && (!free(i + di, j) || !free(i, j + dj))) continue;
         const nk = (j + dj) * cols + i + di;
         if (done[nk]) continue;
+        if (walls && this.overRail(k, nk)) continue;
         const ng = g[k] + NEIGHBOUR_STEP[n] * this.cellSize * cost[nk];
         if (ng >= g[nk]) continue;
         g[nk] = ng;
@@ -500,6 +544,39 @@ export class NavGrid {
     // Land units can be anywhere on a bridge deck.
     if (!this.rules.flies && this.rules.minDepth === 0 && f.deckAt(x, z) !== null) return true;
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
+  }
+
+  /**
+   * Whether going from a to b means climbing over a bridge's railings (one
+   * end on a deck, the other just outside its side), for a class that can't
+   * (see RAIL_WALL). Movement and shoves check it, so vehicles only get on
+   * and off bridges by the ramps.
+   */
+  railCrossing(ax: number, az: number, bx: number, bz: number): boolean {
+    if (!this.railWalls()) return false;
+    const [ai, aj] = this.cellOf(ax, az);
+    const [bi, bj] = this.cellOf(bx, bz);
+    // By cells, as routes see the map: a route along the deck's edge cells stays on the deck.
+    return this.overRail(aj * this.cols + ai, bj * this.cols + bi);
+  }
+
+  /** Whether going from a to b climbs up over a railing onto a deck (see railCrossing), rather than down off one. */
+  railBoarding(ax: number, az: number, bx: number, bz: number): boolean {
+    if (!this.railWalls()) return false;
+    const [ai, aj] = this.cellOf(ax, az);
+    const [bi, bj] = this.cellOf(bx, bz);
+    return this.samples.rail[aj * this.cols + ai] === 1 && this.samples.deck[bj * this.cols + bi] === 1;
+  }
+
+  /** Whether this class can't get over bridge railings (routes don't go over them at all). */
+  private railWalls(): boolean {
+    return this.rules.rail >= RAIL_WALL && !this.rules.flies && this.rules.minDepth === 0;
+  }
+
+  /** Whether a step between two cells is over a railing, between a deck and the strip outside it. */
+  private overRail(a: number, b: number): boolean {
+    const { rail, deck } = this.samples;
+    return (deck[a] === 1 && rail[b] === 1) || (rail[a] === 1 && deck[b] === 1);
   }
 
   /** Whether any building stands on a point's cell (whatever this class goes over). */
@@ -633,7 +710,8 @@ export class NavGrid {
   /** Route cost of the cell under a point (1 is plain open ground; see MoveRules). */
   costAt(x: number, z: number): number {
     const [i, j] = this.cellOf(x, z);
-    return this.cost[j * this.cols + i];
+    const k = j * this.cols + i;
+    return this.cost[k] + this.traffic[k];
   }
 
   /**
@@ -645,26 +723,34 @@ export class NavGrid {
   lineClear(a: Point, b: Point, radius = 0, maxCost = Infinity): boolean {
     const dist = D.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.ceil(dist / (this.cellSize * 0.5));
+    const walls = this.railWalls();
+    const [ai, aj] = this.cellOf(a.x, a.z);
+    let prev = aj * this.cols + ai;
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
       const [i, j] = this.cellOf(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
       if (!this.fits(i, j, radius)) return false;
-      if (this.cost[j * this.cols + i] > maxCost + 1e-6) return false;
+      const k = j * this.cols + i;
+      if (this.cost[k] + this.traffic[k] > maxCost + 1e-6) return false;
+      // Not over a bridge's railings, even where it's no dearer than the rest of the way.
+      if (walls && k !== prev && this.overRail(prev, k)) return false;
+      prev = k;
     }
     return true;
   }
 
   /** The closest cell a unit of this radius fits in (searching outward in rings). */
-  nearestOpen(x: number, z: number, maxRing = 12, radius = 0): [number, number] | null {
+  nearestOpen(x: number, z: number, maxRing = 12, radius = 0, deck = -1): [number, number] | null {
     const [ci, cj] = this.cellOf(x, z);
-    if (this.fits(ci, cj, radius)) return [ci, cj];
+    const deckOk = (i: number, j: number) => deck < 0 || this.samples.deck[j * this.cols + i] === deck;
+    if (this.fits(ci, cj, radius) && deckOk(ci, cj)) return [ci, cj];
     for (let r = 1; r <= maxRing; r++) {
       let best: [number, number] | null = null;
       let bestD = Infinity;
       for (let dj = -r; dj <= r; dj++) {
         for (let di = -r; di <= r; di++) {
           if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
-          if (!this.fits(ci + di, cj + dj, radius)) continue;
+          if (!this.fits(ci + di, cj + dj, radius) || !deckOk(ci + di, cj + dj)) continue;
           const d = di * di + dj * dj;
           if (d < bestD) {
             bestD = d;
@@ -701,7 +787,11 @@ export class NavGrid {
   private route(from: Point, to: Point, radius: number): { points: Point[]; found: boolean } | null {
     // A wide unit standing somewhere tight starts by backing out to the nearest roomy spot,
     // rather than planning onward through a gap it can't fit.
-    const start = (radius > 0 ? this.nearestOpen(from.x, from.z, 3, radius) : null) ?? this.nearestOpen(from.x, from.z);
+    // Not over a railing, though: from beside a bridge, the deck is no nearer than the ramp.
+    const [fi, fj] = this.cellOf(from.x, from.z);
+    const fk = fj * this.cols + fi;
+    const side = this.railWalls() && (this.samples.rail[fk] === 1 || this.samples.deck[fk] === 1) ? this.samples.deck[fk] : -1;
+    const start = (radius > 0 ? this.nearestOpen(from.x, from.z, 3, radius, side) : null) ?? this.nearestOpen(from.x, from.z, 12, 0, side) ?? this.nearestOpen(from.x, from.z);
     // A wide unit settles for a spot near the goal; much further away and it's better to squeeze in.
     // A goal this class can't get to at all (a boat sent inland, a hover past a cliff) becomes the
     // nearest spot it can: the shore closest to the enemy base, say.
@@ -733,10 +823,11 @@ export class NavGrid {
     let closestH = Infinity;
     // The search's inner loop, with fits() and blocked() written out over the raw arrays (same answers, far fewer calls).
     const rows = this.rows;
-    const { terrain, occupied, clearance, cost, closed, stamp, g, f, parent, open } = this;
+    const { terrain, occupied, clearance, cost, traffic, closed, stamp, g, f, parent, open } = this;
     if (radius > 0) this.updateClearance();
     const need = radius + CLEARANCE_MARGIN;
     const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
+    const walls = this.railWalls();
     while (open.size > 0 && expansions++ < MAX_EXPANSIONS) {
       const k = open.pop();
       if (closed[k] === id) continue;
@@ -763,7 +854,8 @@ export class NavGrid {
         // No squeezing diagonally between two blocked cells.
         if (di !== 0 && dj !== 0 && (isBlocked(i + di, j) || isBlocked(i, j + dj))) continue;
         if (closed[nk] === id) continue;
-        const ng = g[k] + NEIGHBOUR_STEP[n] * cost[nk];
+        if (walls && this.overRail(k, nk)) continue;
+        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
         g[nk] = ng;
@@ -791,10 +883,19 @@ export class NavGrid {
     const dist = D.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.max(1, Math.ceil(dist / (this.cellSize * 0.5)));
     let cost = 0;
-    for (let s = 1; s <= steps; s++) {
+    const walls = this.railWalls();
+    let prev = -1;
+    for (let s = 0; s <= steps; s++) {
       const t = s / steps;
       const x = a.x + (b.x - a.x) * t;
       const z = a.z + (b.z - a.z) * t;
+      if (walls) {
+        const [i, j] = this.cellOf(x, z);
+        const k = j * this.cols + i;
+        if (prev >= 0 && k !== prev && this.overRail(prev, k)) return Infinity;
+        prev = k;
+      }
+      if (s === 0) continue;
       if (!this.fitsAt(x, z, radius)) return Infinity;
       cost += (dist / steps) * this.costAt(x, z);
     }

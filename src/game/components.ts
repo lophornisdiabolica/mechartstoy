@@ -161,6 +161,22 @@ export interface NavState {
   goalVersion: number;
   /** Gave up short of the goal in a crowd (see checkStuck): stays put while sent within SETTLE of the same place. */
   settled: boolean;
+  /**
+   * The narrow passage (a bridge, later a city street) the route runs along
+   * next, by its id in Traffic, and which way (1 from its a end to b, -1
+   * back), or -1 for none; and when to look again (see traffic.ts).
+   */
+  lane: number;
+  laneDir: number;
+  laneCheckAt: number;
+  /** Waiting at a narrow's mouth for oncoming traffic until this time, at this spot off to the side (see traffic.ts). */
+  holdUntil: number;
+  holdX: number;
+  holdZ: number;
+  /** When it started waiting there (Infinity while not), so nothing waits for good. */
+  heldSince: number;
+  /** Let onto its narrow (see traffic.ts): it keeps the way from then until it's on. */
+  laneGo: boolean;
 }
 
 export function makeNavState(): NavState {
@@ -190,6 +206,14 @@ export function makeNavState(): NavState {
     goalZ: 0,
     goalVersion: -1,
     settled: false,
+    lane: -1,
+    laneDir: 0,
+    laneCheckAt: 0,
+    holdUntil: -1,
+    holdX: 0,
+    holdZ: 0,
+    heldSince: Infinity,
+    laneGo: false,
   };
 }
 
