@@ -518,7 +518,19 @@ export class Battlefield {
    * ramps at its ends (see NavGrid).
    */
   railAt(x: number, z: number): boolean {
-    if (this.deckAt(x, z) !== null) return false;
+    return this.railKind(x, z) !== 0;
+  }
+
+  /**
+   * What's beside a bridge deck at a point (see railAt): 0 nothing; 1 a
+   * railing, along the level middle and wherever the deck is over water;
+   * 2 the open side of a ramp, which has no railing (and flares out a
+   * little, see render/terrainMesh.ts): rough to drive up onto from the
+   * side, but not a wall.
+   */
+  railKind(x: number, z: number): 0 | 1 | 2 {
+    if (this.deckAt(x, z) !== null) return 0;
+    let kind: 0 | 1 | 2 = 0;
     for (const b of this.bridges) {
       if (b.gone) continue;
       const dx = b.bx - b.ax;
@@ -531,9 +543,21 @@ export class Battlefield {
       // The deck's height level with the point, against the ground (or water) there.
       const deck = this.deckOf(b, b.ax + dx * t, b.az + dz * t);
       if (deck === null) continue;
-      if (deck - Math.max(this.heightAt(x, z), this.seaLevel) >= RAIL_DROP || this.isWater(x, z)) return true;
+      if (deck - Math.max(this.heightAt(x, z), this.seaLevel) >= RAIL_DROP || this.isWater(x, z)) {
+        if (this.railedAt(b, t)) return 1;
+        kind = 2;
+      }
     }
-    return false;
+    return kind;
+  }
+
+  /** Whether a bridge has railings at `t` along it (0 at a, 1 at b): along its level middle, and wherever it's over water; not on its ramps. */
+  railedAt(b: Bridge, t: number): boolean {
+    const x = b.ax + (b.bx - b.ax) * t;
+    const z = b.az + (b.bz - b.az) * t;
+    if (this.isWater(x, z)) return true;
+    const deck = this.deckOf(b, x, z);
+    return deck !== null && deck >= b.level - 0.05;
   }
 
   /**

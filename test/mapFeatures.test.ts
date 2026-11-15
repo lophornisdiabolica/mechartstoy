@@ -107,7 +107,7 @@ describe('bridges', () => {
 });
 
 describe('dense forest', () => {
-  it('stops shots, falls to them, and turns back into open ground once cleared', () => {
+  it('stops shots, falls to them, and leaves fallen forest that stays rough going', () => {
     const g = game(9, (s) => (s.map.forest = 0.5));
     const woods = g.field.woods;
     expect(woods.trees.length).toBeGreaterThan(50);
@@ -132,16 +132,12 @@ describe('dense forest', () => {
     const nav = g.ctx.nav;
     expect(nav.costAt(tree.x, tree.z)).toBeGreaterThan(1.2);
     expect(nav.costAt(tree.x, tree.z)).toBeLessThan(GROUND_DEFS.thicket.cost.tracked!);
-    // Driven over again and again, the trunks are pressed into the ground and it's open ground again.
+    // Driven over again and again, the trunks are pressed into the ground, but it stays fallen forest.
     const cellTrees = woods.treesNear(tree.x, tree.z);
-    let passes = 0;
-    while (g.field.groundAt(tree.x, tree.z).id === 'felled' && passes < 200) {
-      for (const t of cellTrees) woods.trample(woods.trees[t].x, woods.trees[t].z, 1.1, 0.5);
-      passes++;
-    }
-    expect(passes).toBeGreaterThan(5);
-    expect(g.field.groundAt(tree.x, tree.z).id).toBe('plain');
+    for (let pass = 0; pass < 200; pass++) for (const t of cellTrees) woods.trample(woods.trees[t].x, woods.trees[t].z, 1.1, 0.5);
     expect(cellTrees.every((t) => woods.trees[t].sunk >= 1)).toBe(true);
+    expect(g.field.groundAt(tree.x, tree.z).id).toBe('felled');
+    expect(nav.costAt(tree.x, tree.z)).toBeGreaterThan(1.2);
   });
 
   it('takes more shooting to knock down than a single light shell', () => {

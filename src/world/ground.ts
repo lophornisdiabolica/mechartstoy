@@ -78,9 +78,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   },
   /**
    * Dense forest that's been knocked down: a tangle of fallen trunks, still
-   * rougher going than open ground for wheels and tracks. Driven over enough,
-   * the trunks get pressed into the ground and it's open ground again (see
-   * Woods.trample).
+   * rougher going than open ground for wheels and tracks, however much it's
+   * driven over (the trunks only sink part way: see Woods.trample).
    */
   felled: {
     id: 'felled',

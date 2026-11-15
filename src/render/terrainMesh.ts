@@ -509,6 +509,10 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
   }
 }
 
+/** How far a bridge's ramps flare out to each side where they meet the ground, and the rise over which the flare narrows away to nothing. */
+const RAMP_FLARE = 0.8;
+const RAMP_FLARE_RISE = 1.2;
+
 /** A bridge: a concrete deck on piers, with railings, from bank to bank. */
 function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const g = new THREE.Group();
@@ -533,11 +537,19 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
     const y0 = field.deckAt(x0, z0) ?? field.heightAt(x0, z0);
     const y1 = field.deckAt(x1, z1) ?? field.heightAt(x1, z1);
     const seg = Math.hypot(x1 - x0, z1 - z0, y1 - y0);
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.35, bridge.width), deck);
-    slab.position.set((x0 + x1) / 2, (y0 + y1) / 2 - 0.17, (z0 + z1) / 2);
+    // The ramps have no railings and flare out to the sides toward the ground, so a vehicle
+    // coming up onto one off a tight corner looks like it's driving on, not hopping over.
+    const tm = (t0 + t1) / 2;
+    const railed = field.railedAt(bridge, tm);
+    const mx = (x0 + x1) / 2;
+    const mz = (z0 + z1) / 2;
+    const rise = (y0 + y1) / 2 - field.heightAt(mx, mz);
+    const flare = railed ? 0 : RAMP_FLARE * Math.max(0, 1 - rise / RAMP_FLARE_RISE);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.35, bridge.width + flare * 2), deck);
+    slab.position.set(mx, (y0 + y1) / 2 - 0.17, mz);
     slab.rotation.set(0, heading, Math.atan2(y1 - y0, Math.hypot(x1 - x0, z1 - z0)), 'YXZ');
     g.add(slab);
-    for (const side of [-1, 1]) {
+    for (const side of railed ? [-1, 1] : []) {
       const r = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.3, 0.12), rail);
       const ox = Math.sin(heading) * side * (bridge.width / 2 - 0.06);
       const oz = Math.cos(heading) * side * (bridge.width / 2 - 0.06);
@@ -546,8 +558,6 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
       g.add(r);
     }
     // Piers where the deck is over water.
-    const mx = (x0 + x1) / 2;
-    const mz = (z0 + z1) / 2;
     if (s % 3 === 1 && field.isWater(mx, mz)) {
       const bottom = field.heightAt(mx, mz) - 0.3;
       const top = (y0 + y1) / 2 - 0.35;
