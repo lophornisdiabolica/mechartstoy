@@ -75,7 +75,12 @@ export interface MapStyle {
   forest: number;
   towns: number;
   townSize: TownSize;
+  /** A city over the whole map (Metropolis). Other styles with towns make their first town a city CITY_ODDS of the time. */
+  city?: 'sprawl';
 }
+
+/** How often a rolled map style with towns makes its first town a city. */
+export const CITY_ODDS = 0.3;
 
 export const MAP_STYLES: MapStyle[] = [
   { id: 'standard', label: 'Standard', water: 0.5, hills: 1, forest: 0.2, towns: 1, townSize: 'medium' },
@@ -87,6 +92,7 @@ export const MAP_STYLES: MapStyle[] = [
   { id: 'wetlands', label: 'Wetlands', water: 0.7, hills: 0.4, forest: 0.4, towns: 2, townSize: 'small' },
   { id: 'badlands', label: 'Badlands', water: 0, hills: 1.5, forest: 0, towns: 2, townSize: 'small' },
   { id: 'countryside', label: 'Countryside', water: 0.45, hills: 1.1, forest: 0.3, towns: 2, townSize: 'medium' },
+  { id: 'metropolis', label: 'Metropolis', water: 0.3, hills: 0.6, forest: 0, towns: 0, townSize: 'medium', city: 'sprawl' },
 ];
 
 const clamp = (v: number, limit: keyof typeof LIMITS) => Math.max(LIMITS[limit].min, Math.min(LIMITS[limit].max, v));
@@ -117,8 +123,11 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     s.map.forest = round2(clamp(style.forest + (style.forest > 0 ? rng.range(-0.05, 0.05) : 0), 'forest'));
     s.map.towns = style.towns;
     s.map.townSize = style.townSize;
+    // Always drawn, so the rest of the roll doesn't depend on the style.
+    const cityRoll = rng.next();
+    s.map.city = style.city ?? (style.towns > 0 && cityRoll < CITY_ODDS ? 'district' : 'off');
     s.map.placed.towns = null;
-    label.push(style.label);
+    label.push(s.map.city === 'district' ? `${style.label} with a city` : style.label);
   }
   if (v.roll.biome) {
     s.map.biome = rng.pick(BIOME_IDS);

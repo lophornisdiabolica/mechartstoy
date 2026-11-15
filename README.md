@@ -269,6 +269,12 @@ battle, its exact map via `seed`).
   any towns: blocks wherever the ground is dry and gentle enough, kept
   off the base pads and bridges, each block levelled so hills become
   terraces with the avenues ramping between them.
+  The square sits on a random corner of the central crossing. A city's
+  central avenues run on past its edge, narrowing to a town street's
+  width where country roads join them. Re-rolled map styles include
+  **Metropolis** (a city over the whole map); other styles with towns
+  make the first one a city 30% of the time (`CITY_ODDS`). For sims,
+  `--maps` takes `city` and `metropolis`.
   **Waterways** (on by
   default) dig channels joining the water near the bases, so boats can
   sail from one to another; from 60% water every base gets water, with an

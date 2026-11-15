@@ -14,7 +14,7 @@ import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, Variet
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual' },
   biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
-  style: { label: 'Map style', title: 'Water, hills, dense forest and towns together, from one of the map styles' },
+  style: { label: 'Map style', title: 'Water, hills, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
 };

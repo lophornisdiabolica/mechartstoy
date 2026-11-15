@@ -1,5 +1,6 @@
 import { Battlefield, STREET_WIDTH } from './battlefield';
 import { Heap } from './waterways';
+import { CITY_TAPER } from './city';
 import * as D from '../core/dmath';
 
 /**
@@ -56,7 +57,9 @@ export function connectTowns(field: Battlefield): number {
     const ux = D.cos(t.angle);
     const uz = D.sin(t.angle);
     return [-1, 1].map((side) => {
-      const end = { x: t.x + side * ux * t.radius, z: t.z + side * uz * t.radius };
+      // (A city's main avenue runs on past its edge, narrowing to meet the road.)
+      const reach = t.radius + (t.city ? CITY_TAPER : 0);
+      const end = { x: t.x + side * ux * reach, z: t.z + side * uz * reach };
       const lead = { x: end.x + side * ux * LEAD_OUT, z: end.z + side * uz * LEAD_OUT };
       // The link starts a little way back up the street, so the two overlap rather than meeting
       // edge to edge (where a sliver of ground could show between them on a slope).

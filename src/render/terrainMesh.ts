@@ -233,14 +233,19 @@ const LIFT_GRADE = 0.3;
  */
 function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   // Points every half unit along the line.
-  const at: { x: number; z: number }[] = [];
+  const at: { x: number; z: number; w: number }[] = [];
+  const widthAt = (k: number) => road.widths?.[k] ?? road.width;
   for (let k = 1; k < road.points.length; k++) {
     const a = road.points[k - 1];
     const b = road.points[k];
     const len = Math.hypot(b.x - a.x, b.z - a.z);
     if (len < 1e-6) continue;
     const steps = Math.max(1, Math.ceil(len / 0.5));
-    for (let s = at.length === 0 ? 0 : 1; s <= steps; s++) at.push({ x: a.x + ((b.x - a.x) * s) / steps, z: a.z + ((b.z - a.z) * s) / steps });
+    // (A tapering stretch eases from one width to the other.)
+    for (let s = at.length === 0 ? 0 : 1; s <= steps; s++) {
+      const t = s / steps;
+      at.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, w: widthAt(k - 1) + (widthAt(k) - widthAt(k - 1)) * (t * t * (3 - 2 * t)) });
+    }
   }
   // Each one's direction is the line's heading over a couple of units round it, so the rows
   // across the road turn smoothly through a bend instead of folding over each other on its inside.
@@ -248,7 +253,7 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
     const a = at[Math.max(0, k - TANGENT_SPAN)];
     const b = at[Math.min(at.length - 1, k + TANGENT_SPAN)];
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-    return { x: p.x, z: p.z, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
+    return { x: p.x, z: p.z, w: p.w, dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
   });
   const dry = (p: (typeof dense)[number]) => !field.isWater(p.x, p.z) && field.deckAt(p.x, p.z) === null;
   let keptLast = dense[0];
@@ -259,18 +264,20 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
   const samples = dense.filter((p, k) => {
     const last = keptLast;
     const turn = Math.acos(Math.max(-1, Math.min(1, p.dx * last.dx + p.dz * last.dz)));
-    const ends = k === 0 || k === dense.length - 1;
+    // (The rows one step in from each end too: the end's kerb runs between them and the end.)
+    const ends = k <= 1 || k >= dense.length - 2;
+    const narrowing = Math.abs(p.w - last.w) > 0.05;
     const shore = !ends && (dry(p) !== dry(dense[k - 1]) || dry(p) !== dry(dense[k + 1]));
-    if (!ends && !shore && Math.hypot(p.x - last.x, p.z - last.z) + 1e-6 < ROW_MAX && turn < ROW_TURN) return false;
+    if (!ends && !shore && !narrowing && Math.hypot(p.x - last.x, p.z - last.z) + 1e-6 < ROW_MAX && turn < ROW_TURN) return false;
     keptLast = p;
     return true;
   });
   const fill = new THREE.Color(ROAD_COLOR);
   const edge = new THREE.Color(ROAD_EDGE);
-  const half = road.width / 2;
   // A row across follows the ground loosely: the straight line that best fits the ground under
   // it, bowing towards the ground by at most ROW_BOW (the lift below then clears any bump left).
   const row = (p: (typeof samples)[number]) => {
+    const half = p.w / 2;
     const pts = ROAD_ACROSS.map((f) => {
       const x = p.x - p.dz * half * f;
       const z = p.z + p.dx * half * f;
@@ -359,8 +366,10 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
     if (!drawn(k)) continue;
     const r0 = lifted[k - 1];
     const r1 = lifted[k];
+    // The first and last stretch are kerb right across, so a road's bare end has an edge like its sides.
+    const endKerb = k === 1 || k === samples.length - 1;
     for (let q = 1; q <= last; q++) {
-      quad(r0[q - 1], r0[q], r1[q - 1], r1[q], q > 1 && q < last);
+      quad(r0[q - 1], r0[q], r1[q - 1], r1[q], q > 1 && q < last && !endKerb);
     }
     // An embankment down each side, its foot following the ground every half unit or so (between
     // rows up to ROW_MAX apart the ground can dip away under the road's straight edge, and a foot

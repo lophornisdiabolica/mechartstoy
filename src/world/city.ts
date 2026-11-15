@@ -40,6 +40,8 @@ interface AxisPlan {
   avenues: [number, number][];
   /** First and last cell of each block. */
   blocks: [number, number][];
+  /** The block on the square's side of the central avenue, next to it. */
+  squareBlock: number;
 }
 
 export interface CityLot {
@@ -101,7 +103,7 @@ export interface CityPlan {
   /** Centre of the city square, left open for an outpost (or just open). */
   square: { x: number; z: number; hx: number; hz: number };
   /** Avenue and alley centre lines (world units), with widths. */
-  avenues: { points: { x: number; z: number }[]; width: number }[];
+  avenues: { points: { x: number; z: number }[]; width: number; widths?: number[] }[];
   alleys: { points: { x: number; z: number }[]; width: number }[];
 }
 
@@ -115,16 +117,21 @@ export function cityNorm(dx: number, dz: number): number {
   return Math.sqrt(Math.sqrt(dx * dx * dx * dx + dz * dz * dz * dz));
 }
 
-/** One axis, from the central avenue outward both ways, out to `cells`. The first block on the + side is the square's. */
-function planAxis(rng: Rng, cells: number): AxisPlan {
-  const plan: AxisPlan = { lots: [], alleys: [], avenues: [[-1, 1]], blocks: [] };
+/**
+ * One axis, from the central avenue outward both ways, out to `cells`. The
+ * first block on the `square` side (1 or -1) is the square's.
+ */
+function planAxis(rng: Rng, cells: number, square: number): AxisPlan {
+  const plan: AxisPlan = { lots: [], alleys: [], avenues: [[-1, 1]], blocks: [], squareBlock: -1 };
   for (const sign of [1, -1]) {
     let at = 2;
     let first = true;
     while (at + LOT - 1 <= cells) {
-      const n = first && sign === 1 ? SQUARE_LOTS : rng.pick(BLOCK_LOTS);
+      const isSquare = first && sign === square;
+      const n = isSquare ? SQUARE_LOTS : rng.pick(BLOCK_LOTS);
       first = false;
       const block = plan.blocks.length;
+      if (isSquare) plan.squareBlock = block;
       const start = at;
       for (let k = 0; k < n && at + LOT - 1 <= cells; k++) {
         if (k > 0) {
@@ -151,15 +158,16 @@ function planAxis(rng: Rng, cells: number): AxisPlan {
  */
 export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng, options: CityOptions = {}): CityPlan {
   const { keep = () => true, centralToEdge = true } = options;
-  const ax = planAxis(rng, Math.floor(rx / CITY_CELL));
-  const az = planAxis(rng, Math.floor(rz / CITY_CELL));
+  // Which corner of the central crossing the square is on.
+  const ax = planAxis(rng, Math.floor(rx / CITY_CELL), rng.chance(0.5) ? 1 : -1);
+  const az = planAxis(rng, Math.floor(rz / CITY_CELL), rng.chance(0.5) ? 1 : -1);
   const shape = { x, z, rx, rz };
   // Cell offsets to world: cell `o`'s centre is o cells from the centre.
   const wx = (o: number) => x + o * CITY_CELL;
   const wz = (o: number) => z + o * CITY_CELL;
-  // The square is the first + block on both axes.
-  const squareBlockX = ax.lots[0].block;
-  const squareBlockZ = az.lots[0].block;
+  // The square is the block next to the central crossing on its side, on both axes.
+  const squareBlockX = Math.max(0, ax.squareBlock);
+  const squareBlockZ = Math.max(0, az.squareBlock);
   const [sx0, sx1] = ax.blocks[squareBlockX];
   const [sz0, sz1] = az.blocks[squareBlockZ];
   const square = { x: (wx(sx0) + wx(sx1)) / 2, z: (wz(sz0) + wz(sz1)) / 2, hx: ((sx1 - sx0 + 1) * CITY_CELL) / 2, hz: ((sz1 - sz0 + 1) * CITY_CELL) / 2 };
@@ -206,9 +214,17 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng,
       if (central && centralToEdge) runs.splice(0, runs.length, [-r, r]);
       for (const [lo, hi] of runs) {
         const pad = central && centralToEdge ? 0 : CITY_CELL * 1.5;
+        const width = AVENUE * CITY_CELL;
+        if (central && centralToEdge) {
+          // Out past the edge it narrows smoothly to a town street's width, where country roads join it.
+          const stops = [lo - CITY_TAPER, lo, hi, hi + CITY_TAPER];
+          const points = stops.flatMap((v) => (axis === 'x' ? along(mid, false, z + v, z + v) : along(mid, true, x + v, x + v)).slice(0, 1));
+          avenues.push({ points, width, widths: [TAPER_TO, width, width, TAPER_TO] });
+          continue;
+        }
         // An avenue across x (fixed x) runs along z, and the other way round.
         const points = axis === 'x' ? along(mid, false, z + lo - pad, z + hi + pad) : along(mid, true, x + lo - pad, x + hi + pad);
-        avenues.push({ points, width: AVENUE * CITY_CELL });
+        avenues.push({ points, width });
       }
     }
   }
@@ -225,9 +241,11 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng,
           return mine === alley.block && theirs === b && Math.abs(across) < LOT * CITY_CELL;
         });
         if (!beside) continue;
-        // From the avenue edge to the avenue edge, a little into each so they meet.
-        const from = (o0 - 0.5 - 0.3) * CITY_CELL;
-        const to = (o1 + 0.5 + 0.3) * CITY_CELL;
+        // From one end of the block to the other, and on into the avenue at either end past its
+        // kerb, so the alley's paving runs into the avenue's (an end with no avenue stops at the block's edge).
+        const avenueAt = (o: number) => other.avenues.some(([a0, a1]) => o >= a0 && o <= a1);
+        const from = (o0 - 0.5 - (avenueAt(o0 - 1) ? ALLEY_INTO : 0.2)) * CITY_CELL;
+        const to = (o1 + 0.5 + (avenueAt(o1 + 1) ? ALLEY_INTO : 0.2)) * CITY_CELL;
         const points = axis === 'x' ? along(alley.at, false, z + from, z + to) : along(alley.at, true, x + from, x + to);
         alleys.push({ points, width: ALLEY * CITY_CELL * 0.9 });
       }
@@ -235,6 +253,13 @@ export function planCity(x: number, z: number, rx: number, rz: number, rng: Rng,
   }
   return { x, z, rx, rz, lots, features, square, avenues, alleys };
 }
+
+/** How far past a city's edge its central avenues run on, narrowing to TAPER_TO (a town street's width, STREET_WIDTH) for country roads to join. */
+export const CITY_TAPER = 5;
+const TAPER_TO = 3.2;
+
+/** How far an alley runs on into the avenue at its end, in cells: past the avenue's kerb, onto its paving. */
+const ALLEY_INTO = 1.2;
 
 /** Longest stretch of an avenue with no lots beside it before it's broken in two (about three lots). */
 const RUN_GAP = 13;
