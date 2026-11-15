@@ -3,21 +3,47 @@ import { Game } from '../game/game';
 import { CAPTURE_RADIUS } from '../game/outposts';
 import { Battlefield } from '../world/battlefield';
 import { factionColors } from './models';
+import { meshHeightAt } from './terrainMesh';
 
 const SEGMENTS = 64;
 const WIDTH = 0.45;
 
-/** A flat ring round (x, z) that follows the ground, built as one quad per segment so a draw range can show part of it. */
-function groundRing(field: Battlefield, x: number, z: number, radius: number, lift: number): THREE.BufferGeometry {
+const down = new THREE.Vector3(0, -1, 0);
+const caster = new THREE.Raycaster();
+const from = new THREE.Vector3();
+
+/**
+ * The height of whatever is drawn at (x, z): the ground (or water) or a road on it,
+ * whichever is higher. Roads stand up to a few tenths above the ground and
+ * the ground mesh's triangles don't quite follow surfaceAt, so a ring at a
+ * fixed height over surfaceAt dipped in and out of them and flickered.
+ */
+function drawnHeight(field: Battlefield, roads: THREE.Object3D[], x: number, z: number): number {
+  from.set(x, 1000, z);
+  caster.set(from, down);
+  const ground = Math.max(meshHeightAt(field, x, z), field.surfaceAt(x, z));
+  const hit = caster.intersectObjects(roads, true)[0];
+  return hit ? Math.max(hit.point.y, ground) : ground;
+}
+
+/**
+ * A flat ring round (x, z) that sits over the ground and roads, built as one
+ * quad per segment so a draw range can show part of it. Each corner takes the
+ * highest point from it to halfway to its neighbours, so the straight edges
+ * between corners don't cut through a bump or a road's crown.
+ */
+function groundRing(field: Battlefield, surfaces: THREE.Object3D[], x: number, z: number, radius: number, lift: number): THREE.BufferGeometry {
   const pos: number[] = [];
   const index: number[] = [];
+  const at = (a: number, r: number) => drawnHeight(field, surfaces, x + Math.cos(a) * r, z + Math.sin(a) * r);
+  const step = (Math.PI * 2) / SEGMENTS;
   for (let i = 0; i <= SEGMENTS; i++) {
     // Clockwise from the top, as seen from above, like a clock filling up.
-    const a = -Math.PI / 2 + (i / SEGMENTS) * Math.PI * 2;
+    const a = -Math.PI / 2 + i * step;
     for (const r of [radius - WIDTH, radius]) {
-      const px = x + Math.cos(a) * r;
-      const pz = z + Math.sin(a) * r;
-      pos.push(px, field.surfaceAt(px, pz) + lift, pz);
+      let y = -Infinity;
+      for (const da of [-step / 2, 0, step / 2]) for (const dr of [-WIDTH / 2, 0, WIDTH / 2]) y = Math.max(y, at(a + da, r + dr));
+      pos.push(x + Math.cos(a) * r, y + lift, z + Math.sin(a) * r);
     }
   }
   for (let i = 0; i < SEGMENTS; i++) {
@@ -39,13 +65,21 @@ export class OutpostRings {
   readonly root = new THREE.Group();
   private readonly rings: { owner: THREE.Mesh; progress: THREE.Mesh; shown: { owner: number; claimant: number } }[];
 
-  constructor(private readonly game: Game) {
+  private readonly stop: () => void;
+
+  /** `terrain` is the drawn ground and roads (see buildTerrain), whose roads the rings sit on. */
+  constructor(private readonly game: Game, terrain: THREE.Object3D) {
     this.root.name = 'outpost-rings';
+    const roads = terrain.getObjectByName('roads');
+    const surfaces = roads ? [roads] : [];
+    const ownerRing = (o: { x: number; z: number }) => groundRing(game.field, surfaces, o.x, o.z, CAPTURE_RADIUS, 0.08);
+    const progressRing = (o: { x: number; z: number }) => groundRing(game.field, surfaces, o.x, o.z, CAPTURE_RADIUS + WIDTH * 1.2, 0.1);
     this.rings = game.ctx.outposts.map((o) => {
-      const material = () => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
-      const owner = new THREE.Mesh(groundRing(game.field, o.x, o.z, CAPTURE_RADIUS, 0.08), material());
+      // Pulled toward the camera a little too, like the roads, for what's left of a near tie.
+      const material = () => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+      const owner = new THREE.Mesh(ownerRing(o), material());
       (owner.material as THREE.MeshBasicMaterial).opacity = 0.45;
-      const progress = new THREE.Mesh(groundRing(game.field, o.x, o.z, CAPTURE_RADIUS + WIDTH * 1.2, 0.1), material());
+      const progress = new THREE.Mesh(progressRing(o), material());
       (progress.material as THREE.MeshBasicMaterial).opacity = 0.9;
       for (const m of [owner, progress]) {
         m.renderOrder = 2;
@@ -54,6 +88,27 @@ export class OutpostRings {
       }
       return { owner, progress, shown: { owner: NaN, claimant: NaN } };
     });
+    // Craters and god powers move the ground and the roads on it, so rings near a change are rebuilt to sit on the new surface.
+    // (The terrain listens first, so its roads are already redrawn by now.)
+    this.stop = game.field.onChange((area) => {
+      const reach = CAPTURE_RADIUS + WIDTH * 3;
+      game.ctx.outposts.forEach((o, i) => {
+        const [i0, j0] = game.field.cellAt(o.x - reach, o.z - reach);
+        const [i1, j1] = game.field.cellAt(o.x + reach, o.z + reach);
+        if (area.i1 < i0 || area.i0 > i1 || area.j1 < j0 || area.j0 > j1) return;
+        const ring = this.rings[i];
+        const range = ring.progress.geometry.drawRange.count;
+        ring.owner.geometry.dispose();
+        ring.owner.geometry = ownerRing(o);
+        ring.progress.geometry.dispose();
+        ring.progress.geometry = progressRing(o);
+        ring.progress.geometry.setDrawRange(0, range);
+      });
+    });
+  }
+
+  dispose(): void {
+    this.stop();
   }
 
   update(): void {
