@@ -160,13 +160,20 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     /** The highest the ground under it has been (a land brush lowers it a little at a time). */
     root: number;
     gone: boolean;
+    /** Knocked flat with the dense forest round it (see woods.ts): which way it lies, or null standing. */
+    down: number | null;
   }
   /** The drawn props by map cell, so a change to some cells finds its props quickly. */
   const byCell = new Map<number, Drawn[]>();
   const { cols } = field.config;
   const place = (d: Drawn) => {
-    dummy.position.set(d.prop.x, d.y + d.offset * d.prop.scale, d.prop.z);
-    dummy.rotation.set(0, d.prop.rotation, 0);
+    if (d.down === null) {
+      dummy.position.set(d.prop.x, d.y + d.offset * d.prop.scale, d.prop.z);
+      dummy.rotation.set(0, d.prop.rotation, 0);
+    } else {
+      dummy.position.set(d.prop.x, d.y + 0.08, d.prop.z);
+      dummy.rotation.set(0, -d.down, -Math.PI / 2 + 0.1, 'YXZ');
+    }
     dummy.scale.setScalar(d.gone ? 0 : d.prop.scale);
     dummy.updateMatrix();
     d.mesh.setMatrixAt(d.instance, dummy.matrix);
@@ -180,7 +187,7 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     const mesh = new THREE.InstancedMesh(style.geometry, material, list.length);
     const base = new THREE.Color(style.color);
     list.forEach((p, i) => {
-      const d: Drawn = { prop: p, mesh, instance: i, offset: style.baseOffset, y: p.y, root: p.y, gone: false };
+      const d: Drawn = { prop: p, mesh, instance: i, offset: style.baseOffset, y: p.y, root: p.y, gone: false, down: null };
       place(d);
       mesh.setColorAt(i, base.clone().offsetHSL(rng.range(-0.03, 0.03), 0, rng.range(-0.06, 0.06)));
       const [ci, cj] = field.cellAt(p.x, p.z);
@@ -217,8 +224,50 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
       mesh.computeBoundingSphere();
     }
   });
-  group.userData.dispose = stop;
+  // Small trees a big dense-forest tree falls across go down with it, the way it fell. (Driving
+  // through ordinary woods leaves them be: only the dense forest's own falling trees do this.)
+  const knock = (k: number) => {
+    const t = field.woods.trees[k];
+    if (t.fell === null) return;
+    const len = FALLEN_REACH * t.size;
+    const ex = t.x + Math.cos(t.fell) * len;
+    const ez = t.z + Math.sin(t.fell) * len;
+    const [i0, j0] = field.cellAt(Math.min(t.x, ex) - 1.5, Math.min(t.z, ez) - 1.5);
+    const [i1, j1] = field.cellAt(Math.max(t.x, ex) + 1.5, Math.max(t.z, ez) + 1.5);
+    const moved = new Set<THREE.InstancedMesh>();
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        for (const d of byCell.get(j * cols + i) ?? []) {
+          if (d.gone || d.down !== null || d.prop.kind === 'rock' || d.prop.kind === 'shrub') continue;
+          if (segmentDistance(d.prop.x, d.prop.z, t.x, t.z, ex, ez) > KNOCK_REACH) continue;
+          // Not quite the same way, so a row of them doesn't lie in lockstep.
+          d.down = t.fell + (((d.instance * 7) % 5) - 2) * 0.15;
+          place(d);
+          moved.add(d.mesh);
+        }
+      }
+    }
+    for (const mesh of moved) mesh.instanceMatrix.needsUpdate = true;
+  };
+  for (let k = 0; k < field.woods.trees.length; k++) knock(k);
+  const stopFell = field.woods.onFell(knock);
+  group.userData.dispose = () => {
+    stop();
+    stopFell();
+  };
   return group;
+}
+
+/** How far a fallen dense-forest tree reaches along the ground at size 1, and how close to it a small tree goes down too. */
+const FALLEN_REACH = 3;
+const KNOCK_REACH = 1.2;
+
+function segmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+  return Math.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
 function ensureNonIndexed(g: THREE.BufferGeometry): THREE.BufferGeometry {

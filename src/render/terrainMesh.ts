@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { disposeTree } from './dispose';
 import { Rng } from '../core/rng';
-import { Battlefield, Bridge, Road } from '../world/battlefield';
+import { Battlefield, Bridge, RAMP_FLARE, Road } from '../world/battlefield';
 import { BIOMES } from '../world/biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS } from '../world/ground';
 
@@ -500,53 +500,170 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
   }
 }
 
-/** A bridge: a concrete deck on piers, with railings, from bank to bank. */
+/** A bridge deck's thickness, and how far its ends' aprons reach out to meet the ground ahead. */
+const SLAB = 0.35;
+const APRON = 1.2;
+
+type P3 = [number, number, number];
+
+/**
+ * A bridge: a concrete deck from bank to bank, with railings, on piers over
+ * the water and on solid walls down to the ground over land (so nothing looks
+ * like it's slipping under it). Its open ramps (see Battlefield.openRamps)
+ * have wings sloping down to the ground at the sides, wide at the foot and
+ * narrowing to nothing where the railing starts, and an apron at each end.
+ */
 function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const g = new THREE.Group();
   const dx = bridge.bx - bridge.ax;
   const dz = bridge.bz - bridge.az;
   const length = Math.hypot(dx, dz);
+  const ux = dx / length;
+  const uz = dz / length;
+  // Across the deck (the side Battlefield.wingAt measures as positive).
+  const nx = uz;
+  const nz = -ux;
+  const half = bridge.width / 2;
   const heading = Math.atan2(-dz, dx);
   // Engineers' bridges are timber on trestles; the map's are concrete.
   const timber = bridge.builtBy !== undefined;
   const deck = new THREE.MeshStandardMaterial({ color: timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: 0.9 });
   const dark = new THREE.MeshStandardMaterial({ color: timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: 0.9 });
   const rail = new THREE.MeshStandardMaterial({ color: 0x6c7278, flatShading: true, roughness: 0.6, metalness: 0.3 });
-  // The deck in short segments that follow its height (ramps at the ends).
-  const steps = Math.max(2, Math.ceil(length / 1.5));
-  for (let s = 0; s < steps; s++) {
-    const t0 = s / steps;
-    const t1 = (s + 1) / steps;
-    const x0 = bridge.ax + dx * t0;
-    const z0 = bridge.az + dz * t0;
-    const x1 = bridge.ax + dx * t1;
-    const z1 = bridge.az + dz * t1;
-    const y0 = field.deckAt(x0, z0) ?? field.heightAt(x0, z0);
-    const y1 = field.deckAt(x1, z1) ?? field.heightAt(x1, z1);
-    const seg = Math.hypot(x1 - x0, z1 - z0, y1 - y0);
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.35, bridge.width), deck);
-    slab.position.set((x0 + x1) / 2, (y0 + y1) / 2 - 0.17, (z0 + z1) / 2);
-    slab.rotation.set(0, heading, Math.atan2(y1 - y0, Math.hypot(x1 - x0, z1 - z0)), 'YXZ');
-    g.add(slab);
+  const top: number[] = [];
+  const under: number[] = [];
+  // Each face wound to face `facing` (one-sided, so the shadow pass draws only the far side and the deck doesn't shadow itself into a moire).
+  const quad = (out: number[], a: P3, b: P3, c: P3, d: P3, facing: P3) => {
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    if (n[0] * facing[0] + n[1] * facing[1] + n[2] * facing[2] >= 0) out.push(...a, ...b, ...c, ...a, ...c, ...d);
+    else out.push(...a, ...d, ...c, ...a, ...c, ...b);
+  };
+  const UP: P3 = [0, 1, 0];
+  const DOWN: P3 = [0, -1, 0];
+  const across = (s: number): P3 => [nx * (s === 0 ? -1 : 1), 0, nz * (s === 0 ? -1 : 1)];
+  // A skirt down from an outer edge into the ground, so nothing shows under it from any side.
+  const sink = (p: P3): P3 => [p[0], Math.min(p[1], field.heightAt(p[0], p[2])) - 0.5, p[2]];
+  const skirt = (a: P3, b: P3, facing: P3) => quad(under, a, b, sink(b), sink(a), facing);
+  const sea = field.seaLevel;
+  const groundAt = (x: number, z: number) => Math.max(field.heightAt(x, z), sea) + 0.03;
+
+  // Stations along the deck: about every 0.75 m, and exactly where each open ramp ends.
+  const [ea, eb] = field.openRamps(bridge);
+  const steps = Math.max(2, Math.ceil(length / 0.75));
+  const ts = new Set<number>();
+  for (let s = 0; s <= steps; s++) ts.add(s / steps);
+  ts.add(Math.min(1, ea / length));
+  ts.add(Math.max(0, 1 - eb / length));
+  const stations = [...ts].sort((a, b) => a - b).filter((t, k, all) => k === 0 || t - all[k - 1] > 0.02 / length);
+  const flareAt = (t: number) => {
+    const sa = t * length;
+    const sb = (1 - t) * length;
+    if (sa < ea) return RAMP_FLARE * (1 - sa / ea);
+    if (sb < eb) return RAMP_FLARE * (1 - sb / eb);
+    return 0;
+  };
+  interface Station {
+    t: number;
+    x: number;
+    z: number;
+    y: number;
+    wet: boolean;
+    /** Per side (-1, +1): the deck's edge on top, the foot of the wall or fascia under it, and the wing's outer edge on the ground. */
+    edge: [P3, P3];
+    foot: [P3, P3];
+    wing: [P3, P3];
+  }
+  const at = (t: number): Station => {
+    const x = bridge.ax + dx * t;
+    const z = bridge.az + dz * t;
+    const y = field.deckAlong(bridge, t);
+    const wet = field.isWater(x, z);
+    const flare = flareAt(t);
+    const edge: P3[] = [];
+    const foot: P3[] = [];
+    const wing: P3[] = [];
     for (const side of [-1, 1]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.3, 0.12), rail);
-      const ox = Math.sin(heading) * side * (bridge.width / 2 - 0.06);
-      const oz = Math.cos(heading) * side * (bridge.width / 2 - 0.06);
-      r.position.set((x0 + x1) / 2 + ox, (y0 + y1) / 2 + 0.15, (z0 + z1) / 2 + oz);
-      r.rotation.copy(slab.rotation);
-      g.add(r);
+      const ex = x + nx * side * half;
+      const ez = z + nz * side * half;
+      edge.push([ex, y, ez]);
+      foot.push([ex, wet ? y - SLAB : Math.min(y - SLAB, field.heightAt(ex, ez) - 0.3), ez]);
+      const wx = x + nx * side * (half + flare);
+      const wz = z + nz * side * (half + flare);
+      wing.push(flare > 0.01 ? [wx, Math.min(y, groundAt(wx, wz)), wz] : edge[edge.length - 1]);
+    }
+    return { t, x, z, y, wet, edge: edge as [P3, P3], foot: foot as [P3, P3], wing: wing as [P3, P3] };
+  };
+  const all = stations.map(at);
+  const low = (p: P3): P3 => [p[0], p[1] - SLAB, p[2]];
+
+  for (let k = 0; k + 1 < all.length; k++) {
+    const a = all[k];
+    const b = all[k + 1];
+    quad(top, a.edge[0], b.edge[0], b.edge[1], a.edge[1], UP);
+    quad(under, low(a.edge[0]), low(b.edge[0]), low(b.edge[1]), low(a.edge[1]), DOWN);
+    for (const s of [0, 1]) {
+      // The side: a fascia over the water, a solid wall down into the ground over land.
+      quad(under, a.edge[s], b.edge[s], b.foot[s], a.foot[s], across(s));
+      // A ramp's wing, sloping from the deck's edge to the ground, skirted down into it at its outer edge.
+      if (a.wing[s] !== a.edge[s] || b.wing[s] !== b.edge[s]) {
+        quad(top, a.edge[s], b.edge[s], b.wing[s], a.wing[s], UP);
+        skirt(a.wing[s], b.wing[s], across(s));
+      }
+    }
+    // Railings along the railed stretch.
+    const tm = (a.t + b.t) / 2;
+    if (field.railedAt(bridge, tm)) {
+      const seg = Math.hypot(b.x - a.x, b.z - a.z, b.y - a.y);
+      const pitch = Math.atan2(b.y - a.y, Math.hypot(b.x - a.x, b.z - a.z));
+      for (const side of [-1, 1]) {
+        const r = new THREE.Mesh(new THREE.BoxGeometry(seg + 0.05, 0.3, 0.12), rail);
+        r.position.set((a.x + b.x) / 2 + nx * side * (half - 0.06), (a.y + b.y) / 2 + 0.15, (a.z + b.z) / 2 + nz * side * (half - 0.06));
+        r.rotation.set(0, heading, pitch, 'YXZ');
+        g.add(r);
+      }
     }
     // Piers where the deck is over water.
-    const mx = (x0 + x1) / 2;
-    const mz = (z0 + z1) / 2;
-    if (s % 3 === 1 && field.isWater(mx, mz)) {
+    const mx = (a.x + b.x) / 2;
+    const mz = (a.z + b.z) / 2;
+    if (k % 4 === 2 && field.isWater(mx, mz)) {
       const bottom = field.heightAt(mx, mz) - 0.3;
-      const top = (y0 + y1) / 2 - 0.35;
-      const pier = new THREE.Mesh(new THREE.BoxGeometry(0.7, top - bottom, bridge.width * 0.8), dark);
-      pier.position.set(mx, (top + bottom) / 2, mz);
+      const ceiling = (a.y + b.y) / 2 - SLAB;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(0.7, ceiling - bottom, bridge.width * 0.8), dark);
+      pier.position.set(mx, (ceiling + bottom) / 2, mz);
       pier.rotation.y = heading;
       g.add(pier);
     }
+  }
+  // Each end: its face, and an apron running on out to the ground ahead, so a bank that slopes across the bridge never leaves the deck's end standing proud.
+  for (const [end, out] of [
+    [all[0], -1],
+    [all[all.length - 1], 1],
+  ] as const) {
+    const forward: P3 = [ux * out, 0, uz * out];
+    quad(under, end.edge[0], end.edge[1], end.foot[1], end.foot[0], forward);
+    const line: P3[] = [end.wing[0], end.edge[0], end.edge[1], end.wing[1]];
+    const ahead = line.map((p): P3 => {
+      const x = p[0] + ux * out * APRON;
+      const z = p[2] + uz * out * APRON;
+      return [x, Math.min(p[1], groundAt(x, z)), z];
+    });
+    for (let k = 0; k + 1 < line.length; k++) {
+      quad(top, line[k], line[k + 1], ahead[k + 1], ahead[k], UP);
+      skirt(ahead[k], ahead[k + 1], forward);
+    }
+    skirt(line[0], ahead[0], across(0));
+    skirt(line[3], ahead[3], across(1));
+  }
+  for (const [positions, material] of [
+    [top, deck],
+    [under, dark],
+  ] as const) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.computeVertexNormals();
+    g.add(new THREE.Mesh(geo, material));
   }
   g.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {

@@ -111,6 +111,8 @@ export interface Frame {
   cells: CellState[];
   /** Trees that fell, and which way. */
   fell: [number, number][];
+  /** Fallen trees pressed further into the ground, and how far (see Woods.trample). */
+  trod: [number, number][];
   /** Trees planted (a god power), in order: x, z and size. */
   grown: [number, number, number][];
   ctx: unknown;
@@ -216,6 +218,7 @@ export class SimHost {
   private poses: Pose[] = [];
   private areas: CellArea[] = [];
   private fell: [number, number][] = [];
+  private trod: [number, number][] = [];
   private grown: [number, number, number][] = [];
   /** What the page has of each COPIED component: per type, a shallow copy of each entity's as last sent. */
   private readonly sent = COPIED.map(() => new Map<Entity, Record<string, unknown>>());
@@ -261,6 +264,7 @@ export class SimHost {
     }
     field.onChange((area) => this.areas.push(area));
     field.woods.onFell((t) => this.fell.push([t, field.woods.trees[t].fell!]));
+    field.woods.onTrod((t) => this.trod.push([t, field.woods.trees[t].sunk]));
     field.woods.onGrow((t) => {
       const tree = field.woods.trees[t];
       this.grown.push([tree.x, tree.z, tree.size]);
@@ -340,7 +344,7 @@ export class SimHost {
     world.profile?.clear();
     this.ticks = this.simMs = this.worstMs = 0;
     if (!this.dirty) {
-      const empty: Frame = { ...base, changed: false, created: [], poses: [], untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], grown: [], ctx: null, profile };
+      const empty: Frame = { ...base, changed: false, created: [], poses: [], untransformed: [], changes: [], removed: [], events: [], destroyed: [], cells: [], fell: [], trod: [], grown: [], ctx: null, profile };
       return { frame: empty, transfer };
     }
     this.dirty = false;
@@ -396,7 +400,7 @@ export class SimHost {
     });
 
     const cells = this.areas.map((a) => field.cellState(a));
-    for (const c of cells) transfer.push(c.ground.buffer as ArrayBuffer, c.roadCell.buffer as ArrayBuffer, c.bridgeCell.buffer as ArrayBuffer, c.heights.buffer as ArrayBuffer);
+    for (const c of cells) transfer.push(c.ground.buffer as ArrayBuffer, c.roadCell.buffer as ArrayBuffer, c.bridgeCell.buffer as ArrayBuffer, c.wingCell.buffer as ArrayBuffer, c.heights.buffer as ArrayBuffer);
 
     const frame: Frame = {
       ...base,
@@ -410,6 +414,7 @@ export class SimHost {
       destroyed: this.destroyed,
       cells,
       fell: this.fell,
+      trod: this.trod,
       grown: this.grown,
       ctx: this.refs.encode({
         escalation: ctx.escalation,
@@ -436,6 +441,7 @@ export class SimHost {
     this.events = [];
     this.areas = [];
     this.fell = [];
+    this.trod = [];
     this.grown = [];
     return { frame, transfer };
   }
@@ -500,6 +506,7 @@ export class SimView {
     for (const [x, z, size] of frame.grown) field.woods.grow(x, z, size);
     for (const c of frame.cells) field.applyCells(c);
     for (const [t, angle] of frame.fell) field.woods.showFell(t, angle);
+    for (const [t, sunk] of frame.trod ?? []) field.woods.showSunk(t, sunk);
 
     const last = frame.poses.at(-1);
     for (const e of frame.created) {

@@ -206,10 +206,16 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
     if (air.size > 0 && air.has(other) !== flying) return;
     const ot = body.t;
     const or = body.collider?.radius ?? 0.5;
+    // A friend coming the other way: both keep to their right, so they pass instead of mirroring each other's dodges.
+    let headOn = false;
     if (!body.building && myFaction !== undefined && ctx.sides.allied(body.faction?.id ?? -1, myFaction)) {
-      // Friendlies on the move sort themselves out via separation; only steer around parked ones.
+      // Friendlies on the move sort themselves out via separation; only steer around parked ones
+      // (and ones waiting their turn at a bridge, which are as good as parked).
       const om = body.mover;
-      if (om && om.targetX !== null) return;
+      if (om && om.targetX !== null && !(om.nav.holdUntil > world.time)) {
+        if (flying || D.cos(body.t.heading - t.heading) > -0.5) return;
+        headOn = true;
+      }
     }
     const vx = ot.x - t.x;
     const vz = ot.z - t.z;
@@ -221,12 +227,13 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
     if (Math.abs(side) >= clearance) return;
     const urgency = (1 - Math.max(0, ahead - or) / lookahead) * (1 - Math.abs(side) / clearance);
     // Steer to the side the obstacle isn't on; dead ahead, break the tie consistently per pair.
-    const away = Math.abs(side) > 0.05 ? -Math.sign(side) : (e + other) % 2 === 0 ? 1 : -1;
+    const away = headOn ? -1 : Math.abs(side) > 0.05 ? -Math.sign(side) : (e + other) % 2 === 0 ? 1 : -1;
     ax += -dirZ * away * urgency * 2;
     az += dirX * away * urgency * 2;
   });
   return { x: ax, z: az };
 }
+
 
 /**
  * Every so often check we've actually moved; if not, sidestep for a moment.
@@ -249,11 +256,12 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: M
     m.targetX = m.targetZ = null;
     return;
   }
-  // Try a point off to one side (alternating by entity), then the other, then back the way we came.
+  // Try a point off to its right, then its left, then back the way we came. Everyone tries
+  // right first, so two units stuck nose to nose step apart rather than both the same way.
   // Prefer spots the unit actually fits in; a wide unit wedged between buildings has to back out.
   const radius = world.get(e, Collider)?.radius ?? 0.5;
   const r = radius + 2.5;
-  const first = e % 2 === 0 ? 1 : -1;
+  const first = -1;
   const tries = [
     [first, 0.3],
     [-first, 0.3],
@@ -324,11 +332,16 @@ export function movementSystem(ctx: SimContext): System {
           continue;
         }
 
-        const wp = nextWaypoint(ctx, world, t, m, radius, budget);
+        // Waiting a turn at a narrow (see traffic.ts): pull over to the waiting spot and stay there.
+        const holding = world.time < m.nav.holdUntil;
+        const wp = holding ? { x: m.nav.holdX, z: m.nav.holdZ } : nextWaypoint(ctx, world, t, m, radius, budget);
         const dx = wp.x - t.x;
         const dz = wp.z - t.z;
         const dist = D.hypot(dx, dz);
-        if (dist < 1e-4) continue;
+        if (dist < (holding ? 0.6 : 1e-4)) {
+          if (holding) m.nav.checkAt = world.time + STUCK_CHECK;
+          continue;
+        }
         let dirX = dx / dist;
         let dirZ = dz / dist;
         const avoid = avoidance(ctx, world, e, t, dirX, dirZ, air);
@@ -355,18 +368,55 @@ export function movementSystem(ctx: SimContext): System {
         const stepLen = Math.min(dist, speed * throttle * dt);
         const nx = t.x + D.cos(t.heading) * stepLen;
         const nz = t.z - D.sin(t.heading) * stepLen;
-        if (rules.flies || ctx.navs.for(m.move).terrainAllowsAt(nx, nz)) {
+        const grid = ctx.navs.for(m.move);
+        // No going over a bridge's railings; wriggling free of being wedged on a deck may drop off its side, but nothing climbs up one.
+        const detouring = world.time < m.nav.detourUntil;
+        const canStep = (x: number, z: number) =>
+          grid.terrainAllowsAt(x, z) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
+        let go = rules.flies || canStep(nx, nz);
+        let [gx, gz] = [nx, nz];
+        // Nosed into the corner where a ramp's railing starts (cutting across it for the deck): slide on up
+        // onto the open ramp beside it rather than grind against the railing until the unsticking kicks in.
+        if (!go && field.bridges.length > 0 && field.deckAt(t.x, t.z) === null && field.railKind(nx, nz) === 1) {
+          const sx = nx - t.x;
+          const sz = nz - t.z;
+          for (const [x, z] of Math.abs(sx) >= Math.abs(sz) ? [[nx, t.z], [t.x, nz]] : [[t.x, nz], [nx, t.z]]) {
+            if ((x !== t.x || z !== t.z) && towardDeck(field, t.x, t.z, x, z) && canStep(x, z)) {
+              [gx, gz] = [x, z];
+              go = true;
+              break;
+            }
+          }
+        }
+        if (go) {
+          const [nx, nz] = [gx, gz];
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.
           if (CRUSHERS.has(m.move) && stepLen > 0) {
             const r = world.get(e, Collider)?.radius ?? 0.5;
-            if (m.move !== 'walker' || r >= 1.2) field.woods.crush(nx, nz, r * 0.8, { x: t.x - D.cos(t.heading), z: t.z + D.sin(t.heading) });
+            if (m.move !== 'walker' || r >= 1.2) {
+              field.woods.crush(nx, nz, r * 0.8, { x: t.x - D.cos(t.heading), z: t.z + D.sin(t.heading) });
+              // And press the fallen trunks they drive over into the ground, wearing tracks through.
+              const ground = field.groundAt(nx, nz).id;
+              if (ground === 'felled' || ground === 'thicket') field.woods.trample(nx, nz, r * 0.8, stepLen);
+            }
           }
         }
       }
     },
   };
+}
+
+/** Whether a step from (ax, az) to (bx, bz) ends over a bridge's deck cells, nearer its middle line than it started. */
+function towardDeck(field: Battlefield, ax: number, az: number, bx: number, bz: number): boolean {
+  const index = field.bridgeAt(bx, bz);
+  if (index < 0) return false;
+  const b = field.bridges[index];
+  const dx = b.bx - b.ax;
+  const dz = b.bz - b.az;
+  const off = (x: number, z: number) => Math.abs((x - b.ax) * dz - (z - b.az) * dx);
+  return off(bx, bz) < off(ax, az);
 }
 
 /** How far from its loiter point a plane circles, and how far ahead round the circle it steers. */
@@ -516,7 +566,8 @@ export function separationSystem(ctx: SimContext): System {
           const push = ((minDist - d) / d) * share;
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
-          if (flying || terrain.terrainAllowsAt(nx, nz)) {
+          // Shoved or not, vehicles don't go over a bridge's railings.
+          if (flying || (terrain.terrainAllowsAt(nx, nz) && !terrain.railCrossing(t.x, t.z, nx, nz))) {
             t.x = nx;
             t.z = nz;
           }

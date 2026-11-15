@@ -127,9 +127,9 @@ describe('god powers', () => {
     expect(game.field.woods.hasTreesAt(p.x, p.z)).toBe(true);
     expect(game.usePower({ kind: 'forest', brush: 'clear', size: 'medium', x: p.x, z: p.z })).toBe(true);
     expect(game.field.woods.hasTreesAt(p.x, p.z)).toBe(false);
-    // Cleared forest goes back to open ground (see woods.ts).
+    // Cleared forest is fallen forest, until it's driven flat (see woods.ts).
     const [i, j] = game.field.cellAt(p.x, p.z);
-    expect(game.field.ground[j * game.field.config.cols + i]).toBe(groundCode('plain'));
+    expect(game.field.ground[j * game.field.config.cols + i]).toBe(groundCode('felled'));
     expect(BRUSH_RADIUS.small).toBeLessThan(BRUSH_RADIUS.medium);
   });
 
