@@ -160,7 +160,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
 }
 
 /** The ground mesh's own height at a point: the plane of the triangle it's in (heightAt blends the four corners, which isn't quite the same). */
-function meshHeightAt(field: Battlefield, x: number, z: number): number {
+export function meshHeightAt(field: Battlefield, x: number, z: number): number {
   const { cellSize, cols, rows } = field.config;
   const gx = Math.max(0, Math.min(cols - 1e-6, (x - field.bounds.minX) / cellSize));
   const gz = Math.max(0, Math.min(rows - 1e-6, (z - field.bounds.minZ) / cellSize));

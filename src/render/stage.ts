@@ -166,6 +166,7 @@ export class Stage {
       this.stopProps?.();
       this.entities.dispose();
       this.commanderOverlay.dispose();
+      this.outpostRings.dispose();
       this.frontLines.dispose();
       this.fireGround.dispose();
       this.debugOverlay.dispose();
@@ -194,7 +195,7 @@ export class Stage {
     this.godEffects = new GodEffects(game, this.effects);
     this.godCursor.attach(field);
     this.markers = new Markers(game, this.entities);
-    this.outpostRings = new OutpostRings(game);
+    this.outpostRings = new OutpostRings(game, terrain);
     this.outpostRings.root.visible = this.ringsShown;
     this.commanderOverlay = new CommanderOverlay(game);
     this.commanderOverlay.visible = this.plansShown;
