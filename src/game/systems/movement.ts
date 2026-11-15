@@ -370,7 +370,26 @@ export function movementSystem(ctx: SimContext): System {
         const nz = t.z - D.sin(t.heading) * stepLen;
         const grid = ctx.navs.for(m.move);
         // No going over a bridge's railings; wriggling free of being wedged on a deck may drop off its side, but nothing climbs up one.
-        if (rules.flies || (grid.terrainAllowsAt(nx, nz) && !(world.time < m.nav.detourUntil ? grid.railBoarding(t.x, t.z, nx, nz) : grid.railCrossing(t.x, t.z, nx, nz)))) {
+        const detouring = world.time < m.nav.detourUntil;
+        const canStep = (x: number, z: number) =>
+          grid.terrainAllowsAt(x, z) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
+        let go = rules.flies || canStep(nx, nz);
+        let [gx, gz] = [nx, nz];
+        // Nosed into the corner where a ramp's railing starts (cutting across it for the deck): slide on up
+        // onto the open ramp beside it rather than grind against the railing until the unsticking kicks in.
+        if (!go && field.bridges.length > 0 && field.deckAt(t.x, t.z) === null && field.railKind(nx, nz) === 1) {
+          const sx = nx - t.x;
+          const sz = nz - t.z;
+          for (const [x, z] of Math.abs(sx) >= Math.abs(sz) ? [[nx, t.z], [t.x, nz]] : [[t.x, nz], [nx, t.z]]) {
+            if ((x !== t.x || z !== t.z) && towardDeck(field, t.x, t.z, x, z) && canStep(x, z)) {
+              [gx, gz] = [x, z];
+              go = true;
+              break;
+            }
+          }
+        }
+        if (go) {
+          const [nx, nz] = [gx, gz];
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.
@@ -387,6 +406,17 @@ export function movementSystem(ctx: SimContext): System {
       }
     },
   };
+}
+
+/** Whether a step from (ax, az) to (bx, bz) ends over a bridge's deck cells, nearer its middle line than it started. */
+function towardDeck(field: Battlefield, ax: number, az: number, bx: number, bz: number): boolean {
+  const index = field.bridgeAt(bx, bz);
+  if (index < 0) return false;
+  const b = field.bridges[index];
+  const dx = b.bx - b.ax;
+  const dz = b.bz - b.az;
+  const off = (x: number, z: number) => Math.abs((x - b.ax) * dz - (z - b.az) * dx);
+  return off(bx, bz) < off(ax, az);
 }
 
 /** How far from its loiter point a plane circles, and how far ahead round the circle it steers. */

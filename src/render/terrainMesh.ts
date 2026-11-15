@@ -527,12 +527,25 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const heading = Math.atan2(-dz, dx);
   // Engineers' bridges are timber on trestles; the map's are concrete.
   const timber = bridge.builtBy !== undefined;
-  const deck = new THREE.MeshStandardMaterial({ color: timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: 0.9, side: THREE.DoubleSide });
-  const dark = new THREE.MeshStandardMaterial({ color: timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: 0.9, side: THREE.DoubleSide });
+  const deck = new THREE.MeshStandardMaterial({ color: timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: 0.9 });
   const rail = new THREE.MeshStandardMaterial({ color: 0x6c7278, flatShading: true, roughness: 0.6, metalness: 0.3 });
   const top: number[] = [];
   const under: number[] = [];
-  const quad = (out: number[], a: P3, b: P3, c: P3, d: P3) => out.push(...a, ...b, ...c, ...a, ...c, ...d);
+  // Each face wound to face `facing` (one-sided, so the shadow pass draws only the far side and the deck doesn't shadow itself into a moire).
+  const quad = (out: number[], a: P3, b: P3, c: P3, d: P3, facing: P3) => {
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    if (n[0] * facing[0] + n[1] * facing[1] + n[2] * facing[2] >= 0) out.push(...a, ...b, ...c, ...a, ...c, ...d);
+    else out.push(...a, ...d, ...c, ...a, ...c, ...b);
+  };
+  const UP: P3 = [0, 1, 0];
+  const DOWN: P3 = [0, -1, 0];
+  const across = (s: number): P3 => [nx * (s === 0 ? -1 : 1), 0, nz * (s === 0 ? -1 : 1)];
+  // A skirt down from an outer edge into the ground, so nothing shows under it from any side.
+  const sink = (p: P3): P3 => [p[0], Math.min(p[1], field.heightAt(p[0], p[2])) - 0.5, p[2]];
+  const skirt = (a: P3, b: P3, facing: P3) => quad(under, a, b, sink(b), sink(a), facing);
   const sea = field.seaLevel;
   const groundAt = (x: number, z: number) => Math.max(field.heightAt(x, z), sea) + 0.03;
 
@@ -588,13 +601,16 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   for (let k = 0; k + 1 < all.length; k++) {
     const a = all[k];
     const b = all[k + 1];
-    quad(top, a.edge[0], b.edge[0], b.edge[1], a.edge[1]);
-    quad(under, low(a.edge[0]), low(b.edge[0]), low(b.edge[1]), low(a.edge[1]));
+    quad(top, a.edge[0], b.edge[0], b.edge[1], a.edge[1], UP);
+    quad(under, low(a.edge[0]), low(b.edge[0]), low(b.edge[1]), low(a.edge[1]), DOWN);
     for (const s of [0, 1]) {
       // The side: a fascia over the water, a solid wall down into the ground over land.
-      quad(under, a.edge[s], b.edge[s], b.foot[s], a.foot[s]);
-      // A ramp's wing, sloping from the deck's edge to the ground.
-      if (a.wing[s] !== a.edge[s] || b.wing[s] !== b.edge[s]) quad(top, a.edge[s], b.edge[s], b.wing[s], a.wing[s]);
+      quad(under, a.edge[s], b.edge[s], b.foot[s], a.foot[s], across(s));
+      // A ramp's wing, sloping from the deck's edge to the ground, skirted down into it at its outer edge.
+      if (a.wing[s] !== a.edge[s] || b.wing[s] !== b.edge[s]) {
+        quad(top, a.edge[s], b.edge[s], b.wing[s], a.wing[s], UP);
+        skirt(a.wing[s], b.wing[s], across(s));
+      }
     }
     // Railings along the railed stretch.
     const tm = (a.t + b.t) / 2;
@@ -625,14 +641,20 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
     [all[0], -1],
     [all[all.length - 1], 1],
   ] as const) {
-    quad(under, end.edge[0], end.edge[1], end.foot[1], end.foot[0]);
+    const forward: P3 = [ux * out, 0, uz * out];
+    quad(under, end.edge[0], end.edge[1], end.foot[1], end.foot[0], forward);
     const line: P3[] = [end.wing[0], end.edge[0], end.edge[1], end.wing[1]];
     const ahead = line.map((p): P3 => {
       const x = p[0] + ux * out * APRON;
       const z = p[2] + uz * out * APRON;
       return [x, Math.min(p[1], groundAt(x, z)), z];
     });
-    for (let k = 0; k + 1 < line.length; k++) quad(top, line[k], line[k + 1], ahead[k + 1], ahead[k]);
+    for (let k = 0; k + 1 < line.length; k++) {
+      quad(top, line[k], line[k + 1], ahead[k + 1], ahead[k], UP);
+      skirt(ahead[k], ahead[k + 1], forward);
+    }
+    skirt(line[0], ahead[0], across(0));
+    skirt(line[3], ahead[3], across(1));
   }
   for (const [positions, material] of [
     [top, deck],
