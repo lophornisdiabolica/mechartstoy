@@ -9,7 +9,7 @@ import * as D from '../core/dmath';
  * Frost (Rime). Cryo weapons, and the cold that Rime's Glacier walker and
  * cold tower give off, lay frost on the ground: it goes white, and enemies
  * of whoever froze it slow right down while they're on it (water freezes
- * over too, so boats crawl). Frost thaws on its own after a while, and
+ * over too, so boats crawl). Frost thaws on its own after a while (slowly: a canister's patch lasts about fifteen seconds), and
  * fire (Firestorm's burning ground) melts it at once. Shard guns hit
  * harder on anything standing on frost: frozen things shatter (see
  * WeaponDef.shatter).
@@ -29,7 +29,7 @@ export const FROZEN = 0.3;
 /** Most frost a patch can hold: seconds of thaw, about. */
 const MAX_FROST = 14;
 /** Frost lost per second as it thaws on its own. */
-const THAW = 1;
+const THAW = 0.4;
 /** Speed on fully frozen ground, as a share of the usual; it eases from 1 at FROZEN. */
 export const ICE_PACE = 0.5;
 /** Frost at which a patch slows as much as it ever will. */

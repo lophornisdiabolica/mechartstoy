@@ -274,7 +274,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'rime',
     name: 'Rime',
     blurb: 'Frost. Cryo troopers and freezer trucks lay frost that slows its enemies right down (water freezes too, so boats crawl), and shard tanks shatter whatever stands on it. Fire melts the frost. Its cryo plant keeps the ground round the base frozen. Super unit: the Glacier, a walker that freezes the ground it walks on.',
-    caps: { infantry: 1.1, vehicle: 1.1 },
+    caps: { infantry: 0.9, vehicle: 1.35 },
     production: {
       barracks: {
         table: [

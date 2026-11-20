@@ -121,7 +121,7 @@ describe('Rime: frost', () => {
     run(game, 0.2);
     expect(game.ctx.frost.at(base.x, base.z)).toBeGreaterThan(2);
     expect(game.ctx.frost.at(base.x + 10, base.z)).toBe(0);
-    run(game, 4);
+    run(game, 9);
     expect(game.ctx.frost.at(base.x, base.z)).toBe(0);
   });
 
@@ -129,7 +129,9 @@ describe('Rime: frost', () => {
     const hurt = (frozen: boolean) => {
       const game = emptyGame();
       const base = game.field.baseSites[0];
-      standing(game, UNIT_DEFS.shardTank, 0, base.x, base.z);
+      // Without the light frost its own shells lay, so only the frost laid here counts.
+      const def = { ...UNIT_DEFS.shardTank, weapon: { ...UNIT_DEFS.shardTank.weapon, frost: undefined } };
+      standing(game, def, 0, base.x, base.z);
       const enemy = dummy(game, UNIT_DEFS.tank, 1, base.x + 10, base.z);
       let shattered = 0;
       game.events.on('shatter', () => shattered++);

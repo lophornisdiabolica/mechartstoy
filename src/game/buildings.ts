@@ -347,7 +347,7 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.2,
     production: { table: [{ unit: 'shardTank', weight: 1, count: 1 }, { unit: 'freezerTruck', weight: 1, count: 1 }], interval: 32 },
-    chill: { radius: 12, rate: 2.2 },
+    chill: { radius: 12, rate: 1 },
     rebuildDelay: 40,
     buildTime: 10,
   },

@@ -392,7 +392,8 @@ battle, its exact map via `seed`).
     and a **cryo plant** that keeps the ground round the base frozen.
     Frost turns the ground white and slows enemies of whoever laid it to
     as little as half speed, on water too; it thaws on its own and fire
-    melts it at once. Shard guns do 1.8× to anything standing on frost.
+    melts it at once. Shard guns frost a little of what they hit, and do
+    1.8× to anything standing on frost, so follow-up shots shatter it.
     Its engineers throw ice bridges: quicker to put up, more of them, but
     they melt away sooner and flame melts them fast. Super unit: the
     Glacier, a walker that freezes the ground round it.
