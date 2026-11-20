@@ -351,6 +351,19 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
+  // Sabre: a hall that turns out duelists in packs.
+  duelHall: {
+    id: 'duelHall',
+    name: 'Duel Hall',
+    model: 'bld:duelHall',
+    hp: 800,
+    armor: 7,
+    radius: 2.6,
+    height: 3.2,
+    production: { table: [{ unit: 'duelist', weight: 1, count: 4 }], interval: 30 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

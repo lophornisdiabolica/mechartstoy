@@ -305,8 +305,8 @@ battle, its exact map via `seed`).
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
-  Ember Firestorm; Aegis and Rime have no slot of their own, and wear
-  Verdant Protectorate and Frost Dominion colours). Every doctrine fields rifle squads with AT troopers,
+  Ember Firestorm; Aegis, Rime and Sabre have no slot of their own, and wear
+  Verdant Protectorate, Frost Dominion and Onyx Order colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -397,6 +397,16 @@ battle, its exact map via `seed`).
     Its engineers throw ice bridges: quicker to put up, more of them, but
     they melt away sooner and flame melts them fast. Super unit: the
     Glacier, a walker that freezes the ground round it.
+  - *Sabre:* melee mechs. Small squads of riflemen (0.55× infantry cap)
+    and many more mechs: **duelists**, quick little blade striders that
+    each take half a vehicle slot, come from the factory and from its
+    **duel hall** in fours; **breakers**, heavy rams that take one and a
+    half, smash their way into tanks. Every mech fights hand to hand with
+    its main weapon but carries a gun on a mount of its own (duelists a
+    head gun, breakers a shoulder cannon), so it isn't helpless across a
+    river or at a crossing it can't reach. Super unit: the Colossus, a
+    giant whose hammer fists sweep everything round it and whose rocket
+    rack reaches aircraft.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
@@ -413,7 +423,10 @@ battle, its exact map via `seed`).
   overhead. Shot-down aircraft fall out of the sky.
 - **Unit caps:** each side has a cap per category: infantry, vehicles,
   aircraft and super units (the Titan and the other doctrines' super units), leaned by
-  the side's doctrine. A full category stops its own production but not
+  the side's doctrine. Most units take one slot; a unit can take less or
+  more (`UnitDef.capCost`: a duelist takes half, a breaker one and a half),
+  still out of the one shared vehicle pool, so the survivors of a long
+  battle still drift towards its stronger units. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
   mech bay, and losing one is a real setback: the bay starts the next from
   scratch, a full build time away, whatever it had done while capped. The super cap can grow during a battle, with the tide ramp (up
@@ -655,7 +668,7 @@ group just past its sight, and the strength to take it, goes for it as a
 squad, at a run, rather than waiting for it to walk into reach. The
 `struck` event draws the blow: the body jabs forward, the model swings
 (`rig.strike`), sparks fly the way it swung and a stomp kicks up dust.
-No doctrine uses either yet.
+Sabre's mechs use both.
 
 ### Changing the map mid-battle
 
@@ -753,7 +766,7 @@ outposts and the light scenery are still placed once, at the start.
   `recordSquad` when raised) get missing soldiers back one at a time,
   appearing beside the squad.
 - **Unit caps** (`game/caps.ts`). Every unit has a `category` (infantry,
-  vehicle, super) and counts against that cap; ask `canBuild` before
+  vehicle, super) and counts `capCost(def)` (default 1) against that cap; ask `canBuild` before
   producing one, which also checks the super unit's outpost gate (if on). Caps are
   scaled by side strength like production. Outpost guards don't count.
 - **Settings.** Tuning the player can change lives in `BattleSettings`

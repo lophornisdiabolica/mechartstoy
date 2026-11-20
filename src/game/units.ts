@@ -144,6 +144,12 @@ export interface UnitDef {
   class: UnitClass;
   /** Which unit cap it counts against. */
   category: UnitCategory;
+  /**
+   * How much of that cap one takes (1 by default): a little mech that counts
+   * as half a slot lets a doctrine field twice as many in the same cap, while
+   * the cap stays one pool shared by every type in the category.
+   */
+  capCost?: number;
   /** How it gets around (see moveClasses.ts). */
   move: MoveClass;
   role: Role;
@@ -1515,6 +1521,76 @@ export const UNIT_DEFS = {
     weapon: weapon({ name: 'Shard cannons', range: 18, damage: 44, cooldown: 4, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3, shatter: 1.8, frost: 2 }),
     // The cold rolls off it: everything round it walks on ice.
     chill: { radius: 7, rate: 1.2 },
+    wreckTime: 35,
+    siege: true,
+  },
+  // Sabre: blade mechs. Each fights hand to hand with its main weapon and carries a gun
+  // on a mount of its own, so it isn't helpless across a river or a tight crossing.
+  duelist: {
+    id: 'duelist',
+    name: 'Duelist',
+    class: 'mech',
+    category: 'vehicle',
+    // Little mechs: two to a vehicle slot, so Sabre fields packs of them instead of rifle squads.
+    capCost: 0.5,
+    move: 'walker',
+    role: 'frontline',
+    model: 'duelist',
+    hp: 80,
+    armor: 2,
+    speed: 3.9,
+    turnRate: 3.4,
+    radius: 0.7,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 5,
+    weapon: weapon({ name: 'Arm blade', range: 0.6, damage: 16, cooldown: 1.1, projectile: 'shell', speed: 1, muzzleHeight: 1.4, melee: { style: 'swing', lunge: 1, knock: 0.4, sweep: 0.9, sweepMost: 2, charge: 1.5 } }),
+    mounts: [{ weapon: weapon({ name: 'Head gun', range: 10, damage: 4, cooldown: 1.3, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.8, targets: 'both' }), mount: 'duelist#gun', turnRate: 5 }],
+    wreckTime: 15,
+    siege: false,
+  },
+  breaker: {
+    id: 'breaker',
+    name: 'Breaker',
+    class: 'mech',
+    category: 'vehicle',
+    capCost: 1.5,
+    move: 'walker',
+    role: 'frontline',
+    model: 'breaker',
+    hp: 340,
+    armor: 9,
+    speed: 2.5,
+    turnRate: 1.7,
+    radius: 1.3,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 1.8,
+    // Rams its spiked arms into a tank or a wall, and throws what it hits back.
+    weapon: weapon({ name: 'Ram spikes', range: 0.7, damage: 62, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 2.2, pierce: 0.4, melee: { style: 'thrust', lunge: 2, knock: 1.6, charge: 1.4 } }),
+    mounts: [{ weapon: weapon({ name: 'Shoulder cannon', range: 14, damage: 28, cooldown: 3.2, projectile: 'shell', speed: 34, splash: 1, spread: 0.05, muzzleHeight: 3.3 }), mount: 'breaker#cannon', turnRate: 1.8 }],
+    wreckTime: 25,
+    siege: false,
+  },
+  colossus: {
+    id: 'colossus',
+    name: 'Colossus',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'colossus',
+    hp: 1250,
+    armor: 20,
+    speed: 1.4,
+    turnRate: 0.9,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.1,
+    // Hammers down round itself: everything close goes flying.
+    weapon: weapon({ name: 'Hammer fists', range: 1.2, damage: 95, cooldown: 2.6, projectile: 'shell', speed: 1, muzzleHeight: 3.5, pierce: 0.3, melee: { style: 'stomp', lunge: 1.5, knock: 2.2, sweep: 3.14, sweepMost: 7, charge: 1.3 } }),
+    mounts: [{ weapon: weapon({ name: 'Rocket rack', range: 18, damage: 30, cooldown: 4.5, burst: 4, burstGap: 0.15, projectile: 'missile', speed: 24, splash: 1.2, spread: 0.08, muzzleHeight: 5.2, targets: 'both' }), mount: 'colossus#rockets', turnRate: 1.4 }],
     wreckTime: 35,
     siege: true,
   },

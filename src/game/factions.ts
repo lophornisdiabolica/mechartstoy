@@ -28,6 +28,7 @@ export const FACTIONS: readonly FactionDef[] = [
   // (see variety.ts), but a battle still has at most eight slots.
   { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
   { id: 9, name: 'Frost Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
+  { id: 10, name: 'Onyx Order', primary: 0x3b3f46, secondary: 0xd8b45a },
 ];
 
 /** Most sides a battle can have. */
