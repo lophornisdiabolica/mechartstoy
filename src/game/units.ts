@@ -1667,7 +1667,7 @@ export const UNIT_DEFS = {
     turretTurnRate: 2.6,
     weapon: weapon({ name: 'Twin guns', range: 13, damage: 9, cooldown: 1.4, burst: 2, burstGap: 0.15, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.06, muzzleHeight: 1.7 }),
     // Static off its mast: enemy guns round it reload slowly.
-    jam: { radius: 9, pace: 0.55 },
+    jam: { radius: 9, pace: 0.65 },
     wreckTime: 15,
     siege: false,
   },
@@ -1689,8 +1689,8 @@ export const UNIT_DEFS = {
     turretTurnRate: 1.1,
     weapon: weapon({ name: 'Twin cannons', range: 18, damage: 46, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
     // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
-    mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 4.5, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 9 }), mount: 'overmind#array', turnRate: 2 }],
-    jam: { radius: 13, pace: 0.5 },
+    mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
+    jam: { radius: 10, pace: 0.6 },
     wreckTime: 35,
     siege: true,
   },
