@@ -2,12 +2,13 @@ import { Entity, System, World } from '../core/ecs';
 import { Rng } from '../core/rng';
 import { OutpostKind, OutpostSite } from '../world/battlefield';
 import { BuildingDef, BuildingId } from './buildings';
-import { Armed, Building, Construction, Faction, GARRISON, Garrison, Guard, Health, OutpostPart, Producer, Rubble, Targetable, Transform, Unit } from './components';
+import { Building, Construction, Faction, GARRISON, Garrison, Guard, Health, OutpostPart, Producer, Rubble, Targetable, Transform, Unit } from './components';
 import { productionFor } from './doctrines';
 import { SimContext } from './context';
 import { spawnSpot } from './systems/production';
 import { spawnBuilding, spawnUnit } from './spawn';
 import * as D from '../core/dmath';
+import { forEachArm } from './arsenal';
 
 /**
  * Outposts: small forts in no-man's land that any side can capture. Each
@@ -234,8 +235,7 @@ export function capture(world: World, ctx: SimContext, o: Outpost, faction: numb
     if (rubble) rubble.faction = faction;
     const f = world.get(e, Faction);
     if (f) f.id = faction;
-    const armed = world.get(e, Armed);
-    if (armed) armed.target = null;
+    forEachArm(world, e, (armed) => (armed.target = null));
     salvageFor(world, ctx, e, o);
   }
   ctx.events.emit('outpostCaptured', { outpost: o.index, faction, previous, x: o.x, z: o.z });

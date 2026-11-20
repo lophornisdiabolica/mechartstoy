@@ -140,6 +140,11 @@ export class BattleAudio {
     this.unsubscribe = [];
     on('fired', (e) => this.fired(e));
     on('impact', (e) => this.impact(e));
+    // A melee blow: a dull thud, heavier for a stomp or a sweep that caught several.
+    on('struck', (e) => {
+      this.activity.add(STIR.shell * 0.5);
+      this.cue('thud', 'cannons', e.x, e.z, e.style === 'stomp' || e.hits > 1 ? 1 : 0.75);
+    });
     on('unitDestroyed', (e) => {
       if (e.def.category === 'infantry') return;
       const big = e.def.radius >= 1.6;

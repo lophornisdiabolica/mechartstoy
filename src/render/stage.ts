@@ -192,7 +192,7 @@ export class Stage {
     this.stopProps = props.userData.dispose;
     battle.add(terrain, props, woods);
     const roadTops = terrain.userData.roadTops as RoadTops;
-    this.entities = new EntityView(game.world, (x, z) => field.surfaceAt(x, z), (x, z) => field.deckAt(x, z), (x, z) => roadTops.at(x, z));
+    this.entities = new EntityView(game.world, (x, z) => field.surfaceAt(x, z), (x, z) => field.deckAt(x, z), (x, z) => roadTops.at(x, z), game.events);
     this.effects = new Effects(game.events, field);
     this.godEffects = new GodEffects(game, this.effects);
     this.godCursor.attach(field);

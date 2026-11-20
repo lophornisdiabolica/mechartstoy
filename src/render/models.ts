@@ -3,6 +3,7 @@ import { GARRISON } from '../game/components';
 import type { Rng } from '../core/rng';
 import { FACTIONS, FactionDef } from '../game/factions';
 import { mountOf } from '../game/mounts';
+import type { MeleeDef } from '../game/units';
 
 /**
  * Model registry: maps a Renderable.model key to a factory that builds a
@@ -32,6 +33,18 @@ export interface ModelRig {
   barrels?: THREE.Object3D[];
   /** Empty markers at each muzzle in the mount's order, for tests and tools. */
   muzzles?: THREE.Object3D[];
+  /**
+   * Weapons on mounts of their own (see UnitDef.mounts), in the same order:
+   * each one's turret, turned to its own aim, and barrels, pitched to its
+   * own elevation, as for the main weapon above.
+   */
+  mounts?: { turret?: THREE.Object3D; barrels?: THREE.Object3D[] }[];
+  /**
+   * Melee units (see MeleeDef): pose a blow `k` of the way through, 0 to 1
+   * (the swing of an arm, a claw's snap, a ram's jolt). Called every frame
+   * while one is under way, and with 1 when it's over.
+   */
+  strike?(k: number, style: MeleeDef['style']): void;
   /** Orient the whole model along its velocity (projectiles). Build these facing +z. */
   faceVelocity?: boolean;
   /** Aircraft: lean into turns, this many radians of roll per radian a second of turning (planes most). */

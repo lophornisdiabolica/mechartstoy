@@ -1,6 +1,6 @@
 import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Ai, Ammo, Armed, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
+import { Ai, Ammo, Armed, Arsenal, Building, Collider, Construction, Faction, Health, Mover, Targetable, Transform, Unit } from '../components';
 import { damageThrough } from './projectiles';
 import { aimPoint, clearShot, elevationFor, mountFor, Point3, weaponMuzzle } from '../lineOfFire';
 import { pivotHeight } from '../mounts';
@@ -39,6 +39,9 @@ export function canHit(world: World, armed: Armed, target: Entity): boolean {
  * nothing extra; the low side just can't reach as far as the high side.
  */
 export function effectiveRange(world: World, e: Entity, armed: Armed, target: Entity): number {
+  // A melee weapon reaches from the striker's edge, and a lunge carries it further (see MeleeDef).
+  const melee = armed.weapon.melee;
+  if (melee) return armed.weapon.range + (world.get(e, Collider)?.radius ?? 0) + (melee.lunge ?? 0);
   const dh = world.req(e, Transform).y - world.req(target, Transform).y;
   return armed.weapon.range * (1 + Math.max(0, Math.min(HEIGHT_RANGE_MAX, dh * HEIGHT_RANGE_PER_UNIT)));
 }
@@ -73,7 +76,7 @@ function muzzleToward(world: World, ctx: SimContext, e: Entity, armed: Armed, ta
   const t = world.req(e, Transform);
   const tt = world.req(target, Transform);
   const aim = D.atan2(-(tt.z - t.z), tt.x - t.x);
-  const mount = mountFor(world, e);
+  const mount = mountFor(world, e, armed);
   const pitch = mount ? elevationFor(world, e, mount, armed, aim, target) : null;
   if (pitch && !pitch.reach) return null;
   return weaponMuzzle(world, e, armed, aim, pitch?.elev ?? armed.elev, armed.shot, ctx);
@@ -122,7 +125,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   armed.blocked = false;
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.score - b.score || a.e - b.e);
-  if (armed.weapon.arc || armed.weapon.projectile === 'flame') return candidates[0].e;
+  // Lobbed shots go over cover, flame licks round it, and a blow lands on whatever it's touching.
+  if (armed.weapon.arc || armed.weapon.projectile === 'flame' || armed.weapon.melee) return candidates[0].e;
   for (const c of candidates.slice(0, SIGHT_CHECKS)) {
     const muzzle = muzzleToward(world, ctx, e, armed, c.e);
     if (muzzle && clearShot(world, ctx, muzzle, c.e, e, faction)) return c.e;
@@ -152,7 +156,7 @@ export function firingSpot(world: World, ctx: SimContext, e: Entity, armed: Arme
   const dist = D.hypot(t.x - tt.x, t.z - tt.z);
   const ring = Math.max(armed.weapon.minRange + 1, Math.min(dist, armed.weapon.range * 0.7));
   const base = D.atan2(t.z - tt.z, t.x - tt.x);
-  const mount = mountFor(world, e);
+  const mount = mountFor(world, e, armed);
   for (const da of SPOT_ANGLES) {
     const a = base + da;
     const x = tt.x + D.cos(a) * ring;
@@ -211,26 +215,37 @@ export function targetingSystem(ctx: SimContext): System {
       const spotting = spotters(world, ctx);
       for (const e of world.query(Armed, Transform, Faction)) {
         if (world.has(e, Construction)) continue;
-        const armed = world.req(e, Armed);
-        // A dead target triggers an immediate re-think; otherwise re-think on a timer.
-        if (armed.target !== null && !world.has(armed.target, Targetable)) {
-          armed.target = null;
-          armed.nextTargetAt = world.time;
-        }
-        if (world.time < armed.nextTargetAt) continue;
-        armed.nextTargetAt = world.time + RETARGET_INTERVAL;
-        // Flying home to rearm: nothing to shoot with (see Ammo).
-        if (world.get(e, Ammo)?.rearming && armed.burstLeft === 0) {
-          armed.target = null;
-          continue;
-        }
-        armed.target = findTarget(world, ctx, e, armed, spotting);
-        const spot = armed.blocked && armed.target !== null ? firingSpot(world, ctx, e, armed, armed.target) : null;
-        armed.spotX = spot?.x ?? null;
-        armed.spotZ = spot?.z ?? null;
+        retarget(world, ctx, e, world.req(e, Armed), spotting, true);
+        const arsenal = world.get(e, Arsenal);
+        if (arsenal) for (const armed of arsenal.arms) retarget(world, ctx, e, armed, spotting, false);
       }
     },
   };
+}
+
+/**
+ * One weapon's think: drop a dead target at once, otherwise pick again on
+ * a timer. Only the main weapon looks for a firing spot, since only it
+ * moves the unit; a weapon on a mount of its own just takes the best target
+ * it has from wherever the unit is.
+ */
+function retarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spotting: Spotter[], main: boolean): void {
+  // A dead target triggers an immediate re-think; otherwise re-think on a timer.
+  if (armed.target !== null && !world.has(armed.target, Targetable)) {
+    armed.target = null;
+    armed.nextTargetAt = world.time;
+  }
+  if (world.time < armed.nextTargetAt) return;
+  armed.nextTargetAt = world.time + RETARGET_INTERVAL;
+  // Flying home to rearm: nothing to shoot with (see Ammo).
+  if (world.get(e, Ammo)?.rearming && armed.burstLeft === 0) {
+    armed.target = null;
+    return;
+  }
+  armed.target = findTarget(world, ctx, e, armed, spotting);
+  const spot = main && armed.blocked && armed.target !== null ? firingSpot(world, ctx, e, armed, armed.target) : null;
+  armed.spotX = spot?.x ?? null;
+  armed.spotZ = spot?.z ?? null;
 }
 
 /** Edge-to-edge distance from an entity to its target, so big buildings count as in range sooner. */

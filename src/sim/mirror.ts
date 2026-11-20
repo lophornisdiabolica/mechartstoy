@@ -1,5 +1,5 @@
 import { ComponentType, Entity } from '../core/ecs';
-import { Armed, Building, Tilt, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
+import { Armed, Arsenal, Building, Tilt, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
 import { GameEvents } from '../game/context';
 import { Command, Game, SIM_HZ } from '../game/game';
 import { BattleSettings } from '../game/settings';
@@ -34,7 +34,7 @@ import { GodState } from '../game/god';
  * change to show (Health.lastHit is replaced on every hit). Transform is
  * packed separately.
  */
-const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer];
+const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer, Arsenal];
 /**
  * Numbers per entity in a Pose: id, x, y, z, heading, Armed.aim and
  * Armed.elev (NaN if unarmed), and Tilt.pitch and Tilt.roll (NaN for what
@@ -46,12 +46,19 @@ const P_FIELDS = 9;
 export interface Pose {
   time: number;
   data: Float64Array;
+  /**
+   * The aim of weapons on mounts of their own (see Arsenal), which turn on
+   * their own: entity, the weapon's place in its Arsenal, aim and elev,
+   * for each. Null when nothing on the field has any.
+   */
+  arms: Float64Array | null;
 }
 
 const EVENT_TYPES: Record<keyof GameEvents, true> = {
   spawned: true,
   fired: true,
   impact: true,
+  struck: true,
   unitDestroyed: true,
   damaged: true,
   buildingDamaged: true,
@@ -322,7 +329,16 @@ export class SimHost {
       data[n + 8] = tilt?.roll ?? NaN;
       n += P_FIELDS;
     }
-    return { time: world.time, data: n === data.length ? data : data.subarray(0, n) };
+    let arms: Float64Array | null = null;
+    const armed = world.count(Arsenal);
+    if (armed > 0) {
+      const out: number[] = [];
+      for (const e of world.query(Arsenal)) {
+        world.req(e, Arsenal).arms.forEach((a, k) => out.push(e, k, a.aim, a.elev));
+      }
+      arms = Float64Array.from(out);
+    }
+    return { time: world.time, data: n === data.length ? data : data.subarray(0, n), arms };
   }
 
   command(c: Command): void {
@@ -652,6 +668,23 @@ export class SimView {
         tilt.roll = d[k2 + 8];
       }
     }
+    if (b.arms) poseArms(world, a.arms, b.arms, alpha);
     return alpha;
+  }
+}
+
+/** Turn weapons on mounts of their own (see Pose.arms) to their aim between two ticks. */
+function poseArms(world: Game['world'], a: Float64Array | null, b: Float64Array, alpha: number): void {
+  const from = new Map<number, number>();
+  if (a) for (let k = 0; k < a.length; k += 4) from.set(a[k] * 64 + a[k + 1], k);
+  for (let k = 0; k < b.length; k += 4) {
+    const arsenal = world.get(b[k], Arsenal);
+    const armed = arsenal?.arms[b[k + 1]];
+    if (!armed) continue;
+    const ka = from.get(b[k] * 64 + b[k + 1]);
+    const aim = b[k + 2];
+    const elev = b[k + 3];
+    armed.aim = ka !== undefined ? a![ka + 2] + wrapAngle(aim - a![ka + 2]) * alpha : aim;
+    armed.elev = ka !== undefined ? a![ka + 3] + (elev - a![ka + 3]) * alpha : elev;
   }
 }

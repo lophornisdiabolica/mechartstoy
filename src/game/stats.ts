@@ -3,6 +3,7 @@ import { World } from '../core/ecs';
 import { Armed, Faction, GOD, Guard, isTownFaction, NEUTRAL, Unit } from './components';
 import { GameEvents } from './context';
 import { strengthOf } from './offensive';
+import { engaged, forEachArm, weaponsOf } from './arsenal';
 
 /** One unit (or building) type's tally on one side. */
 export interface TypeStats {
@@ -91,7 +92,7 @@ export class BattleStats {
         this.sides[k.faction].kills++;
         this.credit(k.faction, k.source);
         const by = this.sides[k.faction].strengthBy;
-        by[k.source] = (by[k.source] ?? 0) + strengthOf(e.def.hp, e.def.armor, e.def.weapon);
+        by[k.source] = (by[k.source] ?? 0) + strengthOf(e.def.hp, e.def.armor, e.def.mounts ? weaponsOf(e.def) : e.def.weapon);
         const t = this.type(k.faction, k.source);
         t.kills++;
         bump(t.victims, e.def.id);
@@ -136,8 +137,8 @@ export class BattleStats {
       t.alive += seconds;
       const armed = world.get(e, Armed);
       if (!armed) continue;
-      if (armed.target !== null) t.engaged += seconds;
-      if (world.time - armed.firedAt <= armed.weapon.cooldown + FIRING_SLACK) t.firing += seconds;
+      if (engaged(world, e)) t.engaged += seconds;
+      if (firing(world, e)) t.firing += seconds;
     }
   }
 
@@ -163,6 +164,15 @@ export class BattleStats {
     const types = this.sides[faction].types;
     return (types[id] ??= { built: 0, lost: 0, kills: 0, razed: 0, victims: {}, killers: {}, dealt: 0, taken: 0, dealtTo: {}, alive: 0, engaged: 0, firing: 0 });
   }
+}
+
+/** Whether any of a unit's weapons is firing: it fired no longer ago than its cooldown (and FIRING_SLACK). */
+function firing(world: World, e: number): boolean {
+  let yes = false;
+  forEachArm(world, e, (a) => {
+    if (world.time - a.firedAt <= a.weapon.cooldown + FIRING_SLACK) yes = true;
+  });
+  return yes;
 }
 
 /** A unit counts as firing until this long after its weapon is ready again: one missed beat isn't a pause. */

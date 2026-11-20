@@ -1,4 +1,4 @@
-import { UnitId, WeaponDef } from './units';
+import { UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -33,6 +33,8 @@ export interface BuildingDef {
   };
   /** Defensive weapon, aimed by a turret. */
   weapon?: WeaponDef;
+  /** More weapons on mounts of their own, each with its own target and cooldown (see WeaponMountDef). */
+  mounts?: WeaponMountDef[];
   sight?: number;
   turretTurnRate?: number;
   /**

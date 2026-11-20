@@ -119,6 +119,8 @@ export interface Mover {
   cruise?: boolean;
   loiterX?: number;
   loiterZ?: number;
+  /** A melee unit charging what it's closing on (see MeleeDef.charge): its speed multiplier for now. */
+  surge?: number;
 }
 export const Mover = defineComponent<Mover>('Mover');
 
@@ -298,8 +300,25 @@ export interface Armed {
   firedAt: number;
   /** The side of what it last fired at (null if it never has), so a Commander knows whose guns are shelling it (see commander/hunts.ts). */
   firedOn: number | null;
+  /**
+   * The mount it's on (a key in MOUNTS, see mounts.ts), for a weapon on a
+   * mount of its own (see Arsenal); without one, the model's own mount.
+   */
+  mount?: string;
 }
 export const Armed = defineComponent<Armed>('Armed');
+
+/**
+ * A unit's (or building's) weapons beyond its main one (Armed), each on a
+ * mount of its own with its own target, aim and cooldown (see
+ * UnitDef.mounts). The main weapon steers the unit; these just fight with
+ * whatever it brings them near. See arsenal.ts for going over all of a
+ * unit's weapons at once.
+ */
+export interface Arsenal {
+  arms: Armed[];
+}
+export const Arsenal = defineComponent<Arsenal>('Arsenal');
 
 /** Battlefield AI: chase targets in sight, otherwise attack or hold depending on the tide. */
 export interface Ai {

@@ -198,6 +198,7 @@ export class Effects {
 
     events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.climb ?? 0, e.kind));
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
+    events.on('struck', (e) => this.blow(e));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
     events.on('buildingDamaged', (e) => {
       this.burners.push({ entity: e.entity, x: e.x, y: e.y + e.def.radius * 0.8, z: e.z, size: e.def.radius * 0.7, until: Infinity, nextPuff: 0 });
@@ -276,6 +277,27 @@ export class Effects {
           this.flashes.spawn({ x, y: this.groundAt(x, z, y) + 0.4, z, vy: rand(1, 2.5), life: rand(0.6, 1.2), size: 0.18, endSize: 0.04, color: 0xb8f090, endColor: 0x000000 });
         }
         break;
+    }
+  }
+
+  /**
+   * A melee blow landing (see the 'struck' event): sparks thrown off the
+   * way it swung (across for a swing, on through for a thrust), and a stomp
+   * kicks up a ring of dust where it comes down.
+   */
+  private blow(e: GameEvents['struck']): void {
+    const n = 5 + Math.min(6, e.hits * 2);
+    for (let i = 0; i < n; i++) {
+      // Across the striker's facing for a swing, along it for a thrust.
+      const across = e.style === 'swing' ? (Math.random() < 0.5 ? 1 : -1) * Math.PI * 0.5 : 0;
+      const a = e.heading + across + rand(-0.6, 0.6);
+      const sp = rand(1.5, 4);
+      this.flashes.spawn({ x: e.x, y: e.y, z: e.z, vx: Math.cos(a) * sp, vy: rand(0.5, 2.5), vz: -Math.sin(a) * sp, life: rand(0.12, 0.3), size: 0.14, endSize: 0.03, color: 0xfff4c0, endColor: 0xff8a30 });
+    }
+    if (e.style === 'stomp') {
+      const y = this.groundAt(e.x, e.z, e.y);
+      this.shocks.spawn({ x: e.x, y: y + 0.1, z: e.z, life: 0.35, size: 0.5, endSize: 3, color: 0x9a8a70, endColor: 0x000000 });
+      this.dust(e.x, y, e.z, 1.5, 6);
     }
   }
 
