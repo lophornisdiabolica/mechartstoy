@@ -1,4 +1,4 @@
-import { ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
+import { JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -39,6 +39,8 @@ export interface BuildingDef {
   shield?: ShieldDef;
   /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
   chill?: { radius: number; rate: number };
+  /** Jams the enemy weapons round it (Cipher; see JamDef and hacking.ts). */
+  jam?: JamDef;
   sight?: number;
   turretTurnRate?: number;
   /**
@@ -112,6 +114,25 @@ const towerCannon: WeaponDef = {
   targets: 'both',
   heavy: towerShell,
   heavyAt: 6,
+};
+
+/** Cipher's uplink mast: turns enemy vehicles that come near the base (see hacking.ts). */
+const hackUplink: WeaponDef = {
+  name: 'Mast uplink',
+  range: 18,
+  minRange: 0,
+  damage: 0,
+  cooldown: 6,
+  burst: 1,
+  burstGap: 0,
+  projectile: 'hack',
+  speed: 45,
+  splash: 0,
+  spread: 0,
+  arc: false,
+  muzzleHeight: 4.2,
+  targets: 'ground',
+  hack: 8,
 };
 
 /** The hilltop gun: a big, slow artillery piece that lobs shells over whatever's in the way. */
@@ -361,6 +382,23 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.2,
     production: { table: [{ unit: 'duelist', weight: 1, count: 4 }], interval: 30 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Cipher: turns out hack trucks and jammers, and its own uplink turns enemy vehicles that come at the base.
+  uplinkMast: {
+    id: 'uplinkMast',
+    name: 'Uplink Mast',
+    model: 'bld:uplinkMast',
+    hp: 750,
+    armor: 7,
+    radius: 2.4,
+    height: 4.5,
+    production: { table: [{ unit: 'hackTruck', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }], interval: 34 },
+    weapon: hackUplink,
+    sight: 18,
+    turretTurnRate: 2,
+    jam: { radius: 11, pace: 0.6 },
     rebuildDelay: 40,
     buildTime: 10,
   },

@@ -43,6 +43,7 @@ import { Divine, godSystem, Power, powerSpot } from './god';
 import { FireField, fireSystem } from './fire';
 import { Domes, shieldSystem } from './shields';
 import { FrostField, frostSystem } from './frost';
+import { hackSystem } from './hacking';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -170,6 +171,7 @@ export class Game {
       projectileSystem(ctx),
       fireSystem(ctx),
       frostSystem(ctx),
+      hackSystem(ctx),
       deathSystem(ctx),
       wreckSystem(ctx),
       scrapSystem(ctx),

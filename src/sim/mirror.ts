@@ -73,6 +73,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   earthwork: true,
   hunt: true,
   span: true,
+  hacked: true,
   militia: true,
   crater: true,
   shieldHit: true,

@@ -305,6 +305,9 @@ export interface Armed {
    * mount of its own (see Arsenal); without one, the model's own mount.
    */
   mount?: string;
+  /** Jammed (Cipher; see hacking.ts) until this sim time: it reloads at `jamPace` of its usual rate. */
+  jammed?: number;
+  jamPace?: number;
 }
 export const Armed = defineComponent<Armed>('Armed');
 
@@ -350,6 +353,21 @@ export interface Ai {
   runUntil?: number;
 }
 export const Ai = defineComponent<Ai>('Ai');
+
+/**
+ * A vehicle hacked by Cipher (see hacking.ts). While `turned`, its Faction
+ * is the hacker's and its own AI is set aside in `ai`: it stands where it
+ * is and fights whatever is near it. After that it's itself again, and the
+ * component stays on until `proofUntil` so it can't be turned again at once.
+ */
+export interface Hacked {
+  home: number;
+  turned: boolean;
+  until: number;
+  proofUntil: number;
+  ai: Ai | null;
+}
+export const Hacked = defineComponent<Hacked>('Hacked');
 
 /** An energy dome over an entity (see ShieldDef and shields.ts). */
 export interface Shield {

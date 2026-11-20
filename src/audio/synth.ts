@@ -21,6 +21,7 @@ export type SoundId =
   | 'launch'
   | 'thud'
   | 'shatter'
+  | 'glitch'
   | 'shieldHit'
   | 'blast'
   | 'wreck'
@@ -448,6 +449,20 @@ const SOUNDS: Record<SoundId, Render> = {
       mix(out, envelope(sweep(n - at, rate, f, f * 0.97), rate, 0.0005, 0.05), 0.35, at);
     }
     return tail(normalize(out), rate);
+  },
+  // Cipher's hacks taking: a stuttering digital warble, chopped into steps.
+  glitch: (rate, rnd, v) => {
+    const n = Math.round(0.5 * rate);
+    const out = new Float32Array(n);
+    const step = Math.round(0.03 * rate);
+    let f = 600;
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      if (i % step === 0) f = 500 + (rnd() * 0.5 + 0.5) * (1400 + v * 60);
+      phase += (2 * Math.PI * f) / rate;
+      out[i] = Math.sign(Math.sin(phase)) * 0.5 * Math.pow(1 - i / n, 1.4) * (i % step < step * 0.8 ? 1 : 0);
+    }
+    return tail(normalize(lowpass(out, rate, 4000)), rate);
   },
   // A shot bursting on an energy dome: a soft electric ping with a fizz.
   shieldHit: (rate, rnd, v) => {

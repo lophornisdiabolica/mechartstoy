@@ -1429,3 +1429,112 @@ registerModel('colossus', (faction) => {
     },
   });
 });
+
+/** Cipher's signal glow. */
+const SIGNAL = 0x2ee6c4;
+
+// Cipher: a truck with a hacking dish on its bed and a pintle gun on the cab roof.
+registerModel('hackTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.6, 0.6], 0.46, 0.44));
+  root.add(box(1.9, 0.25, 0.86, METAL, 0, 0.5, 0));
+  root.add(box(0.6, 0.55, 0.84, primary, 0.62, 0.9, 0)); // cab
+  root.add(box(0.06, 0.25, 0.6, GLASS, 0.93, 1.0, 0));
+  root.add(box(0.7, 0.3, 0.7, secondary, -0.4, 0.77, 0)); // signal box
+  const turret = new THREE.Group();
+  turret.position.set(-0.4, 1.0, 0);
+  turret.add(cylinder(0.1, 0.12, 0.3, 6, DARK, 0, 0.15, 0));
+  const dish = barrelPivot('hackTruck', turret);
+  dish.add(cylinder(0.42, 0.08, 0.16, 10, secondary, 0.12, 0, 0).rotateZ(-Math.PI / 2));
+  const core = glowBox(0.12, 0.12, 0.12, SIGNAL);
+  core.position.set(0.3, 0, 0);
+  dish.add(core);
+  root.add(turret);
+  const gun = ownMount(root, 'hackTruck#gun', (t) => {
+    t.add(box(0.1, 0.2, 0.1, DARK, 0, 0.1, 0));
+    t.add(box(0.55, 0.08, 0.08, DARK, 0.27, 0.2, 0));
+  });
+  return setRig(root, { turret, ...mounted('hackTruck', root, turret, [dish]), mounts: [gun] });
+});
+
+// Cipher: a walker with twin guns and a jamming mast whose rings pulse.
+registerModel('jammer', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.55, 0.8, primary, 0, 0.1, 0));
+  turret.add(box(0.3, 0.2, 0.5, GLASS, 0.45, 0.22, 0));
+  for (const side of [-1, 1]) turret.add(box(0.8, 0.1, 0.1, DARK, 0.55, -0.05, side * 0.42));
+  turret.add(box(0.12, 1.1, 0.12, METAL, -0.3, 0.9, 0)); // the mast
+  const rings: THREE.Object3D[] = [];
+  for (const y of [0.75, 1.05, 1.35]) {
+    const ring = glowBox(0.36, 0.06, 0.36, SIGNAL);
+    ring.position.set(-0.3, y, 0);
+    turret.add(ring);
+    rings.push(ring);
+  }
+  turret.add(box(0.6, 0.12, 0.86, secondary, -0.05, 0.43, 0));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.78, 0.82, 0.18, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.05, side * 0.3);
+    body.add(leg.hip);
+    return leg;
+  });
+  const walk = walker(legs, body, 0.9, 0.5);
+  let t = Math.random() * 3;
+  return setRig(root, {
+    turret,
+    ...walk,
+    ...mounted('jammer', root, turret),
+    animate(state) {
+      walk.animate?.(state);
+      // The rings pulse in turn, up the mast.
+      t += state.dt;
+      rings.forEach((r, i) => r.scale.setScalar(1 + 0.25 * Math.max(0, Math.sin(t * 4 - i * 1.2))));
+    },
+  });
+});
+
+// Cipher's super unit: a heavy walker with twin cannons and a hack array on its back.
+registerModel('overmind', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.8;
+  root.add(body);
+  body.add(box(1.3, 0.5, 1.6, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.3;
+  turret.add(box(2.0, 1.2, 2.0, primary, 0, 0.6, 0));
+  turret.add(box(0.3, 0.3, 1.1, GLASS, 1.05, 0.8, 0));
+  turret.add(box(1.6, 0.25, 2.1, secondary, -0.1, 1.3, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(0.6, 0.55, 0.45, secondary, 0.2, 0.5, side * 1.2)); // arms
+    turret.add(box(1.4, 0.2, 0.2, DARK, 0.9, 0.5, side * 1.2)); // cannons
+  }
+  for (const z of [-0.6, 0.6]) {
+    const node = glowBox(0.2, 0.2, 0.2, SIGNAL);
+    node.position.set(-1.05, 0.7, z);
+    turret.add(node);
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.4, 1.4, 0.45, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.65);
+    body.add(leg.hip);
+    return leg;
+  });
+  const array = ownMount(root, 'overmind#array', (t) => {
+    t.add(cylinder(0.25, 0.3, 0.3, 8, DARK, 0, 0.1, 0));
+    t.add(cylinder(0.7, 0.15, 0.25, 12, secondary, 0.5, 0.35, 0).rotateZ(-Math.PI / 2));
+    const core = glowBox(0.18, 0.18, 0.18, SIGNAL);
+    core.position.set(0.72, 0.35, 0);
+    t.add(core);
+  });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('overmind', root, turret), mounts: [array] });
+});

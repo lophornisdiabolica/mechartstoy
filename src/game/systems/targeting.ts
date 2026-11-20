@@ -8,6 +8,7 @@ import { SimContext } from '../context';
 import type { WeaponDef } from '../units';
 import * as D from '../../core/dmath';
 import { doctrineOf } from '../doctrines';
+import { hackable } from '../hacking';
 import { UnitId } from '../units';
 
 const RETARGET_INTERVAL = 0.5;
@@ -112,6 +113,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
     if (!ctx.sides.hostile(faction, otherFaction)) return;
     if (builder && world.get(other, Unit)?.def.builds === true && (crossing || engineers.onCrossing(other))) return;
     if (!canHit(world, armed, other)) return;
+    // A hack weapon only goes for what it can turn (see hacking.ts).
+    if (armed.weapon.hack && !hackable(world, other)) return;
     const d = Math.sqrt(d2);
     if (d < armed.weapon.minRange) return;
     if (d > armed.sight) {

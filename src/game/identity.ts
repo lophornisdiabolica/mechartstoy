@@ -59,6 +59,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   aegis: ['Sanctum', 'Ward', 'Shieldwall', 'Safeguard'],
   rime: ['Hold', 'Reach', 'Throne', 'Winterguard'],
   sabre: ['Blades', 'Edge', 'Duellists', 'Fellowship'],
+  cipher: ['Network', 'Signal', 'Cell', 'Protocol'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

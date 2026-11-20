@@ -1,3 +1,4 @@
+import { reloadPace } from '../hacking';
 import { Entity, System, World } from '../../core/ecs';
 import { Ammo, Armed, Arsenal, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
@@ -147,7 +148,7 @@ export function weaponSystem(ctx: SimContext): System {
  */
 function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: number, main: boolean): void {
   const t = world.req(e, Transform);
-  armed.cooldown -= dt;
+  armed.cooldown -= dt * reloadPace(world, armed);
 
   const mount = mountFor(world, e, armed);
   const target = armed.target !== null && world.has(armed.target, Targetable) ? armed.target : null;
