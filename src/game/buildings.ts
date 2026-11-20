@@ -41,6 +41,8 @@ export interface BuildingDef {
   chill?: { radius: number; rate: number };
   /** Jams the enemy weapons round it (Cipher; see JamDef and hacking.ts). */
   jam?: JamDef;
+  /** Puffs out smoke round itself (Veil; see smoke.ts). */
+  smokes?: { radius: number; rate: number };
   sight?: number;
   turretTurnRate?: number;
   /**
@@ -399,6 +401,20 @@ export const BUILDING_DEFS = {
     sight: 18,
     turretTurnRate: 2,
     jam: { radius: 11, pace: 0.6 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Veil: turns out ghost tanks and smoke trucks, and keeps a pall of smoke over the base.
+  smokeStacks: {
+    id: 'smokeStacks',
+    name: 'Smoke Stacks',
+    model: 'bld:smokeStacks',
+    hp: 750,
+    armor: 7,
+    radius: 2.6,
+    height: 3,
+    production: { table: [{ unit: 'ghostTank', weight: 1, count: 1 }, { unit: 'smokeTruck', weight: 0.6, count: 1 }], interval: 32 },
+    smokes: { radius: 11, rate: 0.8 },
     rebuildDelay: 40,
     buildTime: 10,
   },

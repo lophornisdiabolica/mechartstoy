@@ -18,6 +18,7 @@ import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
 import { FireGround } from './fireGround';
 import { FrostGround } from './frostGround';
+import { SmokeClouds } from './smokeClouds';
 import { Domes } from './domes';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
 import { setFactionPalette } from './models';
@@ -78,6 +79,7 @@ export class Stage {
   frontLines!: FrontLines;
   private fireGround!: FireGround;
   private frostGround!: FrostGround;
+  private smokeClouds!: SmokeClouds;
   private domes!: Domes;
   /** Where a god power will land (see GodPanel). */
   readonly godCursor = new GodCursor();
@@ -175,6 +177,7 @@ export class Stage {
       this.frontLines.dispose();
       this.fireGround.dispose();
       this.frostGround.dispose();
+      this.smokeClouds.dispose();
       this.domes.dispose();
       this.debugOverlay.dispose();
       disposeTree(this.battle);
@@ -214,6 +217,8 @@ export class Stage {
     battle.add(this.fireGround.root);
     this.frostGround = new FrostGround(game);
     battle.add(this.frostGround.root);
+    this.smokeClouds = new SmokeClouds(game);
+    battle.add(this.smokeClouds.root);
     this.domes = new Domes(game);
     battle.add(this.domes.root);
     const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
@@ -372,6 +377,7 @@ export class Stage {
     this.frontLines.update(frameSeconds);
     this.fireGround.update(simSeconds);
     this.frostGround.update();
+    this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
     this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();

@@ -369,6 +369,16 @@ export interface Hacked {
 }
 export const Hacked = defineComponent<Hacked>('Hacked');
 
+/**
+ * A stealthy unit (Veil; see UnitDef.stealth and smoke.ts): `hidden` once it
+ * has gone long enough without firing (and, for some, without moving), so
+ * enemies can't pick it out unless they're close or spotting for it.
+ */
+export interface Veiled {
+  hidden: boolean;
+}
+export const Veiled = defineComponent<Veiled>('Veiled');
+
 /** An energy dome over an entity (see ShieldDef and shields.ts). */
 export interface Shield {
   def: ShieldDef;

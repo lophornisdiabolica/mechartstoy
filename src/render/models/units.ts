@@ -1538,3 +1538,73 @@ registerModel('overmind', (faction) => {
   });
   return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('overmind', root, turret), mounts: [array] });
 });
+
+/** Veil's soot-dark stacks and vents. */
+const SOOT = 0x34303a;
+
+registerModel('shadeTrooper', (faction) => infantry(faction, 'rifle'));
+
+// Veil: a truck with a smoke mortar on its bed and canisters racked behind the cab.
+registerModel('smokeTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.7, 0, 0.7], 0.44, 0.42));
+  root.add(box(2.0, 0.25, 0.85, METAL, 0, 0.5, 0));
+  root.add(box(0.6, 0.6, 0.82, primary, 0.68, 0.9, 0)); // cab
+  root.add(box(0.06, 0.26, 0.62, GLASS, 1.01, 1.02, 0));
+  for (const z of [-0.24, 0, 0.24]) root.add(cylinder(0.1, 0.1, 0.4, 6, SOOT, 0.1, 0.83, z)); // canisters
+  const turret = new THREE.Group();
+  turret.position.set(-0.7, 0.62, 0);
+  turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
+  const tube = barrelPivot('smokeTruck', turret);
+  tube.add(box(0.9, 0.24, 0.24, SOOT, 0.35, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('smokeTruck', root, turret, [tube]) });
+});
+
+// Veil: a low, angular tank with sloped plates and a long thin gun.
+registerModel('ghostTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.2, 0.38, 0.42, 0.58));
+  root.add(box(2.0, 0.38, 1.05, primary, 0, 0.56, 0));
+  const glacis = box(0.6, 0.12, 1.0, secondary, 0.95, 0.62, 0);
+  glacis.rotation.z = -0.5;
+  root.add(glacis);
+  const turret = new THREE.Group();
+  turret.position.set(-0.1, 0.8, 0);
+  turret.add(box(0.95, 0.3, 0.8, primary, 0, 0.15, 0));
+  turret.add(box(0.5, 0.1, 0.6, secondary, -0.2, 0.35, 0));
+  const gun = barrelPivot('ghostTank', turret);
+  gun.add(box(1.3, 0.11, 0.11, DARK, 0.65, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('ghostTank', root, turret, [gun]) });
+});
+
+// Veil's super unit: a heavy walker with twin cannons and smoke stacks pouring off its back.
+registerModel('eclipse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.8;
+  root.add(body);
+  body.add(box(1.3, 0.5, 1.6, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.3;
+  turret.add(box(2.0, 1.2, 2.0, primary, 0, 0.6, 0));
+  turret.add(box(0.3, 0.3, 1.1, GLASS, 1.05, 0.8, 0));
+  turret.add(box(1.6, 0.25, 2.1, secondary, -0.1, 1.3, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(0.6, 0.55, 0.45, secondary, 0.2, 0.5, side * 1.2)); // arms
+    turret.add(box(1.4, 0.2, 0.2, DARK, 0.9, 0.5, side * 1.2)); // cannons
+  }
+  for (const z of [-0.55, 0.55]) turret.add(cylinder(0.22, 0.28, 1.0, 8, SOOT, -0.75, 1.9, z)); // stacks
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.4, 1.4, 0.45, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.65);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('eclipse', root, turret) });
+});

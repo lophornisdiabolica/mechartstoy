@@ -106,22 +106,28 @@ export class Batcher {
     for (const b of this.sprites.values()) b.count = 0;
   }
 
-  /** Draw a mesh this frame, where its matrixWorld puts it. */
-  addMesh(mesh: THREE.Mesh): void {
+  /**
+   * Draw a mesh this frame, where its matrixWorld puts it. With `ghost`, it's
+   * drawn in that (see-through) material instead, tinted its own colour and
+   * casting no shadow: a stealthed unit (see EntityView).
+   */
+  addMesh(mesh: THREE.Mesh, ghost?: THREE.Material): void {
     const own = mesh.material as THREE.Material;
     const kind = own.userData.batch as 'flat' | 'glow' | undefined;
-    const material = kind === 'flat' ? this.flat : kind === 'glow' ? this.glow : own;
+    const material = ghost ?? (kind === 'flat' ? this.flat : kind === 'glow' ? this.glow : own);
+    const castShadow = ghost ? false : mesh.castShadow;
+    const receiveShadow = ghost ? false : mesh.receiveShadow;
     const size = mesh.geometry.userData.box as [number, number, number] | undefined;
     const geometry = size ? this.unitBox : mesh.geometry;
     let byMaterial = this.meshes.get(geometry);
     if (!byMaterial) this.meshes.set(geometry, (byMaterial = new Map()));
     let list = byMaterial.get(material);
     if (!list) byMaterial.set(material, (list = []));
-    let batch = list.find((b) => b.mesh.castShadow === mesh.castShadow && b.mesh.receiveShadow === mesh.receiveShadow);
+    let batch = list.find((b) => b.mesh.castShadow === castShadow && b.mesh.receiveShadow === receiveShadow);
     if (!batch) {
       batch = { mesh: this.meshBatch(geometry, material, 16), count: 0, idle: 0 };
-      batch.mesh.castShadow = mesh.castShadow;
-      batch.mesh.receiveShadow = mesh.receiveShadow;
+      batch.mesh.castShadow = castShadow;
+      batch.mesh.receiveShadow = receiveShadow;
       list.push(batch);
       this.root.add(batch.mesh);
     }
@@ -129,7 +135,7 @@ export class Batcher {
     if (size) batch.mesh.setMatrixAt(batch.count, _m.multiplyMatrices(mesh.matrixWorld, _scale.makeScale(size[0], size[1], size[2])));
     else batch.mesh.setMatrixAt(batch.count, mesh.matrixWorld);
     // Every instance gets a colour (white when its material has its own), so the attribute is always filled.
-    batch.mesh.setColorAt(batch.count, kind ? (own as THREE.MeshStandardMaterial).color : _white);
+    batch.mesh.setColorAt(batch.count, kind || ghost ? ((own as THREE.MeshStandardMaterial).color ?? _white) : _white);
     batch.count++;
   }
 
