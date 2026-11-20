@@ -305,8 +305,8 @@ battle, its exact map via `seed`).
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
-  Ember Firestorm; Aegis, Rime, Sabre and Cipher have no slot of their own, and wear
-  Verdant Protectorate, Frost Dominion, Onyx Order and Magenta Directive colours). Every doctrine fields rifle squads with AT troopers,
+  Ember Firestorm; Aegis, Rime, Sabre, Cipher and Veil have no slot of their own, and wear
+  Verdant Protectorate, Frost Dominion, Onyx Order, Magenta Directive and Obsidian Choir colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -417,6 +417,19 @@ battle, its exact map via `seed`).
     two thirds of their rate of fire. Its **uplink mast** turns out more and hacks
     vehicles that come at the base. Super unit: the Overmind, a walker
     with a hack array on its back.
+  - *Veil:* smoke and stealth (`game/smoke.ts`). Smoke trucks lob
+    canisters that leave a drifting grey cloud, and its **smoke stacks**
+    keep a pall over the base. Nobody can pick out a target through more
+    than two units of thick smoke, so whoever is in a cloud (or behind it)
+    can't be shot at, and can't shoot out, from further than four units,
+    except by the side that laid it, which sees straight through its own
+    smoke. Super units and buildings loom out of it. Shade squads vanish
+    when they stand still and hold their fire, and ghost tanks fade a few
+    seconds after each shot; firing gives them away. Spotters (guard
+    towers, Bastion's scout copters, comms arrays) see stealthed units in
+    their radius, but not through smoke. Stealthed units are drawn
+    see-through, and shades as a flicker. Super unit: the Eclipse, a walker
+    pouring out smoke round the army that walks with it.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
