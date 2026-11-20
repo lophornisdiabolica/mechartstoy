@@ -142,8 +142,10 @@ describe('parameter sweeps', () => {
 
 describe('matchups apart from maps', () => {
   it('meets every pairing on every map type once, sides taking turns', () => {
+    const n = DOCTRINE_IDS.length;
+    const pairs = (n * (n - 1)) / 2;
     const plans = latinPlans(0, ['medium', 'wet', 'dry', 'hilly']);
-    expect(plans.length).toBe(28 * 4);
+    expect(plans.length).toBe(pairs * 4);
     const seen = new Map<string, number>();
     const side1 = new Map<string, number>();
     for (const p of plans) {
@@ -155,11 +157,11 @@ describe('matchups apart from maps', () => {
       seen.set(key, (seen.get(key) ?? 0) + 1);
       side1.set(`${a}@${p.map}`, (side1.get(`${a}@${p.map}`) ?? 0) + 1);
     }
-    expect(seen.size).toBe(28 * 4);
+    expect(seen.size).toBe(pairs * 4);
     expect([...seen.values()].every((n) => n === 1)).toBe(true);
-    // Each doctrine is side 1 in three or four of its seven matchups on each map type.
-    for (const n of side1.values()) expect(Math.abs(n - 3.5)).toBeLessThanOrEqual(0.5);
-    expect(latinPlans(224, ['medium', 'wet']).length).toBe(224);
+    // Each doctrine is side 1 in about half its matchups on each map type.
+    for (const k of side1.values()) expect(Math.abs(k - (n - 1) / 2)).toBeLessThanOrEqual(0.5);
+    expect(latinPlans(pairs * 4, ['medium', 'wet']).length).toBe(pairs * 4);
   });
 
   it('shows each pairing per map type, and which ones the map decides', () => {

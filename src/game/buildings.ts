@@ -1,4 +1,4 @@
-import { UnitId, WeaponDef, WeaponMountDef } from './units';
+import { ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -35,6 +35,10 @@ export interface BuildingDef {
   weapon?: WeaponDef;
   /** More weapons on mounts of their own, each with its own target and cooldown (see WeaponMountDef). */
   mounts?: WeaponMountDef[];
+  /** An energy dome over it and what's round it (Aegis; see ShieldDef). */
+  shield?: ShieldDef;
+  /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
+  chill?: { radius: number; rate: number };
   sight?: number;
   turretTurnRate?: number;
   /**
@@ -316,6 +320,34 @@ export const BUILDING_DEFS = {
     height: 2.6,
     production: { table: [{ unit: 'scorchBuggy', weight: 1, count: 2 }], interval: 30 },
     explodes: { damage: 80, radius: 6 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Aegis: turns out dome trucks and lance walkers, under a big dome of its own over the base.
+  shieldWorks: {
+    id: 'shieldWorks',
+    name: 'Shield Works',
+    model: 'bld:shieldWorks',
+    hp: 800,
+    armor: 7,
+    radius: 2.6,
+    height: 3,
+    production: { table: [{ unit: 'lanceWalker', weight: 1, count: 1 }, { unit: 'domeTruck', weight: 0.6, count: 1 }], interval: 34 },
+    shield: { radius: 13, hp: 1400, regen: 40, rest: 5, downTime: 20 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Rime: turns out freezer trucks and shard tanks, and keeps the ground round it frozen.
+  cryoPlant: {
+    id: 'cryoPlant',
+    name: 'Cryo Plant',
+    model: 'bld:cryoPlant',
+    hp: 750,
+    armor: 7,
+    radius: 2.6,
+    height: 3.2,
+    production: { table: [{ unit: 'shardTank', weight: 1, count: 1 }, { unit: 'freezerTruck', weight: 1, count: 1 }], interval: 32 },
+    chill: { radius: 12, rate: 2.2 },
     rebuildDelay: 40,
     buildTime: 10,
   },

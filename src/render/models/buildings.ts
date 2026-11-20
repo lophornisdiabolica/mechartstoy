@@ -711,3 +711,38 @@ registerModel('rubble', () => {
   g.add(wall);
   return g;
 });
+
+// Aegis: a hall with a tall dome emitter on its roof.
+registerModel('bld:shieldWorks', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(3.6, 2.2, 3.4, WALLS[3], 0.2, 1.35, 0));
+  g.add(box(3.7, 0.25, 3.5, primary, 0.2, 2.5, 0));
+  g.add(box(0.06, 1.2, 1.4, DARK, 2.01, 0.85, 0)); // door
+  g.add(cylinder(0.7, 0.95, 0.5, 10, secondary, 0, 2.85, 0));
+  g.add(cylinder(0.18, 0.18, 1.2, 6, METAL, 0, 3.6, 0));
+  const orb = glowBox(0.6, 0.6, 0.6, 0x9fe3ff);
+  orb.position.set(0, 4.4, 0);
+  g.add(orb);
+  for (const z of [-1.3, 1.3]) g.add(box(0.5, 0.5, 0.5, 0x9fe3ff, -1.9, 0.5, z)); // capacitor cells
+  return g;
+});
+
+// Rime: cooling towers and a coolant tank, frosted over.
+registerModel('bld:cryoPlant', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  for (const z of [-1.2, 1.2]) {
+    g.add(cylinder(0.8, 1.0, 2.6, 10, 0xdfeff5, -1.1, 1.55, z)); // cooling towers
+    g.add(cylinder(0.82, 0.82, 0.22, 10, primary, -1.1, 2.4, z));
+  }
+  g.add(box(1.8, 1.3, 1.8, WALLS[2], 1.2, 0.9, 0.8)); // plant shed
+  g.add(box(1.9, 0.15, 1.9, secondary, 1.2, 1.62, 0.8));
+  const tank = cylinder(0.45, 0.45, 1.6, 10, 0xcfefff, 1.2, 0.75, -1.4);
+  tank.rotation.x = Math.PI / 2;
+  g.add(tank);
+  g.add(box(0.15, 0.15, 2.0, DARK, 0.25, 0.5, 0)); // pipes
+  return g;
+});

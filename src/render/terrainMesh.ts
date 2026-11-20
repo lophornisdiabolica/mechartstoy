@@ -550,8 +550,10 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const heading = Math.atan2(-dz, dx);
   // Engineers' bridges are timber on trestles; the map's are concrete.
   const timber = bridge.builtBy !== undefined;
-  const deck = new THREE.MeshStandardMaterial({ color: timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: 0.9 });
+  // Rime's are ice: pale, glassy blue.
+  const ice = bridge.ice === true;
+  const deck = new THREE.MeshStandardMaterial({ color: ice ? 0xd6eef8 : timber ? 0x8a6a46 : 0x9c978c, flatShading: true, roughness: ice ? 0.3 : 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: ice ? 0x8fbcd4 : timber ? 0x5a4630 : 0x5f5b55, flatShading: true, roughness: ice ? 0.3 : 0.9 });
   const rail = new THREE.MeshStandardMaterial({ color: 0x6c7278, flatShading: true, roughness: 0.6, metalness: 0.3 });
   const top: number[] = [];
   const under: number[] = [];

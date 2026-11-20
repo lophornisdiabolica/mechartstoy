@@ -590,9 +590,31 @@ export function orthogonalArray(levels: number, factors: number): number[][] {
   });
 }
 
+/**
+ * An orthogonal array over the doctrines for `sides` sides, plus `extra`
+ * free columns (a map type). With a number of doctrines that isn't a prime
+ * power (ten), it's the array for the next prime power with every row
+ * that names a doctrine past the last dropped: each pair of doctrines still
+ * meets equally often in any two sides' columns.
+ */
+export function doctrineArray(sides: number, extra = 0): number[][] {
+  const n = DOCTRINE_IDS.length;
+  let q = n;
+  while (!finiteField(q)) q++;
+  const array = orthogonalArray(q, sides + extra);
+  if (q === n) return array;
+  // The extra columns (map types) are no longer balanced once rows are dropped, so they're
+  // replaced by the doctrines' sum: with the other sides' doctrines fixed, one side's runs
+  // through every doctrine, so any number of map types comes round within one of evenly.
+  return array.filter((row) => row.slice(0, sides).every((d) => d < n)).map((row) => {
+    const sum = row.slice(0, sides).reduce((a, b) => a + b, 0);
+    return [...row.slice(0, sides), ...row.slice(sides).map((_, k) => sum + k)];
+  });
+}
+
 /** Query strings (see scenarioSettings' overrides) giving each side a doctrine, one per row of an orthogonal array. */
 export function doctrinePlans(sides: number): string[] {
-  return orthogonalArray(DOCTRINE_IDS.length, sides).map((row) => row.map((d, i) => `doc${i + 1}=${DOCTRINE_IDS[d]}`).join('&'));
+  return doctrineArray(sides).map((row) => row.map((d, i) => `doc${i + 1}=${DOCTRINE_IDS[d]}`).join('&'));
 }
 
 /** One battle's place in a run: its battle number, the settings it adds to the scenario, and its map type's name. */
@@ -622,7 +644,7 @@ export function battlePlans(sides: number, count: number, options: { set?: strin
   // What each battle number plays before map types: doctrines from the array, or nothing.
   let rows: { set: string; level: number }[];
   if (options.doctrines) {
-    const array = orthogonalArray(DOCTRINE_IDS.length, sides + 1);
+    const array = doctrineArray(sides, 1);
     const passes = Math.max(1, Math.round(count / array.length));
     rows = Array.from({ length: passes * array.length }, (_, i) => {
       const row = array[i % array.length];

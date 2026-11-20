@@ -10,6 +10,7 @@ import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
 import { strike } from './melee';
+import { domeOver } from '../shields';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -44,10 +45,20 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   let ez = tt.z + D.sin(missA) * missR;
   let ey: number;
   let struck: Entity | null = target;
+  let dome: Entity | undefined;
   if (w.arc || w.projectile === 'flame') {
     // Lobbed, or flame (which licks round corners a little): lands at the impact point, on the ground or at an aircraft's height.
     const tm = world.get(target, Mover);
     ey = (tm && MOVE_RULES[tm.move].flies ? tt.y : ctx.field.surfaceAt(ex, ez)) + Math.min(1.5, targetRadius * 0.6);
+    // Lobbed missiles come down on an enemy dome's skin, not under it (shells and flame fall through: see shields.ts).
+    if (w.projectile === 'missile' && ctx.domes.list.length > 0) {
+      const over = domeOver(ctx, muzzle, ex, ez, faction);
+      if (over && over.y > ey) {
+        ey = over.y;
+        struck = null;
+        dome = over.dome.entity;
+      }
+    }
   } else {
     // Direct fire: aimed at the body, and stopped by the first thing in the way (see lineOfFire.ts).
     const aim = aimPoint(world, target);
@@ -56,6 +67,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     ey = trace.y;
     ez = trace.z;
     struck = trace.hit;
+    dome = trace.dome;
   }
   const flight = D.hypot(ex - sx, ez - sz);
   // Bombs dropped from aircraft just fall; everything else lobbed goes up and over.
@@ -80,6 +92,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     arcHeight: w.arc && !dropped ? Math.max(2, dist * 0.35) : w.projectile === 'flame' ? 0.4 : 0,
     elapsed: 0,
     duration: Math.max(0.05, flight / w.speed),
+    ...(dome !== undefined ? { dome } : {}),
   });
   // The flash and smoke go the way the barrel points.
   const dir = mount ? barrelDirection(mount, hullPose(world, e), armed.aim, armed.elev) : { heading: armed.aim, climb: 0 };
