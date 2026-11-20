@@ -4,7 +4,8 @@ import { MOVE_RULES, MoveClass } from '../../world/moveClasses';
 import { Ai, Armed, Building, Faction, Guard, Health, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { LaneId } from '../lanes';
-import { fightingStrength } from '../offensive';
+import { fightingStrength, weaponDps } from '../offensive';
+import { armsOf } from '../arsenal';
 import { UnitDef, WeaponDef } from '../units';
 import { ANTI_AIR } from './roles';
 import { STRENGTH_CELL } from './strength';
@@ -68,9 +69,14 @@ export function threatKindOf(def: UnitDef, move: MoveClass): ThreatKind {
   return def.category === 'infantry' ? 'infantry' : 'vehicle';
 }
 
+/** Seconds of running in a melee unit's danger reaches over (see ThreatMap.spread). */
+const MELEE_RUSH = 3;
+
 /** How much a weapon endangers each kind of unit, 0 to 1. */
 export function menace(w: WeaponDef, id: string): Record<ThreatKind, number> {
   const ground = w.targets !== 'air';
+  // A blow lands on soldiers and vehicles alike: what's in reach takes it all.
+  if (w.melee) return { infantry: ground ? 0.7 : 0, vehicle: ground ? (w.damage >= 35 ? 1 : 0.5) : 0, air: 0 };
   return {
     // Shells lobbed in, big blasts and flame are what infantry should keep away from; a tank's gun less so.
     infantry: !ground ? 0 : w.arc || w.splash >= 2 || w.projectile === 'flame' ? 1 : w.damage <= 8 ? 0.5 : 0.3,
@@ -110,41 +116,53 @@ export class ThreatMap {
     for (const k of LAYERS) for (const l of this.layers[k]) l.fill(0);
     for (const k of LAYERS) this.totals[k].fill(0);
     for (const l of this.afloat) l.fill(0);
-    const { minX, minZ } = this.field.bounds;
     for (const e of world.query(Armed, Health, Faction, Transform)) {
       const f = world.req(e, Faction).id;
       if (f < 0 || f >= this.layers.infantry.length) continue;
-      const w = world.req(e, Armed).weapon;
       const id = world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? '';
-      const m = menace(w, id);
-      const s = fightingStrength(world, e);
-      if (s <= 0) continue;
-      const t = world.req(e, Transform);
-      const boat = world.get(e, Mover)?.move === 'naval' ? s * Math.max(m.infantry, m.vehicle) : 0;
-      const reach = Math.min(MOST_REACH, w.range + REACH_PAD);
-      const i0 = Math.max(0, Math.floor((t.x - reach - minX) / STRENGTH_CELL));
-      const i1 = Math.min(this.cols - 1, Math.floor((t.x + reach - minX) / STRENGTH_CELL));
-      const j0 = Math.max(0, Math.floor((t.z - reach - minZ) / STRENGTH_CELL));
-      const j1 = Math.min(this.rows - 1, Math.floor((t.z + reach - minZ) / STRENGTH_CELL));
-      const inf = this.layers.infantry[f];
-      const veh = this.layers.vehicle[f];
-      const air = this.layers.air[f];
-      const any = this.layers.any[f];
-      const afloat = this.afloat[f];
-      for (const k of THREAT_KINDS) this.totals[k][f] += s * m[k];
-      this.totals.any[f] += s;
-      for (let j = j0; j <= j1; j++) {
-        const cz = minZ + (j + 0.5) * STRENGTH_CELL - t.z;
-        for (let i = i0; i <= i1; i++) {
-          const cx = minX + (i + 0.5) * STRENGTH_CELL - t.x;
-          if (cx * cx + cz * cz > reach * reach) continue;
-          const k = j * this.cols + i;
-          inf[k] += s * m.infantry;
-          veh[k] += s * m.vehicle;
-          air[k] += s * m.air;
-          any[k] += s;
-          if (boat > 0) afloat[k] += boat;
-        }
+      const total = fightingStrength(world, e);
+      if (total <= 0) continue;
+      const arms = armsOf(world, e);
+      // Each of its weapons spreads its share of the unit's strength over its own reach (see UnitDef.mounts).
+      const dps = arms.length > 1 ? arms.reduce((sum, a) => sum + weaponDps(a.weapon), 0) : 0;
+      for (const armed of arms) {
+        const s = arms.length > 1 ? (dps > 0 ? total * (weaponDps(armed.weapon) / dps) : 0) : total;
+        if (s > 0) this.spread(world, e, f, armed.weapon, id, s);
+      }
+    }
+  }
+
+  /** One weapon's danger, `s`, over its reach round the unit (or building) carrying it. */
+  private spread(world: World, e: number, f: number, w: WeaponDef, id: string, s: number): void {
+    const { minX, minZ } = this.field.bounds;
+    const m = menace(w, id);
+    const t = world.req(e, Transform);
+    const boat = world.get(e, Mover)?.move === 'naval' ? s * Math.max(m.infantry, m.vehicle) : 0;
+    // A melee weapon's danger is how far its unit can run in and hit in a few seconds (see MeleeDef).
+    const range = w.melee ? w.range + (w.melee.lunge ?? 0) + (world.get(e, Unit)?.def.speed ?? 0) * (w.melee.charge ?? 1) * MELEE_RUSH : w.range;
+    const reach = Math.min(MOST_REACH, range + REACH_PAD);
+    const i0 = Math.max(0, Math.floor((t.x - reach - minX) / STRENGTH_CELL));
+    const i1 = Math.min(this.cols - 1, Math.floor((t.x + reach - minX) / STRENGTH_CELL));
+    const j0 = Math.max(0, Math.floor((t.z - reach - minZ) / STRENGTH_CELL));
+    const j1 = Math.min(this.rows - 1, Math.floor((t.z + reach - minZ) / STRENGTH_CELL));
+    const inf = this.layers.infantry[f];
+    const veh = this.layers.vehicle[f];
+    const air = this.layers.air[f];
+    const any = this.layers.any[f];
+    const afloat = this.afloat[f];
+    for (const k of THREAT_KINDS) this.totals[k][f] += s * m[k];
+    this.totals.any[f] += s;
+    for (let j = j0; j <= j1; j++) {
+      const cz = minZ + (j + 0.5) * STRENGTH_CELL - t.z;
+      for (let i = i0; i <= i1; i++) {
+        const cx = minX + (i + 0.5) * STRENGTH_CELL - t.x;
+        if (cx * cx + cz * cz > reach * reach) continue;
+        const k = j * this.cols + i;
+        inf[k] += s * m.infantry;
+        veh[k] += s * m.vehicle;
+        air[k] += s * m.air;
+        any[k] += s;
+        if (boat > 0) afloat[k] += boat;
       }
     }
   }

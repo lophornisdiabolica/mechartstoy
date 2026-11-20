@@ -128,6 +128,12 @@ export class CommanderOverlay {
           this.add(marker(field, goal.x, goal.z, 2), color, 0.85);
           continue;
         }
+        // A charge: from the melee squad to what it's charging.
+        if (goal.charge) {
+          const g = arrow(field, goal.charge.fromX, goal.charge.fromZ, goal.x, goal.z);
+          if (g) this.add(g, color, 0.9);
+          continue;
+        }
         // A task force's arrow starts from where its squads are; the team's goals chain on from the army.
         const force = goal.force !== undefined ? c.taskForces.forces.find((tf) => tf.id === goal.force) : undefined;
         const start = force ?? from;

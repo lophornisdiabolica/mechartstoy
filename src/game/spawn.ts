@@ -5,6 +5,7 @@ import {
   Ai,
   Ammo,
   Armed,
+  Arsenal,
   Carrier,
   Building,
   Collider,
@@ -26,7 +27,7 @@ import {
 import { SimContext } from './context';
 import { MoveClass, MOVE_RULES } from '../world/moveClasses';
 import { mountOf } from './mounts';
-import { UnitDef, WeaponDef } from './units';
+import { UnitDef, WeaponDef, WeaponMountDef } from './units';
 import * as D from '../core/dmath';
 
 export function armed(
@@ -39,8 +40,9 @@ export function armed(
   aim: number,
   siege = false,
   model?: string,
+  mount?: string,
 ): Armed {
-  return {
+  const out: Armed = {
     weapon,
     sight,
     turret,
@@ -60,6 +62,24 @@ export function armed(
     burstTimer: 0,
     firedAt: -Infinity,
     firedOn: null,
+  };
+  if (mount !== undefined) out.mount = mount;
+  return out;
+}
+
+/**
+ * The weapons on mounts of their own (see WeaponMountDef), as an Arsenal, or
+ * null for a type with none. Each gets its own cooldown, so they don't all
+ * open up on the same tick.
+ */
+export function arsenalFor(ctx: SimContext, mounts: readonly WeaponMountDef[] | undefined, sight: number, turnRate: number, radius: number, heading: number, siege = false): Arsenal | null {
+  if (!mounts || mounts.length === 0) return null;
+  return {
+    arms: mounts.map((m) => {
+      const turret = m.turret ?? true;
+      // The model's key goes in for the rest pose; the mount's own key, if it has one.
+      return armed(ctx, m.weapon, sight, turret, m.turnRate ?? turnRate, radius * 0.8, heading, siege, m.mount, m.mount);
+    }),
   };
 }
 
@@ -138,6 +158,8 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     Armed,
     armed(ctx, def.weapon, def.sight, def.turret, def.turret ? def.turretTurnRate : def.turnRate, def.radius * 0.8, heading, def.siege, def.model),
   );
+  const arsenal = arsenalFor(ctx, def.mounts, def.sight, def.turretTurnRate, def.radius, heading, def.siege);
+  if (arsenal) world.add(e, Arsenal, arsenal);
   const offset = rallyOffset(ctx, def, squad);
   world.add(e, Ai, {
     objectiveX: x,
@@ -183,6 +205,8 @@ export function spawnBuilding(
   world.add(e, Collider, { radius: def.radius });
   if (def.weapon && faction !== NEUTRAL) {
     world.add(e, Armed, armed(ctx, def.weapon, def.sight ?? def.weapon.range, true, def.turretTurnRate ?? 2, 0.4, heading, false, def.model));
+    const arsenal = arsenalFor(ctx, def.mounts, def.sight ?? def.weapon.range, def.turretTurnRate ?? 2, 0.5, heading);
+    if (arsenal) world.add(e, Arsenal, arsenal);
   }
   const production = faction !== NEUTRAL ? productionFor(ctx, def, faction) : undefined;
   if (production) {

@@ -1,4 +1,5 @@
 import { UnitDef } from '../units';
+import { hitsAir, weaponsOf } from '../arsenal';
 import { ANTI_AIR } from './roles';
 import type { SidePicture } from './commander';
 
@@ -67,11 +68,12 @@ export function needsOf(side: SidePicture): Needs {
 
 /** How much a unit answers each need: flak fully, other guns that can shoot aircraft half. */
 function answers(def: UnitDef): { antiAir: number; antiArmour: number; antiInfantry: number; fast: number } {
-  const w = def.weapon;
+  // Counting every weapon it carries (see UnitDef.mounts): a tank with a roof machine gun answers both.
+  const ws = def.mounts ? weaponsOf(def) : [def.weapon];
   return {
-    antiAir: ANTI_AIR.has(def.id) ? 1 : w.targets !== 'ground' ? 0.5 : 0,
-    antiArmour: w.damage >= 35 ? 1 : 0,
-    antiInfantry: (w.splash >= 1 && w.damage < 35) || w.damage <= 8 ? 1 : 0,
+    antiAir: ANTI_AIR.has(def.id) ? 1 : hitsAir(ws) ? 0.5 : 0,
+    antiArmour: ws.some((w) => w.damage >= 35) ? 1 : 0,
+    antiInfantry: ws.some((w) => (w.splash >= 1 && w.damage < 35) || w.damage <= 8) ? 1 : 0,
     fast: def.speed >= 3.4 ? 1 : 0,
   };
 }

@@ -1,4 +1,5 @@
 import { AttackTiming, BaseLayout, CityMode, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { weaponsOf } from '../game/arsenal';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
@@ -49,8 +50,8 @@ function short(v: number): string {
 
 /** Damage per second, counting bursts. */
 function dps(def: UnitDef): number {
-  const w = def.weapon;
-  return (w.damage * w.burst) / w.cooldown;
+  // Every weapon it carries (see UnitDef.mounts).
+  return weaponsOf(def).reduce((sum, w) => sum + (w.damage * w.burst) / w.cooldown, 0);
 }
 
 /** What a stat works out to after its multiplier, for the stats table (with a second line for armour and damage per hit). */

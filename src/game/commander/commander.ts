@@ -1,6 +1,6 @@
 import { System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
-import { Armed, Faction, Guard, Mover, Transform, Unit } from '../components';
+import { Faction, Guard, Mover, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { fightingStrength } from '../offensive';
 import { findPlaces, Place } from './places';
@@ -11,6 +11,8 @@ import { Avoidance, ThreatMap } from './threats';
 import { JobKind, Roles } from './roles';
 import { TaskForce, TaskForces } from './taskForces';
 import { Hunt, Hunts } from './hunts';
+import { Charges } from './charges';
+import { shootsAir } from '../arsenal';
 
 /*
  * The Commander: a planner per side, above the squads (see the Commander
@@ -35,7 +37,7 @@ export interface UnitMix {
 }
 
 /** Team goals (push, defend, mass, regroup) and task force jobs (take or hold an outpost, see taskForces.ts). */
-export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup' | 'take' | 'hold' | 'hunt';
+export type GoalKind = 'push' | 'defend' | 'mass' | 'regroup' | 'take' | 'hold' | 'hunt' | 'charge';
 
 /** Something a side means to do, and where. */
 export interface Goal {
@@ -50,6 +52,8 @@ export interface Goal {
   force?: number;
   /** For a hunt (see hunts.ts): where the hunters are, how many squads, the gun's unit type and the flank point they're swinging round by, if any. */
   hunt?: { fromX: number; fromZ: number; squads: number; unit: string; flankX: number | null; flankZ: number | null };
+  /** For a charge (see charges.ts): where the charging squad was when it was called. */
+  charge?: { fromX: number; fromZ: number };
 }
 
 /** One side's picture of the battle. */
@@ -102,6 +106,8 @@ export class Commander {
   readonly taskForces = new TaskForces();
   /** Squads sent to kill long-range guns shelling their side (see hunts.ts). */
   readonly hunts = new Hunts();
+  /** Melee squads sent charging at enemies just out of their sight (see charges.ts; worker only). */
+  readonly charges = new Charges();
   /** Jobs that suit particular units: flak covering, artillery on high ground, escorts (worker only: the page doesn't need them). */
   readonly roles = new Roles();
   /** Engineers' building jobs (see engineers.ts). */
@@ -152,12 +158,11 @@ export class Commander {
       count[f]++;
       side.mix[def.category]++;
       if (def.role === 'artillery') side.mix.artillery++;
-      const armed = world.get(e, Armed);
       const strength = fightingStrength(world, e);
       const flies = MOVE_RULES[world.get(e, Mover)?.move ?? def.move].flies;
       if (flies) side.air += strength;
       else side.ground += strength;
-      if (armed && armed.weapon.targets !== 'ground') {
+      if (shootsAir(world, e)) {
         side.antiAir += strength;
         side.mix.antiAir++;
       }
@@ -180,6 +185,7 @@ export class Commander {
     }
     this.taskForces.update(world, ctx);
     this.hunts.update(world, ctx, (q) => this.taskForces.forSquad(q) !== undefined);
+    this.charges.update(world, ctx, (q) => this.taskForces.forSquad(q) !== undefined || this.hunts.forSquad(q) !== undefined);
     this.roles.update(world, ctx, this.strength, this.taskForces);
     this.engineers.update(world, ctx);
     this.avoidance.update(world, ctx);
@@ -192,6 +198,9 @@ export class Commander {
         if (tf.side !== f) continue;
         const o = ctx.outposts[tf.outpost];
         side.goals.push({ kind: tf.kind, x: o.x, z: o.z, target: null, score: tf.launch > 0 ? tf.strength / tf.launch : 1, force: tf.id });
+      }
+      for (const c of this.charges.charges) {
+        if (c.side === f) side.goals.push({ kind: 'charge', x: c.x, z: c.z, target: null, score: 1, charge: { fromX: c.fromX, fromZ: c.fromZ } });
       }
       for (const h of this.hunts.hunts) {
         if (h.side !== f) continue;

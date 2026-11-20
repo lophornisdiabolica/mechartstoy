@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Ammo, Armed, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
+import { Ammo, Armed, Arsenal, Building, Collider, Construction, Faction, makeTransform, Mover, Projectile, Renderable, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { turnToward, wrapAngle } from './movement';
 import { aimPoint, clearShot, elevationFor, hullPose, mountFor, traceShot, weaponMuzzle } from '../lineOfFire';
@@ -9,6 +9,7 @@ import { Health } from '../components';
 import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
+import { strike } from './melee';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -103,81 +104,112 @@ function approach(from: number, to: number, step: number): number {
   return from < to ? Math.min(to, from + step) : Math.max(to, from - step);
 }
 
-/** Aims turrets (or hulls), manages cooldowns and bursts, and launches projectiles. */
+/** How closely a melee weapon must face its target to strike, radians: a blow lands on what it's up against. */
+const MELEE_TOLERANCE = 0.6;
+
+/**
+ * Aims turrets (or hulls), manages cooldowns and bursts, and launches
+ * projectiles (or lands blows, for melee weapons: see melee.ts), for every
+ * weapon a unit or building has: its main one and any on mounts of their own.
+ */
 export function weaponSystem(ctx: SimContext): System {
   return {
     name: 'weapons',
     update(world, dt) {
       for (const e of world.query(Armed, Transform)) {
         if (world.has(e, Construction)) continue;
-        const armed = world.req(e, Armed);
-        const t = world.req(e, Transform);
-        armed.cooldown -= dt;
-
-        const mount = mountFor(world, e);
-        const target = armed.target !== null && world.has(armed.target, Targetable) ? armed.target : null;
-        if (target === null) {
-          armed.burstLeft = 0;
-          // Turrets drift back to face forward when idle, and barrels settle back to rest.
-          armed.aim = armed.turret ? turnToward(armed.aim, t.heading, armed.turnRate * dt) : t.heading;
-          if (mount?.pivot) armed.elev = approach(armed.elev, mount.rest ?? 0, ELEV_RATE * dt);
-          continue;
-        }
-
-        const tt = world.req(target, Transform);
-        const desired = D.atan2(-(tt.z - t.z), tt.x - t.x);
-        if (armed.turret) {
-          armed.aim = turnToward(armed.aim, desired, armed.turnRate * dt);
-        } else {
-          // Turret-less units turn the whole body once they've stopped to shoot.
-          const mover = world.get(e, Mover);
-          // Planes can only aim by flying at it (see Mover.cruise).
-          if (!mover || (mover.targetX === null && !mover.cruise)) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
-          armed.aim = t.heading;
-        }
-
-        // Barrels pitch toward the target as the turret comes round.
-        const pitch = mount ? elevationFor(world, e, mount, armed, desired, target) : null;
-        if (pitch && mount?.pivot) armed.elev = approach(armed.elev, pitch.elev, ELEV_RATE * dt);
-
-        if (armed.burstLeft > 0) {
-          armed.burstTimer -= dt;
-          if (armed.burstTimer <= 0) {
-            armed.burstLeft--;
-            volley(world, ctx, e, armed, target, mount);
-            armed.burstTimer = armed.weapon.burstGap;
-          }
-          continue;
-        }
-
-        const d = distanceToTarget(world, e, target);
-        const inRange = d <= effectiveRange(world, e, armed, target) && d >= armed.weapon.minRange;
-        const aligned = Math.abs(wrapAngle(desired - armed.aim)) < AIM_TOLERANCE && (!pitch || Math.abs(armed.elev - pitch.elev) < ELEV_TOLERANCE);
-        if (armed.cooldown <= 0 && inRange && aligned && !world.get(e, Ammo)?.rearming) {
-          // Barrels that can't dip (or lift) far enough to bear hold fire too, and the AI moves the unit to where they can.
-          if (pitch && !pitch.reach) {
-            armed.blocked = true;
-            continue;
-          }
-          // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
-          if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
-            const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, armed.shot, ctx);
-            armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
-            if (armed.blocked) continue;
-          }
-          // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
-          const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
-          armed.burstLeft = w.burst - 1;
-          volley(world, ctx, e, armed, target, mount, w);
-          armed.firedAt = world.time;
-          armed.firedOn = world.get(target, Faction)?.id ?? null;
-          // Aircraft that carry only so much go home to rearm once it's spent (see Ammo).
-          const ammo = world.get(e, Ammo);
-          if (ammo && --ammo.left <= 0) ammo.rearming = true;
-          armed.burstTimer = w.burstGap;
-          armed.cooldown = w.cooldown;
-        }
+        operate(world, ctx, e, world.req(e, Armed), dt, true);
+        const arsenal = world.get(e, Arsenal);
+        if (arsenal) for (const armed of arsenal.arms) operate(world, ctx, e, armed, dt, false);
       }
     },
   };
+}
+
+/**
+ * One weapon's tick. Only the main weapon turns a turret-less unit's body
+ * to aim, and only its trigger pulls use up an aircraft's ammunition; a
+ * fixed weapon on a mount of its own fires when the body happens to face
+ * its target.
+ */
+function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: number, main: boolean): void {
+  const t = world.req(e, Transform);
+  armed.cooldown -= dt;
+
+  const mount = mountFor(world, e, armed);
+  const target = armed.target !== null && world.has(armed.target, Targetable) ? armed.target : null;
+  if (target === null) {
+    armed.burstLeft = 0;
+    // Turrets drift back to face forward when idle, and barrels settle back to rest.
+    armed.aim = armed.turret ? turnToward(armed.aim, t.heading, armed.turnRate * dt) : t.heading;
+    if (mount?.pivot) armed.elev = approach(armed.elev, mount.rest ?? 0, ELEV_RATE * dt);
+    return;
+  }
+
+  const tt = world.req(target, Transform);
+  const desired = D.atan2(-(tt.z - t.z), tt.x - t.x);
+  if (armed.turret) {
+    armed.aim = turnToward(armed.aim, desired, armed.turnRate * dt);
+  } else {
+    // Turret-less units turn the whole body once they've stopped to shoot.
+    const mover = world.get(e, Mover);
+    // Planes can only aim by flying at it (see Mover.cruise).
+    if (main && (!mover || (mover.targetX === null && !mover.cruise))) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
+    armed.aim = t.heading;
+  }
+
+  // Barrels pitch toward the target as the turret comes round.
+  const pitch = mount ? elevationFor(world, e, mount, armed, desired, target) : null;
+  if (pitch && mount?.pivot) armed.elev = approach(armed.elev, pitch.elev, ELEV_RATE * dt);
+
+  if (armed.burstLeft > 0) {
+    armed.burstTimer -= dt;
+    if (armed.burstTimer <= 0) {
+      armed.burstLeft--;
+      if (armed.weapon.melee) strike(world, ctx, e, armed, target);
+      else volley(world, ctx, e, armed, target, mount);
+      armed.burstTimer = armed.weapon.burstGap;
+    }
+    return;
+  }
+
+  const melee = armed.weapon.melee;
+  const d = distanceToTarget(world, e, target);
+  const inRange = d <= effectiveRange(world, e, armed, target) && d >= armed.weapon.minRange;
+  const tolerance = melee ? MELEE_TOLERANCE : AIM_TOLERANCE;
+  const aligned = Math.abs(wrapAngle(desired - armed.aim)) < tolerance && (!pitch || Math.abs(armed.elev - pitch.elev) < ELEV_TOLERANCE);
+  if (armed.cooldown <= 0 && inRange && aligned && !world.get(e, Ammo)?.rearming) {
+    // A blow: no barrels to bear and nothing in the way of what it's touching (see melee.ts).
+    if (melee) {
+      armed.burstLeft = armed.weapon.burst - 1;
+      strike(world, ctx, e, armed, target);
+      armed.firedAt = world.time;
+      armed.firedOn = world.get(target, Faction)?.id ?? null;
+      armed.burstTimer = armed.weapon.burstGap;
+      armed.cooldown = armed.weapon.cooldown;
+      return;
+    }
+    // Barrels that can't dip (or lift) far enough to bear hold fire too, and the AI moves the unit to where they can.
+    if (pitch && !pitch.reach) {
+      armed.blocked = true;
+      return;
+    }
+    // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
+    if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
+      const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, armed.shot, ctx);
+      armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
+      if (armed.blocked) return;
+    }
+    // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
+    const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+    armed.burstLeft = w.burst - 1;
+    volley(world, ctx, e, armed, target, mount, w);
+    armed.firedAt = world.time;
+    armed.firedOn = world.get(target, Faction)?.id ?? null;
+    // Aircraft that carry only so much go home to rearm once it's spent (see Ammo).
+    const ammo = main ? world.get(e, Ammo) : undefined;
+    if (ammo && --ammo.left <= 0) ammo.rearming = true;
+    armed.burstTimer = w.burstGap;
+    armed.cooldown = w.cooldown;
+  }
 }

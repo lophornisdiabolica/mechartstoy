@@ -61,6 +61,55 @@ export interface WeaponDef {
    */
   heavy?: WeaponDef;
   heavyAt?: number;
+  /**
+   * A close-quarters weapon (see MeleeDef and systems/melee.ts): it fires no
+   * projectile but strikes what it's touching. Its `range` is measured from
+   * the striker's edge to the target's, and `projectile` only sets how the
+   * blow sounds.
+   */
+  melee?: MeleeDef;
+}
+
+/**
+ * How a melee weapon lands its blows. The sim side is all physical: a blow
+ * lands on what's within reach, a lunge carries the striker in, a knock
+ * shoves the struck back, a sweep catches others beside the target. The
+ * look (a claw swipe, a ram, a stomp) is the model's, keyed by `style`.
+ */
+export interface MeleeDef {
+  /** How it looks and sounds: a blade or claw swinging across, a lunge or ram straight in, a stomp straight down. */
+  style: 'swing' | 'thrust' | 'stomp';
+  /**
+   * How far it leaps or rams forward to land a blow, on top of its reach:
+   * it strikes from that much further out and ends up against its target.
+   */
+  lunge?: number;
+  /** How far a blow shoves the struck away, for one its own size (bigger ones move less, buildings not at all). */
+  knock?: number;
+  /** Radians either side of straight ahead a blow sweeps across, catching other enemies within reach there too. */
+  sweep?: number;
+  /** Most others a sweep can catch beside the target. */
+  sweepMost?: number;
+  /** Speed multiplier while closing on a target it can see but not yet reach: a charge. */
+  charge?: number;
+}
+
+/**
+ * A weapon on a mount of its own, beside a unit's main weapon (see
+ * UnitDef.mounts): a tank's roof machine gun, a walker's flak pod, a
+ * mech's claw. Each picks its own target and keeps its own cooldown, so a
+ * unit can shoot a tank with its cannon while its machine gun works on
+ * the infantry round it, or claw what's on it while its guns fire on.
+ * Only the main weapon steers the unit: what it chases and where it stands.
+ */
+export interface WeaponMountDef {
+  weapon: WeaponDef;
+  /** Its mount's key in MOUNTS (see mounts.ts): where its turret, barrels and muzzles are. Without one, it fires from the unit's middle. */
+  mount?: string;
+  /** Turns to aim on its own (a turret, the default) rather than only firing where the hull points. */
+  turret?: boolean;
+  /** How fast it turns, radians per second (the unit's turret's rate by default). */
+  turnRate?: number;
 }
 
 export interface UnitDef {
@@ -88,6 +137,8 @@ export interface UnitDef {
   turret: boolean;
   turretTurnRate: number;
   weapon: WeaponDef;
+  /** More weapons, each on a mount of its own with its own target and cooldown (see WeaponMountDef). */
+  mounts?: WeaponMountDef[];
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */

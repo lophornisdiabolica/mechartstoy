@@ -1,6 +1,7 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
-import { Armed, Building, Construction, Faction, GARRISON, Guard, Health, MILITIA_BASE, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { Building, Construction, Faction, GARRISON, Guard, Health, MILITIA_BASE, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { armsOf } from '../game/arsenal';
 import { Goal, UnitMix } from '../game/commander/commander';
 import { STYLES } from '../game/commander/advice';
 import { describeBonus } from '../game/outposts';
@@ -562,8 +563,8 @@ export class Controls {
       this.inspect.append(bar, el('div', { class: 'sub' }, `${Math.ceil(Math.max(0, h.hp))} / ${h.max} HP${armour}`));
     }
     const lines: string[] = [];
-    const armed = w.get(e, Armed);
-    if (armed) lines.push(`${armed.weapon.name}: ${armed.target !== null ? 'engaging' : 'no target'}`);
+    // Every weapon it carries, each with its own target (see UnitDef.mounts).
+    for (const armed of armsOf(w, e)) lines.push(`${armed.weapon.name}${armed.weapon.melee ? ' (melee)' : ''}: ${armed.target !== null ? 'engaging' : 'no target'}`);
     if (unit) {
       lines.push(`${MOVE_LABELS[unit.def.move]}, ${ROLE_LABELS[unit.def.role]}`);
       lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);

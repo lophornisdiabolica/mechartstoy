@@ -3,6 +3,7 @@ import { MOVE_RULES } from '../../world/moveClasses';
 import { Battlefield } from '../../world/battlefield';
 import { Armed, Faction, Health, Mover, Transform } from '../components';
 import { fightingStrength } from '../offensive';
+import { shootsAir } from '../arsenal';
 
 /** World units per strength-map cell. */
 export const STRENGTH_CELL = 6;
@@ -52,7 +53,7 @@ export class StrengthMap {
       const mover = world.get(e, Mover);
       if (mover && MOVE_RULES[mover.move].flies) this.air[f][k] += s;
       else this.ground[f][k] += s;
-      if (world.req(e, Armed).weapon.targets !== 'ground') this.antiAir[f][k] += s;
+      if (shootsAir(world, e)) this.antiAir[f][k] += s;
     }
   }
 
