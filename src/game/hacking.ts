@@ -52,9 +52,9 @@ function release(world: World, ctx: SimContext, e: Entity, h: Hacked): void {
   const by = world.req(e, Faction).id;
   world.req(e, Faction).id = h.home;
   h.turned = false;
-  if (h.ai && world.req(e, Health).hp > 0) world.add(e, Ai, h.ai);
+  if (h.ai && (world.get(e, Health)?.hp ?? 0) > 0) world.add(e, Ai, h.ai);
   h.ai = null;
-  stop(world, e);
+  if (world.has(e, Armed)) stop(world, e);
   forgetAbout(world, e);
   const t = world.req(e, Transform);
   ctx.events.emit('hacked', { entity: e, x: t.x, y: t.y, z: t.z, faction: by, home: h.home, back: true });
@@ -105,14 +105,15 @@ export function hackSystem(ctx: SimContext): System {
     update(world) {
       for (const e of world.query(Hacked, Faction)) {
         const h = world.req(e, Hacked);
-        if (h.turned && (world.time >= h.until || world.req(e, Health).hp <= 0)) release(world, ctx, e, h);
+        const hp = world.get(e, Health)?.hp ?? 0;
+        if (h.turned && (world.time >= h.until || hp <= 0)) release(world, ctx, e, h);
         else if (!h.turned && world.time >= h.proofUntil) world.remove(e, Hacked);
       }
       if (world.time < jamAt) return;
       jamAt = world.time + JAM_EVERY;
       for (const e of world.query(Unit, Transform, Faction)) {
         const jam = world.req(e, Unit).def.jam;
-        if (jam && world.req(e, Health).hp > 0) jamAround(world, ctx, e, jam);
+        if (jam && (world.get(e, Health)?.hp ?? 0) > 0) jamAround(world, ctx, e, jam);
       }
       for (const e of world.query(Building, Transform, Faction)) {
         const jam = world.req(e, Building).def.jam;
