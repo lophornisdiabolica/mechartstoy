@@ -304,8 +304,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       barracks: { table: [rifleSquad(3, 1)], interval: 20 },
       factory: {
         table: [
-          { unit: 'duelist', weight: 3, count: 3 },
-          { unit: 'reaver', weight: 2, count: 1 },
+          { unit: 'duelist', weight: 2.6, count: 3 },
+          { unit: 'reaver', weight: 2.6, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -313,7 +313,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'colossus', weight: 1, count: 1 }] },
     },
     signature: 'duelHall',
-    waves: [rifleSquad(3, 2), { unit: 'duelist', weight: 3, count: 3 }, { unit: 'reaver', weight: 1.5, count: 1 }],
+    waves: [rifleSquad(3, 2), { unit: 'duelist', weight: 2.6, count: 3 }, { unit: 'reaver', weight: 2, count: 1 }],
   },
 };
 

@@ -1319,35 +1319,35 @@ registerModel('duelist', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   const body = new THREE.Group();
-  body.position.y = 1.4;
+  body.position.y = 1.2;
   root.add(body);
   const turret = new THREE.Group();
-  turret.add(box(0.9, 0.5, 0.7, primary, 0, 0.1, 0));
-  turret.add(box(0.28, 0.2, 0.46, GLASS, 0.4, 0.2, 0));
-  turret.add(box(0.5, 0.12, 0.76, secondary, -0.15, 0.3, 0));
+  turret.add(box(0.78, 0.44, 0.6, primary, 0, 0.08, 0));
+  turret.add(box(0.24, 0.18, 0.4, GLASS, 0.35, 0.17, 0));
+  turret.add(box(0.44, 0.1, 0.66, secondary, -0.13, 0.26, 0));
   const arm = new THREE.Group();
-  arm.position.set(0.2, 0, -0.42);
-  arm.add(box(0.3, 0.2, 0.2, METAL, 0, 0, 0));
-  arm.add(box(1.1, 0.06, 0.16, BLADE, 0.55, 0, 0));
+  arm.position.set(0.17, 0, -0.36);
+  arm.add(box(0.26, 0.18, 0.18, METAL, 0, 0, 0));
+  arm.add(box(0.96, 0.06, 0.14, BLADE, 0.48, 0, 0));
   turret.add(arm);
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.68, 0.72, 0.14, METAL, DARK);
-    leg.hip.position.set(-0.05, -0.05, side * 0.26);
+    const leg = makeLeg(0.58, 0.62, 0.12, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.05, side * 0.22);
     body.add(leg.hip);
     return leg;
   });
   // An arm cannon on its left, opposite the blade: it swings on its own shoulder, and bobs with the body as it walks.
   const gun = ownMount(root, 'duelist#gun', (t) => {
-    t.add(box(0.22, 0.2, 0.2, METAL, 0, 0, 0));
-    t.add(box(0.36, 0.14, 0.14, secondary, 0.17, -0.01, 0.005));
-    t.add(box(0.3, 0.09, 0.09, DARK, 0.45, 0, 0));
+    t.add(box(0.19, 0.17, 0.17, METAL, 0, 0, 0));
+    t.add(box(0.31, 0.12, 0.12, secondary, 0.145, -0.01, 0.005));
+    t.add(box(0.26, 0.08, 0.08, DARK, 0.38, 0, 0));
   });
   body.add(gun.turret);
   gun.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
-    ...walker(legs, body, 0.85, 0.55),
+    ...walker(legs, body, 0.75, 0.55),
     ...mounted('duelist', root, turret),
     mounts: [gun],
     // The blade sweeps across in front of it.
@@ -1361,20 +1361,20 @@ registerModel('duelist', (faction) => {
 registerModel('reaver', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
-  root.add(...tracks(2.4, 0.42, 0.46, 0.62));
-  root.add(box(2.2, 0.46, 1.16, primary, 0, 0.6, 0));
-  root.add(box(0.45, 0.28, 1.22, secondary, 0.9, 0.5, 0)); // ram plate
+  root.add(...tracks(2.8, 0.5, 0.55, 0.75));
+  root.add(box(2.6, 0.55, 1.4, primary, 0, 0.75, 0));
+  root.add(box(0.56, 0.3, 1.46, secondary, 1.1, 0.62, 0)); // ram plate
   const turret = new THREE.Group();
-  turret.position.set(-0.15, 0.85, 0);
-  turret.add(box(1.05, 0.42, 0.95, primary, 0, 0.21, 0));
-  turret.add(box(0.5, 0.12, 0.7, secondary, -0.25, 0.47, 0));
+  turret.position.set(-0.15, 1.03, 0);
+  turret.add(box(1.2, 0.48, 1.08, primary, 0, 0.24, 0));
+  turret.add(box(0.58, 0.14, 0.8, secondary, -0.28, 0.55, 0));
   // The arm swings across in front of the turret as it strikes; at rest it points straight ahead.
   const arm = new THREE.Group();
-  arm.position.set(0.35, 0.28, 0);
-  arm.add(box(0.36, 0.3, 0.36, METAL, 0, 0, 0)); // shoulder
-  arm.add(box(1.4, 0.16, 0.16, METAL, 0.85, 0, 0));
-  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the axe head
-  arm.add(box(0.34, 0.05, 0.22, BLADE, 1.9, 0.01, -0.17));
+  arm.position.set(0.4, 0.32, 0);
+  arm.add(box(0.42, 0.34, 0.42, METAL, 0, 0, 0)); // shoulder
+  arm.add(box(1.6, 0.18, 0.18, METAL, 0.98, 0, 0));
+  arm.add(box(0.7, 0.07, 0.46, BLADE, 2.07, 0, 0.15)); // the axe head
+  arm.add(box(0.4, 0.06, 0.26, BLADE, 2.18, 0.01, -0.2));
   turret.add(arm);
   root.add(turret);
   const mg = ownMount(root, 'reaver#mg', (t) => {
@@ -1423,6 +1423,9 @@ registerModel('colossus', (faction) => {
     t.add(box(0.9, 0.5, 1.0, secondary, 0.1, 0.45, 0));
     for (const z of [-0.25, 0.25]) t.add(box(0.05, 0.36, 0.36, DARK, 0.585, 0.45, z));
   });
+  // On its back: it bobs with the body as it walks, and comes down with it when it falls.
+  body.add(rack.turret);
+  rack.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
     ...walker(legs, body, 1.8, 0.3),
