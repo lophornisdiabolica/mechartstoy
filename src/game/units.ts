@@ -1561,7 +1561,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'reaver',
-    hp: 320,
+    hp: 340,
     armor: 9,
     speed: 2.6,
     turnRate: 1.7,

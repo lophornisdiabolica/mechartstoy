@@ -109,27 +109,34 @@ export function strike(world: World, ctx: SimContext, e: Entity, armed: Armed, t
   const tr = world.get(target, Collider)?.radius ?? 0.5;
 
   // A lunge carries the striker in to its reach's halfway mark, as far as the ground lets it.
+  // The blow lands from where the lunge ends, though the dash there takes a few ticks to draw.
   let lunged = 0;
+  let sx = t.x;
+  let sz = t.z;
   const dist = D.hypot(tt.x - t.x, tt.z - t.z);
   const gap = dist - r - tr;
   if (melee.lunge && gap > w.range * 0.5 && dist > 1e-4) {
     lunged = Math.min(melee.lunge, gap - w.range * 0.5);
-    dash(world, e, ((tt.x - t.x) / dist) * lunged, ((tt.z - t.z) / dist) * lunged);
+    const dx = ((tt.x - t.x) / dist) * lunged;
+    const dz = ((tt.z - t.z) / dist) * lunged;
+    dash(world, e, dx, dz);
+    sx += dx;
+    sz += dz;
   }
 
   const by: Hit = { source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown', faction };
-  const heading = D.atan2(-(tt.z - t.z), tt.x - t.x);
+  const heading = D.atan2(-(tt.z - sz), tt.x - sx);
   const struck = [target];
   if (melee.sweep) {
     // Others within reach either side of the line to the target, nearest first.
     const others: { e: Entity; d: number }[] = [];
-    ctx.grid.forEachNear(t.x, t.z, r + w.range + 3, (other, d2) => {
+    ctx.grid.forEachNear(sx, sz, r + w.range + 3, (other, d2) => {
       if (other === target || other === e || !world.has(other, Targetable)) return;
       if (!ctx.sides.hostile(faction, world.req(other, Faction).id) || !canHit(world, armed, other)) return;
       const d = Math.sqrt(d2);
       if (d - r - (world.get(other, Collider)?.radius ?? 0.5) > w.range) return;
       const ot = world.req(other, Transform);
-      if (Math.abs(wrapAngle(D.atan2(-(ot.z - t.z), ot.x - t.x) - heading)) > melee.sweep!) return;
+      if (Math.abs(wrapAngle(D.atan2(-(ot.z - sz), ot.x - sx) - heading)) > melee.sweep!) return;
       others.push({ e: other, d });
     });
     others.sort((a, b) => a.d - b.d || a.e - b.e);
@@ -142,9 +149,9 @@ export function strike(world: World, ctx: SimContext, e: Entity, armed: Armed, t
     if (melee.knock && world.has(victim, Mover) && !world.has(victim, Building)) {
       const vt = world.req(victim, Transform);
       const vr = world.get(victim, Collider)?.radius ?? 0.5;
-      const d = Math.max(1e-4, D.hypot(vt.x - t.x, vt.z - t.z));
+      const d = Math.max(1e-4, D.hypot(vt.x - sx, vt.z - sz));
       const k = melee.knock * Math.max(KNOCK_LEAST, Math.min(KNOCK_MOST, r / vr));
-      dash(world, victim, ((vt.x - t.x) / d) * k, ((vt.z - t.z) / d) * k);
+      dash(world, victim, ((vt.x - sx) / d) * k, ((vt.z - sz) / d) * k);
     }
     applyDamage(world, ctx, victim, w.damage, by, w.pierce ?? 0);
   }
