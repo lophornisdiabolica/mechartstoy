@@ -69,7 +69,10 @@ next to the other results.
 With `--doctrines` the map type is one more column of the orthogonal array,
 so every doctrine meets every map type equally often in the same 64
 battles; `--every-map` plays every battle on every map type instead, for
-tighter numbers per map at that many times the cost.
+tighter numbers per map at that many times the cost. The niche report
+(`--niche`) also splits each doctrine's win rate between the shorter and
+the longer half of the battles, which shows a doctrine that wins early
+and fades, or one that only comes good in long battles.
 
 `--compare a.json b.json` compares two saved runs without playing anything:
 battle lengths, doctrine win rates (flagging changes bigger than the
@@ -89,7 +92,10 @@ cheaply than battles. The code is in `src/sim/duel.ts`.
 
 To dig into particular battles: `--seeds 3,7-9` plays just those battle
 numbers of each scenario (with the doctrines and map types they get in a
-full run), and `--battle 1v1-7` plays one battle on its own and prints its
+full run), `--latin --involving aegis,rime` plays just the Latin battles
+that have one of those doctrines on a side (against every doctrine, with
+the same battle numbers as a full run, so it pools and compares with
+one), and `--battle 1v1-7` plays one battle on its own and prints its
 **timeline** (every side's units, buildings, production, outposts, kills
 and attacks every 30 seconds) and where the sim's time went. `--from
 sims-results/x.json` takes that battle's doctrines, map type and settings
