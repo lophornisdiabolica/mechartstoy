@@ -60,6 +60,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   rime: ['Hold', 'Reach', 'Throne', 'Winterguard'],
   sabre: ['Blades', 'Edge', 'Duellists', 'Fellowship'],
   cipher: ['Network', 'Signal', 'Cell', 'Protocol'],
+  veil: ['Choir', 'Shroud', 'Vigil', 'Silence'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

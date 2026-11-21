@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Wreck } from '../game/components';
+import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
@@ -38,7 +38,12 @@ interface ViewEntry {
   grounded: boolean;
   /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
   strike: { t: number; style: MeleeDef['style']; jab: number } | null;
+  /** Stealthed (see game/smoke.ts): drawn faint and see-through. */
+  veiled: boolean;
 }
+
+/** What a stealthed unit is drawn in: a faint, see-through shimmer of itself. */
+const GHOST = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.3, depthWrite: false });
 
 /** Seconds a melee blow takes to draw. */
 const STRIKE_TIME = 0.35;
@@ -152,7 +157,7 @@ export class EntityView {
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null, veiled: false };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -258,6 +263,7 @@ export class EntityView {
       }
       entry.lastX = x;
       entry.lastZ = z;
+      entry.veiled = w.get(e, Veiled)?.hidden === true;
     }
     this.batch();
   }
@@ -268,8 +274,10 @@ export class EntityView {
     const b = this.batcher;
     b.begin();
     for (const entry of this.entries.values()) {
-      for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m);
-      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s);
+      const ghost = entry.veiled ? GHOST : undefined;
+      for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m, ghost);
+      // A stealthed trooper is drawn faint and see-through, steady like a ghost tank.
+      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.veiled);
     }
     b.end();
   }

@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -51,6 +51,8 @@ export interface DoctrineDef {
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
+/** Veil's squads: shades (riflemen who vanish when they stand still and hold fire) with an AT trooper. */
+const shadeSquad = (shades: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'shadeTrooper', weight, count: shades, with: { unit: 'atTrooper', count: at } });
 
 const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   armour: {
@@ -336,6 +338,26 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     signature: 'uplinkMast',
     waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'droneOperator', weight: 1, count: 2 }, { unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
   },
+  veil: {
+    id: 'veil',
+    name: 'Veil',
+    blurb: 'Haze and stealth. Smoke trucks lob canisters that leave a thin haze: shots into it or out of it go wild, except Veil\'s own. Shade squads vanish while they hold their fire in a forest, by a building or in Veil\'s haze, even on the move, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth. It flies strike jets rather than scout copters. Its smoke stacks keep a haze over the base. Super unit: the Eclipse, a walker breathing out haze over the army round it.',
+    caps: { infantry: 1, vehicle: 1 },
+    production: {
+      barracks: { table: [shadeSquad(4, 1)], interval: 15 },
+      factory: {
+        table: [
+          { unit: 'ghostTank', weight: 3, count: 1 },
+          { unit: 'smokeTruck', weight: 1.5, count: 1 },
+          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'jet', weight: 0.8, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'eclipse', weight: 1, count: 1 }] },
+    },
+    signature: 'smokeStacks',
+    waves: [shadeSquad(4, 4), { unit: 'ghostTank', weight: 2, count: 1 }, { unit: 'smokeTruck', weight: 1, count: 1 }],
+  },
 };
 
 /**
@@ -353,7 +375,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

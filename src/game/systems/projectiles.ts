@@ -110,6 +110,8 @@ export function projectileSystem(ctx: SimContext): System {
         }
         // Cryo shots lay frost where they land (see frost.ts), on land or water; not in the air.
         if (w.frost && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2) ctx.frost.add(p.ex, p.ez, Math.max(1.6, w.splash), w.frost, p.faction);
+        // Smoke shells lay a cloud where they land (see smoke.ts).
+        if (w.smoke) ctx.smoke.add(p.ex, p.ez, Math.max(2, w.splash), w.smoke, p.faction);
         // Flame keeps burning where it lands (see fire.ts); not in the air, or on the water.
         if (p.kind === 'flame' && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) {
           ctx.fire.add(p.ex, p.ez, w.splash, heatPerShot(w), p.faction, p.source);

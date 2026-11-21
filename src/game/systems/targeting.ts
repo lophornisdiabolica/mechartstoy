@@ -9,6 +9,7 @@ import type { WeaponDef } from '../units';
 import * as D from '../../core/dmath';
 import { doctrineOf } from '../doctrines';
 import { hackable } from '../hacking';
+import { canSee } from '../smoke';
 import { UnitId } from '../units';
 
 const RETARGET_INTERVAL = 0.5;
@@ -116,6 +117,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
     // A hack weapon only goes for what it can turn (see hacking.ts).
     if (armed.weapon.hack && !hackable(world, other)) return;
     const d = Math.sqrt(d2);
+    // Stealthed, and nobody spotting it (see smoke.ts).
+    if (!canSee(world, ctx, faction, other, d - (world.get(other, Collider)?.radius ?? 0), spotters)) return;
     if (d < armed.weapon.minRange) return;
     if (d > armed.sight) {
       const ot = world.req(other, Transform);

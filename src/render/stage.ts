@@ -18,6 +18,7 @@ import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
 import { FireGround } from './fireGround';
 import { FrostGround } from './frostGround';
+import { SmokeClouds } from './smokeClouds';
 import { Domes } from './domes';
 import { JamMarks } from './jamMarks';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
@@ -79,6 +80,7 @@ export class Stage {
   frontLines!: FrontLines;
   private fireGround!: FireGround;
   private frostGround!: FrostGround;
+  private smokeClouds!: SmokeClouds;
   private domes!: Domes;
   private jamMarks!: JamMarks;
   /** Where a god power will land (see GodPanel). */
@@ -177,6 +179,7 @@ export class Stage {
       this.frontLines.dispose();
       this.fireGround.dispose();
       this.frostGround.dispose();
+      this.smokeClouds.dispose();
       this.domes.dispose();
       this.jamMarks.dispose();
       this.debugOverlay.dispose();
@@ -217,6 +220,8 @@ export class Stage {
     battle.add(this.fireGround.root);
     this.frostGround = new FrostGround(game);
     battle.add(this.frostGround.root);
+    this.smokeClouds = new SmokeClouds(game);
+    battle.add(this.smokeClouds.root);
     this.domes = new Domes(game);
     battle.add(this.domes.root);
     this.jamMarks = new JamMarks(game);
@@ -377,6 +382,7 @@ export class Stage {
     this.frontLines.update(frameSeconds);
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
+    this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
     this.jamMarks.update(simSeconds);
     this.debugOverlay.update(frameSeconds);
