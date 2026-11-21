@@ -1,5 +1,5 @@
 import { System, World } from '../core/ecs';
-import { Armed, Faction, Guard, Health, Mover, Transform, Unit } from './components';
+import { Armed, Arsenal, Faction, Guard, Health, Mover, Transform, Unit } from './components';
 import { WeaponDef } from './units';
 import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
@@ -86,12 +86,22 @@ export function fightingStrength(world: World, e: number): number {
   const h = world.get(e, Health);
   const a = world.get(e, Armed);
   if (!h || !a) return 0;
-  return strengthOf(h.hp, h.armor, a.weapon);
+  const arsenal = world.get(e, Arsenal);
+  return strengthOf(h.hp, h.armor, arsenal ? [a.weapon, ...arsenal.arms.map((x) => x.weapon)] : a.weapon);
 }
 
-/** fightingStrength for given health, armour and weapon (a fresh unit of a type: its def's hp, armor and weapon). */
-export function strengthOf(hp: number, armor: number, w: WeaponDef): number {
-  const dps = (w.damage * w.burst) / Math.max(0.1, w.cooldown);
+/** A weapon's damage per second, flat out (bursts and cooldowns, not armour or misses). */
+export function weaponDps(w: WeaponDef): number {
+  return (w.damage * w.burst) / Math.max(0.1, w.cooldown);
+}
+
+/**
+ * fightingStrength for given health, armour and weapon (a fresh unit of a
+ * type: its def's hp, armor and weapon), or weapons: a unit with several
+ * (see UnitDef.mounts) puts out all of their damage together.
+ */
+export function strengthOf(hp: number, armor: number, w: WeaponDef | readonly WeaponDef[]): number {
+  const dps = isList(w) ? w.reduce((sum, x) => sum + weaponDps(x), 0) : weaponDps(w);
   // Armour is taken off each hit; against a typical hit (ARMOUR_REF damage) that's this share of it.
   const absorbed = armor / (armor + ARMOUR_REF);
   return Math.sqrt((hp / (1 - absorbed)) * dps);
@@ -263,4 +273,8 @@ export function offensiveSystem(ctx: SimContext): System {
       ctx.offensive.update(world, ctx);
     },
   };
+}
+
+function isList(w: WeaponDef | readonly WeaponDef[]): w is readonly WeaponDef[] {
+  return Array.isArray(w);
 }

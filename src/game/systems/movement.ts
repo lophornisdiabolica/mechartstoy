@@ -2,11 +2,12 @@ import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
 import { MOVE_RULES, MoveClass, MoveRules } from '../../world/moveClasses';
 import { BuildingDef } from '../buildings';
-import { Ai, Armed, Building, Collider, Faction, GroundFollow, Health, Mover, NavState, Transform, Unit } from '../components';
+import { Ai, Building, Collider, Faction, GroundFollow, Health, Mover, NavState, Transform, Unit } from '../components';
 import { NavGrid } from '../../world/navGrid';
 import { CellArea } from '../../world/ground';
 import { SimContext } from '../context';
 import * as D from '../../core/dmath';
+import { engaged, fightsHandToHand, lastFired } from '../arsenal';
 
 export function wrapAngle(a: number): number {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -197,11 +198,14 @@ function avoidance(ctx: SimContext, world: World, e: Entity, t: Transform, dirX:
   const myFaction = world.get(e, Faction)?.id;
   const flying = air.has(e);
   const over = MOVE_RULES[world.get(e, Mover)?.move ?? 'tracked'].over;
+  // Melee units go straight at the enemy rather than round them (see systems/melee.ts).
+  const melee = fightsHandToHand(world, e);
   let ax = 0;
   let az = 0;
   ctx.grid.forEachNear(t.x, t.z, lookahead + 3.5, (other, _d2, body) => {
     if (other === e) return;
     if (body.building && goesOver(over, body.building.def)) return;
+    if (melee && !body.building && myFaction !== undefined && ctx.sides.hostile(myFaction, body.faction?.id ?? -1)) return;
     // Aircraft only steer round other aircraft, and ground units don't dodge what's flying over them.
     if (air.size > 0 && air.has(other) !== flying) return;
     const ot = body.t;
@@ -364,7 +368,9 @@ export function movementSystem(ctx: SimContext): System {
         // ground's kind (scrap, roads, dense forest) speeds or slows some classes. Bridges are dry land.
         const field = ctx.field;
         const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
-        const speed = rules.flies ? m.speed : wet ? m.speed * rules.waterSpeed : m.speed * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
+        // A charging melee unit runs (see Mover.surge).
+        const pace = m.surge ? m.speed * m.surge : m.speed;
+        const speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : pace * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
         const stepLen = Math.min(dist, speed * throttle * dt);
         const nx = t.x + D.cos(t.heading) * stepLen;
         const nz = t.z - D.sin(t.heading) * stepLen;
@@ -508,9 +514,8 @@ const ALERT_TIME = 6;
  * or been hit lately. Infantry bunch up while it doesn't, and spread out when it does.
  */
 export function alert(world: World, e: Entity): boolean {
-  const armed = world.get(e, Armed);
-  if (armed?.target != null) return true;
-  const last = Math.max(world.get(e, Health)?.hurtAt ?? -Infinity, armed?.firedAt ?? -Infinity);
+  if (engaged(world, e)) return true;
+  const last = Math.max(world.get(e, Health)?.hurtAt ?? -Infinity, lastFired(world, e));
   return world.time - last < ALERT_TIME;
 }
 

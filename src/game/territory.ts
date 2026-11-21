@@ -1,11 +1,12 @@
 import { Entity, System, World } from '../core/ecs';
-import { Ai, Armed, Faction, Guard, Health, Transform, Unit } from './components';
+import { Ai, Faction, Guard, Health, Transform, Unit } from './components';
 import { SimContext } from './context';
 import { canBuild, countByCategory } from './caps';
 import { spawnSpot } from './systems/production';
 import { spawnUnit } from './spawn';
 import { UnitId } from './units';
 import * as D from '../core/dmath';
+import { lastFired } from './arsenal';
 
 /**
  * Territory and healing. A side's territory is its base and the ground round
@@ -60,7 +61,7 @@ export function inTerritory(ctx: SimContext, faction: number, x: number, z: numb
 
 /** Whether a unit is resting: hasn't fired or been hit for REST_TIME. */
 export function resting(world: World, e: Entity): boolean {
-  const last = Math.max(world.get(e, Health)?.hurtAt ?? -Infinity, world.get(e, Armed)?.firedAt ?? -Infinity);
+  const last = Math.max(world.get(e, Health)?.hurtAt ?? -Infinity, lastFired(world, e));
   return world.time - last >= REST_TIME;
 }
 

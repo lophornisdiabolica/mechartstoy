@@ -604,6 +604,38 @@ fire and moves to where it can (`elevationFor`, and the firing spots in
 `systems/targeting.ts`). Lobbed weapons raise their barrels and racks
 further the further they're shooting.
 
+### More than one weapon, and melee
+
+A unit (or building) has one **main weapon** (`UnitDef.weapon`, the `Armed`
+component) and can carry more on **mounts of their own**
+(`UnitDef.mounts`, the `Arsenal` component): a tank's roof machine gun, a
+walker's flak pod, a mech's claw. Each picks its own target, turns its own
+turret (its own entry in `game/mounts.ts`, which the model builds as
+`rig.mounts`), pitches its own barrels and keeps its own cooldown, so a
+tank can shell a tank with its cannon while its machine gun works on the
+infantry round it. Only the main weapon steers the unit: what it chases,
+where it stands and which way a turret-less hull turns. A fixed weapon on
+a mount of its own fires when the hull happens to face its target.
+`game/arsenal.ts` goes over all of a unit's weapons for everything that
+asks "is it fighting", "how strong is it" or "can it shoot aircraft"
+(strength, the Commander's threat map and production advice, alertness,
+healing, stats).
+
+A weapon with `melee` (`MeleeDef`) is a **melee weapon**
+(`systems/melee.ts`): it fires no projectile but lands a blow on what it's
+touching. Its reach runs from the striker's own edge, so melee units close
+to contact and keep pressing in, and go straight at enemies rather than
+steering round them. All of it is physical: a `lunge` bounds the last
+stretch in, a `knock` shoves the struck back (small things further than
+big ones), a `sweep` catches enemies either side of the target too, and a
+`charge` runs at a target it can see but not yet reach. The Commander
+calls **charges** (`commander/charges.ts`): a melee squad with an enemy
+group just past its sight, and the strength to take it, goes for it as a
+squad, at a run, rather than waiting for it to walk into reach. The
+`struck` event draws the blow: the body jabs forward, the model swings
+(`rig.strike`), sparks fly the way it swung and a stomp kicks up dust.
+No doctrine uses either yet.
+
 ### Changing the map mid-battle
 
 The map isn't fixed once generated. `Battlefield.paint(x, z, radius,

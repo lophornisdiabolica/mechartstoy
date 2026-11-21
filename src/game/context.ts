@@ -19,7 +19,7 @@ import { SquadRoster } from './territory';
 import { FactionOrders } from './orders';
 import { BattleSettings } from './settings';
 import { TideSettings } from './tide';
-import { ProjectileKind, UnitDef, UnitId } from './units';
+import { MeleeDef, ProjectileKind, UnitDef, UnitId } from './units';
 
 /** Events systems publish for other layers (effects, audio, UI) to react to. */
 export type GameEvents = {
@@ -27,6 +27,12 @@ export type GameEvents = {
   /** `heading` and `climb` are which way the barrel points. */
   fired: { entity: Entity; x: number; y: number; z: number; heading: number; climb: number; kind: ProjectileKind };
   impact: { x: number; y: number; z: number; kind: ProjectileKind; splash: number };
+  /**
+   * A melee blow landed (see systems/melee.ts): where (the target's edge),
+   * the way the striker faced, how it swung, how far it lunged in for it,
+   * and how many it hit (more than one for a sweep).
+   */
+  struck: { entity: Entity; x: number; y: number; z: number; heading: number; style: MeleeDef['style']; kind: ProjectileKind; lunge: number; hits: number };
   /** `killer` is whoever landed the last blow, if anyone did. */
   unitDestroyed: { entity: Entity; x: number; y: number; z: number; def: UnitDef; faction: number; killer: Hit | null };
   /**

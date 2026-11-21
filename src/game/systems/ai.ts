@@ -68,6 +68,8 @@ export function aiSystem(ctx: SimContext): System {
         const guard = world.get(e, Guard);
         const post = guard ? ctx.outposts[guard.outpost] : null;
         const def = world.get(e, Unit)?.def;
+        // A charge lasts only while the AI keeps calling it (see the melee notes below).
+        if (mover.surge) mover.surge = undefined;
         // Engineers go and build what the Commander wants built, or wait at home (see commander/engineers.ts).
         if (def?.builds) {
           const job = ctx.commander.engineers.jobFor(e);
@@ -142,9 +144,20 @@ export function aiSystem(ctx: SimContext): System {
             continue;
           }
         }
+        const melee = armed.weapon.melee;
         if (armed.target !== null && world.isAlive(armed.target) && (!post || near(world, armed.target, post, GUARD_LEASH))) {
           const tt = world.req(armed.target, Transform);
           const reach = effectiveRange(world, e, armed, armed.target);
+          // Melee units fight up against their target: they close on it at a run, and keep pressing in (see melee.ts).
+          if (melee) {
+            const closing = distanceToTarget(world, e, armed.target) > reach;
+            if (closing && melee.charge) mover.surge = melee.charge;
+            mover.faceX = tt.x;
+            mover.faceZ = tt.z;
+            mover.targetX = tt.x;
+            mover.targetZ = tt.z;
+            continue;
+          }
           const outOfRange = distanceToTarget(world, e, armed.target) > reach * (role === 'artillery' ? 0.95 : 0.85);
           // Support units don't chase: out of range, they carry on keeping up with the frontline.
           if (!(role === 'support' && outOfRange && !post)) {
@@ -172,6 +185,17 @@ export function aiSystem(ctx: SimContext): System {
             }
             continue;
           }
+        }
+
+        // A charge the Commander called for this squad, at enemies just out of its sight (see commander/charges.ts).
+        const charge = !post && ctx.orders[faction].stance === 'auto' && !ctx.orders[faction].rally ? ctx.commander.charges.forSquad(ai.squad) : undefined;
+        if (charge && charge.side === faction) {
+          if (melee?.charge) mover.surge = melee.charge;
+          mover.targetX = charge.x + ai.rallyOffsetX * 0.3;
+          mover.targetZ = charge.z + ai.rallyOffsetZ * 0.3;
+          mover.faceX = charge.x;
+          mover.faceZ = charge.z;
+          continue;
         }
 
         // Support units tag along a little behind the nearest frontline ally.

@@ -178,8 +178,13 @@ export function hullPose(world: World, e: Entity): HullPose {
   return { x: t.x, y: t.y, z: t.z, heading: t.heading, pitch: tilt?.pitch ?? 0, roll: tilt?.roll ?? 0 };
 }
 
-/** The mount an entity's model carries its guns on, if it has one (see mounts.ts). */
-export function mountFor(world: World, e: Entity): Mount | undefined {
+/**
+ * The mount a weapon is on (see mounts.ts): its own, for one on a mount of
+ * its own (see Arsenal), or else the one the entity's model carries its
+ * main guns on, if any.
+ */
+export function mountFor(world: World, e: Entity, armed?: Armed): Mount | undefined {
+  if (armed?.mount !== undefined) return mountOf(armed.mount);
   const r = world.get(e, Renderable);
   return r ? mountOf(r.model) : undefined;
 }
@@ -191,7 +196,7 @@ export function mountFor(world: World, e: Entity): Mount | undefined {
  * weapon's height.
  */
 export function weaponMuzzle(world: World, e: Entity, armed: Armed, aim: number, elev: number, index: number, ctx?: SimContext): Point3 {
-  const mount = mountFor(world, e);
+  const mount = mountFor(world, e, armed);
   if (!mount) return muzzlePoint(world, e, aim, armed.muzzleOffset, armed.weapon.muzzleHeight, ctx);
   return muzzleWorld(mount, hullPose(world, e), aim, elev, index);
 }

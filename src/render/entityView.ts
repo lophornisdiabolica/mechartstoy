@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Construction, Faction, Unit, Renderable, Tilt, Transform, Wreck } from '../game/components';
+import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
 import { breakModel, Collapse, stepCollapse } from './wrecks';
 import { SIM_HZ } from '../game/game';
+import type { EventBus } from '../core/events';
+import type { GameEvents } from '../game/context';
+import type { MeleeDef } from '../game/units';
 
 function lerpAngle(a: number, b: number, t: number): number {
   let d = b - a;
@@ -33,7 +36,12 @@ interface ViewEntry {
   duck: number;
   /** Goes on the ground, so is drawn standing on any road there (see the road check). */
   grounded: boolean;
+  /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
+  strike: { t: number; style: MeleeDef['style']; jab: number } | null;
 }
+
+/** Seconds a melee blow takes to draw. */
+const STRIKE_TIME = 0.35;
 
 const _ahead = new THREE.Vector3();
 /** Where round a boat to look for a deck overhead (scaled by its size), and the gap it keeps under one. */
@@ -81,6 +89,7 @@ export class EntityView {
     private readonly surface?: (x: number, z: number) => number,
     private readonly deck?: (x: number, z: number) => number | null,
     private readonly road?: (x: number, z: number) => number,
+    events?: EventBus<GameEvents>,
   ) {
     this.root.name = 'entities';
     this.root.visible = false;
@@ -88,10 +97,20 @@ export class EntityView {
     this.root.matrixWorldAutoUpdate = false;
     this.drawn = this.batcher.root;
     world.onDestroy((e) => this.remove(e));
+    // A melee blow: the striker's body jabs at its target as the model swings (see ModelRig.strike).
+    this.stopStruck = events?.on('struck', (s) => {
+      const entry = this.entries.get(s.entity);
+      if (!entry) return;
+      const radius = world.get(s.entity, Collider)?.radius ?? 0.5;
+      entry.strike = { t: 0, style: s.style, jab: s.style === 'stomp' ? 0 : radius * (s.style === 'thrust' ? 0.45 : 0.25) };
+    });
   }
+
+  private readonly stopStruck?: () => void;
 
   /** Free the batches' GPU buffers (when the battle is unloaded). */
   dispose(): void {
+    this.stopStruck?.();
     this.batcher.dispose();
   }
 
@@ -133,7 +152,7 @@ export class EntityView {
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -209,6 +228,29 @@ export class EntityView {
         const tilted = obj.rotation.x !== 0 || obj.rotation.z !== 0;
         rig.turret.rotation.y = tilted && mountOf(w.req(e, Renderable).model) ? turretYaw(hullMatrix(obj.rotation.y, obj.rotation.z, obj.rotation.x, _m), armed.aim) : armed.aim - obj.rotation.y;
         if (rig.barrels) for (const b of rig.barrels) b.rotation.z = armed.elev;
+      }
+      // Weapons on mounts of their own turn and pitch to their own aim.
+      const arsenal = rig?.mounts ? w.get(e, Arsenal) : undefined;
+      if (rig?.mounts && arsenal) {
+        const tilted = obj.rotation.x !== 0 || obj.rotation.z !== 0;
+        const m = tilted ? hullMatrix(obj.rotation.y, obj.rotation.z, obj.rotation.x, _m) : null;
+        rig.mounts.forEach((mount, k) => {
+          const a = arsenal.arms[k];
+          if (!a) return;
+          if (mount.turret) mount.turret.rotation.y = m ? turretYaw(m, a.aim) : a.aim - obj.rotation.y;
+          if (mount.barrels) for (const b of mount.barrels) b.rotation.z = a.elev;
+        });
+      }
+      // A melee blow: jab forward and back along the way it faces, while the model swings.
+      if (entry.strike) {
+        const s = entry.strike;
+        s.t += dt;
+        const k = Math.min(1, s.t / STRIKE_TIME);
+        const jab = Math.sin(Math.PI * k) * s.jab;
+        obj.position.x += Math.cos(obj.rotation.y) * jab;
+        obj.position.z -= Math.sin(obj.rotation.y) * jab;
+        rig?.strike?.(k, s.style);
+        if (k >= 1) entry.strike = null;
       }
       if (rig?.animate) {
         const moved = Math.hypot(x - entry.lastX, z - entry.lastZ);
