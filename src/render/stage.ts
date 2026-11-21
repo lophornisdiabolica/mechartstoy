@@ -376,7 +376,7 @@ export class Stage {
     this.commanderOverlay.update();
     this.frontLines.update(frameSeconds);
     this.fireGround.update(simSeconds);
-    this.frostGround.update();
+    this.frostGround.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
     this.debugOverlay.update(frameSeconds);

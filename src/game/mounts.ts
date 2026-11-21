@@ -113,13 +113,14 @@ export const MOUNTS: Record<string, Mount> = {
   // keyed by its model and '#' (see UnitDef.mounts), and sits on top of the body, where the torso turns.
   duelist: { turret: [0, 1.4, 0], muzzles: [[1.3, 0, -0.42]] },
   'duelist#gun': { turret: [0, 1.75, 0], muzzles: [[0.5, 0, 0]] },
-  breaker: { turret: [0, 2.25, 0], muzzles: pair(1.4, 0.35, 0.85) },
-  'breaker#cannon': { turret: [0, 3.19, 0], muzzles: [[0.9, 0.15, 0]] },
+  reaver: { turret: [-0.15, 0.85, 0], muzzles: [[2.45, 0.28, 0]] },
+  'reaver#mg': { turret: [0.75, 0.9, 0.3], muzzles: [[0.5, 0.1, 0]] },
   colossus: { turret: [0, 3.25, 0], muzzles: pair(1.6, 0.4, 1.25) },
   'colossus#rockets': { turret: [0, 4.85, 0], muzzles: pair(0.61, 0.45, 0.25), salvo: 'alternate' },
   // Cipher.
-  hackTruck: { turret: [-0.4, 1.0, 0], pivot: [0, 0.3, 0], muzzles: [[0.35, 0, 0]], elev: [-0.2, 0.9], rest: 0.4 },
-  'hackTruck#gun': { turret: [0.55, 1.2, 0], muzzles: [[0.55, 0.2, 0]] },
+  hackVan: { turret: [-0.4, 1.28, 0], pivot: [0, 0.3, 0], muzzles: [[0.35, 0, 0]], elev: [-0.2, 0.9], rest: 0.4 },
+  'hackVan#gun': { turret: [0.5, 1.22, 0], muzzles: [[0.55, 0.2, 0]] },
+  arcTank: { turret: [-0.1, 0.83, 0], muzzles: [[1.15, 0.32, 0]] },
   jammer: { turret: [0, 1.6, 0], muzzles: pair(0.95, -0.05, 0.42) },
   overmind: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'overmind#array': { turret: [-0.3, 4.75, 0], muzzles: [[0.75, 0.35, 0]] },

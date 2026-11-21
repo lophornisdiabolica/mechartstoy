@@ -1147,9 +1147,12 @@ registerModel('domeTruck', (faction) => {
   root.add(orb);
   const turret = new THREE.Group();
   turret.position.set(0.55, 1.15, 0);
-  turret.add(box(0.1, 0.25, 0.1, DARK, 0, 0.12, 0));
+  turret.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.04, 0)); // ring mount on the cab roof
+  turret.add(box(0.1, 0.18, 0.1, DARK, 0, 0.17, 0));
   const gun = barrelPivot('domeTruck', turret);
-  gun.add(box(0.58, 0.08, 0.08, DARK, 0.26, 0, 0));
+  gun.add(box(0.3, 0.15, 0.17, DARK, 0.03, 0.01, 0)); // receiver
+  gun.add(box(0.04, 0.2, 0.32, secondary, 0.21, 0.06, 0)); // gun shield
+  gun.add(box(0.58, 0.07, 0.07, DARK, 0.26, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('domeTruck', root, turret, [gun]) });
 });
@@ -1249,7 +1252,8 @@ registerModel('freezerTruck', (faction) => {
   turret.position.set(-0.7, 0.62, 0);
   turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
   const tube = barrelPivot('freezerTruck', turret);
-  tube.add(box(0.9, 0.22, 0.22, DARK, 0.35, 0, 0));
+  // Short of the pivot at the back, so it clears the bed when it rests tipped up.
+  tube.add(box(0.72, 0.22, 0.22, DARK, 0.44, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('freezerTruck', root, turret, [tube]) });
 });
@@ -1344,45 +1348,37 @@ registerModel('duelist', (faction) => {
   });
 });
 
-// Sabre: a heavy walker with ram spikes for arms, a ram plate across its chest and a cannon on its back.
-registerModel('breaker', (faction) => {
+// Sabre: a heavy tank whose turret carries a great scything arm, and a machine gun in the hull.
+registerModel('reaver', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
-  const body = new THREE.Group();
-  body.position.y = 2.0;
-  root.add(body);
-  body.add(box(0.9, 0.4, 1.1, METAL, 0, 0, 0));
+  root.add(...tracks(2.4, 0.42, 0.46, 0.62));
+  root.add(box(2.2, 0.46, 1.16, primary, 0, 0.6, 0));
+  root.add(box(0.45, 0.28, 1.22, secondary, 0.9, 0.5, 0)); // ram plate
   const turret = new THREE.Group();
-  turret.position.y = 0.25;
-  turret.add(box(1.4, 0.8, 1.3, primary, 0, 0.4, 0));
-  turret.add(box(0.3, 0.22, 0.8, GLASS, 0.62, 0.55, 0));
-  turret.add(box(1.0, 0.18, 1.36, secondary, -0.15, 0.85, 0));
-  turret.add(box(0.15, 0.6, 1.5, secondary, 0.78, 0.35, 0)); // ram plate
-  const spikes = new THREE.Group();
-  for (const side of [-1, 1]) {
-    spikes.add(box(0.5, 0.45, 0.35, secondary, 0.1, 0.35, side * 0.85));
-    spikes.add(box(1.2, 0.18, 0.18, BLADE, 0.8, 0.35, side * 0.85));
-  }
-  turret.add(spikes);
-  body.add(turret);
-  const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(1.0, 1.0, 0.3, METAL, DARK);
-    leg.hip.position.set(0, -0.05, side * 0.45);
-    body.add(leg.hip);
-    return leg;
-  });
-  const cannon = ownMount(root, 'breaker#cannon', (t) => {
-    t.add(box(0.5, 0.25, 0.5, DARK, 0, 0.1, 0));
-    t.add(box(0.9, 0.14, 0.14, DARK, 0.45, 0.15, 0));
+  turret.position.set(-0.15, 0.85, 0);
+  turret.add(box(1.05, 0.42, 0.95, primary, 0, 0.21, 0));
+  turret.add(box(0.5, 0.12, 0.7, secondary, -0.25, 0.47, 0));
+  // The arm swings across in front of the turret as it strikes; at rest it points straight ahead.
+  const arm = new THREE.Group();
+  arm.position.set(0.35, 0.28, 0);
+  arm.add(box(0.36, 0.3, 0.36, METAL, 0, 0, 0)); // shoulder
+  arm.add(box(1.4, 0.16, 0.16, METAL, 0.85, 0, 0));
+  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the scythe blade, hooked back
+  arm.add(box(0.34, 0.05, 0.22, BLADE, 1.9, 0.01, -0.17));
+  turret.add(arm);
+  root.add(turret);
+  const mg = ownMount(root, 'reaver#mg', (t) => {
+    t.add(box(0.26, 0.13, 0.2, DARK, 0.08, 0.035, 0));
+    t.add(box(0.4, 0.06, 0.06, DARK, 0.3, 0.1, 0));
   });
   return setRig(root, {
     turret,
-    ...walker(legs, body, 1.2, 0.45),
-    ...mounted('breaker', root, turret),
-    mounts: [cannon],
-    // The spikes punch forward.
+    ...mounted('reaver', root, turret),
+    mounts: [mg],
+    // The arm sweeps across from one side to the other.
     strike(k) {
-      spikes.position.x = Math.sin(Math.PI * k) * 0.4;
+      arm.rotation.y = Math.cos(Math.PI * k) * 1.1 * Math.sin(Math.PI * k) * 2;
     },
   });
 });
@@ -1431,31 +1427,55 @@ registerModel('colossus', (faction) => {
 });
 
 /** Cipher's signal glow. */
-const SIGNAL = 0x2ee6c4;
+const SIGNAL = 0x5fd8c0;
 
-// Cipher: a truck with a hacking dish on its bed and a pintle gun on the cab roof.
-registerModel('hackTruck', (faction) => {
+// Cipher: a boxy van with a hacking dish on its roof and a pintle gun up front.
+registerModel('hackVan', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   root.add(...wheels([-0.6, 0.6], 0.46, 0.44));
-  root.add(box(1.9, 0.25, 0.86, METAL, 0, 0.5, 0));
-  root.add(box(0.6, 0.55, 0.84, primary, 0.62, 0.9, 0)); // cab
-  root.add(box(0.06, 0.25, 0.6, GLASS, 0.93, 1.0, 0));
-  root.add(box(0.7, 0.3, 0.7, secondary, -0.4, 0.77, 0)); // signal box
+  root.add(box(1.9, 0.2, 0.84, METAL, 0, 0.45, 0)); // chassis
+  root.add(box(1.95, 0.72, 0.9, primary, -0.05, 0.86, 0)); // van body
+  root.add(box(1.97, 0.1, 0.92, secondary, -0.05, 0.78, 0)); // stripe
+  root.add(box(0.06, 0.3, 0.72, GLASS, 0.94, 1.0, 0)); // windscreen
+  root.add(box(0.5, 0.06, 0.6, DARK, -0.4, 1.25, 0)); // roof plate
   const turret = new THREE.Group();
-  turret.position.set(-0.4, 1.0, 0);
-  turret.add(cylinder(0.1, 0.12, 0.3, 6, DARK, 0, 0.15, 0));
-  const dish = barrelPivot('hackTruck', turret);
+  turret.position.set(-0.4, 1.28, 0);
+  turret.add(cylinder(0.1, 0.12, 0.26, 6, DARK, 0, 0.13, 0));
+  const dish = barrelPivot('hackVan', turret);
   dish.add(cylinder(0.42, 0.08, 0.16, 10, secondary, 0.12, 0, 0).rotateZ(-Math.PI / 2));
   const core = glowBox(0.12, 0.12, 0.12, SIGNAL);
   core.position.set(0.3, 0, 0);
   dish.add(core);
   root.add(turret);
-  const gun = ownMount(root, 'hackTruck#gun', (t) => {
-    t.add(box(0.1, 0.2, 0.1, DARK, 0, 0.1, 0));
-    t.add(box(0.55, 0.08, 0.08, DARK, 0.27, 0.2, 0));
+  const gun = ownMount(root, 'hackVan#gun', (t) => {
+    t.add(cylinder(0.13, 0.16, 0.08, 8, METAL, 0, 0.04, 0));
+    t.add(box(0.08, 0.14, 0.08, DARK, 0, 0.13, 0));
+    t.add(box(0.5, 0.07, 0.07, DARK, 0.3, 0.2, 0));
   });
-  return setRig(root, { turret, ...mounted('hackTruck', root, turret, [dish]), mounts: [gun] });
+  return setRig(root, { turret, ...mounted('hackVan', root, turret, [dish]), mounts: [gun] });
+});
+
+// Cipher: a tank with a lightning coil on its turret and a forked emitter out front.
+registerModel('arcTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.2, 0.4, 0.44, 0.58));
+  root.add(box(2.0, 0.42, 1.06, primary, 0, 0.58, 0));
+  const turret = new THREE.Group();
+  turret.position.set(-0.1, 0.83, 0);
+  turret.add(box(0.95, 0.32, 0.8, primary, 0, 0.16, 0));
+  for (const [y, r] of [[0.42, 0.26], [0.56, 0.22], [0.7, 0.18]] as const) turret.add(cylinder(r, r, 0.1, 10, secondary, -0.15, y, 0)); // coil
+  const top = glowBox(0.16, 0.12, 0.16, SIGNAL);
+  top.position.set(-0.15, 0.82, 0);
+  turret.add(top);
+  turret.add(box(0.75, 0.1, 0.1, DARK, 0.72, 0.32, 0.12)); // forked emitter
+  turret.add(box(0.74, 0.1, 0.1, DARK, 0.73, 0.32, -0.12));
+  const tip = glowBox(0.1, 0.14, 0.3, 0xd8f4ff);
+  tip.position.set(1.1, 0.32, 0);
+  turret.add(tip);
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('arcTank', root, turret) });
 });
 
 // Cipher: a walker with twin guns and a jamming mast whose rings pulse.

@@ -118,25 +118,6 @@ const towerCannon: WeaponDef = {
   heavyAt: 6,
 };
 
-/** Cipher's uplink mast: turns enemy vehicles that come near the base (see hacking.ts). */
-const hackUplink: WeaponDef = {
-  name: 'Mast uplink',
-  range: 18,
-  minRange: 0,
-  damage: 0,
-  cooldown: 6,
-  burst: 1,
-  burstGap: 0,
-  projectile: 'hack',
-  speed: 45,
-  splash: 0,
-  spread: 0,
-  arc: false,
-  muzzleHeight: 4.2,
-  targets: 'ground',
-  hack: 8,
-};
-
 /** The hilltop gun: a big, slow artillery piece that lobs shells over whatever's in the way. */
 const bigGunShell: WeaponDef = {
   name: 'Heavy gun',
@@ -387,7 +368,7 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
-  // Cipher: turns out hack trucks and jammers, and its own uplink turns enemy vehicles that come at the base.
+  // Cipher: turns out hack vans and jammers, and jams the enemy guns that come at the base.
   uplinkMast: {
     id: 'uplinkMast',
     name: 'Uplink Mast',
@@ -396,11 +377,8 @@ export const BUILDING_DEFS = {
     armor: 7,
     radius: 2.4,
     height: 4.5,
-    production: { table: [{ unit: 'hackTruck', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }], interval: 34 },
-    weapon: hackUplink,
-    sight: 18,
-    turretTurnRate: 2,
-    jam: { radius: 11, pace: 0.6 },
+    production: { table: [{ unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }], interval: 34 },
+    jam: { radius: 16, pace: 0.6, every: 3 },
     rebuildDelay: 40,
     buildTime: 10,
   },

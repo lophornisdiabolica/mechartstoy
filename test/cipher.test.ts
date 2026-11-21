@@ -25,10 +25,10 @@ function standing(game: Game, def: UnitDef, faction: number, x: number, z: numbe
 }
 
 describe('Cipher: hacking', () => {
-  it('a hack truck turns an enemy tank to its side for a while, then it comes back and cannot be turned again at once', () => {
+  it('a hack van turns an enemy tank to its side for a while, then it comes back and cannot be turned again at once', () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
-    standing(game, UNIT_DEFS.hackTruck, 0, base.x, base.z);
+    standing(game, UNIT_DEFS.hackVan, 0, base.x, base.z);
     // A free tank (with its own AI) so there's something to set aside and give back.
     const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, base.x + 10, base.z);
     game.world.req(tank, Armed).cooldown = Infinity;
@@ -43,8 +43,8 @@ describe('Cipher: hacking', () => {
     expect(turnedAt).toBeGreaterThan(0);
     expect(game.world.req(tank, Faction).id).toBe(0);
     expect(game.world.has(tank, Ai)).toBe(false);
-    run(game, UNIT_DEFS.hackTruck.weapon.hack! + 0.5);
-    expect(backAt - turnedAt).toBeCloseTo(UNIT_DEFS.hackTruck.weapon.hack!, 0);
+    run(game, UNIT_DEFS.hackVan.weapon.hack! + 0.5);
+    expect(backAt - turnedAt).toBeCloseTo(UNIT_DEFS.hackVan.weapon.hack!, 0);
     expect(game.world.req(tank, Faction).id).toBe(1);
     expect(game.world.has(tank, Ai)).toBe(true);
     // The truck reloads well before the tank is open to it again, but the hack doesn't take.
@@ -56,7 +56,7 @@ describe('Cipher: hacking', () => {
   it('a turned tank fights its old friends', () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
-    const truck = standing(game, UNIT_DEFS.hackTruck, 0, base.x, base.z);
+    const truck = standing(game, UNIT_DEFS.hackVan, 0, base.x, base.z);
     game.world.req(truck, Armed).cooldown = 0;
     const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, base.x + 10, base.z);
     // The tank holds its fire until it's been turned.
@@ -70,7 +70,7 @@ describe('Cipher: hacking', () => {
   it('hack weapons leave infantry and super units alone', () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
-    const truck = standing(game, UNIT_DEFS.hackTruck, 0, base.x, base.z);
+    const truck = standing(game, UNIT_DEFS.hackVan, 0, base.x, base.z);
     const trooper = standing(game, UNIT_DEFS.trooper, 1, base.x + 6, base.z);
     const titan = standing(game, UNIT_DEFS.titan, 1, base.x, base.z + 9);
     game.world.req(trooper, Armed).cooldown = Infinity;
@@ -89,11 +89,31 @@ describe('Cipher: hacking', () => {
     standing(game, UNIT_DEFS.jammer, 0, base.x, base.z);
     const enemy = standing(game, UNIT_DEFS.tank, 1, base.x + 6, base.z);
     const ally = standing(game, UNIT_DEFS.tank, 0, base.x - 3, base.z);
-    const far = standing(game, UNIT_DEFS.tank, 1, base.x + 30, base.z);
-    run(game, 1);
+    const far = standing(game, UNIT_DEFS.tank, 1, base.x + 20, base.z);
+    // Its first pulse comes within one interval.
+    run(game, UNIT_DEFS.jammer.jam!.every + 0.1);
     expect(reloadPace(game.world, game.world.req(enemy, Armed))).toBe(UNIT_DEFS.jammer.jam!.pace);
     expect(reloadPace(game.world, game.world.req(ally, Armed))).toBe(1);
     expect(reloadPace(game.world, game.world.req(far, Armed))).toBe(1);
+  });
+});
+
+describe('Cipher: arc tanks', () => {
+  it('lightning arcs from the soldier it hits to the ones round it', () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    standing(game, UNIT_DEFS.arcTank, 0, base.x, base.z);
+    const squad = [0, 1, 2, 3].map((i) => {
+      const e = standing(game, UNIT_DEFS.trooper, 1, base.x + 8 + (i % 2) * 1.2, base.z + Math.floor(i / 2) * 1.2);
+      game.world.req(e, Armed).cooldown = Infinity;
+      return e;
+    });
+    let arcs = 0;
+    game.events.on('arc', () => arcs++);
+    run(game, 3);
+    expect(arcs).toBeGreaterThan(0);
+    const hurt = squad.filter((e) => !game.world.isAlive(e) || (game.world.get(e, Health)?.hp ?? 0) < UNIT_DEFS.trooper.hp);
+    expect(hurt.length).toBeGreaterThanOrEqual(3);
   });
 });
 

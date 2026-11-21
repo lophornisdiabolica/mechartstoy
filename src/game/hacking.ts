@@ -19,9 +19,8 @@ import type { JamDef } from './units';
 
 /** Seconds after it comes back that a hacked vehicle can't be turned again. */
 export const HACK_PROOF = 12;
-/** Seconds between the jammers' pulses; a pulse jams for a little longer, so it doesn't flicker. */
-const JAM_EVERY = 0.5;
-const JAM_HOLD = 0.7;
+/** A pulse jams for this much longer than the time to the jammer's next one, so it doesn't flicker. */
+const JAM_HOLD = 0.3;
 
 /** Whether a hack can turn this entity now: an army vehicle (not a super unit, a carrier, an engineer or an outpost guard) that isn't turned already or just back. */
 export function hackable(world: World, e: Entity): boolean {
@@ -96,10 +95,13 @@ function forgetAbout(world: World, e: Entity): void {
 
 /**
  * Brings turned vehicles back when their time is up (or when they die, so
- * they die as their own side's), and runs the jammers. Before the death system.
+ * they die as their own side's), and runs the jammers: each sends out a
+ * pulse every `every` seconds that jams the enemy guns it reaches until
+ * the next one. Before the death system.
  */
 export function hackSystem(ctx: SimContext): System {
-  let jamAt = 0;
+  /** When each jammer next pulses. */
+  const pulseAt = new Map<Entity, number>();
   return {
     name: 'hacking',
     update(world) {
@@ -109,39 +111,56 @@ export function hackSystem(ctx: SimContext): System {
         if (h.turned && (world.time >= h.until || hp <= 0)) release(world, ctx, e, h);
         else if (!h.turned && world.time >= h.proofUntil) world.remove(e, Hacked);
       }
-      if (world.time < jamAt) return;
-      jamAt = world.time + JAM_EVERY;
+      const pulse = (e: Entity, jam: JamDef) => {
+        const at = pulseAt.get(e);
+        if (at === undefined) {
+          // Each starts a little out of step with the others, by its id, so a row of jammers doesn't pulse as one.
+          pulseAt.set(e, world.time + (e % 7) * (jam.every / 7));
+          return;
+        }
+        if (world.time < at) return;
+        pulseAt.set(e, at + jam.every);
+        jamAround(world, ctx, e, jam);
+      };
       for (const e of world.query(Unit, Transform, Faction)) {
         const jam = world.req(e, Unit).def.jam;
-        if (jam && (world.get(e, Health)?.hp ?? 0) > 0) jamAround(world, ctx, e, jam);
+        if (jam && (world.get(e, Health)?.hp ?? 0) > 0) pulse(e, jam);
       }
       for (const e of world.query(Building, Transform, Faction)) {
         const jam = world.req(e, Building).def.jam;
-        if (jam && !world.has(e, Construction)) jamAround(world, ctx, e, jam);
+        if (jam && !world.has(e, Construction)) pulse(e, jam);
       }
+      for (const e of pulseAt.keys()) if (!world.isAlive(e) || !world.has(e, Transform)) pulseAt.delete(e);
     },
   };
 }
 
+/** Most jammed things a pulse names for the view to spark on. */
+const PULSE_SHOWS = 16;
+
 function jamAround(world: World, ctx: SimContext, e: Entity, jam: JamDef): void {
   const t = world.req(e, Transform);
   const side = world.req(e, Faction).id;
-  const until = world.time + JAM_HOLD;
+  // Jammed until a little after the next pulse, so a jammer's steady work doesn't flicker on and off.
+  const until = world.time + jam.every + JAM_HOLD;
+  const hits: number[] = [];
   ctx.grid.forEachNear(t.x, t.z, jam.radius, (other) => {
     if (!ctx.sides.hostile(side, world.req(other, Faction).id)) return;
     const ot = world.req(other, Transform);
     if (D.sq(ot.x - t.x) + D.sq(ot.z - t.z) > jam.radius * jam.radius) return;
+    const armed = world.get(other, Armed);
+    if (!armed) return;
     const jamArm = (a: Armed) => {
       // The strongest jam on it wins.
       if (a.jammed !== undefined && a.jammed > world.time && (a.jamPace ?? 1) < jam.pace) return;
       a.jammed = until;
       a.jamPace = jam.pace;
     };
-    const armed = world.get(other, Armed);
-    if (!armed) return;
     jamArm(armed);
     for (const arm of world.get(other, Arsenal)?.arms ?? []) jamArm(arm);
+    if (hits.length < PULSE_SHOWS * 3) hits.push(ot.x, ot.y, ot.z);
   });
+  ctx.events.emit('jamPulse', { x: t.x, y: t.y, z: t.z, radius: jam.radius, faction: side, hits });
 }
 
 /** How fast a weapon reloads now: slower while jammed. */

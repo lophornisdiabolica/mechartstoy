@@ -306,7 +306,7 @@ battle, its exact map via `seed`).
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
   Ember Firestorm; Aegis, Rime, Sabre, Cipher and Veil have no slot of their own, and wear
-  Verdant Protectorate, Frost Dominion, Onyx Order, Magenta Directive and Obsidian Choir colours). Every doctrine fields rifle squads with AT troopers,
+  Verdant Protectorate, Celeste Dominion, Onyx Order, Magenta Directive and Obsidian Choir colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -400,23 +400,27 @@ battle, its exact map via `seed`).
   - *Sabre:* melee mechs. Small squads of riflemen (0.55× infantry cap)
     and many more mechs: **duelists**, quick little blade striders that
     each take half a vehicle slot, come from the factory and from its
-    **duel hall** in fours; **breakers**, heavy rams that take one and a
+    **duel hall** in fours; **reavers**, heavy tanks whose turret is a
+    great scything arm, take one and a
     half, smash their way into tanks. Every mech fights hand to hand with
     its main weapon but carries a gun on a mount of its own (duelists a
-    head gun, breakers a shoulder cannon), so it isn't helpless across a
+    head gun, reavers a hull machine gun), so it isn't helpless across a
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
-  - *Cipher:* hacking (`game/hacking.ts`). Hack trucks lock on to an
+  - *Cipher:* hacking (`game/hacking.ts`). Hack vans lock on to an
     enemy vehicle and turn it to Cipher's side for six seconds: it stops
     dead and fights whatever is round it, its old friends included (and
     they it), then comes back to itself and can't be turned again for
     twelve. Kills it makes while turned are Cipher's; if it dies turned, it
     dies as its own side's. Infantry, super units, carriers and engineers
-    can't be hacked. Jammer walkers slow the enemy guns round them to about
-    two thirds of their rate of fire. Its **uplink mast** turns out more and hacks
-    vehicles that come at the base. Super unit: the Overmind, a walker
-    with a hack array on its back.
+    can't be hacked. Arc tanks throw lightning that jumps from one soldier
+    to the next (`WeaponDef.chain`), clearing the AT troopers that crowd a
+    hacked vehicle. Jammer walkers send out a pulse every few seconds, a
+    ring sweeping out to fourteen units: enemy guns it reaches reload at
+    0.6× until the next. Its **uplink mast** turns out more and jams what
+    comes at the base. Super unit: the Overmind, a walker with a hack array
+    on its back.
   - *Veil:* smoke and stealth (`game/smoke.ts`). Smoke trucks lob
     canisters that leave a drifting grey cloud, and its **smoke stacks**
     keep a pall over the base. Nobody can pick out a target through more
@@ -447,7 +451,7 @@ battle, its exact map via `seed`).
 - **Unit caps:** each side has a cap per category: infantry, vehicles,
   aircraft and super units (the Titan and the other doctrines' super units), leaned by
   the side's doctrine. Most units take one slot; a unit can take less or
-  more (`UnitDef.capCost`: a duelist takes half, a breaker one and a half),
+  more (`UnitDef.capCost`: a duelist takes half, a reaver one and a half),
   still out of the one shared vehicle pool, so the survivors of a long
   battle still drift towards its stronger units. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow

@@ -83,6 +83,10 @@ export type GameEvents = {
   shieldHit: { entity: Entity; faction: number; x: number; y: number; z: number; share: number };
   /** A shard gun's shot shattered something frozen (see frost.ts). */
   shatter: { x: number; y: number; z: number };
+  /** Lightning arcing from one enemy to the next (see WeaponDef.chain): the points it ran through, x, y, z in threes. */
+  arc: { points: number[]; faction: number };
+  /** A jammer's pulse went out (see hacking.ts): how far, and where some of what it jammed are (x, y, z in threes). */
+  jamPulse: { x: number; y: number; z: number; radius: number; faction: number; hits: number[] };
   /** A vehicle was hacked over to another side, or came back to its own (`back`; see hacking.ts). */
   hacked: { entity: Entity; x: number; y: number; z: number; faction: number; home: number; back: boolean };
   /** An energy dome collapsed (see shields.ts). */

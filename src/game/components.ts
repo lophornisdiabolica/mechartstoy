@@ -121,6 +121,11 @@ export interface Mover {
   loiterZ?: number;
   /** A melee unit charging what it's closing on (see MeleeDef.charge): its speed multiplier for now. */
   surge?: number;
+  /**
+   * A lunge or a knock under way (see systems/melee.ts): it's carried along
+   * at (vx, vz) for `left` more seconds, a quick dash rather than a jump.
+   */
+  dash?: { vx: number; vz: number; left: number };
 }
 export const Mover = defineComponent<Mover>('Mover');
 
