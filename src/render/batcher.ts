@@ -162,7 +162,7 @@ export class Batcher {
       geometry.setAttribute('uvOffset', offsets);
       // A ghost is the same cut-out, drawn faint and see-through (see addMesh's ghost).
       const material = ghost
-        ? new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5, transparent: true, opacity: GHOST_SPRITE_OPACITY, depthWrite: false })
+        ? new THREE.MeshLambertMaterial({ map: sheet, alphaTest: GHOST_SPRITE_OPACITY * 0.5, transparent: true, opacity: GHOST_SPRITE_OPACITY, depthWrite: false })
         : new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5 });
       material.onBeforeCompile = spriteShader;
       const mesh = new THREE.InstancedMesh(geometry, material, 16);

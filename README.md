@@ -442,8 +442,9 @@ battle, its exact map via `seed`).
     a ghost tank for three.
     Spotters (guard towers, Bastion's scout copters, comms arrays) see
     stealthed units in their radius. Stealthed units are drawn faint and
-    see-through. Super unit: the Eclipse, a walker breathing out haze over
-    the army that walks with it.
+    see-through. Its factory turns out ghost tanks in place of plain ones,
+    and strike jets in place of scout copters. Super unit: the Eclipse, a
+    walker breathing out haze over the army that walks with it.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;

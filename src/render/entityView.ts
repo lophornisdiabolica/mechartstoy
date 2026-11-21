@@ -43,7 +43,7 @@ interface ViewEntry {
 }
 
 /** What a stealthed unit is drawn in: a faint, see-through shimmer of itself. */
-const GHOST = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.22, depthWrite: false });
+const GHOST = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.3, depthWrite: false });
 
 /** Seconds a melee blow takes to draw. */
 const STRIKE_TIME = 0.35;

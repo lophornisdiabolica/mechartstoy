@@ -41,8 +41,9 @@ export class SmokeClouds {
 
   constructor(private readonly game: Game) {
     this.root.name = 'smoke-clouds';
-    const puff = new THREE.IcosahedronGeometry(SMOKE_CELL * 0.75, 1);
-    this.puffs = new THREE.InstancedMesh(puff, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.2, depthWrite: false }), MOST);
+    // Faceted, like everything else: a low-poly lump, flat-shaded.
+    const puff = new THREE.IcosahedronGeometry(SMOKE_CELL * 0.75, 0);
+    this.puffs = new THREE.InstancedMesh(puff, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.2, depthWrite: false, flatShading: true }), MOST);
     this.puffs.count = 0;
     this.puffs.frustumCulled = false;
     this.puffs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -91,7 +92,7 @@ export class SmokeClouds {
       const thick = Math.min(1, amount / (THICK * 3));
       const size = (0.4 + 0.8 * Math.min(1, amount / THICK)) * (0.85 + hash(k + 3) * 0.3);
       _p.set(x, Math.max(field.surfaceAt(x, z), field.seaLevel) + size * 0.15, z);
-      _e.set(0, roll * 0.2, 0);
+      _e.set(hash(k + 11) * 0.6, roll * 0.2, hash(k + 17) * 0.6);
       _q.setFromEuler(_e);
       // Low and wide: a bank lying over the ground, not a cloud standing on it.
       _s.set(size * 1.35, size * (0.3 + thick * 0.35), size * 1.35);

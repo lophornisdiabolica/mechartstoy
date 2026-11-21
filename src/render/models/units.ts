@@ -1580,7 +1580,8 @@ registerModel('ghostTank', (faction) => {
   const root = new THREE.Group();
   root.add(...tracks(2.2, 0.38, 0.42, 0.58));
   root.add(box(2.0, 0.38, 1.05, primary, 0, 0.56, 0));
-  const glacis = box(0.6, 0.12, 1.0, secondary, 0.95, 0.62, 0);
+  // An angled bumper out ahead of the hull, a little wider than it.
+  const glacis = box(0.45, 0.12, 1.15, secondary, 1.2, 0.61, 0);
   glacis.rotation.z = -0.5;
   root.add(glacis);
   const turret = new THREE.Group();
