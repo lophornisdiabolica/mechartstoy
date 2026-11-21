@@ -1,13 +1,19 @@
 import * as THREE from 'three';
 import { Construction, Shield, Transform } from '../game/components';
 import { Game } from '../game/game';
+import { Battlefield } from '../world/battlefield';
 
 /** How long a dome flares where a shot bursts on it, seconds. */
 const FLARE = 0.25;
 /** How long a collapsing dome's shards take to fall and fade, seconds. */
 const BURST = 1.3;
-/** Height of the bright band where a dome meets the ground, world units. */
-const BAND = 0.35;
+/** Width of the bright line where a dome meets the ground, world units, and how far over the ground it lies. */
+const LINE = 0.2;
+const LINE_LIFT = 0.06;
+/** Points round the ground line. */
+const LINE_STEPS = 48;
+/** How fast a weak dome pulses, radians per second: slow, a breath rather than a flicker. */
+const PULSE = 3;
 /** Shards a collapsing dome breaks into, per unit of radius (and at most). */
 const SHARDS_PER_UNIT = 9;
 const MOST_SHARDS = 140;
@@ -37,20 +43,19 @@ const WEAK = new THREE.Color(0xffb0c8);
 
 /**
  * Aegis's energy domes (see game/shields.ts): a pale faceted bubble over
- * each emitter that's up, fainter and pinker as it weakens and flickering
- * near the end, flaring for a moment where shots burst on it, with a bright band
- * where it meets the ground, and breaking into hexagonal tiles that fall
- * in and fade when it collapses. Purely visual: the domes come from each
+ * each emitter that's up, fainter and pinker as it weakens and pulsing
+ * slowly near the end, flaring for a moment where shots burst on it, with a
+ * bright line along the ground where the dome meets it (on a slope too),
+ * and breaking into pink hexagonal tiles that fall in and fade when it
+ * collapses. Purely visual: the domes come from each
  * emitter's Shield, which the page gets from the sim.
  */
 export class Domes {
   readonly root = new THREE.Group();
   private readonly geometry = new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-  /** The bright band round the foot of a dome, so where it stands reads at a glance. */
-  private readonly bandGeometry = new THREE.CylinderGeometry(1, 1, BAND, 36, 1, true).translate(0, BAND / 2, 0);
   /** A hexagonal tile of the dome's skin, for when it breaks up. */
   private readonly shardGeometry = new THREE.CircleGeometry(1, 6);
-  private readonly shown = new Map<number, { mesh: THREE.Mesh; band: THREE.Mesh; material: THREE.MeshBasicMaterial; bandMaterial: THREE.MeshBasicMaterial; flare: number }>();
+  private readonly shown = new Map<number, { mesh: THREE.Mesh; band: THREE.Mesh; material: THREE.MeshBasicMaterial; bandMaterial: THREE.MeshBasicMaterial; flare: number; at: string }>();
   private readonly bursts: { mesh: THREE.InstancedMesh; material: THREE.MeshBasicMaterial; age: number; size: number; shards: Shard[] }[] = [];
   private readonly stops: (() => void)[] = [];
   private time = 0;
@@ -80,6 +85,7 @@ export class Domes {
     this.root.remove(d.mesh, d.band);
     d.material.dispose();
     d.bandMaterial.dispose();
+    d.band.geometry.dispose();
     this.shown.delete(e);
   }
 
@@ -92,6 +98,8 @@ export class Domes {
     const n = Math.min(MOST_SHARDS, Math.max(24, Math.round(radius * SHARDS_PER_UNIT)));
     const material = this.material();
     material.opacity = 0.45;
+    // A dome breaks when it's spent, so its tiles are a weak dome's pink.
+    material.color.copy(WEAK);
     const mesh = new THREE.InstancedMesh(this.shardGeometry, material, n);
     mesh.frustumCulled = false;
     mesh.renderOrder = 3;
@@ -138,11 +146,12 @@ export class Domes {
         mesh.renderOrder = 3;
         mesh.userData.noShadow = true;
         const bandMaterial = this.material();
-        const band = new THREE.Mesh(this.bandGeometry, bandMaterial);
+        const band = new THREE.Mesh(groundLineGeometry(), bandMaterial);
         band.renderOrder = 3;
+        band.frustumCulled = false;
         band.userData.noShadow = true;
         this.root.add(mesh, band);
-        d = { mesh, band, material, bandMaterial, flare: 0 };
+        d = { mesh, band, material, bandMaterial, flare: 0, at: '' };
         this.shown.set(e, d);
       }
       const t = world.req(e, Transform);
@@ -150,13 +159,16 @@ export class Domes {
       d.mesh.scale.setScalar(s.def.radius);
       const share = Math.max(0, Math.min(1, s.hp / s.def.hp));
       d.flare = Math.max(0, d.flare - simSeconds);
-      // Weak domes flicker.
-      const flicker = share < 0.3 ? 0.6 + 0.4 * Math.abs(Math.sin(this.time * 23 + e)) : 1;
-      d.material.opacity = (0.07 + 0.11 * share + (d.flare / FLARE) * 0.25) * flicker;
+      // Weak domes breathe: a slow, gentle swell and fade.
+      const pulse = share < 0.3 ? 0.8 + 0.2 * Math.sin(this.time * PULSE + e) : 1;
+      d.material.opacity = (0.07 + 0.11 * share + (d.flare / FLARE) * 0.25) * pulse;
       d.material.color.copy(WEAK).lerp(DOME, share);
-      // The foot of the dome glows brighter than its skin, a little under the ground so it never floats.
-      d.band.position.set(t.x, t.y - 0.1, t.z);
-      d.band.scale.set(s.def.radius, 1, s.def.radius);
+      // The line where the dome meets the ground glows brighter than its skin.
+      const at = `${t.x.toFixed(2)},${t.y.toFixed(2)},${t.z.toFixed(2)},${s.def.radius}`;
+      if (at !== d.at) {
+        d.at = at;
+        groundLine(d.band.geometry, this.game.field, t.x, t.y, t.z, s.def.radius);
+      }
       d.bandMaterial.opacity = Math.min(0.85, d.material.opacity * 3.2);
       d.bandMaterial.color.copy(d.material.color);
     }
@@ -197,7 +209,52 @@ export class Domes {
     }
     this.bursts.length = 0;
     this.geometry.dispose();
-    this.bandGeometry.dispose();
     this.shardGeometry.dispose();
   }
+}
+
+/** An empty strip for a dome's ground line, filled by groundLine. */
+function groundLineGeometry(): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((LINE_STEPS + 1) * 2 * 3), 3));
+  const index: number[] = [];
+  for (let i = 0; i < LINE_STEPS; i++) {
+    const a = i * 2;
+    index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+  g.setIndex(index);
+  return g;
+}
+
+/**
+ * Lay a dome's ground line: a thin strip on the ground along where the
+ * half sphere at (x, y, z) meets it. Uphill the ground cuts the dome
+ * nearer its middle, so the line pulls in; downhill, where the ground falls
+ * away under the rim, it runs under the rim.
+ */
+function groundLine(g: THREE.BufferGeometry, field: Battlefield, x: number, y: number, z: number, radius: number): void {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const ground = (px: number, pz: number) => Math.max(field.surfaceAt(px, pz), field.seaLevel);
+  for (let i = 0; i <= LINE_STEPS; i++) {
+    const a = (i / LINE_STEPS) * Math.PI * 2;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    // Where along this way the skin comes down to the ground: halve the gap between the middle and the rim.
+    const above = (r: number) => y + Math.sqrt(Math.max(0, radius * radius - r * r)) - ground(x + c * r, z + s * r);
+    let r = radius;
+    if (above(radius) < 0) {
+      let lo = 0;
+      let hi = radius;
+      for (let k = 0; k < 10; k++) {
+        const mid = (lo + hi) / 2;
+        if (above(mid) > 0) lo = mid;
+        else hi = mid;
+      }
+      r = lo;
+    }
+    const inner = Math.max(0, r - LINE);
+    pos.setXYZ(i * 2, x + c * r, ground(x + c * r, z + s * r) + LINE_LIFT, z + s * r);
+    pos.setXYZ(i * 2 + 1, x + c * inner, ground(x + c * inner, z + s * inner) + LINE_LIFT, z + s * inner);
+  }
+  pos.needsUpdate = true;
 }

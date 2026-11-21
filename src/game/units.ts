@@ -1573,11 +1573,11 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 5,
     weapon: weapon({ name: 'Arm blade', range: 0.6, damage: 16, cooldown: 1.1, projectile: 'shell', speed: 1, muzzleHeight: 1.4, melee: { style: 'swing', lunge: 1, knock: 0.4, sweep: 0.9, sweepMost: 2, charge: 1.5 } }),
-    mounts: [{ weapon: weapon({ name: 'Head gun', range: 10, damage: 4, cooldown: 1.3, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.8, targets: 'both' }), mount: 'duelist#gun', turnRate: 5 }],
+    mounts: [{ weapon: weapon({ name: 'Arm cannon', range: 10, damage: 4, cooldown: 1.3, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.42, targets: 'both' }), mount: 'duelist#gun', turnRate: 5 }],
     wreckTime: 15,
     siege: false,
   },
-  // A heavy tank whose turret is a great scything arm: it swings round with the turret and sweeps
+  // A heavy tank whose turret is a great axe arm: it swings round with the turret and sweeps
   // across whatever it's up against. A machine gun in the hull does the ranged work.
   reaver: {
     id: 'reaver',
@@ -1597,7 +1597,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.4,
-    weapon: weapon({ name: 'Scythe arm', range: 1.3, damage: 58, cooldown: 2.3, projectile: 'shell', speed: 1, muzzleHeight: 1.1, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 1.4, sweep: 1.2, sweepMost: 3, charge: 1.35 } }),
+    weapon: weapon({ name: 'Axe arm', range: 1.3, damage: 58, cooldown: 2.3, projectile: 'shell', speed: 1, muzzleHeight: 1.1, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 1.4, sweep: 1.2, sweepMost: 3, charge: 1.35 } }),
     mounts: [{ weapon: weapon({ name: 'Hull machine gun', range: 11, damage: 5, cooldown: 1.2, burst: 4, burstGap: 0.09, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1, targets: 'both' }), mount: 'reaver#mg', turnRate: 3.5 }],
     wreckTime: 25,
     siege: false,

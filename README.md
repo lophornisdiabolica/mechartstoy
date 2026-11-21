@@ -407,10 +407,10 @@ battle, its exact map via `seed`).
     and many more mechs: **duelists**, quick little blade striders that
     each take half a vehicle slot, come from the factory and from its
     **duel hall** in fours; **reavers**, heavy tanks whose turret is a
-    great scything arm, take one and a
+    great axe arm, take one and a
     half, smash their way into tanks. Every mech fights hand to hand with
-    its main weapon but carries a gun on a mount of its own (duelists a
-    head gun, reavers a hull machine gun), so it isn't helpless across a
+    its main weapon but carries a gun on a mount of its own (duelists an
+    arm cannon, reavers a hull machine gun), so it isn't helpless across a
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
