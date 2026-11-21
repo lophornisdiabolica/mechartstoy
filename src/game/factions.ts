@@ -27,7 +27,7 @@ export const FACTIONS: readonly FactionDef[] = [
   // The canonical factions of the doctrines past the eighth: a side that picks one wears these colours
   // (see variety.ts), but a battle still has at most eight slots.
   { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
-  { id: 9, name: 'Frost Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
+  { id: 9, name: 'Celeste Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
 ];
 
 /** Most sides a battle can have. */
