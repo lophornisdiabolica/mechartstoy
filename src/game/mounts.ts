@@ -113,8 +113,8 @@ export const MOUNTS: Record<string, Mount> = {
   // keyed by its model and '#' (see UnitDef.mounts), and sits on top of the body, where the torso turns.
   duelist: { turret: [0, 1.4, 0], muzzles: [[1.3, 0, -0.42]] },
   'duelist#gun': { turret: [0, 1.75, 0], muzzles: [[0.5, 0, 0]] },
-  breaker: { turret: [0, 2.25, 0], muzzles: pair(1.4, 0.35, 0.85) },
-  'breaker#cannon': { turret: [0, 3.19, 0], muzzles: [[0.9, 0.15, 0]] },
+  reaver: { turret: [-0.15, 0.85, 0], muzzles: [[2.45, 0.28, 0]] },
+  'reaver#mg': { turret: [0.75, 0.9, 0.3], muzzles: [[0.5, 0.1, 0]] },
   colossus: { turret: [0, 3.25, 0], muzzles: pair(1.6, 0.4, 1.25) },
   'colossus#rockets': { turret: [0, 4.85, 0], muzzles: pair(0.61, 0.45, 0.25), salvo: 'alternate' },
   // Cipher.

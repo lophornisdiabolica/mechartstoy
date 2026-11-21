@@ -44,6 +44,7 @@ import { FireField, fireSystem } from './fire';
 import { Domes, shieldSystem } from './shields';
 import { FrostField, frostSystem } from './frost';
 import { hackSystem } from './hacking';
+import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -159,6 +160,7 @@ export class Game {
       targetingSystem(ctx),
       aiSystem(ctx),
       trafficSystem(ctx),
+      dashSystem(ctx),
       movementSystem(ctx),
       separationSystem(ctx),
       laneKeepSystem(ctx),

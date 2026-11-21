@@ -298,14 +298,14 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   sabre: {
     id: 'sabre',
     name: 'Sabre',
-    blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Breakers that ram tanks and walls, all fighting hand to hand with guns on their backs for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
+    blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Reavers, heavy tanks whose turret is a great scything arm, all fighting hand to hand with guns on their backs for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
     caps: { infantry: 0.55, vehicle: 1.25 },
     production: {
       barracks: { table: [rifleSquad(3, 1)], interval: 20 },
       factory: {
         table: [
           { unit: 'duelist', weight: 3, count: 3 },
-          { unit: 'breaker', weight: 2, count: 1 },
+          { unit: 'reaver', weight: 2, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -313,7 +313,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'colossus', weight: 1, count: 1 }] },
     },
     signature: 'duelHall',
-    waves: [rifleSquad(3, 2), { unit: 'duelist', weight: 3, count: 3 }, { unit: 'breaker', weight: 1.5, count: 1 }],
+    waves: [rifleSquad(3, 2), { unit: 'duelist', weight: 3, count: 3 }, { unit: 'reaver', weight: 1.5, count: 1 }],
   },
   cipher: {
     id: 'cipher',
