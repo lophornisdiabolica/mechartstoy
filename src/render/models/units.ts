@@ -1147,9 +1147,12 @@ registerModel('domeTruck', (faction) => {
   root.add(orb);
   const turret = new THREE.Group();
   turret.position.set(0.55, 1.15, 0);
-  turret.add(box(0.1, 0.25, 0.1, DARK, 0, 0.12, 0));
+  turret.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.04, 0)); // ring mount on the cab roof
+  turret.add(box(0.1, 0.18, 0.1, DARK, 0, 0.17, 0));
   const gun = barrelPivot('domeTruck', turret);
-  gun.add(box(0.58, 0.08, 0.08, DARK, 0.26, 0, 0));
+  gun.add(box(0.3, 0.15, 0.17, DARK, 0.03, 0.01, 0)); // receiver
+  gun.add(box(0.04, 0.2, 0.32, secondary, 0.21, 0.06, 0)); // gun shield
+  gun.add(box(0.58, 0.07, 0.07, DARK, 0.26, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('domeTruck', root, turret, [gun]) });
 });
@@ -1249,7 +1252,8 @@ registerModel('freezerTruck', (faction) => {
   turret.position.set(-0.7, 0.62, 0);
   turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
   const tube = barrelPivot('freezerTruck', turret);
-  tube.add(box(0.9, 0.22, 0.22, DARK, 0.35, 0, 0));
+  // Short of the pivot at the back, so it clears the bed when it rests tipped up.
+  tube.add(box(0.72, 0.22, 0.22, DARK, 0.44, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('freezerTruck', root, turret, [tube]) });
 });

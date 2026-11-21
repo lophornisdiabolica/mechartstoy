@@ -306,7 +306,7 @@ battle, its exact map via `seed`).
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
   Ember Firestorm; Aegis, Rime and Sabre have no slot of their own, and wear
-  Verdant Protectorate, Frost Dominion and Onyx Order colours). Every doctrine fields rifle squads with AT troopers,
+  Verdant Protectorate, Celeste Dominion and Onyx Order colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more

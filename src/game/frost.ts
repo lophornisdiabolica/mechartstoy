@@ -172,35 +172,31 @@ export class FrostField {
   }
 }
 
-/** Seconds between the cold that chilling units and buildings give off. */
-const CHILL_EVERY = 0.5;
 
 /**
  * Thaws the frost (fire melts it outright), and lets chilling units and
  * buildings (see UnitDef.chill) freeze the ground round them.
  */
 export function frostSystem(ctx: SimContext): System {
-  let chillAt = 0;
   return {
     name: 'frost',
     update(world, dt) {
       const frost = ctx.frost;
       if (frost.count > 0) frost.thaw(dt, (x, z) => ctx.fire.count > 0 && ctx.fire.heatAt(x, z) > 0.25);
-      if (world.time < chillAt) return;
-      chillAt = world.time + CHILL_EVERY;
+      // The cold comes off them steadily, every tick, so the edge of an aura doesn't pulse.
       for (const e of world.query(Unit, Transform, Faction)) {
         const chill = world.req(e, Unit).def.chill;
         if (!chill) continue;
         const m = world.get(e, Mover);
         if (m && MOVE_RULES[m.move].flies) continue;
         const t = world.req(e, Transform);
-        frost.add(t.x, t.z, chill.radius, chill.rate * CHILL_EVERY, world.req(e, Faction).id);
+        frost.add(t.x, t.z, chill.radius, chill.rate * dt, world.req(e, Faction).id);
       }
       for (const e of world.query(Building, Transform, Faction)) {
         const chill = world.req(e, Building).def.chill;
         if (!chill || world.has(e, Construction)) continue;
         const t = world.req(e, Transform);
-        frost.add(t.x, t.z, chill.radius, chill.rate * CHILL_EVERY, world.req(e, Faction).id);
+        frost.add(t.x, t.z, chill.radius, chill.rate * dt, world.req(e, Faction).id);
       }
     },
   };
