@@ -20,6 +20,7 @@ import { FireGround } from './fireGround';
 import { FrostGround } from './frostGround';
 import { SmokeClouds } from './smokeClouds';
 import { Domes } from './domes';
+import { JamMarks } from './jamMarks';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
 import { setFactionPalette } from './models';
 import './models/buildings';
@@ -81,6 +82,7 @@ export class Stage {
   private frostGround!: FrostGround;
   private smokeClouds!: SmokeClouds;
   private domes!: Domes;
+  private jamMarks!: JamMarks;
   /** Where a god power will land (see GodPanel). */
   readonly godCursor = new GodCursor();
   private godEffects!: GodEffects;
@@ -179,6 +181,7 @@ export class Stage {
       this.frostGround.dispose();
       this.smokeClouds.dispose();
       this.domes.dispose();
+      this.jamMarks.dispose();
       this.debugOverlay.dispose();
       disposeTree(this.battle);
     }
@@ -221,6 +224,8 @@ export class Stage {
     battle.add(this.smokeClouds.root);
     this.domes = new Domes(game);
     battle.add(this.domes.root);
+    this.jamMarks = new JamMarks(game);
+    battle.add(this.jamMarks.root);
     const debugShown = this.debugOverlay ? DEBUG_IDS.filter((l) => this.debugOverlay.isShown(l)) : [];
     const costClass = this.debugOverlay?.costClass;
     this.debugOverlay = new DebugOverlay(game);
@@ -379,6 +384,7 @@ export class Stage {
     this.frostGround.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
+    this.jamMarks.update(simSeconds);
     this.debugOverlay.update(frameSeconds);
     this.renderer.info.reset();
     this.composer.render(frameSeconds);

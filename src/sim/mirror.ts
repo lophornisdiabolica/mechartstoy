@@ -74,8 +74,6 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   hunt: true,
   span: true,
   hacked: true,
-  jamPulse: true,
-  arc: true,
   militia: true,
   crater: true,
   shieldHit: true,

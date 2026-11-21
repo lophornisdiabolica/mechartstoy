@@ -28,8 +28,8 @@ export const FACTIONS: readonly FactionDef[] = [
   // (see variety.ts), but a battle still has at most eight slots.
   { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
   { id: 9, name: 'Celeste Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
-  { id: 10, name: 'Onyx Order', primary: 0x3b3f46, secondary: 0xd8b45a },
-  { id: 11, name: 'Magenta Directive', primary: 0x96457a, secondary: 0x6cc9b6 },
+  { id: 10, name: 'Onyx Order', primary: 0x3b3f46, secondary: 0xd8434a },
+  { id: 11, name: 'Magenta Directive', primary: 0xa83c82, secondary: 0x5f9e92 },
   { id: 12, name: 'Obsidian Choir', primary: 0x3a2f4a, secondary: 0xb9a6e0 },
 ];
 

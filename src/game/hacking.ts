@@ -135,15 +135,11 @@ export function hackSystem(ctx: SimContext): System {
   };
 }
 
-/** Most jammed things a pulse names for the view to spark on. */
-const PULSE_SHOWS = 16;
-
 function jamAround(world: World, ctx: SimContext, e: Entity, jam: JamDef): void {
   const t = world.req(e, Transform);
   const side = world.req(e, Faction).id;
   // Jammed until a little after the next pulse, so a jammer's steady work doesn't flicker on and off.
   const until = world.time + jam.every + JAM_HOLD;
-  const hits: number[] = [];
   ctx.grid.forEachNear(t.x, t.z, jam.radius, (other) => {
     if (!ctx.sides.hostile(side, world.req(other, Faction).id)) return;
     const ot = world.req(other, Transform);
@@ -158,9 +154,7 @@ function jamAround(world: World, ctx: SimContext, e: Entity, jam: JamDef): void 
     };
     jamArm(armed);
     for (const arm of world.get(other, Arsenal)?.arms ?? []) jamArm(arm);
-    if (hits.length < PULSE_SHOWS * 3) hits.push(ot.x, ot.y, ot.z);
   });
-  ctx.events.emit('jamPulse', { x: t.x, y: t.y, z: t.z, radius: jam.radius, faction: side, hits });
 }
 
 /** How fast a weapon reloads now: slower while jammed. */

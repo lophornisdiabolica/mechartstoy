@@ -390,7 +390,7 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
 
 /** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
 const TOWN_CLOTHES: Record<string, [string, string, string]> = {
@@ -452,6 +452,11 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       px(0, 3, 1, 4, '#bfe9ff'); // coolant tank on the back
       px(5, 5, 2, 1, '#333'); // sprayer
       px(7, 5, 1, 1, '#dff6ff');
+    } else if (kit === 'operator') {
+      px(0, 3, 2, 3, '#4a4f58'); // drone rack on the back
+      px(0, 0, 1, 3, '#6a6f78'); // antenna
+      px(0, 0, 1, 1, '#6ab8aa');
+      px(5, 5, 2, 1, '#333'); // carbine
     } else if (kit === 'wrench') {
       px(1, 2, 1, 1, '#f0c419'); // hard hat brim, either side of the face
       px(6, 2, 1, 1, '#f0c419');
@@ -1118,6 +1123,7 @@ registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
 registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
 registerModel('cryoTrooper', (faction) => infantry(faction, 'cryo'));
+registerModel('droneOperator', (faction) => infantry(faction, 'operator'));
 registerModel('engineer', (faction) => infantry(faction, 'wrench'));
 // Townsfolk (see game/towns.ts): three sets of everyday clothes, and the militia.
 registerModel('civilian:0', (faction) => infantry(faction, 'civilian0'));
@@ -1309,7 +1315,7 @@ function ownMount(root: THREE.Object3D, key: string, build: (turret: THREE.Group
   return { turret };
 }
 
-// Sabre: a light two-legged mech with a blade down its right arm and a gun on its head.
+// Sabre: a light two-legged mech with a blade down its right arm and a cannon on its left.
 registerModel('duelist', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -1332,10 +1338,14 @@ registerModel('duelist', (faction) => {
     body.add(leg.hip);
     return leg;
   });
+  // An arm cannon on its left, opposite the blade: it swings on its own shoulder, and bobs with the body as it walks.
   const gun = ownMount(root, 'duelist#gun', (t) => {
-    t.add(box(0.22, 0.1, 0.22, DARK, 0, -0.03, 0));
-    t.add(box(0.5, 0.09, 0.09, DARK, 0.25, 0, 0));
+    t.add(box(0.22, 0.2, 0.2, METAL, 0, 0, 0));
+    t.add(box(0.36, 0.14, 0.14, secondary, 0.17, -0.01, 0.005));
+    t.add(box(0.3, 0.09, 0.09, DARK, 0.45, 0, 0));
   });
+  body.add(gun.turret);
+  gun.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
     ...walker(legs, body, 0.85, 0.55),
@@ -1348,7 +1358,7 @@ registerModel('duelist', (faction) => {
   });
 });
 
-// Sabre: a heavy tank whose turret carries a great scything arm, and a machine gun in the hull.
+// Sabre: a heavy tank whose turret carries a great axe arm, and a machine gun in the hull.
 registerModel('reaver', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -1364,7 +1374,7 @@ registerModel('reaver', (faction) => {
   arm.position.set(0.35, 0.28, 0);
   arm.add(box(0.36, 0.3, 0.36, METAL, 0, 0, 0)); // shoulder
   arm.add(box(1.4, 0.16, 0.16, METAL, 0.85, 0, 0));
-  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the scythe blade, hooked back
+  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the axe head
   arm.add(box(0.34, 0.05, 0.22, BLADE, 1.9, 0.01, -0.17));
   turret.add(arm);
   root.add(turret);
@@ -1427,7 +1437,7 @@ registerModel('colossus', (faction) => {
 });
 
 /** Cipher's signal glow. */
-const SIGNAL = 0x5fd8c0;
+const SIGNAL = 0x6ab8aa;
 
 // Cipher: a boxy van with a hacking dish on its roof and a pintle gun up front.
 registerModel('hackVan', (faction) => {
@@ -1448,35 +1458,17 @@ registerModel('hackVan', (faction) => {
   core.position.set(0.3, 0, 0);
   dish.add(core);
   root.add(turret);
+  // A pintle gun on a ring mount, with a gun shield, like the dome truck's.
   const gun = ownMount(root, 'hackVan#gun', (t) => {
-    t.add(cylinder(0.13, 0.16, 0.08, 8, METAL, 0, 0.04, 0));
-    t.add(box(0.08, 0.14, 0.08, DARK, 0, 0.13, 0));
-    t.add(box(0.5, 0.07, 0.07, DARK, 0.3, 0.2, 0));
+    t.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.04, 0)); // ring mount
+    t.add(box(0.1, 0.18, 0.1, DARK, 0, 0.17, 0));
+    t.add(box(0.3, 0.15, 0.17, DARK, 0.03, 0.27, 0)); // receiver
+    t.add(box(0.04, 0.2, 0.32, secondary, 0.21, 0.32, 0)); // gun shield
+    t.add(box(0.58, 0.07, 0.07, DARK, 0.26, 0.26, 0));
   });
   return setRig(root, { turret, ...mounted('hackVan', root, turret, [dish]), mounts: [gun] });
 });
 
-// Cipher: a tank with a lightning coil on its turret and a forked emitter out front.
-registerModel('arcTank', (faction) => {
-  const { primary, secondary } = factionColors(faction);
-  const root = new THREE.Group();
-  root.add(...tracks(2.2, 0.4, 0.44, 0.58));
-  root.add(box(2.0, 0.42, 1.06, primary, 0, 0.58, 0));
-  const turret = new THREE.Group();
-  turret.position.set(-0.1, 0.83, 0);
-  turret.add(box(0.95, 0.32, 0.8, primary, 0, 0.16, 0));
-  for (const [y, r] of [[0.42, 0.26], [0.56, 0.22], [0.7, 0.18]] as const) turret.add(cylinder(r, r, 0.1, 10, secondary, -0.15, y, 0)); // coil
-  const top = glowBox(0.16, 0.12, 0.16, SIGNAL);
-  top.position.set(-0.15, 0.82, 0);
-  turret.add(top);
-  turret.add(box(0.75, 0.1, 0.1, DARK, 0.72, 0.32, 0.12)); // forked emitter
-  turret.add(box(0.74, 0.1, 0.1, DARK, 0.73, 0.32, -0.12));
-  const tip = glowBox(0.1, 0.14, 0.3, 0xd8f4ff);
-  tip.position.set(1.1, 0.32, 0);
-  turret.add(tip);
-  root.add(turret);
-  return setRig(root, { turret, ...mounted('arcTank', root, turret) });
-});
 
 // Cipher: a walker with twin guns and a jamming mast whose rings pulse.
 registerModel('jammer', (faction) => {

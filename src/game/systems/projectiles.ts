@@ -6,7 +6,6 @@ import * as D from '../../core/dmath';
 import { heatPerShot } from '../fire';
 import { hitDome } from '../shields';
 import { hack } from '../hacking';
-import type { WeaponDef } from '../units';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -46,43 +45,6 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
     const t = world.req(e, Transform);
     ctx.events.emit('buildingDamaged', { entity: e, x: t.x, y: t.y, z: t.z, def: building.def });
   }
-}
-
-/**
- * Lightning arcing on from what a shot hit (see WeaponDef.chain): to the
- * nearest enemy within reach of the last one struck, again and again,
- * weaker each time. Tells the view where it went (the 'arc' event).
- */
-function arcOn(world: World, ctx: SimContext, from: Entity, w: WeaponDef, by: Hit, hit: Set<Entity>): void {
-  const chain = w.chain!;
-  const start = world.req(from, Transform);
-  const points = [start.x, start.y + entityHeight(world, from) * 0.6, start.z];
-  let at = from;
-  let damage = w.damage;
-  for (let j = 0; j < chain.jumps; j++) {
-    const t = world.req(at, Transform);
-    let best = null as Entity | null;
-    let bestD = Infinity;
-    ctx.grid.forEachNear(t.x, t.z, chain.reach + 1, (other, d2) => {
-      if (hit.has(other) || !world.has(other, Targetable) || world.has(other, Building)) return;
-      if (!ctx.sides.hostile(by.faction, world.req(other, Faction).id)) return;
-      const ot = world.req(other, Transform);
-      // Not up to aircraft.
-      if (ot.y - ctx.field.surfaceAt(ot.x, ot.z) > 3) return;
-      const d = Math.sqrt(d2) - world.req(other, Collider).radius;
-      if (d > chain.reach || d > bestD || (d === bestD && best !== null && other > best)) return;
-      best = other;
-      bestD = d;
-    });
-    if (best === null) break;
-    damage *= chain.falloff;
-    applyDamage(world, ctx, best, damage, by);
-    hit.add(best);
-    const bt = world.req(best, Transform);
-    points.push(bt.x, bt.y + entityHeight(world, best) * 0.6, bt.z);
-    at = best;
-  }
-  if (points.length > 3) ctx.events.emit('arc', { points, faction: by.faction });
 }
 
 /** Flies projectiles along their fixed path and applies damage on arrival. */
@@ -127,7 +89,6 @@ export function projectileSystem(ctx: SimContext): System {
             if (w.hack) hack(world, ctx, p.target, p.faction, w.hack);
             else applyDamage(world, ctx, p.target, shattered ? w.damage * w.shatter! : w.damage, by, w.pierce ?? 0);
             hit.add(p.target);
-            if (w.chain) arcOn(world, ctx, p.target, w, by, hit);
           }
         }
         // Splash hurts anything not on the shooter's team, including the civilian town. It reaches

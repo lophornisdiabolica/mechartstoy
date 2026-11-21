@@ -407,10 +407,10 @@ battle, its exact map via `seed`).
     and many more mechs: **duelists**, quick little blade striders that
     each take half a vehicle slot, come from the factory and from its
     **duel hall** in fours; **reavers**, heavy tanks whose turret is a
-    great scything arm, take one and a
+    great axe arm, take one and a
     half, smash their way into tanks. Every mech fights hand to hand with
-    its main weapon but carries a gun on a mount of its own (duelists a
-    head gun, reavers a hull machine gun), so it isn't helpless across a
+    its main weapon but carries a gun on a mount of its own (duelists an
+    arm cannon, reavers a hull machine gun), so it isn't helpless across a
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
@@ -420,13 +420,16 @@ battle, its exact map via `seed`).
     they it), then comes back to itself and can't be turned again for
     twelve. Kills it makes while turned are Cipher's; if it dies turned, it
     dies as its own side's. Infantry, super units, carriers and engineers
-    can't be hacked. Arc tanks throw lightning that jumps from one soldier
-    to the next (`WeaponDef.chain`), clearing the AT troopers that crowd a
-    hacked vehicle. Jammer walkers send out a pulse every few seconds, a
-    ring sweeping out to fourteen units: enemy guns it reaches reload at
-    0.6× until the next. Its **uplink mast** turns out more and jams what
-    comes at the base. Super unit: the Overmind, a walker with a hack array
-    on its back.
+    can't be hacked. Pairs of **drone operators** come out of its
+    barracks: each sends up a drone when it meets the enemy (a carrier of
+    one, `UnitDef.carries`) and readies another 25 s later, and the drones
+    hunt the infantry, the AT troopers that crowd a hacked vehicle
+    included. Jammer walkers send out a pulse every few seconds out to
+    fourteen units: enemy guns it reaches reload at 0.6× until the next,
+    shown as a faint hexagon on the ground under each jammed unit. Its
+    **uplink mast** turns out more and jams what comes at the base. Super
+    unit: the Overmind, a walker with a hack array and a rack of three
+    drones on its back.
   - *Veil:* haze and stealth (`game/smoke.ts`). Smoke trucks lob
     canisters that leave a thin, low haze, and its **smoke stacks** keep
     one over the base. The haze hides nothing, but a shot whose line runs

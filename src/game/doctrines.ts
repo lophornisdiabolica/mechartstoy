@@ -300,7 +300,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   sabre: {
     id: 'sabre',
     name: 'Sabre',
-    blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Reavers, heavy tanks whose turret is a great scything arm, all fighting hand to hand with guns on their backs for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
+    blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Reavers, heavy tanks whose turret is a great axe arm, all fighting hand to hand, with a gun each for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
     caps: { infantry: 0.55, vehicle: 1.25 },
     production: {
       barracks: { table: [rifleSquad(3, 1)], interval: 20 },
@@ -320,13 +320,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   cipher: {
     id: 'cipher',
     name: 'Cipher',
-    blurb: 'Hacking. Hack vans lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Arc tanks throw lightning that jumps from soldier to soldier, and jammer walkers send out pulses that slow the enemy guns they reach. Its uplink mast turns out more and jams what comes at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array on its back.',
-    caps: { infantry: 1, vehicle: 1.1 },
+    blurb: 'Hacking. Hack vans lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Drone operators in its squads, and the Overmind, send up drones that hunt infantry, and jammer walkers send out pulses that slow the enemy guns they reach. Its uplink mast turns out more and jams what comes at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array and a rack of drones on its back.',
+    caps: { infantry: 1, vehicle: 1.1, air: 2.5 },
     production: {
+      barracks: { table: [rifleSquad(4, 3), { unit: 'droneOperator', weight: 1.5, count: 2 }] },
       factory: {
         table: [
-          { unit: 'tank', weight: 2.5, count: 1 },
-          { unit: 'arcTank', weight: 1.5, count: 1 },
+          { unit: 'tank', weight: 3, count: 1 },
           { unit: 'hackVan', weight: 1.5, count: 1 },
           { unit: 'jammer', weight: 1.2, count: 1 },
           { unit: 'flakTank', weight: 0.8, count: 1 },
@@ -336,7 +336,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'overmind', weight: 1, count: 1 }] },
     },
     signature: 'uplinkMast',
-    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'arcTank', weight: 1, count: 1 }, { unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'droneOperator', weight: 1, count: 2 }, { unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
   },
   veil: {
     id: 'veil',
@@ -393,7 +393,7 @@ export function canonicalDoctrine(id: DoctrineId): DoctrineId {
  * Each faction slot's default doctrine, in faction order (see FACTIONS):
  * Cobalt Armour, Crimson Raiders, Ashen Legion, Gilded Bastion, Violet
  * Talon, Ivory Skyline, Teal Tidewater, Ember Firestorm (and, past the
- * eight faction slots a battle has, Verdant Aegis, Frost Rime and Onyx Sabre, who wear
+ * eight faction slots a battle has, Verdant Aegis, Celeste Rime and Onyx Sabre, who wear
  * their own colours when re-rolled or picked).
  */
 export function defaultDoctrine(i: number): DoctrineId {

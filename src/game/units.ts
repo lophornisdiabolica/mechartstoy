@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'arc';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack';
 
 export interface WeaponDef {
   name: string;
@@ -89,13 +89,6 @@ export interface WeaponDef {
    * it go wild, except its own side's.
    */
   smoke?: number;
-  /**
-   * Lightning that arcs on from what it hits (Cipher's arc tanks): up to
-   * `jumps` more enemies, each the nearest within `reach` of the last one
-   * and not yet struck, each taking `falloff` of the hit before. It clears
-   * infantry packed round a vehicle.
-   */
-  chain?: { jumps: number; reach: number; falloff: number };
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -1586,11 +1579,11 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 5,
     weapon: weapon({ name: 'Arm blade', range: 0.6, damage: 16, cooldown: 1.1, projectile: 'shell', speed: 1, muzzleHeight: 1.4, melee: { style: 'swing', lunge: 1, knock: 0.4, sweep: 0.9, sweepMost: 2, charge: 1.5 } }),
-    mounts: [{ weapon: weapon({ name: 'Head gun', range: 10, damage: 4, cooldown: 1.3, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.8, targets: 'both' }), mount: 'duelist#gun', turnRate: 5 }],
+    mounts: [{ weapon: weapon({ name: 'Arm cannon', range: 10, damage: 4, cooldown: 1.3, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.42, targets: 'both' }), mount: 'duelist#gun', turnRate: 5 }],
     wreckTime: 15,
     siege: false,
   },
-  // A heavy tank whose turret is a great scything arm: it swings round with the turret and sweeps
+  // A heavy tank whose turret is a great axe arm: it swings round with the turret and sweeps
   // across whatever it's up against. A machine gun in the hull does the ranged work.
   reaver: {
     id: 'reaver',
@@ -1610,7 +1603,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.4,
-    weapon: weapon({ name: 'Scythe arm', range: 1.3, damage: 58, cooldown: 2.3, projectile: 'shell', speed: 1, muzzleHeight: 1.1, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 1.4, sweep: 1.2, sweepMost: 3, charge: 1.35 } }),
+    weapon: weapon({ name: 'Axe arm', range: 1.3, damage: 58, cooldown: 2.3, projectile: 'shell', speed: 1, muzzleHeight: 1.1, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 1.4, sweep: 1.2, sweepMost: 3, charge: 1.35 } }),
     mounts: [{ weapon: weapon({ name: 'Hull machine gun', range: 11, damage: 5, cooldown: 1.2, burst: 4, burstGap: 0.09, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1, targets: 'both' }), mount: 'reaver#mg', turnRate: 3.5 }],
     wreckTime: 25,
     siege: false,
@@ -1661,25 +1654,27 @@ export const UNIT_DEFS = {
     wreckTime: 15,
     siege: false,
   },
-  // Lightning that jumps from soldier to soldier: what clears the AT troopers round a hacked vehicle.
-  arcTank: {
-    id: 'arcTank',
-    name: 'Arc Tank',
-    class: 'vehicle',
-    category: 'vehicle',
-    move: 'tracked',
+  // Cipher's anti-infantry: a soldier with a carbine and a drone on its back, which it sends up when
+  // there's something to hunt, and readies another a while after.
+  droneOperator: {
+    id: 'droneOperator',
+    name: 'Drone Operator',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
     role: 'frontline',
-    model: 'arcTank',
-    hp: 200,
-    armor: 5,
-    speed: 2.7,
-    turnRate: 1.8,
-    radius: 1.05,
-    sight: 17,
-    turret: true,
-    turretTurnRate: 2.4,
-    weapon: weapon({ name: 'Arc coil', range: 11, damage: 15, cooldown: 1.7, projectile: 'arc', speed: 90, spread: 0.02, muzzleHeight: 1.3, chain: { jumps: 4, reach: 3.5, falloff: 0.8 } }),
-    wreckTime: 20,
+    model: 'droneOperator',
+    hp: 20,
+    armor: 0,
+    speed: 1.6,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 16,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ ...rifle, name: 'Carbine', range: 9, damage: 3 }),
+    carries: { squad: [{ unit: 'drone', count: 1 }], every: 25 },
+    wreckTime: 0,
     siege: false,
   },
   jammer: {
@@ -1724,6 +1719,8 @@ export const UNIT_DEFS = {
     // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
     mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
     jam: { radius: 13, pace: 0.6, every: 3 },
+    // And a rack of drones, sent up when it meets the enemy and readied again a while later.
+    carries: { squad: [{ unit: 'drone', count: 3 }], every: 30 },
     wreckTime: 35,
     siege: true,
   },
