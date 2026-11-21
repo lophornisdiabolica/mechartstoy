@@ -1,4 +1,4 @@
-import { ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
+import { JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -39,6 +39,8 @@ export interface BuildingDef {
   shield?: ShieldDef;
   /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
   chill?: { radius: number; rate: number };
+  /** Jams the enemy weapons round it (Cipher; see JamDef and hacking.ts). */
+  jam?: JamDef;
   sight?: number;
   turretTurnRate?: number;
   /**
@@ -361,6 +363,20 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.2,
     production: { table: [{ unit: 'duelist', weight: 1, count: 4 }], interval: 30 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Cipher: turns out hack vans and jammers, and jams the enemy guns that come at the base.
+  uplinkMast: {
+    id: 'uplinkMast',
+    name: 'Uplink Mast',
+    model: 'bld:uplinkMast',
+    hp: 750,
+    armor: 7,
+    radius: 2.4,
+    height: 4.5,
+    production: { table: [{ unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }], interval: 34 },
+    jam: { radius: 16, pace: 0.6, every: 3 },
     rebuildDelay: 40,
     buildTime: 10,
   },

@@ -29,6 +29,7 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
   { id: 9, name: 'Celeste Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
   { id: 10, name: 'Onyx Order', primary: 0x3b3f46, secondary: 0xd8434a },
+  { id: 11, name: 'Magenta Directive', primary: 0xa83c82, secondary: 0x5f9e92 },
 ];
 
 /** Most sides a battle can have. */

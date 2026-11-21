@@ -117,6 +117,13 @@ export const MOUNTS: Record<string, Mount> = {
   'reaver#mg': { turret: [0.75, 0.9, 0.3], muzzles: [[0.5, 0.1, 0]] },
   colossus: { turret: [0, 3.25, 0], muzzles: pair(1.6, 0.4, 1.25) },
   'colossus#rockets': { turret: [0, 4.85, 0], muzzles: pair(0.61, 0.45, 0.25), salvo: 'alternate' },
+  // Cipher.
+  hackVan: { turret: [-0.4, 1.28, 0], pivot: [0, 0.3, 0], muzzles: [[0.35, 0, 0]], elev: [-0.2, 0.9], rest: 0.4 },
+  'hackVan#gun': { turret: [0.5, 1.22, 0], muzzles: [[0.55, 0.26, 0]] },
+  jammer: { turret: [0, 1.6, 0], muzzles: pair(0.95, -0.05, 0.42) },
+  overmind: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
+  'overmind#array': { turret: [-0.3, 4.75, 0], muzzles: [[0.75, 0.35, 0]] },
+  'bld:uplinkMast': { turret: [0, 4.2, 0], pivot: [0, 0.3, 0], muzzles: [[0.55, 0, 0]], elev: [-0.6, 0.6], rest: 0.2 },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },
   'bld:shoreBattery': { turret: [0, 0.52, 0], pivot: [0.38, 0.3, 0], muzzles: pair(0.99, 0, 0.24), elev: [-0.35, 0.6], rest: 0.08 },

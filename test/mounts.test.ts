@@ -9,7 +9,7 @@ import { BUILDING_DEFS, BuildingDef } from '../src/game/buildings';
 import { Rng } from '../src/core/rng';
 
 /** Soldiers are sprites: their shots leave from in front of them at the weapon's height. */
-const SPRITES = new Set(['trooper', 'atTrooper', 'mortar', 'flameTrooper', 'cryoTrooper', 'engineer']);
+const SPRITES = new Set(['trooper', 'atTrooper', 'mortar', 'flameTrooper', 'cryoTrooper', 'droneOperator', 'engineer']);
 
 /** Pose a model as the entity view does: heading, pitch and roll on the hull, the turret turned on it, the barrels pitched on the turret. */
 function pose(obj: THREE.Object3D, heading: number, pitch: number, roll: number, aim: number, elev: number): void {
