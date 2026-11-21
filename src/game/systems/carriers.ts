@@ -1,7 +1,7 @@
 import { System } from '../../core/ecs';
 import { Ai, Armed, Carrier, Faction, Transform, Unit } from '../components';
 import { SimContext } from '../context';
-import { canBuild, countByCategory } from '../caps';
+import { canBuild, countByCategory, capCost } from '../caps';
 import { newSquad, spawnUnit } from '../spawn';
 import { recordSquad } from '../territory';
 import { UnitId } from '../units';
@@ -70,7 +70,7 @@ export function carrierSystem(ctx: SimContext): System {
           const spot = MOVE_RULES[def.move].flies ? (ctx.field.contains(x, z, 1) ? { x, z } : null) : spawnSpot(ctx, x, z, def.radius);
           if (!spot) continue;
           spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
-          counts[faction][def.category]++;
+          counts[faction][def.category] += capCost(def);
           dropped++;
         }
         if (dropped === 0) continue;

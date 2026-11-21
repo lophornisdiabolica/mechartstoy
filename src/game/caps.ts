@@ -35,9 +35,14 @@ export function countByCategory(world: World, sides: number): CategoryCounts[] {
     // Boats are berthed rather than capped (see BOAT_BERTHS), so they don't crowd out the land army,
     // and so are flagships (see isFlagship); engineers aren't the army.
     if (isBoat(def) || isFlagship(def) || def.builds) continue;
-    out[f][def.category]++;
+    out[f][def.category] += capCost(def);
   }
   return out;
+}
+
+/** How much of its category's cap a unit takes (see UnitDef.capCost). */
+export function capCost(def: UnitDef): number {
+  return def.capCost ?? 1;
 }
 
 /**

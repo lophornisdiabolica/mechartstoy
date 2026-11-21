@@ -4,7 +4,7 @@ import { SimContext } from '../context';
 import { newSquad, spawnUnit } from '../spawn';
 import { outpostBonus } from '../outposts';
 import { tide } from '../tide';
-import { berthFree, canBuild, countBoats, countByCategory, countFlagships, flagshipFree, isBoat, isFlagship } from '../caps';
+import { berthFree, canBuild, countBoats, countByCategory, countFlagships, flagshipFree, isBoat, isFlagship, capCost } from '../caps';
 import { recordSquad } from '../territory';
 import { UnitDef, UnitId } from '../units';
 import { MoveClass } from '../../world/moveClasses';
@@ -180,7 +180,7 @@ export function productionSystem(ctx: SimContext): System {
             spawnUnit(world, ctx, def, faction, spot.x, spot.z, squad);
             alive[faction]++;
             if (isBoat(def)) boats[faction]++;
-            else counts[faction][def.category]++;
+            else counts[faction][def.category] += capCost(def);
           }
         }
       }

@@ -1,4 +1,4 @@
-import { Entity, World } from '../../core/ecs';
+import { Entity, System, World } from '../../core/ecs';
 import { MOVE_RULES } from '../../world/moveClasses';
 import { Armed, Building, Collider, Faction, Hit, Mover, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
@@ -15,8 +15,8 @@ import * as D from '../../core/dmath';
  * projectile. What a watcher sees is all physical:
  * - the striker has to be up against its target (its reach runs from its
  *   own edge), so melee units close to contact and press in (see ai.ts);
- * - a lunge carries it the last stretch in one bound;
- * - a knock shoves the struck back, small things further than big ones;
+ * - a lunge carries it the last stretch in a quick dash;
+ * - a knock throws the struck back, small things further than big ones;
  * - a sweep catches enemies beside the target as well.
  * The swing, thrust or stomp itself is drawn by the model and the effects,
  * from the 'struck' event.
@@ -27,6 +27,39 @@ const SWEEP_MOST = 2;
 /** A knock moves something at most this many times as far as it would one the striker's own size. */
 const KNOCK_MOST = 1.5;
 const KNOCK_LEAST = 0.2;
+
+/** How long a dash takes: a moment, and a little longer the further it goes. */
+function dashTime(distance: number): number {
+  return 0.08 + 0.07 * distance;
+}
+
+/** Send a unit dashing along (dx, dz): it's carried there over a few ticks (see dashSystem). */
+function dash(world: World, e: Entity, dx: number, dz: number): void {
+  const mover = world.get(e, Mover);
+  if (!mover || MOVE_RULES[mover.move].flies) return;
+  const len = D.hypot(dx, dz);
+  if (len < 1e-4) return;
+  const time = dashTime(len);
+  mover.dash = { vx: dx / time, vz: dz / time, left: time };
+}
+
+/** Carries lunging and knocked units along their dash, as far as their ground lets them. */
+export function dashSystem(ctx: SimContext): System {
+  return {
+    name: 'dash',
+    update(world, dt) {
+      for (const e of world.query(Mover, Transform)) {
+        const m = world.req(e, Mover);
+        if (!m.dash) continue;
+        const step = Math.min(dt, m.dash.left);
+        const moved = shove(world, ctx, e, m.dash.vx * step, m.dash.vz * step);
+        m.dash.left -= step;
+        // Stopped short by a wall or the water's edge: the dash is over.
+        if (m.dash.left <= 1e-6 || moved < D.hypot(m.dash.vx, m.dash.vz) * step * 0.5) m.dash = undefined;
+      }
+    },
+  };
+}
 
 /** Where a unit or building's edge nearest a point is, and its height there: where a blow lands. */
 function contactPoint(world: World, from: { x: number; z: number }, target: Entity): { x: number; y: number; z: number } {
@@ -76,27 +109,34 @@ export function strike(world: World, ctx: SimContext, e: Entity, armed: Armed, t
   const tr = world.get(target, Collider)?.radius ?? 0.5;
 
   // A lunge carries the striker in to its reach's halfway mark, as far as the ground lets it.
+  // The blow lands from where the lunge ends, though the dash there takes a few ticks to draw.
   let lunged = 0;
+  let sx = t.x;
+  let sz = t.z;
   const dist = D.hypot(tt.x - t.x, tt.z - t.z);
   const gap = dist - r - tr;
   if (melee.lunge && gap > w.range * 0.5 && dist > 1e-4) {
-    const step = Math.min(melee.lunge, gap - w.range * 0.5);
-    lunged = shove(world, ctx, e, ((tt.x - t.x) / dist) * step, ((tt.z - t.z) / dist) * step);
+    lunged = Math.min(melee.lunge, gap - w.range * 0.5);
+    const dx = ((tt.x - t.x) / dist) * lunged;
+    const dz = ((tt.z - t.z) / dist) * lunged;
+    dash(world, e, dx, dz);
+    sx += dx;
+    sz += dz;
   }
 
   const by: Hit = { source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown', faction };
-  const heading = D.atan2(-(tt.z - t.z), tt.x - t.x);
+  const heading = D.atan2(-(tt.z - sz), tt.x - sx);
   const struck = [target];
   if (melee.sweep) {
     // Others within reach either side of the line to the target, nearest first.
     const others: { e: Entity; d: number }[] = [];
-    ctx.grid.forEachNear(t.x, t.z, r + w.range + 3, (other, d2) => {
+    ctx.grid.forEachNear(sx, sz, r + w.range + 3, (other, d2) => {
       if (other === target || other === e || !world.has(other, Targetable)) return;
       if (!ctx.sides.hostile(faction, world.req(other, Faction).id) || !canHit(world, armed, other)) return;
       const d = Math.sqrt(d2);
       if (d - r - (world.get(other, Collider)?.radius ?? 0.5) > w.range) return;
       const ot = world.req(other, Transform);
-      if (Math.abs(wrapAngle(D.atan2(-(ot.z - t.z), ot.x - t.x) - heading)) > melee.sweep!) return;
+      if (Math.abs(wrapAngle(D.atan2(-(ot.z - sz), ot.x - sx) - heading)) > melee.sweep!) return;
       others.push({ e: other, d });
     });
     others.sort((a, b) => a.d - b.d || a.e - b.e);
@@ -109,9 +149,9 @@ export function strike(world: World, ctx: SimContext, e: Entity, armed: Armed, t
     if (melee.knock && world.has(victim, Mover) && !world.has(victim, Building)) {
       const vt = world.req(victim, Transform);
       const vr = world.get(victim, Collider)?.radius ?? 0.5;
-      const d = Math.max(1e-4, D.hypot(vt.x - t.x, vt.z - t.z));
+      const d = Math.max(1e-4, D.hypot(vt.x - sx, vt.z - sz));
       const k = melee.knock * Math.max(KNOCK_LEAST, Math.min(KNOCK_MOST, r / vr));
-      shove(world, ctx, victim, ((vt.x - t.x) / d) * k, ((vt.z - t.z) / d) * k);
+      dash(world, victim, ((vt.x - sx) / d) * k, ((vt.z - sz) / d) * k);
     }
     applyDamage(world, ctx, victim, w.damage, by, w.pierce ?? 0);
   }

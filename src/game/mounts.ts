@@ -109,6 +109,14 @@ export const MOUNTS: Record<string, Mount> = {
   shardTank: { turret: [-0.1, 0.83, 0], pivot: [0.4, 0.22, 0], muzzles: [[1.3, 0, 0]], elev: GUN },
   freezerTruck: { turret: [-0.7, 0.62, 0], pivot: [0.05, 0.25, 0], muzzles: [[0.8, 0, 0]], elev: [0, 1.1], rest: 0.6 },
   glacier: { turret: [0, 3.25, 0], muzzles: pair(1.55, 0.55, 1.22) },
+  // Sabre. Its melee weapons' "muzzles" are the tips of the blades; each gun on a mount of its own is
+  // keyed by its model and '#' (see UnitDef.mounts), and sits on top of the body, where the torso turns.
+  duelist: { turret: [0, 1.4, 0], muzzles: [[1.3, 0, -0.42]] },
+  'duelist#gun': { turret: [0.05, 1.42, 0.45], muzzles: [[0.6, 0, 0]] },
+  reaver: { turret: [-0.15, 0.85, 0], muzzles: [[2.45, 0.28, 0]] },
+  'reaver#mg': { turret: [0.75, 0.9, 0.3], muzzles: [[0.5, 0.1, 0]] },
+  colossus: { turret: [0, 3.25, 0], muzzles: pair(1.6, 0.4, 1.25) },
+  'colossus#rockets': { turret: [0, 4.85, 0], muzzles: pair(0.61, 0.45, 0.25), salvo: 'alternate' },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },
   'bld:shoreBattery': { turret: [0, 0.52, 0], pivot: [0.38, 0.3, 0], muzzles: pair(0.99, 0, 0.24), elev: [-0.35, 0.6], rest: 0.08 },

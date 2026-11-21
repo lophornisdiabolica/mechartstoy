@@ -30,7 +30,8 @@ describe('weapon mounts', () => {
     expect(models.filter((m) => !MOUNTS[m])).toEqual([]);
   });
 
-  for (const [key, mount] of Object.entries(MOUNTS)) {
+  // Guns on mounts of their own ('model#gun') are checked through their unit's model, below.
+  for (const [key, mount] of Object.entries(MOUNTS).filter(([k]) => !k.includes('#'))) {
     it(`${key}: the model's turret, barrels and muzzles are where the sim shoots from`, () => {
       const obj = createModel(key, 0);
       const rig = getRig(obj)!;
@@ -77,4 +78,25 @@ describe('weapon mounts', () => {
       });
     }
   }
+
+  it("each gun on a mount of its own sits where its mount says, on the unit's model", () => {
+    for (const def of Object.values(UNIT_DEFS)) {
+      const own = ('mounts' in def ? def.mounts : undefined) as { mount?: string }[] | undefined;
+      if (!own?.some((m) => m.mount)) continue;
+      const obj = createModel(def.model, 0);
+      const rig = getRig(obj)!;
+      pose(obj, 0, 0, 0, 0, 0);
+      expect(rig.mounts?.length, def.id).toBe(own.length);
+      own.forEach((m, k) => {
+        if (!m.mount) return;
+        const mount = MOUNTS[m.mount];
+        expect(mount, m.mount).toBeDefined();
+        const at = rig.mounts![k].turret!.getWorldPosition(new THREE.Vector3());
+        expect(at.toArray().map((v) => +v.toFixed(3)), m.mount).toEqual(mount.turret.map((v) => +v.toFixed(3)));
+        const muzzles: THREE.Object3D[] = [];
+        rig.mounts![k].turret!.traverse((o) => o.name === 'muzzle' && muzzles.push(o));
+        expect(muzzles.length, m.mount).toBe(mount.muzzles.length);
+      });
+    }
+  });
 });
