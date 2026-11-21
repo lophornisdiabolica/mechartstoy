@@ -422,7 +422,7 @@ battle, its exact map via `seed`).
     dies as its own side's. Infantry, super units, carriers and engineers
     can't be hacked. Pairs of **drone operators** come out of its
     barracks: each sends up a drone when it meets the enemy (a carrier of
-    one, `UnitDef.carries`) and readies another 25 s later, and the drones
+    one, `UnitDef.carries`) and readies another a minute later, and the drones
     hunt the infantry, the AT troopers that crowd a hacked vehicle
     included. Jammer walkers send out a pulse every few seconds out to
     fourteen units: enemy guns it reaches reload at 0.6× until the next,

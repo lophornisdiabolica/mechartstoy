@@ -1660,7 +1660,7 @@ export const UNIT_DEFS = {
     turret: false,
     turretTurnRate: 6,
     weapon: weapon({ ...rifle, name: 'Carbine', range: 9, damage: 3 }),
-    carries: { squad: [{ unit: 'drone', count: 1 }], every: 25 },
+    carries: { squad: [{ unit: 'drone', count: 1 }], every: 60 },
     wreckTime: 0,
     siege: false,
   },
@@ -1707,7 +1707,7 @@ export const UNIT_DEFS = {
     mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
     jam: { radius: 13, pace: 0.6, every: 3 },
     // And a rack of drones, sent up when it meets the enemy and readied again a while later.
-    carries: { squad: [{ unit: 'drone', count: 3 }], every: 30 },
+    carries: { squad: [{ unit: 'drone', count: 2 }], every: 60 },
     wreckTime: 35,
     siege: true,
   },

@@ -319,7 +319,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'cipher',
     name: 'Cipher',
     blurb: 'Hacking. Hack vans lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Drone operators in its squads, and the Overmind, send up drones that hunt infantry, and jammer walkers send out pulses that slow the enemy guns they reach. Its uplink mast turns out more and jams what comes at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array and a rack of drones on its back.',
-    caps: { infantry: 1, vehicle: 1.1, air: 2.5 },
+    caps: { infantry: 1, vehicle: 1.1 },
     production: {
       barracks: { table: [rifleSquad(4, 3), { unit: 'droneOperator', weight: 1.5, count: 2 }] },
       factory: {
