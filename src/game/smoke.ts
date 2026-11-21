@@ -34,7 +34,7 @@ const MAX_SMOKE = 10;
 /** Smoke lost per second as it thins. */
 const THIN = 0.5;
 /** Spread (see WeaponDef.spread) a shot through haze picks up, at its worst. */
-const HAZE_SPREAD = 0.2;
+const HAZE_SPREAD = 0.35;
 /** Depth of haze along a shot's line, world units, at which it throws the shot off at its worst. */
 const HAZE_FULL = 3;
 /** Anything this close (edge to edge) can be seen whatever the stealth. */

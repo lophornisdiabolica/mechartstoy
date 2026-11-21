@@ -430,12 +430,13 @@ battle, its exact map via `seed`).
   - *Veil:* haze and stealth (`game/smoke.ts`). Smoke trucks lob
     canisters that leave a thin, low haze, and its **smoke stacks** keep
     one over the base. The haze hides nothing, but a shot whose line runs
-    through another side's haze picks up extra spread (up to 0.2, at three
+    through another side's haze picks up extra spread (up to 0.35, at three
     units of haze), so shots into it and out of it scatter round their
     targets and miss a lot; Veil shoots through its own as if it were
     clear. Shade squads vanish while they hold their fire in a forest, by a
     building or in Veil's haze, moving or not; ghost tanks fade a few
-    seconds after each shot. Firing gives either away for three seconds.
+    seconds after each shot. Firing gives a shade away for two seconds,
+    a ghost tank for three.
     Spotters (guard towers, Bastion's scout copters, comms arrays) see
     stealthed units in their radius. Stealthed units are drawn faint and
     see-through. Super unit: the Eclipse, a walker breathing out haze over

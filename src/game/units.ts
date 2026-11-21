@@ -1747,7 +1747,7 @@ export const UNIT_DEFS = {
     turretTurnRate: 6,
     weapon: rifle,
     // In a forest, by a building or in Veil's haze, and holding its fire, it's gone, moving or not.
-    stealth: { after: 3, cover: true },
+    stealth: { after: 2, cover: true },
     wreckTime: 0,
     siege: false,
   },
@@ -1768,7 +1768,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 2.5,
     // Lobs smoke canisters onto the enemy: their shots out of the haze go wild, and Veil's into it don't.
-    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 4.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 5 }),
+    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7 }),
     wreckTime: 15,
     siege: false,
   },
