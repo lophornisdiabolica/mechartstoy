@@ -773,3 +773,20 @@ registerModel('bld:cryoPlant', (faction) => {
   g.add(box(0.15, 0.15, 2.0, DARK, 0.25, 0.5, 0)); // pipes
   return g;
 });
+
+// Sabre: a long hall with two crossed blades over its door.
+registerModel('bld:duelHall', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(4.2, 2.4, 3.4, WALLS[1], 0, 1.45, 0));
+  g.add(gableRoof(4.4, 3.6, 1.0, primary, 2.65));
+  g.add(box(0.06, 1.4, 1.6, DARK, 2.11, 0.95, 0)); // door
+  for (const side of [-1, 1]) {
+    const blade = box(0.08, 2.0, 0.22, 0xc8ccd2, 2.2 + side * 0.03, 2.0, side * 0.35);
+    blade.rotation.x = side * 0.6;
+    g.add(blade);
+  }
+  g.add(box(0.3, 0.3, 0.3, secondary, 2.25, 2.0, 0));
+  return g;
+});

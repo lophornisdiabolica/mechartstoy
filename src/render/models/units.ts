@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
+import { mountOf } from '../../game/mounts';
 import { AnimState, barrelPivot, box, cylinder, glowBox, factionColors, flatMaterial, markShared, mounted, registerModel, setRig } from '../models';
 
 /**
@@ -1292,4 +1293,147 @@ registerModel('glacier', (faction) => {
     return leg;
   });
   return setRig(root, { turret, ...walker(legs, body, 1.8, 0.3), ...mounted('glacier', root, turret) });
+});
+
+const BLADE = 0xc8ccd2;
+
+/** A gun on a mount of its own (see UnitDef.mounts): a turret group at the mount's point, for the rig's `mounts`. */
+function ownMount(root: THREE.Object3D, key: string, build: (turret: THREE.Group) => void): { turret: THREE.Group } {
+  const mount = mountOf(key);
+  if (!mount) throw new Error(`No mount for "${key}"`);
+  const turret = new THREE.Group();
+  turret.position.set(...mount.turret);
+  build(turret);
+  for (const [x, y, z] of mount.muzzles) {
+    const m = new THREE.Object3D();
+    m.name = 'muzzle';
+    m.position.set(x, y, z);
+    turret.add(m);
+  }
+  root.add(turret);
+  return { turret };
+}
+
+// Sabre: a light two-legged mech with a blade down its right arm and a cannon on its left.
+registerModel('duelist', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.2;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(0.78, 0.44, 0.6, primary, 0, 0.08, 0));
+  turret.add(box(0.24, 0.18, 0.4, GLASS, 0.35, 0.17, 0));
+  turret.add(box(0.44, 0.1, 0.66, secondary, -0.13, 0.26, 0));
+  const arm = new THREE.Group();
+  arm.position.set(0.17, 0, -0.36);
+  arm.add(box(0.26, 0.18, 0.18, METAL, 0, 0, 0));
+  arm.add(box(0.96, 0.06, 0.14, BLADE, 0.48, 0, 0));
+  turret.add(arm);
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.58, 0.62, 0.12, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.05, side * 0.22);
+    body.add(leg.hip);
+    return leg;
+  });
+  // An arm cannon on its left, opposite the blade: it swings on its own shoulder, and bobs with the body as it walks.
+  const gun = ownMount(root, 'duelist#gun', (t) => {
+    t.add(box(0.19, 0.17, 0.17, METAL, 0, 0, 0));
+    t.add(box(0.31, 0.12, 0.12, secondary, 0.145, -0.01, 0.005));
+    t.add(box(0.26, 0.08, 0.08, DARK, 0.38, 0, 0));
+  });
+  body.add(gun.turret);
+  gun.turret.position.y -= body.position.y;
+  return setRig(root, {
+    turret,
+    ...walker(legs, body, 0.75, 0.55),
+    ...mounted('duelist', root, turret),
+    mounts: [gun],
+    // The blade sweeps across in front of it.
+    strike(k) {
+      arm.rotation.y = Math.sin(Math.PI * k) * 1.3;
+    },
+  });
+});
+
+// Sabre: a heavy tank whose turret carries a great axe arm, and a machine gun in the hull.
+registerModel('reaver', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.8, 0.5, 0.55, 0.75));
+  root.add(box(2.6, 0.55, 1.4, primary, 0, 0.75, 0));
+  root.add(box(0.56, 0.3, 1.46, secondary, 1.1, 0.62, 0)); // ram plate
+  const turret = new THREE.Group();
+  turret.position.set(-0.15, 1.03, 0);
+  turret.add(box(1.2, 0.48, 1.08, primary, 0, 0.24, 0));
+  turret.add(box(0.58, 0.14, 0.8, secondary, -0.28, 0.55, 0));
+  // The arm swings across in front of the turret as it strikes; at rest it points straight ahead.
+  const arm = new THREE.Group();
+  arm.position.set(0.4, 0.32, 0);
+  arm.add(box(0.42, 0.34, 0.42, METAL, 0, 0, 0)); // shoulder
+  arm.add(box(1.6, 0.18, 0.18, METAL, 0.98, 0, 0));
+  arm.add(box(0.7, 0.07, 0.46, BLADE, 2.07, 0, 0.15)); // the axe head
+  arm.add(box(0.4, 0.06, 0.26, BLADE, 2.18, 0.01, -0.2));
+  turret.add(arm);
+  root.add(turret);
+  const mg = ownMount(root, 'reaver#mg', (t) => {
+    t.add(box(0.26, 0.13, 0.2, DARK, 0.08, 0.035, 0));
+    t.add(box(0.4, 0.06, 0.06, DARK, 0.3, 0.1, 0));
+  });
+  return setRig(root, {
+    turret,
+    ...mounted('reaver', root, turret),
+    mounts: [mg],
+    // The arm sweeps across from one side to the other.
+    strike(k) {
+      arm.rotation.y = Math.cos(Math.PI * k) * 1.1 * Math.sin(Math.PI * k) * 2;
+    },
+  });
+});
+
+// Sabre's super unit: a giant with hammer fists and a rocket rack on its back.
+registerModel('colossus', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.9;
+  root.add(body);
+  body.add(box(1.4, 0.55, 1.7, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.35;
+  turret.add(box(2.2, 1.3, 2.0, primary, 0, 0.65, 0));
+  turret.add(box(0.35, 0.35, 1.2, GLASS, 1.2, 0.95, 0));
+  turret.add(box(1.8, 0.3, 2.1, secondary, -0.2, 1.45, 0));
+  const fists = new THREE.Group();
+  for (const side of [-1, 1]) {
+    fists.add(box(0.7, 0.7, 0.6, secondary, 0.3, 0.4, side * 1.25));
+    fists.add(box(1.2, 0.5, 0.5, METAL, 1.0, 0.4, side * 1.25));
+  }
+  turret.add(fists);
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.45, 1.45, 0.5, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.7);
+    body.add(leg.hip);
+    return leg;
+  });
+  const rack = ownMount(root, 'colossus#rockets', (t) => {
+    t.add(box(0.6, 0.2, 0.6, DARK, 0, 0.08, 0));
+    t.add(box(0.9, 0.5, 1.0, secondary, 0.1, 0.45, 0));
+    for (const z of [-0.25, 0.25]) t.add(box(0.05, 0.36, 0.36, DARK, 0.585, 0.45, z));
+  });
+  // On its back: it bobs with the body as it walks, and comes down with it when it falls.
+  body.add(rack.turret);
+  rack.turret.position.y -= body.position.y;
+  return setRig(root, {
+    turret,
+    ...walker(legs, body, 1.8, 0.3),
+    ...mounted('colossus', root, turret),
+    mounts: [rack],
+    // The fists come up and slam down.
+    strike(k) {
+      fists.position.y = Math.sin(Math.PI * k) * 0.8;
+    },
+  });
 });

@@ -6,7 +6,7 @@ import { ProductionEntry } from '../buildings';
 import { doctrineOf } from '../doctrines';
 import { countUnits, outnumbered, squadLineUp } from './production';
 import { recordSquad } from '../territory';
-import { armyCap, canBuild, CategoryCounts, countByCategory } from '../caps';
+import { armyCap, canBuild, CategoryCounts, countByCategory, capCost } from '../caps';
 import * as D from '../../core/dmath';
 
 export interface ReinforcementConfig {
@@ -73,7 +73,7 @@ export function spawnWave(world: World, ctx: SimContext, faction: number, picks:
         const z = gz + ctx.rng.range(-spread, spread);
         if (ctx.field.contains(x, z, 1) && ctx.nav.fitsAt(x, z, def.radius)) {
           spawnUnit(world, ctx, def, faction, x, z, squad);
-          counts[faction][def.category]++;
+          counts[faction][def.category] += capCost(def);
           break;
         }
       }

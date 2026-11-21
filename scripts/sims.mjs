@@ -56,6 +56,10 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      (default 30), and --set changes settings as for battles
   --seeds 3,7-9      play only these battle numbers of each scenario (with
                      the same doctrines and map types they get in a full run)
+  --involving a,b    with --latin, play only the battles that have one of
+                     these doctrines on a side (against every doctrine), with
+                     the same battle numbers as in a full run, e.g.
+                     --involving aegis,rime for a run on just the new ones
   --profile          time each part of the sim and print where the time
                      goes, with the slowest tick and when it came
   --timeline         save each battle's timeline (every side's units,
@@ -87,7 +91,8 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      doctrine, niche and unit tables
   --niche            also print the niche report: what each doctrine builds
                      and kills by unit class, how its supers trade, and its
-                     win rate by map type and battle size (always on with
+                     win rate by map type, battle size and battle length
+                     (shorter vs longer half; always on with
                      --doctrines, --latin and --pool)
   --list             list the scenarios and stop
   --help             this text
@@ -114,6 +119,7 @@ function parseArgs(argv) {
     rounds: 20,
     gap: 30,
     seeds: null,
+    involving: null,
     profile: false,
     timeline: false,
     battle: null,
@@ -143,6 +149,7 @@ function parseArgs(argv) {
     else if (a === '--rounds') opts.rounds = Math.max(1, Number(argv[++i]));
     else if (a === '--gap') opts.gap = Math.max(4, Number(argv[++i]));
     else if (a === '--seeds') opts.seeds = argv[++i];
+    else if (a === '--involving') opts.involving = argv[++i].split(',').map((d) => d.trim()).filter(Boolean);
     else if (a === '--profile') opts.profile = true;
     else if (a === '--timeline') opts.timeline = true;
     else if (a === '--battle') opts.battle = argv[++i];
@@ -189,6 +196,9 @@ async function main() {
   const picked = opts.seeds ? sim.parseBattleNumbers(opts.seeds) : null;
   const variants = opts.sweep ? sim.sweepVariants(opts.sweep) : null;
   if (opts.latin && opts.doctrines) throw new Error('--latin picks the doctrines itself: leave out --doctrines');
+  if (opts.involving && !opts.latin) throw new Error('--involving picks battles of a --latin run: add --latin');
+  for (const d of opts.involving ?? []) if (!sim.DOCTRINE_IDS.includes(d)) throw new Error(`Unknown doctrine in --involving: ${d} (one of ${sim.DOCTRINE_IDS.join(', ')})`);
+  const involves = (p) => !opts.involving || opts.involving.some((d) => new RegExp(`(^|&)doc[12]=${d}(&|$)`).test(p.set));
   const planned = scenarios.flatMap((s) => {
     // Enough battles in the plan to reach the highest number picked.
     const normal = opts.battles ?? (opts.quick ? s.quick : s.battles);
@@ -201,7 +211,7 @@ async function main() {
       : sim.battlePlans(sides, n, { set: opts.set, doctrines: opts.doctrines, maps: opts.maps, cross: opts.everyMap });
     const only = picked && new Set(picked);
     return plans
-      .filter((p) => !only || only.has(p.battle))
+      .filter((p) => (!only || only.has(p.battle)) && involves(p))
       .map((p) => ({ scenario: s.id, ...p, battle: p.battle + opts.offset, options: { profile: opts.profile, timeline: opts.timeline } }));
   });
   // A sweep plays every battle once per value, the value first so it wins over --set.

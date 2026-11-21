@@ -2,6 +2,7 @@ import { hashSeed } from '../core/rng';
 import { Game, SIM_HZ } from '../game/game';
 import { BattleSettings, defaultFaction, defaultSettings, factionDefs } from '../game/settings';
 import { ALL_DOCTRINE_IDS, DOCTRINE_IDS, DoctrineId } from '../game/doctrines';
+export { DOCTRINE_IDS };
 import { TypeStats } from '../game/stats';
 import { Building, Faction, Producer, Unit } from '../game/components';
 import { outpostsHeldBy } from '../game/outposts';
@@ -729,6 +730,37 @@ export function summarizeDoctrines(results: BattleResult[]): DoctrineSummary[] {
   });
 }
 
+/**
+ * Win rates in the shorter and the longer half of the decided battles (split
+ * at the median length, per scenario so a big battle's length doesn't sort
+ * it), for doctrines that win early and fade, or the other way round.
+ */
+function lengthSplit(results: BattleResult[]): string[] {
+  const decided = results.filter((r) => r.decided);
+  if (decided.length < 8) return [];
+  const short: BattleResult[] = [];
+  const long: BattleResult[] = [];
+  const splits: string[] = [];
+  for (const s of [...new Set(decided.map((r) => r.scenario))]) {
+    const these = decided.filter((r) => r.scenario === s).sort((a, b) => a.minutes - b.minutes);
+    const half = Math.floor(these.length / 2);
+    short.push(...these.slice(0, half));
+    long.push(...these.slice(half));
+    if (these.length > 1) splits.push(`${s} ${these[half].minutes.toFixed(1)} min`);
+  }
+  const a = summarizeDoctrines(short);
+  const b = summarizeDoctrines(long);
+  const cell = (d: DoctrineSummary) => (d.played ? `${pct(d.rate)} ±${Math.round(d.margin * 100)} (${d.played})` : '-');
+  const rows = ALL_DOCTRINE_IDS.map((_, i) => [a[i], b[i]] as const)
+    .filter(([x, y]) => x.played + y.played > 0)
+    .map(([x, y]) => [x.doctrine, cell(x), cell(y), x.played && y.played ? `${y.rate >= x.rate ? '+' : ''}${Math.round((y.rate - x.rate) * 100)}` : '-']);
+  return [
+    '',
+    `Win rate by battle length (shorter and longer half, split at ${splits.join(', ')}; battles played in brackets):`,
+    formatGrid(['Doctrine', 'Shorter half', 'Longer half', 'Change (pts)'], rows),
+  ];
+}
+
 /** For two-sided battles: wins of each doctrine (row) against each other doctrine (column). */
 export function headToHead(results: BattleResult[]): Record<DoctrineId, Record<DoctrineId, number>> {
   const grid = Object.fromEntries(ALL_DOCTRINE_IDS.map((a) => [a, Object.fromEntries(ALL_DOCTRINE_IDS.map((b) => [b, 0]))])) as Record<DoctrineId, Record<DoctrineId, number>>;
@@ -1279,6 +1311,7 @@ export function formatNiche(results: BattleResult[]): string {
     ),
     'Lives is minutes on the field per one built (still alive at the end counts up to then). Trade as above.',
   );
+  out.push(...lengthSplit(results));
   const scenarios = [...new Set(results.map((r) => r.scenario))];
   if (scenarios.length > 1) {
     const by = scenarios.map((s) => summarizeDoctrines(results.filter((r) => r.scenario === s)));

@@ -1,7 +1,7 @@
 import { Entity, System, World } from '../core/ecs';
 import { Ai, Faction, Guard, Health, Transform, Unit } from './components';
 import { SimContext } from './context';
-import { canBuild, countByCategory } from './caps';
+import { canBuild, countByCategory, capCost } from './caps';
 import { spawnSpot } from './systems/production';
 import { spawnUnit } from './spawn';
 import { UnitId } from './units';
@@ -121,7 +121,7 @@ export function territorySystem(ctx: SimContext): System {
         const spot = spawnSpot(ctx, at.x + ctx.rng.range(-1, 1), at.z + ctx.rng.range(-1, 1), def.radius);
         if (!spot) continue;
         spawnUnit(world, ctx, def, roster.faction, spot.x, spot.z, squad);
-        counts[roster.faction][def.category]++;
+        counts[roster.faction][def.category] += capCost(def);
       }
     },
   };
