@@ -311,8 +311,8 @@ battle, its exact map via `seed`).
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
-  Ember Firestorm; Aegis, Rime, Sabre and Cipher have no slot of their own, and wear
-  Verdant Protectorate, Celeste Dominion, Onyx Order and Magenta Directive colours). Every doctrine fields rifle squads with AT troopers,
+  Ember Firestorm; Aegis, Rime, Sabre, Cipher and Veil have no slot of their own, and wear
+  Verdant Protectorate, Celeste Dominion, Onyx Order, Magenta Directive and Obsidian Choir colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -430,6 +430,22 @@ battle, its exact map via `seed`).
     **uplink mast** turns out more and jams what comes at the base. Super
     unit: the Overmind, a walker with a hack array and a rack of three
     drones on its back.
+  - *Veil:* haze and stealth (`game/smoke.ts`). Smoke trucks lob
+    canisters that leave a thin, low haze, and its **smoke stacks** keep
+    one over the base. The haze hides nothing, but a shot whose line runs
+    through another side's haze picks up extra spread (up to 0.35, at three
+    units of haze), so shots into it and out of it scatter round their
+    targets and miss a lot; Veil shoots through its own as if it were
+    clear. Its only infantry are shades, AT troopers that vanish while they
+    hold their fire in a forest, by a building or in Veil's haze, moving or
+    not; ghost tanks fade a few
+    seconds after each shot. Firing gives a shade away for two seconds,
+    a ghost tank for three.
+    Spotters (guard towers, Bastion's scout copters, comms arrays) see
+    stealthed units in their radius. Stealthed units are drawn faint and
+    see-through. Its factory turns out ghost tanks in place of plain ones,
+    and strike jets in place of scout copters. Super unit: the Eclipse, a
+    walker breathing out haze over the army that walks with it.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;

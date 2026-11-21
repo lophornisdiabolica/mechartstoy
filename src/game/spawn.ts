@@ -20,6 +20,7 @@ import {
   Producer,
   Renderable,
   Shield,
+  Veiled,
   Targetable,
   Tilt,
   Transform,
@@ -178,6 +179,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
   });
   if (def.carries) world.add(e, Carrier, { loaded: true, reloadAt: 0 });
   if (def.shield) world.add(e, Shield, makeShield(def.shield));
+  if (def.stealth) world.add(e, Veiled, { hidden: false });
   if (def.ammo) world.add(e, Ammo, { left: def.ammo, max: def.ammo, rearming: false, readyAt: null });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;

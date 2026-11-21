@@ -84,6 +84,11 @@ export interface WeaponDef {
    * only aims at vehicles it can turn.
    */
   hack?: number;
+  /**
+   * Lays haze where it lands, this much (Veil; see smoke.ts): shots through
+   * it go wild, except its own side's.
+   */
+  smoke?: number;
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -196,6 +201,14 @@ export interface UnitDef {
    * radius they reload at `pace` of their usual rate.
    */
   jam?: JamDef;
+  /** Breathes out haze round itself (Veil; see smoke.ts): this much every second within the radius. */
+  smokes?: { radius: number; rate: number };
+  /**
+   * Fades from sight once it has gone `after` seconds without firing (Veil;
+   * see smoke.ts): if `still`, only while it isn't moving; if `cover`, only
+   * while it's in a forest, by a building or in its own side's haze.
+   */
+  stealth?: { after: number; still?: boolean; cover?: boolean };
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -253,6 +266,26 @@ const rifle: WeaponDef = {
   targets: 'ground',
 };
 
+/** An AT trooper's rocket launcher (and a shade's). */
+const rocketLauncher: WeaponDef = {
+  // Slow, heavy rockets: they get through a tank's armour, but not much of a Titan's.
+  name: 'Rocket launcher',
+  range: 11,
+  minRange: 0,
+  damage: 40,
+  cooldown: 4.5,
+  burst: 1,
+  burstGap: 0,
+  projectile: 'missile',
+  speed: 24,
+  splash: 0.5,
+  spread: 0.06,
+  arc: false,
+  muzzleHeight: 0.45,
+  // Missiles are everyone's answer to aircraft (see the notes on air in the README).
+  targets: 'both',
+};
+
 export const UNIT_DEFS = {
   trooper: {
     id: 'trooper',
@@ -290,24 +323,7 @@ export const UNIT_DEFS = {
     sight: 14,
     turret: false,
     turretTurnRate: 6,
-    weapon: {
-      // Slow, heavy rockets: they get through a tank's armour, but not much of a Titan's.
-      name: 'Rocket launcher',
-      range: 11,
-      minRange: 0,
-      damage: 40,
-      cooldown: 4.5,
-      burst: 1,
-      burstGap: 0,
-      projectile: 'missile',
-      speed: 24,
-      splash: 0.5,
-      spread: 0.06,
-      arc: false,
-      muzzleHeight: 0.45,
-      // Missiles are everyone's answer to aircraft (see the notes on air in the README).
-      targets: 'both',
-    },
+    weapon: rocketLauncher,
     wreckTime: 0,
     siege: false,
   },
@@ -1708,6 +1724,96 @@ export const UNIT_DEFS = {
     jam: { radius: 13, pace: 0.6, every: 3 },
     // And a rack of drones, sent up when it meets the enemy and readied again a while later.
     carries: { squad: [{ unit: 'drone', count: 2 }], every: 60 },
+    wreckTime: 35,
+    siege: true,
+  },
+  // Veil: haze and stealth (see smoke.ts). Shots through its haze go wild, except Veil's own, and
+  // its shades and ghost tanks fade from sight when they hold their fire.
+  shadeTrooper: {
+    id: 'shadeTrooper',
+    name: 'Shade',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
+    role: 'frontline',
+    model: 'shadeTrooper',
+    hp: 20,
+    armor: 0,
+    speed: 1.6,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 14,
+    turret: false,
+    turretTurnRate: 6,
+    // An AT trooper that hides: rockets for the armour it creeps up on unseen.
+    weapon: rocketLauncher,
+    // In a forest, by a building or in Veil's haze, and holding its fire, it's gone, moving or not.
+    stealth: { after: 2, cover: true },
+    wreckTime: 0,
+    siege: false,
+  },
+  smokeTruck: {
+    id: 'smokeTruck',
+    name: 'Smoke Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
+    model: 'smokeTruck',
+    hp: 130,
+    armor: 3,
+    speed: 3.2,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2.5,
+    // Lobs smoke canisters onto the enemy: their shots out of the haze go wild, and Veil's into it don't.
+    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7 }),
+    wreckTime: 15,
+    siege: false,
+  },
+  ghostTank: {
+    id: 'ghostTank',
+    name: 'Ghost Tank',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'ghostTank',
+    hp: 200,
+    armor: 6,
+    speed: 2.8,
+    turnRate: 1.7,
+    radius: 1.05,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Cannon', range: 15, damage: 45, cooldown: 3, projectile: 'shell', speed: 40, splash: 0.8, spread: 0.05, muzzleHeight: 1, pierce: 0.2 }),
+    // Gone from sight a few seconds after its last shot.
+    stealth: { after: 3 },
+    wreckTime: 25,
+    siege: false,
+  },
+  eclipse: {
+    id: 'eclipse',
+    name: 'Eclipse',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'eclipse',
+    hp: 1150,
+    armor: 18,
+    speed: 1.3,
+    turnRate: 0.9,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.1,
+    weapon: weapon({ name: 'Twin cannons', range: 18, damage: 48, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
+    // Smoke pours off it: it's too big to hide in it, but what walks with it isn't.
+    smokes: { radius: 8, rate: 1.4 },
     wreckTime: 35,
     siege: true,
   },
