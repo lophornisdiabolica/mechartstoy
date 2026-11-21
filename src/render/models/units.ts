@@ -1460,6 +1460,12 @@ registerModel('hackVan', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.4, 1.28, 0);
   turret.add(cylinder(0.1, 0.12, 0.26, 6, DARK, 0, 0.13, 0));
+  // A yoke on the post, and a pin through it that the dish tips on.
+  turret.add(box(0.1, 0.04, 0.3, METAL, 0, 0.27, 0));
+  for (const z of [-0.13, 0.13]) turret.add(box(0.12, 0.2, 0.03, METAL, 0, 0.32, z));
+  const pin = cylinder(0.045, 0.045, 0.32, 6, DARK, 0, 0.3, 0);
+  pin.rotation.x = Math.PI / 2;
+  turret.add(pin);
   const dish = barrelPivot('hackVan', turret);
   dish.add(cylinder(0.42, 0.08, 0.16, 10, secondary, 0.12, 0, 0).rotateZ(-Math.PI / 2));
   const core = glowBox(0.12, 0.12, 0.12, SIGNAL);
@@ -1550,11 +1556,16 @@ registerModel('overmind', (faction) => {
     return leg;
   });
   const array = ownMount(root, 'overmind#array', (t) => {
+    t.add(cylinder(0.18, 0.22, 0.3, 8, METAL, 0, -0.17, 0)); // a mast down into its back
     t.add(cylinder(0.25, 0.3, 0.3, 8, DARK, 0, 0.1, 0));
+    t.add(box(0.42, 0.14, 0.12, DARK, 0.2, 0.3, 0)); // a boom out to the dish
     t.add(cylinder(0.7, 0.15, 0.25, 12, secondary, 0.5, 0.35, 0).rotateZ(-Math.PI / 2));
     const core = glowBox(0.18, 0.18, 0.18, SIGNAL);
     core.position.set(0.72, 0.35, 0);
     t.add(core);
   });
+  // On its back: it bobs with the body as it walks, and comes down with it when it falls.
+  body.add(array.turret);
+  array.turret.position.y -= body.position.y;
   return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('overmind', root, turret), mounts: [array] });
 });
