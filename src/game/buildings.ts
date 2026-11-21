@@ -95,6 +95,25 @@ const towerShell: WeaponDef = {
   pierce: 0.5,
 };
 
+/** A frost tower's roof mortar (Rime): a lighter, slower freezer truck mortar. */
+const frostLobber: WeaponDef = {
+  name: 'Frost mortar',
+  range: 17,
+  minRange: 4,
+  damage: 10,
+  cooldown: 6,
+  burst: 1,
+  burstGap: 0.1,
+  projectile: 'frost',
+  speed: 16,
+  splash: 2.2,
+  spread: 0.08,
+  arc: true,
+  muzzleHeight: 2.5,
+  targets: 'ground',
+  frost: 4,
+};
+
 const towerCannon: WeaponDef = {
   name: 'Tower cannon',
   range: 15,
@@ -388,6 +407,24 @@ export const BUILDING_DEFS = {
     radius: 0.9,
     height: 2.2,
     weapon: towerCannon,
+    sight: 16,
+    turretTurnRate: 2.5,
+    lasts: 900,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 10,
+  },
+  // Rime's field tower: a field tower with a small frost mortar on its roof, lobbing frost onto what comes at the line.
+  frostTower: {
+    id: 'frostTower',
+    name: 'Frost Tower',
+    model: 'bld:frostTower',
+    hp: 400,
+    armor: 8,
+    radius: 0.9,
+    height: 2.2,
+    weapon: towerCannon,
+    mounts: [{ weapon: frostLobber, mount: 'frostTower#mortar', turnRate: 1.5 }],
     sight: 16,
     turretTurnRate: 2.5,
     lasts: 900,

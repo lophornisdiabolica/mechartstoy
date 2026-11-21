@@ -110,6 +110,11 @@ export const ARRAYS_MOST = 2;
 const ARRAY_BACK = 5;
 const ARRAY_OUT = 0.38;
 
+/** A field tower of any doctrine's kind (Rime's frost tower too): they share the tower count. */
+function isFieldTower(id: string): boolean {
+  return id === 'fieldTower' || id === 'frostTower';
+}
+
 /**
  * Which doctrines get round a choke point better than their enemies, and
  * how: 'steep' (walkers that climb the slopes either side of a valley),
@@ -529,7 +534,7 @@ export class Engineers {
       if (f >= 0 && f < n && def.id === 'hq') hq[f] = true;
       if (f >= 0 && f < n && def.id === 'helipad') this.pads[f]++;
       if (f < 0 || f >= n || !def.lasts) continue;
-      if (def.id === 'fieldTower') this.towers[f]++;
+      if (isFieldTower(def.id)) this.towers[f]++;
       else if (def.id === 'commsArray') this.arrays[f]++;
       else if (def.id === 'shoreBattery') this.batteries[f]++;
       else this.walls[f]++;
@@ -601,7 +606,7 @@ export class Engineers {
     const add = (job: BuildJob | null) => {
       if (!job) return;
       const id = job.def.id;
-      if (id === 'fieldTower' ? towers-- > 0 : id === 'commsArray' ? arrays-- > 0 : walls-- > 0) out.push(job);
+      if (isFieldTower(id) ? towers-- > 0 : id === 'commsArray' ? arrays-- > 0 : walls-- > 0) out.push(job);
     };
     // Bastion's first comms array goes out along the way to the nearest enemy, past the base mast's reach.
     if (doctrine === 'bastion') add(this.approachArray(world, ctx, side));
@@ -622,7 +627,9 @@ export class Engineers {
       if (doctrine === 'legion') out.push(...this.earthworkJobs(world, ctx, side, site));
       // A field tower just behind the middle of the line (further back behind a trench, clear of it).
       const back = doctrine === 'legion' ? LEGION_TOWER_BACK : TOWER_BACK;
-      add(this.buildAt(world, ctx, side, ctx.buildings.fieldTower, site.x - site.dx * back, site.z - site.dz * back, heading, site.dx, site.dz));
+      // Rime's have a frost mortar on the roof.
+      const tower = doctrine === 'rime' ? ctx.buildings.frostTower : ctx.buildings.fieldTower;
+      add(this.buildAt(world, ctx, side, tower, site.x - site.dx * back, site.z - site.dz * back, heading, site.dx, site.dz));
       // Bastion: a comms array behind lines out at the front.
       if (doctrine === 'bastion' && site.kind !== 'rally') {
         add(this.buildAt(world, ctx, side, ctx.buildings.commsArray, site.x - site.dx * ARRAY_BACK + site.dz * 3, site.z - site.dz * ARRAY_BACK - site.dx * 3, heading, site.dx, site.dz));
@@ -1624,7 +1631,7 @@ export class Engineers {
       this.jobs.delete(e);
       const id = job.def.id;
       const full =
-        id === 'fieldTower'
+        isFieldTower(id)
           ? this.towers[side] >= TOWERS_MOST
           : id === 'commsArray'
             ? this.arrays[side] >= ARRAYS_MOST
@@ -1638,7 +1645,7 @@ export class Engineers {
       if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
-      if (id === 'fieldTower') this.towers[side]++;
+      if (isFieldTower(id)) this.towers[side]++;
       else if (id === 'commsArray') this.arrays[side]++;
       else if (id === 'helipad') this.pads[side]++;
       else if (id === 'shoreBattery') this.batteries[side]++;
