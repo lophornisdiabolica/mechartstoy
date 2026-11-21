@@ -1309,7 +1309,7 @@ function ownMount(root: THREE.Object3D, key: string, build: (turret: THREE.Group
   return { turret };
 }
 
-// Sabre: a light two-legged mech with a blade down its right arm and a gun on its head.
+// Sabre: a light two-legged mech with a blade down its right arm and a cannon on its left.
 registerModel('duelist', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -1332,10 +1332,14 @@ registerModel('duelist', (faction) => {
     body.add(leg.hip);
     return leg;
   });
+  // An arm cannon on its left, opposite the blade: it swings on its own shoulder, and bobs with the body as it walks.
   const gun = ownMount(root, 'duelist#gun', (t) => {
-    t.add(box(0.22, 0.1, 0.22, DARK, 0, -0.03, 0));
-    t.add(box(0.5, 0.09, 0.09, DARK, 0.25, 0, 0));
+    t.add(box(0.22, 0.2, 0.2, METAL, 0, 0, 0));
+    t.add(box(0.36, 0.14, 0.14, secondary, 0.17, -0.01, 0.005));
+    t.add(box(0.3, 0.09, 0.09, DARK, 0.45, 0, 0));
   });
+  body.add(gun.turret);
+  gun.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
     ...walker(legs, body, 0.85, 0.55),
@@ -1348,7 +1352,7 @@ registerModel('duelist', (faction) => {
   });
 });
 
-// Sabre: a heavy tank whose turret carries a great scything arm, and a machine gun in the hull.
+// Sabre: a heavy tank whose turret carries a great axe arm, and a machine gun in the hull.
 registerModel('reaver', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -1364,7 +1368,7 @@ registerModel('reaver', (faction) => {
   arm.position.set(0.35, 0.28, 0);
   arm.add(box(0.36, 0.3, 0.36, METAL, 0, 0, 0)); // shoulder
   arm.add(box(1.4, 0.16, 0.16, METAL, 0.85, 0, 0));
-  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the scythe blade, hooked back
+  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the axe head
   arm.add(box(0.34, 0.05, 0.22, BLADE, 1.9, 0.01, -0.17));
   turret.add(arm);
   root.add(turret);
