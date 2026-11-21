@@ -109,7 +109,9 @@ export const MOUNTS: Record<string, Mount> = {
   shardTank: { turret: [-0.1, 0.83, 0], pivot: [0.4, 0.22, 0], muzzles: [[1.3, 0, 0]], elev: GUN },
   freezerTruck: { turret: [-0.7, 0.62, 0], pivot: [0.05, 0.36, 0], muzzles: [[0.66, 0, 0]], elev: [0, 1.1], rest: 0.6 },
   glacier: { turret: [0, 3.25, 0], muzzles: pair(1.55, 0.55, 1.22) },
+  'frostTower#mortar': { turret: [0, 2.32, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [0.3, 1.2], rest: 0.8 },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
+  'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },
   'bld:shoreBattery': { turret: [0, 0.52, 0], pivot: [0.38, 0.3, 0], muzzles: pair(0.99, 0, 0.24), elev: [-0.35, 0.6], rest: 0.08 },
 };

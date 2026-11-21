@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { barrelPivot, box, cylinder, factionColors, gableRoof, glowBox, mounted, registerModel, setRig } from '../models';
+import { barrelPivot, box, cylinder, factionColors, gableRoof, getRig, glowBox, mounted, registerModel, setRig } from '../models';
+import { mountOf } from '../../game/mounts';
 import { TownStyle } from '../../world/biomes';
 
 /**
@@ -13,6 +14,8 @@ const CONCRETE = 0xb9b4a8;
 const WALLS = [0xe8e0d0, 0xd9cfbd, 0xf0ece4, 0xcfc6b4];
 const CIVIC_ROOFS = [0xb5654a, 0x8c4a3a, 0x6d7b86, 0x5d6b5a];
 const WINDOW = 0x40525e;
+/** Rime's pale ice. */
+const ICE = 0xcfe9f5;
 
 const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
@@ -224,7 +227,10 @@ registerModel('bld:barracksBlock', (faction) => {
   return g;
 });
 
-registerModel('bld:tower', (faction) => {
+registerModel('bld:tower', (faction) => guardTower(faction));
+
+/** A guard tower: a concrete drum with a twin-gun turret on top. */
+function guardTower(faction: number): THREE.Object3D {
   const { primary, secondary } = factionColors(faction);
   const g = new THREE.Group();
   g.add(cylinder(0.75, 0.9, 1.6, 8, CONCRETE, 0, 0.8, 0));
@@ -236,6 +242,27 @@ registerModel('bld:tower', (faction) => {
   for (const side of [-1, 1]) guns.add(box(1.0, 0.12, 0.12, DARK, 0.5, 0, side * 0.15));
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:tower', g, turret, [guns]) });
+}
+
+// Rime's field tower: a guard tower with a little frost mortar on its roof, turning on its own.
+registerModel('bld:frostTower', (faction) => {
+  const g = guardTower(faction);
+  const rig = getRig(g)!;
+  const mount = mountOf('frostTower#mortar')!;
+  const t = new THREE.Group();
+  t.position.set(...mount.turret);
+  t.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.05, 0));
+  // A cheek either side and a pin through them that the mortar tips on.
+  for (const z of [-0.12, 0.12]) t.add(box(0.14, 0.2, 0.03, METAL, 0, 0.17, z));
+  const pin = cylinder(0.04, 0.04, 0.28, 6, DARK, 0, 0.2, 0);
+  pin.rotation.x = Math.PI / 2;
+  t.add(pin);
+  const tube = barrelPivot('frostTower#mortar', t);
+  tube.add(box(0.6, 0.18, 0.18, DARK, 0.15, 0, 0));
+  tube.add(box(0.3, 0.2, 0.2, ICE, 0.1, 0, 0)); // coolant sleeve
+  mounted('frostTower#mortar', g, t, [tube]);
+  g.add(t);
+  return setRig(g, { ...rig, mounts: [{ turret: t, barrels: [tube] }] });
 });
 
 /** An outpost's post: a small hut on a round pad, with a radio mast flying its holder's flag. */

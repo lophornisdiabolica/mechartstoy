@@ -30,7 +30,8 @@ describe('weapon mounts', () => {
     expect(models.filter((m) => !MOUNTS[m])).toEqual([]);
   });
 
-  for (const [key, mount] of Object.entries(MOUNTS)) {
+  // Guns on mounts of their own ('model#gun') are checked through their unit's model, below.
+  for (const [key, mount] of Object.entries(MOUNTS).filter(([k]) => !k.includes('#'))) {
     it(`${key}: the model's turret, barrels and muzzles are where the sim shoots from`, () => {
       const obj = createModel(key, 0);
       const rig = getRig(obj)!;
