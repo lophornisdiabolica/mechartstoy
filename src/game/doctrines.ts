@@ -341,7 +341,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   veil: {
     id: 'veil',
     name: 'Veil',
-    blurb: 'Smoke and stealth. Smoke trucks lob canisters that blind whoever is in the cloud (Veil sees through its own smoke), shade squads vanish when they stand still and hold their fire, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth but not smoke. Its smoke stacks keep a pall over the base. Super unit: the Eclipse, a walker pouring out smoke for the army round it.',
+    blurb: 'Haze and stealth. Smoke trucks lob canisters that leave a thin haze: shots into it or out of it go wild, except Veil\'s own. Shade squads vanish while they hold their fire in a forest, by a building or in Veil\'s haze, even on the move, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth. Its smoke stacks keep a haze over the base. Super unit: the Eclipse, a walker breathing out haze over the army round it.',
     caps: { infantry: 1, vehicle: 1 },
     production: {
       barracks: { table: [shadeSquad(4, 1)], interval: 15 },

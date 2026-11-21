@@ -38,7 +38,7 @@ interface ViewEntry {
   grounded: boolean;
   /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
   strike: { t: number; style: MeleeDef['style']; jab: number } | null;
-  /** Stealthed (see game/smoke.ts): drawn see-through, and its infantry only as a flicker. */
+  /** Stealthed (see game/smoke.ts): drawn faint and see-through. */
   veiled: boolean;
 }
 
@@ -85,8 +85,6 @@ export class EntityView {
   private readonly owners = new WeakMap<THREE.Object3D, Entity>();
   /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
   hidden: ReadonlySet<Entity> | null = null;
-  /** Seconds of animation, for stealthed troopers' flicker. */
-  private flicker = 0;
 
   /** `surface` is the ground height at a world point, which wrecks lie along. */
   /** `deck` is the height of a bridge deck over a world point, or null: tall boats duck under them. */
@@ -267,7 +265,6 @@ export class EntityView {
       entry.lastZ = z;
       entry.veiled = w.get(e, Veiled)?.hidden === true;
     }
-    this.flicker += dt;
     this.batch();
   }
 
@@ -279,9 +276,8 @@ export class EntityView {
     for (const entry of this.entries.values()) {
       const ghost = entry.veiled ? GHOST : undefined;
       for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m, ghost);
-      // A stealthed trooper shows only now and then, a glimpse of movement.
-      if (entry.veiled && (this.flicker * 3 + entry.lastX * 0.37) % 1 > 0.2) continue;
-      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s);
+      // A stealthed trooper is drawn faint and see-through, steady like a ghost tank.
+      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.veiled);
     }
     b.end();
   }

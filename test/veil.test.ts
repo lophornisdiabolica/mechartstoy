@@ -5,7 +5,7 @@ import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS, UnitDef } from '../src/game/units';
-import { THICK } from '../src/game/smoke';
+import { hazeSpread, THICK } from '../src/game/smoke';
 
 const DT = 1 / 30;
 
@@ -43,40 +43,32 @@ describe('Veil: smoke', () => {
     expect(most).toBeGreaterThan(THICK);
   });
 
-  it("nobody sees into smoke but the side that laid it", () => {
+  it("shots through another side's haze go wild, but not through its own", () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
-    const enemy = dummy(game, UNIT_DEFS.tank, 1, base.x + 10, base.z);
-    const shooter = standing(game, UNIT_DEFS.tank, 0, base.x, base.z);
-    const keep = () => game.ctx.smoke.add(base.x + 10, base.z, 3, 0.5, 2);
-    for (let i = 0; i < 3 / DT; i++) {
-      keep();
-      game.step(DT);
-    }
-    // Side 2's smoke: side 0 can't pick the tank in it out.
-    expect(game.world.req(shooter, Armed).target).toBeNull();
-    expect(game.world.req(enemy, Health).hp).toBe(UNIT_DEFS.tank.hp);
-    // Its own smoke it sees straight through.
-    const game2 = emptyGame();
-    const enemy2 = dummy(game2, UNIT_DEFS.tank, 1, base.x + 10, base.z);
-    const shooter2 = standing(game2, UNIT_DEFS.tank, 0, base.x, base.z);
-    for (let i = 0; i < 3 / DT; i++) {
-      game2.ctx.smoke.add(base.x + 10, base.z, 3, 0.5, 0);
-      game2.step(DT);
-    }
-    expect(game2.world.req(shooter2, Armed).target).toBe(enemy2);
+    game.ctx.smoke.add(base.x + 10, base.z, 3, 5, 2);
+    expect(hazeSpread(game.ctx, base.x, base.z, base.x + 10, base.z, 0)).toBeGreaterThan(0.05);
+    expect(hazeSpread(game.ctx, base.x, base.z, base.x + 10, base.z, 2)).toBe(0);
+    // Off to one side of it, nothing.
+    expect(hazeSpread(game.ctx, base.x, base.z + 12, base.x + 10, base.z + 12, 0)).toBe(0);
   });
 
-  it('close up, smoke hides nothing', () => {
-    const game = emptyGame();
-    const base = game.field.baseSites[0];
-    const enemy = dummy(game, UNIT_DEFS.tank, 1, base.x + 4.5, base.z);
-    const shooter = standing(game, UNIT_DEFS.tank, 0, base.x, base.z);
-    for (let i = 0; i < 2 / DT; i++) {
-      game.ctx.smoke.add(base.x + 4.5, base.z, 3, 0.5, 1);
-      game.step(DT);
-    }
-    expect(game.world.req(shooter, Armed).target).toBe(enemy);
+  it('a tank in haze is still shot at, but most shots miss', () => {
+    const hurt = (haze: boolean) => {
+      const game = emptyGame();
+      const base = game.field.baseSites[0];
+      const enemy = dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 13, base.z);
+      const shooter = standing(game, UNIT_DEFS.tank, 0, base.x, base.z);
+      for (let i = 0; i < 40 / DT; i++) {
+        if (haze) game.ctx.smoke.add(base.x + 13, base.z, 3, 0.5, 2);
+        game.step(DT);
+      }
+      expect(game.world.req(shooter, Armed).target).toBe(enemy);
+      return 100000 - game.world.req(enemy, Health).hp;
+    };
+    const clear = hurt(false);
+    expect(clear).toBeGreaterThan(0);
+    expect(hurt(true)).toBeLessThan(clear * 0.6);
   });
 });
 
@@ -110,20 +102,25 @@ describe('Veil: stealth', () => {
     expect(game.world.req(tank, Armed).target).toBe(ghost);
   });
 
-  it('shades vanish only while they stand still', () => {
+  it('shades vanish in cover, moving or not, and not in the open', () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
-    const still = dummy(game, UNIT_DEFS.shadeTrooper, 0, base.x, base.z);
-    const walking = dummy(game, UNIT_DEFS.shadeTrooper, 0, base.x, base.z + 3);
-    const m = game.world.req(walking, Mover);
-    for (let i = 0; i < 3 / DT; i++) {
-      // Keep it walking off.
+    const open = dummy(game, UNIT_DEFS.shadeTrooper, 0, base.x, base.z);
+    const hazed = dummy(game, UNIT_DEFS.shadeTrooper, 0, base.x, base.z + 6);
+    const m = game.world.req(hazed, Mover);
+    for (let i = 0; i < 4 / DT; i++) {
+      // Veil's own haze round it, and it keeps walking through it.
+      game.ctx.smoke.add(base.x + 4, base.z + 6, 7, 0.5, 0);
       m.targetX = base.x + 30;
-      m.targetZ = base.z + 3;
+      m.targetZ = base.z + 6;
       game.step(DT);
     }
-    expect(game.world.req(still, Veiled).hidden).toBe(true);
-    expect(game.world.req(walking, Veiled).hidden).toBe(false);
+    expect(game.world.req(open, Veiled).hidden).toBe(false);
+    expect(game.world.req(hazed, Veiled).hidden).toBe(true);
+    // In a forest, too.
+    for (let k = 0; k < 4; k++) game.field.woods.add(base.x + (k % 2) * 0.5, base.z + Math.floor(k / 2) * 0.5, 1);
+    run(game, 0.2);
+    expect(game.world.req(open, Veiled).hidden).toBe(true);
   });
 });
 

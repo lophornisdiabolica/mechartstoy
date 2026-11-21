@@ -85,8 +85,8 @@ export interface WeaponDef {
    */
   hack?: number;
   /**
-   * Lays smoke where it lands, this much (Veil; see smoke.ts): a cloud that
-   * nobody but its own side can see through.
+   * Lays haze where it lands, this much (Veil; see smoke.ts): shots through
+   * it go wild, except its own side's.
    */
   smoke?: number;
   /**
@@ -208,13 +208,14 @@ export interface UnitDef {
    * radius they reload at `pace` of their usual rate.
    */
   jam?: JamDef;
-  /** Puffs out smoke round itself (Veil; see smoke.ts): this much every second within the radius. */
+  /** Breathes out haze round itself (Veil; see smoke.ts): this much every second within the radius. */
   smokes?: { radius: number; rate: number };
   /**
-   * Fades from enemy sight once it has gone `after` seconds without firing
-   * (and, if `still`, while it isn't moving): see smoke.ts.
+   * Fades from sight once it has gone `after` seconds without firing (Veil;
+   * see smoke.ts): if `still`, only while it isn't moving; if `cover`, only
+   * while it's in a forest, by a building or in its own side's haze.
    */
-  stealth?: { after: number; still?: boolean };
+  stealth?: { after: number; still?: boolean; cover?: boolean };
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -1726,8 +1727,8 @@ export const UNIT_DEFS = {
     wreckTime: 35,
     siege: true,
   },
-  // Veil: smoke and stealth (see smoke.ts). Its smoke hides whatever is in it from everyone but
-  // Veil, and its shades and ghost tanks fade from sight when they hold their fire.
+  // Veil: haze and stealth (see smoke.ts). Shots through its haze go wild, except Veil's own, and
+  // its shades and ghost tanks fade from sight when they hold their fire.
   shadeTrooper: {
     id: 'shadeTrooper',
     name: 'Shade',
@@ -1745,8 +1746,8 @@ export const UNIT_DEFS = {
     turret: false,
     turretTurnRate: 6,
     weapon: rifle,
-    // Stand still and hold fire, and it's gone.
-    stealth: { after: 2, still: true },
+    // In a forest, by a building or in Veil's haze, and holding its fire, it's gone, moving or not.
+    stealth: { after: 3, cover: true },
     wreckTime: 0,
     siege: false,
   },
@@ -1766,7 +1767,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.5,
-    // Lobs smoke canisters onto the enemy: they can't see out, and Veil sees straight through.
+    // Lobs smoke canisters onto the enemy: their shots out of the haze go wild, and Veil's into it don't.
     weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 4.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 5 }),
     wreckTime: 15,
     siege: false,

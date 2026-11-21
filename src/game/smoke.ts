@@ -1,44 +1,46 @@
 import { Entity, System, World } from '../core/ecs';
 import { Battlefield } from '../world/battlefield';
 import { MOVE_RULES } from '../world/moveClasses';
-import { Armed, Arsenal, Building, Collider, Construction, Faction, Mover, Transform, Unit, Veiled } from './components';
+import { Armed, Arsenal, Building, Construction, Faction, Mover, Transform, Unit, Veiled } from './components';
 import { SimContext } from './context';
 import * as D from '../core/dmath';
 
 /**
- * Veil's smoke and stealth.
+ * Veil's haze and stealth.
  *
- * Smoke: smoke shells (WeaponDef.smoke) and smoke stacks (UnitDef.smokes,
- * BuildingDef.smokes) lay drifting smoke on a coarse grid, which thins out
- * on its own. A unit can't pick out an enemy when its line of sight runs
- * through more than VEIL_DEPTH of thick smoke, so whoever is in it, or
- * behind it, can't be shot at from further than CLOSE, and can't see out
- * either. The side that laid it sees through its own smoke (thermal
- * sights), which is what makes it Veil's. Big things (super units,
- * buildings) loom out of it and can always be seen.
+ * Haze: smoke shells (WeaponDef.smoke) and smoke stacks (UnitDef.smokes,
+ * BuildingDef.smokes) lay a thin, low haze on a coarse grid, which thins
+ * out on its own. It hides nothing, but a shot whose line runs through
+ * another side's haze goes wild (see hazeSpread): shots into it and out of
+ * it miss a lot, scattering round their targets. The side that laid it
+ * shoots through its own haze as if it were clear (thermal sights), which
+ * is what makes it Veil's.
  *
- * Stealth (UnitDef.stealth): a unit that hasn't fired for a while (and,
- * for `still` ones, isn't moving) fades out of sight: enemies can't pick it
- * out from further than CLOSE, unless one of their spotters (towers' and
- * copters' spotting, see targeting.ts) has it in its radius. Firing gives it
- * away at once.
+ * Stealth (UnitDef.stealth): a unit that hasn't fired for a while fades
+ * out of sight: enemies can't pick it out from further than CLOSE, unless
+ * one of their spotters (towers' and copters' spotting, see targeting.ts)
+ * has it in its radius. Firing gives it away at once. Some only fade while
+ * they're in cover (`cover`: in a forest, by a building, or in their own
+ * side's haze), moving or not.
  *
- * Kept per cell, only for cells with smoke in them, so a battle without
+ * Kept per cell, only for cells with haze in them, so a battle without
  * Veil costs nothing (like frost.ts).
  */
 
 export const SMOKE_CELL = 1.5;
-/** Smoke at which a cell is thick enough to see nothing through. */
+/** Haze at which a cell counts: thick enough to throw shots off, or to hide a shade. */
 export const THICK = 1;
 const MAX_SMOKE = 10;
 /** Smoke lost per second as it thins. */
 const THIN = 0.5;
-/** How much thick smoke a line of sight can run through and still pick a target out, world units. */
-const VEIL_DEPTH = 2;
-/** Anything this close (edge to edge) can be seen whatever the smoke or stealth. */
+/** Spread (see WeaponDef.spread) a shot through haze picks up, at its worst. */
+const HAZE_SPREAD = 0.2;
+/** Depth of haze along a shot's line, world units, at which it throws the shot off at its worst. */
+const HAZE_FULL = 3;
+/** Anything this close (edge to edge) can be seen whatever the stealth. */
 export const CLOSE = 4;
-/** Units at least this big are never hidden by smoke. */
-const LOOMS = 1.6;
+/** How near a building (edge to edge) a unit in `cover` has to be to hide by it. */
+const BY_BUILDING = 1.5;
 
 export class SmokeField {
   readonly cols: number;
@@ -112,23 +114,29 @@ export class SmokeField {
   }
 
   /**
-   * Whether `viewer`'s side loses sight of a point beyond the smoke between
-   * them: more than VEIL_DEPTH of thick smoke along the line that isn't its
-   * own side's (or an ally's).
+   * How much haze a shot from (x0, z0) to (x1, z1) runs through that isn't
+   * its own side's (or an ally's), world units.
    */
-  blinds(ctx: SimContext, x0: number, z0: number, x1: number, z1: number, viewer: number): boolean {
-    if (this.active.length === 0) return false;
+  depth(ctx: SimContext, x0: number, z0: number, x1: number, z1: number, shooter: number): number {
+    if (this.active.length === 0) return 0;
     const len = D.hypot(x1 - x0, z1 - z0);
     const steps = Math.max(1, Math.ceil(len / (SMOKE_CELL * 0.5)));
     const step = len / steps;
     let thick = 0;
     for (let s = 0; s <= steps; s++) {
       const k = this.cellAt(x0 + ((x1 - x0) * s) / steps, z0 + ((z1 - z0) * s) / steps);
-      if (k < 0 || this.smoke[k] < THICK || ctx.sides.allied(this.owner[k], viewer)) continue;
+      if (k < 0 || this.smoke[k] < THICK || ctx.sides.allied(this.owner[k], shooter)) continue;
       thick += step;
-      if (thick > VEIL_DEPTH) return true;
+      if (thick >= HAZE_FULL) break;
     }
-    return false;
+    return thick;
+  }
+
+  /** Whether a point is in side `faction`'s own (or an ally's) haze. */
+  ownAt(ctx: SimContext, x: number, z: number, faction: number): boolean {
+    if (this.active.length === 0) return false;
+    const k = this.cellAt(x, z);
+    return k >= 0 && this.smoke[k] >= THICK && ctx.sides.allied(this.owner[k], faction);
   }
 
   thin(dt: number): void {
@@ -183,33 +191,48 @@ export interface Eye {
 }
 
 /**
- * Whether a unit of side `viewer` at (x, z) can pick out `target`, at `d`
- * from it, edge to edge: not when it's hidden in (or behind) smoke, or
- * stealthed with none of the viewer's side's spotters on it, unless it's
- * close.
+ * Whether a unit of side `viewer` can pick out `target`, at `d` from it,
+ * edge to edge: not when it's stealthed with none of the viewer's side's
+ * spotters on it, unless it's close.
  */
-export function canSee(world: World, ctx: SimContext, viewer: number, x: number, z: number, target: Entity, d: number, eyes: readonly Eye[]): boolean {
-  if (d <= CLOSE) return true;
-  const veiled = world.get(target, Veiled);
-  const smoky = ctx.smoke.count > 0;
-  if (!veiled?.hidden && !smoky) return true;
+export function canSee(world: World, ctx: SimContext, viewer: number, target: Entity, d: number, eyes: readonly Eye[]): boolean {
+  if (d <= CLOSE || !world.get(target, Veiled)?.hidden) return true;
   const tt = world.req(target, Transform);
-  if (veiled?.hidden && !eyes.some((s) => ctx.sides.allied(s.faction, viewer) && D.sq(s.x - tt.x) + D.sq(s.z - tt.z) <= s.radius * s.radius)) return false;
-  if (!smoky || world.has(target, Building) || (world.get(target, Collider)?.radius ?? 0) >= LOOMS) return true;
-  return !ctx.smoke.blinds(ctx, x, z, tt.x, tt.z, viewer);
+  return eyes.some((s) => ctx.sides.allied(s.faction, viewer) && D.sq(s.x - tt.x) + D.sq(s.z - tt.z) <= s.radius * s.radius);
 }
 
-/** Seconds between the smoke that smoke stacks give off. */
-const SMOKE_EVERY = 0.5;
+/**
+ * Extra spread for a shot of side `shooter` from (x0, z0) at (x1, z1): the
+ * more of another side's haze it runs through, the wilder it goes (0 with
+ * no haze on the map, so other battles are untouched).
+ */
+export function hazeSpread(ctx: SimContext, x0: number, z0: number, x1: number, z1: number, shooter: number): number {
+  if (ctx.smoke.count === 0) return 0;
+  return HAZE_SPREAD * Math.min(1, ctx.smoke.depth(ctx, x0, z0, x1, z1, shooter) / HAZE_FULL);
+}
+
+/** Whether a unit is in cover a `cover` stealth unit hides in: a forest, by a building, or its own side's haze. */
+function inCover(world: World, ctx: SimContext, e: Entity, x: number, z: number): boolean {
+  if (ctx.field.woods.hasTreesAt(x, z)) return true;
+  const faction = world.req(e, Faction).id;
+  if (ctx.smoke.ownAt(ctx, x, z, faction)) return true;
+  let by = false;
+  ctx.grid.forEachNear(x, z, BY_BUILDING + 6, (_other, d2, body) => {
+    if (by || !body.building) return;
+    if (Math.sqrt(d2) - (body.collider?.radius ?? body.building.def.radius) <= BY_BUILDING) by = true;
+  });
+  return by;
+}
+
 /** How fast a `still` stealth unit can be going and still count as still. */
 const STILL = 0.05;
 
 /**
- * Thins the smoke, lets smoke stacks puff it out, and works out which
- * stealthy units have faded from sight (see UnitDef.stealth).
+ * Thins the haze, lets smoke stacks breathe it out (a little every tick,
+ * so it stays steady rather than pulsing), and works out which stealthy
+ * units have faded from sight (see UnitDef.stealth).
  */
 export function smokeSystem(ctx: SimContext): System {
-  let puffAt = 0;
   return {
     name: 'smoke',
     update(world, dt) {
@@ -219,24 +242,24 @@ export function smokeSystem(ctx: SimContext): System {
         const stealth = world.req(e, Unit).def.stealth;
         if (!stealth) continue;
         const t = world.req(e, Transform);
-        const moving = stealth.still && D.hypot(t.x - t.px, t.z - t.pz) > STILL * dt * 30;
-        world.req(e, Veiled).hidden = !moving && world.time - firedAt(world, e) >= stealth.after;
+        const veiled = world.req(e, Veiled);
+        if (world.time - firedAt(world, e) < stealth.after) veiled.hidden = false;
+        else if (stealth.still && D.hypot(t.x - t.px, t.z - t.pz) > STILL * dt * 30) veiled.hidden = false;
+        else veiled.hidden = !stealth.cover || inCover(world, ctx, e, t.x, t.z);
       }
-      if (world.time < puffAt) return;
-      puffAt = world.time + SMOKE_EVERY;
       for (const e of world.query(Unit, Transform, Faction)) {
         const puff = world.req(e, Unit).def.smokes;
         if (!puff) continue;
         const m = world.get(e, Mover);
         if (m && MOVE_RULES[m.move].flies) continue;
         const t = world.req(e, Transform);
-        smoke.add(t.x, t.z, puff.radius, puff.rate * SMOKE_EVERY, world.req(e, Faction).id);
+        smoke.add(t.x, t.z, puff.radius, puff.rate * dt, world.req(e, Faction).id);
       }
       for (const e of world.query(Building, Transform, Faction)) {
         const puff = world.req(e, Building).def.smokes;
         if (!puff || world.has(e, Construction)) continue;
         const t = world.req(e, Transform);
-        smoke.add(t.x, t.z, puff.radius, puff.rate * SMOKE_EVERY, world.req(e, Faction).id);
+        smoke.add(t.x, t.z, puff.radius, puff.rate * dt, world.req(e, Faction).id);
       }
     },
   };

@@ -83,6 +83,9 @@ const _m = new THREE.Matrix4();
 const _scale = new THREE.Matrix4();
 const _white = new THREE.Color(1, 1, 1);
 
+/** How opaque a stealthed trooper is drawn: faint, but steady and there to see. */
+const GHOST_SPRITE_OPACITY = 0.3;
+
 export class Batcher {
   /** Holds the batches; add it to the scene. */
   readonly root = new THREE.Group();
@@ -90,6 +93,8 @@ export class Batcher {
   private readonly meshes = new Map<THREE.BufferGeometry, Map<THREE.Material, MeshBatch[]>>();
   /** One per sprite sheet (the texture's image source). */
   private readonly sprites = new Map<object, SpriteBatch>();
+  /** The same, for stealthed troopers, drawn faint (see addSprite). */
+  private readonly ghostSprites = new Map<object, SpriteBatch>();
   private readonly spriteGeometry = new THREE.PlaneGeometry(1, 1);
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
   /** Stand-ins for every flatMaterial and every glowMaterial, white, coloured per instance. */
@@ -104,6 +109,7 @@ export class Batcher {
   begin(): void {
     for (const byMaterial of this.meshes.values()) for (const list of byMaterial.values()) for (const b of list) b.count = 0;
     for (const b of this.sprites.values()) b.count = 0;
+    for (const b of this.ghostSprites.values()) b.count = 0;
   }
 
   /**
@@ -144,22 +150,26 @@ export class Batcher {
    * its sheet: `userData.sheet` if the model set one (the shared texture its
    * own is cloned from), else its own texture.
    */
-  addSprite(sprite: THREE.Sprite): void {
+  addSprite(sprite: THREE.Sprite, ghost = false): void {
     const map = sprite.material.map;
     if (!map) return;
     const sheet = (sprite.userData.sheet as THREE.Texture | undefined) ?? map;
-    let batch = this.sprites.get(map.source);
+    const sprites = ghost ? this.ghostSprites : this.sprites;
+    let batch = sprites.get(map.source);
     if (!batch) {
       const offsets = new THREE.InstancedBufferAttribute(new Float32Array(32), 2).setUsage(THREE.DynamicDrawUsage);
       const geometry = this.spriteGeometry.clone();
       geometry.setAttribute('uvOffset', offsets);
-      const material = new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5 });
+      // A ghost is the same cut-out, drawn faint and see-through (see addMesh's ghost).
+      const material = ghost
+        ? new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5, transparent: true, opacity: GHOST_SPRITE_OPACITY, depthWrite: false })
+        : new THREE.MeshLambertMaterial({ map: sheet, alphaTest: 0.5 });
       material.onBeforeCompile = spriteShader;
       const mesh = new THREE.InstancedMesh(geometry, material, 16);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       batch = { mesh, offsets, count: 0, idle: 0 };
-      this.sprites.set(map.source, batch);
+      sprites.set(map.source, batch);
       this.root.add(mesh);
     }
     if (batch.count === batch.mesh.instanceMatrix.count) this.growSprites(batch);
@@ -189,15 +199,17 @@ export class Batcher {
       }
       if (byMaterial.size === 0) this.meshes.delete(geometry);
     }
-    for (const [source, b] of this.sprites) {
-      b.mesh.count = b.count;
-      b.mesh.instanceMatrix.needsUpdate = b.count > 0;
-      b.offsets.needsUpdate = b.count > 0;
-      b.idle = b.count > 0 ? 0 : b.idle + 1;
-      if (b.idle > IDLE_FRAMES) {
-        this.root.remove(b.mesh);
-        this.disposeSprites(b);
-        this.sprites.delete(source);
+    for (const sprites of [this.sprites, this.ghostSprites]) {
+      for (const [source, b] of sprites) {
+        b.mesh.count = b.count;
+        b.mesh.instanceMatrix.needsUpdate = b.count > 0;
+        b.offsets.needsUpdate = b.count > 0;
+        b.idle = b.count > 0 ? 0 : b.idle + 1;
+        if (b.idle > IDLE_FRAMES) {
+          this.root.remove(b.mesh);
+          this.disposeSprites(b);
+          sprites.delete(source);
+        }
       }
     }
   }
@@ -207,6 +219,7 @@ export class Batcher {
     let n = 0;
     for (const byMaterial of this.meshes.values()) for (const list of byMaterial.values()) n += list.filter((b) => b.count > 0).length;
     for (const b of this.sprites.values()) if (b.count > 0) n++;
+    for (const b of this.ghostSprites.values()) if (b.count > 0) n++;
     return n;
   }
 
@@ -214,8 +227,10 @@ export class Batcher {
   dispose(): void {
     for (const byMaterial of this.meshes.values()) for (const list of byMaterial.values()) for (const b of list) b.mesh.dispose();
     for (const b of this.sprites.values()) this.disposeSprites(b);
+    for (const b of this.ghostSprites.values()) this.disposeSprites(b);
     this.meshes.clear();
     this.sprites.clear();
+    this.ghostSprites.clear();
     this.spriteGeometry.dispose();
     this.unitBox.dispose();
     this.flat.dispose();
