@@ -420,13 +420,16 @@ battle, its exact map via `seed`).
     they it), then comes back to itself and can't be turned again for
     twelve. Kills it makes while turned are Cipher's; if it dies turned, it
     dies as its own side's. Infantry, super units, carriers and engineers
-    can't be hacked. Arc tanks throw lightning that jumps from one soldier
-    to the next (`WeaponDef.chain`), clearing the AT troopers that crowd a
-    hacked vehicle. Jammer walkers send out a pulse every few seconds, a
-    ring sweeping out to fourteen units: enemy guns it reaches reload at
-    0.6× until the next. Its **uplink mast** turns out more and jams what
-    comes at the base. Super unit: the Overmind, a walker with a hack array
-    on its back.
+    can't be hacked. Pairs of **drone operators** come out of its
+    barracks: each sends up a drone when it meets the enemy (a carrier of
+    one, `UnitDef.carries`) and readies another 25 s later, and the drones
+    hunt the infantry, the AT troopers that crowd a hacked vehicle
+    included. Jammer walkers send out a pulse every few seconds out to
+    fourteen units: enemy guns it reaches reload at 0.6× until the next,
+    shown as a faint hexagon on the ground under each jammed unit. Its
+    **uplink mast** turns out more and jams what comes at the base. Super
+    unit: the Overmind, a walker with a hack array and a rack of three
+    drones on its back.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;

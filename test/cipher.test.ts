@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Ai, Armed, Arsenal, Building, Faction, Hacked, Health, Transform } from '../src/game/components';
+import { Ai, Armed, Arsenal, Building, Faction, Hacked, Health, Transform, Unit } from '../src/game/components';
 import { DOCTRINES } from '../src/game/doctrines';
 import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
@@ -98,22 +98,23 @@ describe('Cipher: hacking', () => {
   });
 });
 
-describe('Cipher: arc tanks', () => {
-  it('lightning arcs from the soldier it hits to the ones round it', () => {
-    const game = emptyGame();
+describe('Cipher: drones', () => {
+  it('a drone operator sends up a drone at the enemy, and it hunts their infantry', () => {
+    // Carriers (the operator's drone) run with the rest of the army's upkeep, off in an empty game.
+    const game = new Game(11, { populate: false });
     const base = game.field.baseSites[0];
-    standing(game, UNIT_DEFS.arcTank, 0, base.x, base.z);
-    const squad = [0, 1, 2, 3].map((i) => {
-      const e = standing(game, UNIT_DEFS.trooper, 1, base.x + 8 + (i % 2) * 1.2, base.z + Math.floor(i / 2) * 1.2);
+    standing(game, UNIT_DEFS.droneOperator, 0, base.x, base.z);
+    const squad = [0, 1, 2].map((i) => {
+      const e = standing(game, UNIT_DEFS.trooper, 1, base.x + 7 + i * 1.2, base.z);
       game.world.req(e, Armed).cooldown = Infinity;
       return e;
     });
-    let arcs = 0;
-    game.events.on('arc', () => arcs++);
-    run(game, 3);
-    expect(arcs).toBeGreaterThan(0);
+    run(game, 2);
+    const drones = [...game.world.query(Unit, Faction)].filter((e) => game.world.req(e, Unit).def.id === 'drone' && game.world.req(e, Faction).id === 0);
+    expect(drones.length).toBe(1);
+    run(game, 12);
     const hurt = squad.filter((e) => !game.world.isAlive(e) || (game.world.get(e, Health)?.hp ?? 0) < UNIT_DEFS.trooper.hp);
-    expect(hurt.length).toBeGreaterThanOrEqual(3);
+    expect(hurt.length).toBeGreaterThanOrEqual(2);
   });
 });
 

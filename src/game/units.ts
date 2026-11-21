@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'arc';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack';
 
 export interface WeaponDef {
   name: string;
@@ -84,13 +84,6 @@ export interface WeaponDef {
    * only aims at vehicles it can turn.
    */
   hack?: number;
-  /**
-   * Lightning that arcs on from what it hits (Cipher's arc tanks): up to
-   * `jumps` more enemies, each the nearest within `reach` of the last one
-   * and not yet struck, each taking `falloff` of the hit before. It clears
-   * infantry packed round a vehicle.
-   */
-  chain?: { jumps: number; reach: number; falloff: number };
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -1648,25 +1641,27 @@ export const UNIT_DEFS = {
     wreckTime: 15,
     siege: false,
   },
-  // Lightning that jumps from soldier to soldier: what clears the AT troopers round a hacked vehicle.
-  arcTank: {
-    id: 'arcTank',
-    name: 'Arc Tank',
-    class: 'vehicle',
-    category: 'vehicle',
-    move: 'tracked',
+  // Cipher's anti-infantry: a soldier with a carbine and a drone on its back, which it sends up when
+  // there's something to hunt, and readies another a while after.
+  droneOperator: {
+    id: 'droneOperator',
+    name: 'Drone Operator',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
     role: 'frontline',
-    model: 'arcTank',
-    hp: 200,
-    armor: 5,
-    speed: 2.7,
-    turnRate: 1.8,
-    radius: 1.05,
-    sight: 17,
-    turret: true,
-    turretTurnRate: 2.4,
-    weapon: weapon({ name: 'Arc coil', range: 11, damage: 15, cooldown: 1.7, projectile: 'arc', speed: 90, spread: 0.02, muzzleHeight: 1.3, chain: { jumps: 4, reach: 3.5, falloff: 0.8 } }),
-    wreckTime: 20,
+    model: 'droneOperator',
+    hp: 20,
+    armor: 0,
+    speed: 1.6,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 16,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ ...rifle, name: 'Carbine', range: 9, damage: 3 }),
+    carries: { squad: [{ unit: 'drone', count: 1 }], every: 25 },
+    wreckTime: 0,
     siege: false,
   },
   jammer: {
@@ -1711,6 +1706,8 @@ export const UNIT_DEFS = {
     // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
     mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
     jam: { radius: 13, pace: 0.6, every: 3 },
+    // And a rack of drones, sent up when it meets the enemy and readied again a while later.
+    carries: { squad: [{ unit: 'drone', count: 3 }], every: 30 },
     wreckTime: 35,
     siege: true,
   },
