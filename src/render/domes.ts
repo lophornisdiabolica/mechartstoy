@@ -12,6 +12,8 @@ const LINE = 0.2;
 const LINE_LIFT = 0.06;
 /** Points round the ground line. */
 const LINE_STEPS = 48;
+/** Steps out from the middle when finding where the ground leaves the dome. */
+const LINE_WALK = 12;
 /** How fast a weak dome pulses, radians per second: slow, a breath rather than a flicker. */
 const PULSE = 3;
 /** Shards a collapsing dome breaks into, per unit of radius (and at most). */
@@ -42,8 +44,9 @@ const DOME = new THREE.Color(0x9fe3ff);
 const WEAK = new THREE.Color(0xffb0c8);
 
 /**
- * Aegis's energy domes (see game/shields.ts): a pale faceted bubble over
- * each emitter that's up, fainter and pinker as it weakens and pulsing
+ * Aegis's energy domes (see game/shields.ts): a pale faceted bubble round
+ * each emitter (a whole sphere, which the ground hides the bottom of, so
+ * on a slope it reaches right down to the ground below) that's up, fainter and pinker as it weakens and pulsing
  * slowly near the end, flaring for a moment where shots burst on it, with a
  * bright line along the ground where the dome meets it (on a slope too),
  * and breaking into pink hexagonal tiles that fall in and fade when it
@@ -52,7 +55,7 @@ const WEAK = new THREE.Color(0xffb0c8);
  */
 export class Domes {
   readonly root = new THREE.Group();
-  private readonly geometry = new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  private readonly geometry = new THREE.SphereGeometry(1, 18, 14);
   /** A hexagonal tile of the dome's skin, for when it breaks up. */
   private readonly shardGeometry = new THREE.CircleGeometry(1, 6);
   private readonly shown = new Map<number, { mesh: THREE.Mesh; band: THREE.Mesh; material: THREE.MeshBasicMaterial; bandMaterial: THREE.MeshBasicMaterial; flare: number; at: string }>();
@@ -91,34 +94,36 @@ export class Domes {
 
   /**
    * A collapsing dome breaks into hexagonal tiles of its skin, which fall in
-   * on themselves and fade: spread evenly over the half sphere, each facing
-   * out, tipping inward and tumbling as they drop.
+   * on themselves and fade: spread evenly over the sphere's skin above the
+   * ground, each facing out, tipping inward and tumbling as they drop.
    */
   private shatter(x: number, y: number, z: number, radius: number): void {
+    const field = this.game.field;
     const n = Math.min(MOST_SHARDS, Math.max(24, Math.round(radius * SHARDS_PER_UNIT)));
     const material = this.material();
     material.opacity = 0.45;
     // A dome breaks when it's spent, so its tiles are a weak dome's pink.
     material.color.copy(WEAK);
-    const mesh = new THREE.InstancedMesh(this.shardGeometry, material, n);
-    mesh.frustumCulled = false;
-    mesh.renderOrder = 3;
-    mesh.userData.noShadow = true;
     const shards: Shard[] = [];
     const golden = Math.PI * (3 - Math.sqrt(5));
-    for (let i = 0; i < n; i++) {
-      // Even spread over the half sphere: a spiral up from the rim.
-      const ny = (i + 0.5) / n;
+    // Even spread over the whole sphere (a spiral from bottom to top), keeping the tiles above the ground.
+    const all = n * 2;
+    for (let i = 0; i < all; i++) {
+      const ny = -1 + (2 * (i + 0.5)) / all;
       const ring = Math.sqrt(1 - ny * ny);
       const a = i * golden;
       _n.set(Math.cos(a) * ring, ny, Math.sin(a) * ring);
+      const px = x + _n.x * radius;
+      const py = y + _n.y * radius;
+      const pz = z + _n.z * radius;
+      if (py < Math.max(field.surfaceAt(px, pz), field.seaLevel)) continue;
       const q = new THREE.Quaternion().setFromUnitVectors(_up, _n);
       const inward = 0.6 + Math.random() * 0.8;
       const spinAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
       shards.push({
-        x: x + _n.x * radius,
-        y: y + _n.y * radius,
-        z: z + _n.z * radius,
+        x: px,
+        y: py,
+        z: pz,
         vx: -_n.x * inward,
         vy: -_n.y * inward * 0.5,
         vz: -_n.z * inward,
@@ -126,9 +131,17 @@ export class Domes {
         spin: new THREE.Quaternion().setFromAxisAngle(spinAxis, (Math.random() - 0.5) * 6),
       });
     }
+    if (shards.length === 0) {
+      material.dispose();
+      return;
+    }
+    const mesh = new THREE.InstancedMesh(this.shardGeometry, material, shards.length);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 3;
+    mesh.userData.noShadow = true;
     this.root.add(mesh);
     // Tiles about as wide as the spacing between them, so the dome first reads as a whole breaking.
-    this.bursts.push({ mesh, material, age: 0, size: radius * Math.sqrt((2 * Math.PI) / n) * 0.55, shards });
+    this.bursts.push({ mesh, material, age: 0, size: radius * Math.sqrt((4 * Math.PI) / all) * 0.55, shards });
   }
 
   update(simSeconds: number): void {
@@ -228,9 +241,10 @@ function groundLineGeometry(): THREE.BufferGeometry {
 
 /**
  * Lay a dome's ground line: a thin strip on the ground along where the
- * half sphere at (x, y, z) meets it. Uphill the ground cuts the dome
- * nearer its middle, so the line pulls in; downhill, where the ground falls
- * away under the rim, it runs under the rim.
+ * sphere at (x, y, z) meets it. Each way out from the middle, the ground
+ * leaves the sphere where it climbs through the skin above (uphill, nearer
+ * the middle) or drops through the skin below (downhill, also nearer the
+ * middle once the ground falls away fast enough), and the line follows that.
  */
 function groundLine(g: THREE.BufferGeometry, field: Battlefield, x: number, y: number, z: number, radius: number): void {
   const pos = g.getAttribute('position') as THREE.BufferAttribute;
@@ -239,19 +253,25 @@ function groundLine(g: THREE.BufferGeometry, field: Battlefield, x: number, y: n
     const a = (i / LINE_STEPS) * Math.PI * 2;
     const c = Math.cos(a);
     const s = Math.sin(a);
-    // Where along this way the skin comes down to the ground: halve the gap between the middle and the rim.
-    const above = (r: number) => y + Math.sqrt(Math.max(0, radius * radius - r * r)) - ground(x + c * r, z + s * r);
-    let r = radius;
-    if (above(radius) < 0) {
-      let lo = 0;
-      let hi = radius;
-      for (let k = 0; k < 10; k++) {
-        const mid = (lo + hi) / 2;
-        if (above(mid) > 0) lo = mid;
-        else hi = mid;
+    // How far inside the skin the ground is r along this way: below zero once it's out.
+    const inside = (r: number) => Math.sqrt(Math.max(0, radius * radius - r * r)) - Math.abs(ground(x + c * r, z + s * r) - y);
+    // Walk out to the first step where the ground is out, then halve the gap.
+    let lo = 0;
+    let hi = radius;
+    for (let k = 1; k <= LINE_WALK; k++) {
+      const r = (radius * k) / LINE_WALK;
+      if (inside(r) <= 0) {
+        hi = r;
+        break;
       }
-      r = lo;
+      lo = r;
     }
+    for (let k = 0; k < 6; k++) {
+      const mid = (lo + hi) / 2;
+      if (inside(mid) > 0) lo = mid;
+      else hi = mid;
+    }
+    const r = lo;
     const inner = Math.max(0, r - LINE);
     pos.setXYZ(i * 2, x + c * r, ground(x + c * r, z + s * r) + LINE_LIFT, z + s * r);
     pos.setXYZ(i * 2 + 1, x + c * inner, ground(x + c * inner, z + s * inner) + LINE_LIFT, z + s * inner);
