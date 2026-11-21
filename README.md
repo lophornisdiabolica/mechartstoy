@@ -385,8 +385,8 @@ battle, its exact map via `seed`).
     explodes when destroyed. Super unit: the Inferno Walker.
   - *Aegis:* energy domes (`game/shields.ts`). Tanks, lance walkers, dome
     trucks and flak tanks from the factory; a **shield works** turns out
-    more and keeps a big dome over the base. A dome is a half sphere over
-    its emitter: shots and missiles from outside burst on its skin and it
+    more and keeps a big dome over the base. A dome is a sphere round
+    its emitter, reaching down to the ground on a slope: shots and missiles from outside burst on its skin and it
     soaks up their damage until it collapses, then comes back after a
     while at a third of its strength. Shots from inside go out freely, and
     lobbed shells and flame fall straight through, so artillery and

@@ -13,8 +13,9 @@ const FULL = 1.5;
 /** How fast the drawn frost catches up with the sim's, per second: quickly as it freezes, slowly as it thaws. */
 const FREEZE_RATE = 6;
 const THAW_RATE = 1.5;
-/** How far over the ground (or water) the plates lie. */
-const LIFT = 0.07;
+/** How far over the ground (or water) the plates' undersides lie, and how thick they are, so a plate tipped on a slope still shows its edge. */
+const LIFT = 0.02;
+const THICK = 0.08;
 /**
  * The plates' shades, thinnest to thickest frost, and the frost each takes
  * over at: a few flat steps rather than a gradient.
@@ -32,7 +33,7 @@ const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
 /**
- * Frosted ground (see game/frost.ts): a pale six-sided plate of ice over
+ * Frosted ground (see game/frost.ts): a pale six-sided slab of ice over
  * each frozen cell, laid on a hexagonal lattice (every other row of cells
  * shifted half a cell across, and each plate stretched a little along the
  * rows to fill the square cells' spacing), so thick frost is a honeycomb of
@@ -55,9 +56,9 @@ export class FrostGround {
 
   constructor(private readonly game: Game) {
     this.root.name = 'frost-ground';
-    // Flat sides across the rows (along x), points along them (z): one cell wide, as tall as the lattice needs.
-    const plate = new THREE.CircleGeometry(FROST_CELL / Math.sqrt(3), 6, Math.PI / 6).rotateX(-Math.PI / 2);
-    const material = new THREE.MeshLambertMaterial({ transparent: true, opacity: OPACITY, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    // A thin six-sided slab, flat sides across the rows (along x), points along them (z): one cell wide, as tall as the lattice needs.
+    const plate = new THREE.CylinderGeometry(FROST_CELL / Math.sqrt(3), FROST_CELL / Math.sqrt(3), THICK, 6).translate(0, THICK / 2, 0);
+    const material = new THREE.MeshLambertMaterial({ flatShading: true, transparent: true, opacity: OPACITY, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     this.plates = new THREE.InstancedMesh(plate, material, MOST);
     this.plates.count = 0;
     this.plates.frustumCulled = false;
@@ -110,7 +111,7 @@ export class FrostGround {
       // Tip each plate to the slope under it (flat on water), so it lies on the ground rather than cutting into it.
       const dx = lies ? 0 : field.surfaceAt(x + 0.5, z) - field.surfaceAt(x - 0.5, z);
       const dz = lies ? 0 : field.surfaceAt(x, z + 0.5) - field.surfaceAt(x, z - 0.5);
-      _e.set(Math.atan(dz), 0, -Math.atan(dx), 'YXZ');
+      _e.set(-Math.atan(dz), 0, Math.atan(dx), 'YXZ');
       _q.setFromEuler(_e);
       const size = FILL * (0.6 + 0.4 * Math.min(1, amount / FULL));
       // Stretched along the rows by 2/√3 so the rows, a cell apart, meet point to point.

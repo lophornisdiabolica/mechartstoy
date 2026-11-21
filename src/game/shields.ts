@@ -5,9 +5,10 @@ import type { ShieldDef } from './units';
 import * as D from '../core/dmath';
 
 /*
- * Energy domes (Aegis). A dome is a half sphere over its emitter (a dome
+ * Energy domes (Aegis). A dome is a sphere round its emitter (a dome
  * truck, the Citadel walker, the shield pylon) that stops direct fire and
- * missiles coming in from outside it: they burst on its skin, and it soaks
+ * missiles coming in from outside it (the part above ground, which reaches
+ * right down to it downhill as well as up): they burst on its skin, and it soaks
  * up their damage until it collapses. After a while it comes back, weaker,
  * and builds back up while nothing hits it. Shots from inside go out freely,
  * so the army under it fights on, and lobbed shells and flame fall straight
@@ -15,7 +16,7 @@ import * as D from '../core/dmath';
  * push. It's a line-of-fire obstacle with hit points (see lineOfFire.ts).
  *
  * What a watcher sees: a pale bubble walking up the field, rippling where
- * shots burst on it, flickering as it weakens, and bursting when it goes.
+ * shots burst on it, breathing pink as it weakens, and bursting when it goes.
  */
 
 /** A dome that's up this tick, for line of fire (see Domes). */
@@ -83,8 +84,6 @@ export function domeInTheWay(
     if (disc < 0) continue;
     const s = (-b - Math.sqrt(disc)) / (2 * a);
     if (s < 0.3 || s >= (hit?.s ?? best)) continue;
-    // Only the half above ground.
-    if (from.y + slope * s < d.y - 0.2) continue;
     hit = { s, dome: d };
   }
   return hit;
