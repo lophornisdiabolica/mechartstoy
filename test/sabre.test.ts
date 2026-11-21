@@ -21,7 +21,7 @@ describe('Sabre: blade mechs', () => {
     const game = emptyGame();
     const base = game.field.baseSites[0];
     for (let i = 0; i < 4; i++) spawnUnit(game.world, game.ctx, UNIT_DEFS.duelist, 0, base.x + i * 2, base.z);
-    spawnUnit(game.world, game.ctx, UNIT_DEFS.breaker, 0, base.x, base.z + 5);
+    spawnUnit(game.world, game.ctx, UNIT_DEFS.reaver, 0, base.x, base.z + 5);
     expect(countByCategory(game.world, game.ctx.sides.count)[0].vehicle).toBe(4 * 0.5 + 1.5);
   });
 

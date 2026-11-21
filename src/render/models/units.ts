@@ -1348,45 +1348,37 @@ registerModel('duelist', (faction) => {
   });
 });
 
-// Sabre: a heavy walker with ram spikes for arms, a ram plate across its chest and a cannon on its back.
-registerModel('breaker', (faction) => {
+// Sabre: a heavy tank whose turret carries a great scything arm, and a machine gun in the hull.
+registerModel('reaver', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
-  const body = new THREE.Group();
-  body.position.y = 2.0;
-  root.add(body);
-  body.add(box(0.9, 0.4, 1.1, METAL, 0, 0, 0));
+  root.add(...tracks(2.4, 0.42, 0.46, 0.62));
+  root.add(box(2.2, 0.46, 1.16, primary, 0, 0.6, 0));
+  root.add(box(0.45, 0.28, 1.22, secondary, 0.9, 0.5, 0)); // ram plate
   const turret = new THREE.Group();
-  turret.position.y = 0.25;
-  turret.add(box(1.4, 0.8, 1.3, primary, 0, 0.4, 0));
-  turret.add(box(0.3, 0.22, 0.8, GLASS, 0.62, 0.55, 0));
-  turret.add(box(1.0, 0.18, 1.36, secondary, -0.15, 0.85, 0));
-  turret.add(box(0.15, 0.6, 1.5, secondary, 0.78, 0.35, 0)); // ram plate
-  const spikes = new THREE.Group();
-  for (const side of [-1, 1]) {
-    spikes.add(box(0.5, 0.45, 0.35, secondary, 0.1, 0.35, side * 0.85));
-    spikes.add(box(1.2, 0.18, 0.18, BLADE, 0.8, 0.35, side * 0.85));
-  }
-  turret.add(spikes);
-  body.add(turret);
-  const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(1.0, 1.0, 0.3, METAL, DARK);
-    leg.hip.position.set(0, -0.05, side * 0.45);
-    body.add(leg.hip);
-    return leg;
-  });
-  const cannon = ownMount(root, 'breaker#cannon', (t) => {
-    t.add(box(0.5, 0.25, 0.5, DARK, 0, 0.1, 0));
-    t.add(box(0.9, 0.14, 0.14, DARK, 0.45, 0.15, 0));
+  turret.position.set(-0.15, 0.85, 0);
+  turret.add(box(1.05, 0.42, 0.95, primary, 0, 0.21, 0));
+  turret.add(box(0.5, 0.12, 0.7, secondary, -0.25, 0.47, 0));
+  // The arm swings across in front of the turret as it strikes; at rest it points straight ahead.
+  const arm = new THREE.Group();
+  arm.position.set(0.35, 0.28, 0);
+  arm.add(box(0.36, 0.3, 0.36, METAL, 0, 0, 0)); // shoulder
+  arm.add(box(1.4, 0.16, 0.16, METAL, 0.85, 0, 0));
+  arm.add(box(0.6, 0.06, 0.4, BLADE, 1.8, 0, 0.13)); // the scythe blade, hooked back
+  arm.add(box(0.34, 0.05, 0.22, BLADE, 1.9, 0.01, -0.17));
+  turret.add(arm);
+  root.add(turret);
+  const mg = ownMount(root, 'reaver#mg', (t) => {
+    t.add(box(0.26, 0.13, 0.2, DARK, 0.08, 0.035, 0));
+    t.add(box(0.4, 0.06, 0.06, DARK, 0.3, 0.1, 0));
   });
   return setRig(root, {
     turret,
-    ...walker(legs, body, 1.2, 0.45),
-    ...mounted('breaker', root, turret),
-    mounts: [cannon],
-    // The spikes punch forward.
+    ...mounted('reaver', root, turret),
+    mounts: [mg],
+    // The arm sweeps across from one side to the other.
     strike(k) {
-      spikes.position.x = Math.sin(Math.PI * k) * 0.4;
+      arm.rotation.y = Math.cos(Math.PI * k) * 1.1 * Math.sin(Math.PI * k) * 2;
     },
   });
 });

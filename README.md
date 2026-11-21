@@ -400,10 +400,11 @@ battle, its exact map via `seed`).
   - *Sabre:* melee mechs. Small squads of riflemen (0.55× infantry cap)
     and many more mechs: **duelists**, quick little blade striders that
     each take half a vehicle slot, come from the factory and from its
-    **duel hall** in fours; **breakers**, heavy rams that take one and a
+    **duel hall** in fours; **reavers**, heavy tanks whose turret is a
+    great scything arm, take one and a
     half, smash their way into tanks. Every mech fights hand to hand with
     its main weapon but carries a gun on a mount of its own (duelists a
-    head gun, breakers a shoulder cannon), so it isn't helpless across a
+    head gun, reavers a hull machine gun), so it isn't helpless across a
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
@@ -424,7 +425,7 @@ battle, its exact map via `seed`).
 - **Unit caps:** each side has a cap per category: infantry, vehicles,
   aircraft and super units (the Titan and the other doctrines' super units), leaned by
   the side's doctrine. Most units take one slot; a unit can take less or
-  more (`UnitDef.capCost`: a duelist takes half, a breaker one and a half),
+  more (`UnitDef.capCost`: a duelist takes half, a reaver one and a half),
   still out of the one shared vehicle pool, so the survivors of a long
   battle still drift towards its stronger units. A full category stops its own production but not
   the others. Super units are rare: a small cap (1 by default) and a slow
