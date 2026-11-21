@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Wreck } from '../game/components';
+import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
@@ -38,7 +38,22 @@ interface ViewEntry {
   grounded: boolean;
   /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
   strike: { t: number; style: MeleeDef['style']; jab: number } | null;
+  /**
+   * How far it has faded out (0 solid, 1 a ghost): stealthed units (see
+   * game/smoke.ts) fade out slowly and back in quickly, so one that hides
+   * for a moment between shots only dims a little instead of blinking.
+   */
+  fade: number;
 }
+
+/**
+ * What a stealthed unit is drawn in as it fades out: a few steps of fainter,
+ * see-through shimmer of itself, down to a ghost at the last.
+ */
+const GHOSTS = [0.8, 0.6, 0.45, 0.3].map((opacity) => new THREE.MeshLambertMaterial({ transparent: true, opacity, depthWrite: false }));
+/** Seconds to fade out to a ghost, and back in. */
+const FADE_OUT = 0.9;
+const FADE_IN = 0.25;
 
 /** Seconds a melee blow takes to draw. */
 const STRIKE_TIME = 0.35;
@@ -152,7 +167,7 @@ export class EntityView {
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null, fade: 0 };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -258,6 +273,8 @@ export class EntityView {
       }
       entry.lastX = x;
       entry.lastZ = z;
+      const veiled = w.get(e, Veiled)?.hidden === true;
+      entry.fade = veiled ? Math.min(1, entry.fade + dt / FADE_OUT) : Math.max(0, entry.fade - dt / FADE_IN);
     }
     this.batch();
   }
@@ -268,8 +285,12 @@ export class EntityView {
     const b = this.batcher;
     b.begin();
     for (const entry of this.entries.values()) {
-      for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m);
-      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s);
+      // Solid for the first fifth of the fade, then a step fainter each fifth after.
+      const step = Math.floor(entry.fade * 5) - 1;
+      const ghost = step < 0 ? undefined : GHOSTS[Math.min(step, GHOSTS.length - 1)];
+      for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m, ghost);
+      // A stealthed trooper is drawn faint and see-through, once it's halfway faded.
+      for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.fade >= 0.5);
     }
     b.end();
   }

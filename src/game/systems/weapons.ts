@@ -12,6 +12,7 @@ import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
 import { strike } from './melee';
 import { domeOver } from '../shields';
+import { hazeSpread } from '../smoke';
 
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
@@ -39,8 +40,8 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
 
   const targetRadius = world.get(target, Collider)?.radius ?? 0.5;
   const dist = D.hypot(tt.x - sx, tt.z - sz);
-  // Miss distance grows with range; sqrt keeps the scatter evenly spread over the disc.
-  const missR = w.spread * dist * Math.sqrt(ctx.rng.next());
+  // Miss distance grows with range; sqrt keeps the scatter evenly spread over the disc. Through another side's haze it goes wild (see smoke.ts).
+  const missR = (w.spread + hazeSpread(ctx, sx, sz, tt.x, tt.z, faction)) * dist * Math.sqrt(ctx.rng.next());
   const missA = ctx.rng.range(0, Math.PI * 2);
   let ex = tt.x + D.cos(missA) * missR;
   let ez = tt.z + D.sin(missA) * missR;

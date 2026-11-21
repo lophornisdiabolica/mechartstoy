@@ -815,3 +815,18 @@ registerModel('bld:uplinkMast', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:uplinkMast', g, turret, [dish]) });
 });
+
+// Veil: a soot-dark works with tall smoke stacks.
+registerModel('bld:smokeStacks', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(3.2, 2.0, 3.0, WALLS[2], 0.6, 1.25, 0));
+  g.add(box(3.3, 0.2, 3.1, primary, 0.6, 2.35, 0));
+  g.add(box(0.06, 1.2, 1.4, DARK, 2.21, 0.85, 0)); // door
+  for (const z of [-1.4, 0, 1.4]) {
+    g.add(cylinder(0.35, 0.45, 3.6, 8, 0x34303a, -1.6, 2.0, z)); // stacks
+    g.add(cylinder(0.37, 0.37, 0.18, 8, secondary, -1.6, 3.4, z));
+  }
+  return g;
+});

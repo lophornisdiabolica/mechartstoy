@@ -124,6 +124,10 @@ export const MOUNTS: Record<string, Mount> = {
   overmind: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'overmind#array': { turret: [-0.3, 4.75, 0], muzzles: [[0.75, 0.35, 0]] },
   'bld:uplinkMast': { turret: [0, 4.2, 0], pivot: [0, 0.3, 0], muzzles: [[0.55, 0, 0]], elev: [-0.6, 0.6], rest: 0.2 },
+  // Veil.
+  smokeTruck: { turret: [-0.7, 0.62, 0], pivot: [0.05, 0.4, 0], muzzles: [[0.73, 0, 0]], elev: [0, 1.1], rest: 0.6 },
+  ghostTank: { turret: [-0.1, 0.8, 0], pivot: [0.4, 0.2, 0], muzzles: [[1.3, 0, 0]], elev: GUN },
+  eclipse: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'frostTower#mortar': { turret: [0, 2.32, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [0.3, 1.2], rest: 0.8 },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },

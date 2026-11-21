@@ -43,6 +43,7 @@ import { Divine, godSystem, Power, powerSpot } from './god';
 import { FireField, fireSystem } from './fire';
 import { Domes, shieldSystem } from './shields';
 import { FrostField, frostSystem } from './frost';
+import { SmokeField, smokeSystem } from './smoke';
 import { hackSystem } from './hacking';
 import { dashSystem } from './systems/melee';
 
@@ -139,6 +140,7 @@ export class Game {
       fire: new FireField(this.field),
       domes: new Domes(),
       frost: new FrostField(this.field),
+      smoke: new SmokeField(this.field),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
@@ -173,6 +175,7 @@ export class Game {
       projectileSystem(ctx),
       fireSystem(ctx),
       frostSystem(ctx),
+      smokeSystem(ctx),
       hackSystem(ctx),
       deathSystem(ctx),
       wreckSystem(ctx),
