@@ -200,6 +200,7 @@ export class Effects {
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
     events.on('struck', (e) => this.blow(e));
     events.on('shatter', (e) => this.shatter(e.x, e.y, e.z));
+    events.on('hacked', (e) => this.hacked(e.x, e.y, e.z, e.back));
     events.on('shieldHit', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.25, size: 0.4, endSize: 1.4, color: 0xc8f0ff, endColor: 0x000000 }));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
     events.on('buildingDamaged', (e) => {
@@ -351,6 +352,10 @@ export class Effects {
   /** A flash just out of the muzzle, and for big guns a puff of smoke blown on along the barrel. */
   private muzzleFlash(x: number, y: number, z: number, heading: number, climb: number, kind: ProjectileKind): void {
     const big = kind === 'shell' || kind === 'artillery';
+    if (kind === 'hack') {
+      this.flashes.spawn({ x, y, z, life: 0.12, size: 0.35, color: 0x6ab8aa, endColor: 0x000000 });
+      return;
+    }
     if (kind === 'beam' || kind === 'frost') {
       this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
       return;
@@ -373,6 +378,20 @@ export class Effects {
     }
   }
 
+  /**
+   * A vehicle hacked over (or coming back): a crackle of signal sparks
+   * round it and a ring climbing it, in the colour of whoever has it now.
+   */
+  private hacked(x: number, y: number, z: number, back: boolean): void {
+    const color = back ? 0xffffff : 0x6ab8aa;
+    this.flashes.spawn({ x, y: y + 1, z, life: 0.3, size: 0.6, endSize: 1.6, color, endColor: 0x000000 });
+    for (let i = 0; i < (back ? 5 : 10); i++) {
+      const a = rand(0, Math.PI * 2);
+      const sp = rand(1, 2.5);
+      this.flashes.spawn({ x: x + Math.cos(a) * 0.6, y: y + rand(0.3, 1.6), z: z + Math.sin(a) * 0.6, vx: Math.cos(a) * sp, vy: rand(0.5, 2), vz: Math.sin(a) * sp, life: rand(0.25, 0.5), size: 0.12, endSize: 0.03, color, endColor: 0x103830, drag: 2 });
+    }
+  }
+
   /** Frozen armour breaking up: a burst of pale shards and a glint. */
   private shatter(x: number, y: number, z: number): void {
     this.flashes.spawn({ x, y, z, life: 0.15, size: 0.5, endSize: 0.1, color: 0xffffff, endColor: 0x9fe3ff });
@@ -384,6 +403,11 @@ export class Effects {
   }
 
   private impact(x: number, y: number, z: number, kind: ProjectileKind, splash: number): void {
+    // The hack itself is drawn when it takes (see hacked); the bolt just fizzles.
+    if (kind === 'hack') {
+      this.flashes.spawn({ x, y, z, life: 0.12, size: 0.3, endSize: 0.6, color: 0x6ab8aa, endColor: 0x000000 });
+      return;
+    }
     if (kind === 'beam') {
       this.flashes.spawn({ x, y, z, life: 0.14, size: 0.35, endSize: 0.8, color: 0xd8f6ff, endColor: 0x000000 });
       this.smoke.spawn({ x, y, z, vy: 0.6, life: 0.5, size: 0.1, endSize: 0.3, color: 0x9fb8c8 });

@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack';
 
 export interface WeaponDef {
   name: string;
@@ -77,6 +77,22 @@ export interface WeaponDef {
   frost?: number;
   /** Times its damage against anything standing on its enemies' frost (Rime's shard guns: frozen things shatter). */
   shatter?: number;
+  /**
+   * Hacks what it hits (Cipher; see hacking.ts): an enemy vehicle it lands
+   * on turns to the shooter's side for this many seconds, stops where it is
+   * and fights whatever is near it, its old friends included. Such a weapon
+   * only aims at vehicles it can turn.
+   */
+  hack?: number;
+}
+
+/** A jamming field round a unit or building (Cipher; see hacking.ts). */
+export interface JamDef {
+  radius: number;
+  /** How fast enemy weapons in it reload, as a share of their usual rate. */
+  pace: number;
+  /** Seconds between its pulses: each one jams what it reaches until the next. */
+  every: number;
 }
 
 /**
@@ -175,6 +191,11 @@ export interface UnitDef {
   shield?: ShieldDef;
   /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
   chill?: { radius: number; rate: number };
+  /**
+   * Jams the enemy weapons round it (Cipher; see hacking.ts): within the
+   * radius they reload at `pace` of their usual rate.
+   */
+  jam?: JamDef;
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -1593,6 +1614,100 @@ export const UNIT_DEFS = {
     // Hammers down round itself: everything close goes flying.
     weapon: weapon({ name: 'Hammer fists', range: 1.2, damage: 95, cooldown: 2.6, projectile: 'shell', speed: 1, muzzleHeight: 3.5, pierce: 0.3, melee: { style: 'stomp', lunge: 1.5, knock: 2.2, sweep: 3.14, sweepMost: 7, charge: 1.3 } }),
     mounts: [{ weapon: weapon({ name: 'Rocket rack', range: 18, damage: 30, cooldown: 4.5, burst: 4, burstGap: 0.15, projectile: 'missile', speed: 24, splash: 1.2, spread: 0.08, muzzleHeight: 5.2, targets: 'both' }), mount: 'colossus#rockets', turnRate: 1.4 }],
+    wreckTime: 35,
+    siege: true,
+  },
+  // Cipher: hacking. Its hack weapons turn an enemy vehicle to its side for a few seconds
+  // (see hacking.ts), and its jammers slow the enemy guns round them.
+  hackVan: {
+    id: 'hackVan',
+    name: 'Hack Van',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'support',
+    model: 'hackVan',
+    hp: 140,
+    armor: 3,
+    speed: 3.3,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 3,
+    // A dish on the bed: it locks on to an enemy vehicle and turns it for a while.
+    weapon: weapon({ name: 'Hack uplink', range: 13, damage: 0, cooldown: 10, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 1.5, hack: 6 }),
+    mounts: [{ weapon: weapon({ name: 'Pintle gun', range: 10, damage: 4, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }), mount: 'hackVan#gun', turnRate: 4 }],
+    wreckTime: 15,
+    siege: false,
+  },
+  // Cipher's anti-infantry: a soldier with a carbine and a drone on its back, which it sends up when
+  // there's something to hunt, and readies another a while after.
+  droneOperator: {
+    id: 'droneOperator',
+    name: 'Drone Operator',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
+    role: 'frontline',
+    model: 'droneOperator',
+    hp: 20,
+    armor: 0,
+    speed: 1.6,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 16,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ ...rifle, name: 'Carbine', range: 9, damage: 3 }),
+    carries: { squad: [{ unit: 'drone', count: 1 }], every: 60 },
+    wreckTime: 0,
+    siege: false,
+  },
+  jammer: {
+    id: 'jammer',
+    name: 'Jammer',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'walker',
+    role: 'frontline',
+    model: 'jammer',
+    hp: 170,
+    armor: 5,
+    speed: 2.8,
+    turnRate: 2.2,
+    radius: 0.9,
+    sight: 17,
+    turret: true,
+    turretTurnRate: 2.6,
+    weapon: weapon({ name: 'Twin guns', range: 13, damage: 9, cooldown: 1.4, burst: 2, burstGap: 0.15, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.06, muzzleHeight: 1.7 }),
+    // Its mast sends out a pulse every few seconds: enemy guns it reaches reload slowly until the next.
+    jam: { radius: 14, pace: 0.6, every: 3 },
+    wreckTime: 15,
+    siege: false,
+  },
+  overmind: {
+    id: 'overmind',
+    name: 'Overmind',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'overmind',
+    hp: 1100,
+    armor: 18,
+    speed: 1.3,
+    turnRate: 0.9,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.1,
+    weapon: weapon({ name: 'Twin cannons', range: 18, damage: 46, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
+    // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
+    mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
+    jam: { radius: 13, pace: 0.6, every: 3 },
+    // And a rack of drones, sent up when it meets the enemy and readied again a while later.
+    carries: { squad: [{ unit: 'drone', count: 2 }], every: 60 },
     wreckTime: 35,
     siege: true,
   },

@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -315,6 +315,27 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     signature: 'duelHall',
     waves: [rifleSquad(3, 2), { unit: 'duelist', weight: 2.6, count: 3 }, { unit: 'reaver', weight: 2, count: 1 }],
   },
+  cipher: {
+    id: 'cipher',
+    name: 'Cipher',
+    blurb: 'Hacking. Hack vans lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Drone operators in its squads, and the Overmind, send up drones that hunt infantry, and jammer walkers send out pulses that slow the enemy guns they reach. Its uplink mast turns out more and jams what comes at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array and a rack of drones on its back.',
+    caps: { infantry: 1, vehicle: 1.1 },
+    production: {
+      barracks: { table: [rifleSquad(4, 3), { unit: 'droneOperator', weight: 1.5, count: 2 }] },
+      factory: {
+        table: [
+          { unit: 'tank', weight: 3, count: 1 },
+          { unit: 'hackVan', weight: 1.5, count: 1 },
+          { unit: 'jammer', weight: 1.2, count: 1 },
+          { unit: 'flakTank', weight: 0.8, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'overmind', weight: 1, count: 1 }] },
+    },
+    signature: 'uplinkMast',
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'droneOperator', weight: 1, count: 2 }, { unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
+  },
 };
 
 /**
@@ -332,7 +353,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

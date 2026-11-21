@@ -390,7 +390,7 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
 
 /** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
 const TOWN_CLOTHES: Record<string, [string, string, string]> = {
@@ -452,6 +452,11 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       px(0, 3, 1, 4, '#bfe9ff'); // coolant tank on the back
       px(5, 5, 2, 1, '#333'); // sprayer
       px(7, 5, 1, 1, '#dff6ff');
+    } else if (kit === 'operator') {
+      px(0, 3, 2, 3, '#4a4f58'); // drone rack on the back
+      px(0, 0, 1, 3, '#6a6f78'); // antenna
+      px(0, 0, 1, 1, '#6ab8aa');
+      px(5, 5, 2, 1, '#333'); // carbine
     } else if (kit === 'wrench') {
       px(1, 2, 1, 1, '#f0c419'); // hard hat brim, either side of the face
       px(6, 2, 1, 1, '#f0c419');
@@ -1118,6 +1123,7 @@ registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
 registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
 registerModel('cryoTrooper', (faction) => infantry(faction, 'cryo'));
+registerModel('droneOperator', (faction) => infantry(faction, 'operator'));
 registerModel('engineer', (faction) => infantry(faction, 'wrench'));
 // Townsfolk (see game/towns.ts): three sets of everyday clothes, and the militia.
 registerModel('civilian:0', (faction) => infantry(faction, 'civilian0'));
@@ -1436,4 +1442,130 @@ registerModel('colossus', (faction) => {
       fists.position.y = Math.sin(Math.PI * k) * 0.8;
     },
   });
+});
+
+/** Cipher's signal glow. */
+const SIGNAL = 0x6ab8aa;
+
+// Cipher: a boxy van with a hacking dish on its roof and a pintle gun up front.
+registerModel('hackVan', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.6, 0.6], 0.46, 0.44));
+  root.add(box(1.9, 0.2, 0.84, METAL, 0, 0.45, 0)); // chassis
+  root.add(box(1.95, 0.72, 0.9, primary, -0.05, 0.86, 0)); // van body
+  root.add(box(1.97, 0.1, 0.92, secondary, -0.05, 0.78, 0)); // stripe
+  root.add(box(0.06, 0.3, 0.72, GLASS, 0.94, 1.0, 0)); // windscreen
+  root.add(box(0.5, 0.06, 0.6, DARK, -0.4, 1.25, 0)); // roof plate
+  const turret = new THREE.Group();
+  turret.position.set(-0.4, 1.28, 0);
+  turret.add(cylinder(0.1, 0.12, 0.26, 6, DARK, 0, 0.13, 0));
+  // A yoke on the post, and a pin through it that the dish tips on.
+  turret.add(box(0.1, 0.04, 0.3, METAL, 0, 0.27, 0));
+  for (const z of [-0.13, 0.13]) turret.add(box(0.12, 0.2, 0.03, METAL, 0, 0.32, z));
+  const pin = cylinder(0.045, 0.045, 0.32, 6, DARK, 0, 0.3, 0);
+  pin.rotation.x = Math.PI / 2;
+  turret.add(pin);
+  const dish = barrelPivot('hackVan', turret);
+  dish.add(cylinder(0.42, 0.08, 0.16, 10, secondary, 0.12, 0, 0).rotateZ(-Math.PI / 2));
+  const core = glowBox(0.12, 0.12, 0.12, SIGNAL);
+  core.position.set(0.3, 0, 0);
+  dish.add(core);
+  root.add(turret);
+  // A pintle gun on a ring mount, with a gun shield, like the dome truck's.
+  const gun = ownMount(root, 'hackVan#gun', (t) => {
+    t.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.04, 0)); // ring mount
+    t.add(box(0.1, 0.18, 0.1, DARK, 0, 0.17, 0));
+    t.add(box(0.3, 0.15, 0.17, DARK, 0.03, 0.27, 0)); // receiver
+    t.add(box(0.04, 0.2, 0.32, secondary, 0.21, 0.32, 0)); // gun shield
+    t.add(box(0.58, 0.07, 0.07, DARK, 0.26, 0.26, 0));
+  });
+  return setRig(root, { turret, ...mounted('hackVan', root, turret, [dish]), mounts: [gun] });
+});
+
+
+// Cipher: a walker with twin guns and a jamming mast whose rings pulse.
+registerModel('jammer', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.55, 0.8, primary, 0, 0.1, 0));
+  turret.add(box(0.3, 0.2, 0.5, GLASS, 0.45, 0.22, 0));
+  for (const side of [-1, 1]) turret.add(box(0.8, 0.1, 0.1, DARK, 0.55, -0.05, side * 0.42));
+  turret.add(box(0.12, 1.1, 0.12, METAL, -0.3, 0.9, 0)); // the mast
+  const rings: THREE.Object3D[] = [];
+  for (const y of [0.75, 1.05, 1.35]) {
+    const ring = glowBox(0.36, 0.06, 0.36, SIGNAL);
+    ring.position.set(-0.3, y, 0);
+    turret.add(ring);
+    rings.push(ring);
+  }
+  turret.add(box(0.6, 0.12, 0.86, secondary, -0.05, 0.43, 0));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.78, 0.82, 0.18, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.05, side * 0.3);
+    body.add(leg.hip);
+    return leg;
+  });
+  const walk = walker(legs, body, 0.9, 0.5);
+  let t = Math.random() * 3;
+  return setRig(root, {
+    turret,
+    ...walk,
+    ...mounted('jammer', root, turret),
+    animate(state) {
+      walk.animate?.(state);
+      // The rings pulse in turn, up the mast.
+      t += state.dt;
+      rings.forEach((r, i) => r.scale.setScalar(1 + 0.25 * Math.max(0, Math.sin(t * 4 - i * 1.2))));
+    },
+  });
+});
+
+// Cipher's super unit: a heavy walker with twin cannons and a hack array on its back.
+registerModel('overmind', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.8;
+  root.add(body);
+  body.add(box(1.3, 0.5, 1.6, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.3;
+  turret.add(box(2.0, 1.2, 2.0, primary, 0, 0.6, 0));
+  turret.add(box(0.3, 0.3, 1.1, GLASS, 1.05, 0.8, 0));
+  turret.add(box(1.6, 0.25, 2.1, secondary, -0.1, 1.3, 0));
+  for (const side of [-1, 1]) {
+    turret.add(box(0.6, 0.55, 0.45, secondary, 0.2, 0.5, side * 1.2)); // arms
+    turret.add(box(1.4, 0.2, 0.2, DARK, 0.9, 0.5, side * 1.2)); // cannons
+  }
+  for (const z of [-0.6, 0.6]) {
+    const node = glowBox(0.2, 0.2, 0.2, SIGNAL);
+    node.position.set(-1.05, 0.7, z);
+    turret.add(node);
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.4, 1.4, 0.45, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.65);
+    body.add(leg.hip);
+    return leg;
+  });
+  const array = ownMount(root, 'overmind#array', (t) => {
+    t.add(cylinder(0.18, 0.22, 0.3, 8, METAL, 0, -0.17, 0)); // a mast down into its back
+    t.add(cylinder(0.25, 0.3, 0.3, 8, DARK, 0, 0.1, 0));
+    t.add(box(0.42, 0.14, 0.12, DARK, 0.2, 0.3, 0)); // a boom out to the dish
+    t.add(cylinder(0.7, 0.15, 0.25, 12, secondary, 0.5, 0.35, 0).rotateZ(-Math.PI / 2));
+    const core = glowBox(0.18, 0.18, 0.18, SIGNAL);
+    core.position.set(0.72, 0.35, 0);
+    t.add(core);
+  });
+  // On its back: it bobs with the body as it walks, and comes down with it when it falls.
+  body.add(array.turret);
+  array.turret.position.y -= body.position.y;
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('overmind', root, turret), mounts: [array] });
 });

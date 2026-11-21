@@ -790,3 +790,28 @@ registerModel('bld:duelHall', (faction) => {
   g.add(box(0.3, 0.3, 0.3, secondary, 2.25, 2.0, 0));
   return g;
 });
+
+/** Cipher's signal glow. */
+const CIPHER_GLOW = 0x6ab8aa;
+
+// Cipher: a lattice mast with a dish on top that turns to lock on, beside a signal hut.
+registerModel('bld:uplinkMast', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.6, 0.25, 4.4, CONCRETE, 0, 0.12, 0));
+  g.add(box(2.2, 1.6, 1.8, WALLS[1], -0.9, 1.05, 1.25)); // signal hut
+  g.add(box(2.3, 0.2, 1.9, primary, -0.9, 1.95, 1.25));
+  g.add(box(0.06, 1.0, 0.8, DARK, 0.21, 0.75, 1.25)); // door
+  for (const x of [-0.3, 0.3]) for (const z of [-0.3, 0.3]) g.add(box(0.12, 3.7, 0.12, METAL, x, 2.1, z)); // the mast's legs
+  g.add(box(0.8, 0.15, 0.8, secondary, 0, 4.0, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0, 4.2, 0);
+  turret.add(cylinder(0.2, 0.25, 0.3, 8, DARK, 0, 0.1, 0));
+  const dish = barrelPivot('bld:uplinkMast', turret);
+  dish.add(cylinder(0.55, 0.1, 0.22, 10, secondary, 0.25, 0, 0).rotateZ(-Math.PI / 2));
+  const core = glowBox(0.14, 0.14, 0.14, CIPHER_GLOW);
+  core.position.set(0.48, 0, 0);
+  dish.add(core);
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:uplinkMast', g, turret, [dish]) });
+});

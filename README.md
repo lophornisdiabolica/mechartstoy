@@ -311,8 +311,8 @@ battle, its exact map via `seed`).
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
-  Ember Firestorm; Aegis, Rime and Sabre have no slot of their own, and wear
-  Verdant Protectorate, Celeste Dominion and Onyx Order colours). Every doctrine fields rifle squads with AT troopers,
+  Ember Firestorm; Aegis, Rime, Sabre and Cipher have no slot of their own, and wear
+  Verdant Protectorate, Celeste Dominion, Onyx Order and Magenta Directive colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -414,6 +414,22 @@ battle, its exact map via `seed`).
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
+  - *Cipher:* hacking (`game/hacking.ts`). Hack vans lock on to an
+    enemy vehicle and turn it to Cipher's side for six seconds: it stops
+    dead and fights whatever is round it, its old friends included (and
+    they it), then comes back to itself and can't be turned again for
+    twelve. Kills it makes while turned are Cipher's; if it dies turned, it
+    dies as its own side's. Infantry, super units, carriers and engineers
+    can't be hacked. Pairs of **drone operators** come out of its
+    barracks: each sends up a drone when it meets the enemy (a carrier of
+    one, `UnitDef.carries`) and readies another a minute later, and the drones
+    hunt the infantry, the AT troopers that crowd a hacked vehicle
+    included. Jammer walkers send out a pulse every few seconds out to
+    fourteen units: enemy guns it reaches reload at 0.6× until the next,
+    shown as a faint hexagon on the ground under each jammed unit. Its
+    **uplink mast** turns out more and jams what comes at the base. Super
+    unit: the Overmind, a walker with a hack array and a rack of three
+    drones on its back.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;

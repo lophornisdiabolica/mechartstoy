@@ -82,6 +82,8 @@ export type GameEvents = {
   shieldHit: { entity: Entity; faction: number; x: number; y: number; z: number; share: number };
   /** A shard gun's shot shattered something frozen (see frost.ts). */
   shatter: { x: number; y: number; z: number };
+  /** A vehicle was hacked over to another side, or came back to its own (`back`; see hacking.ts). */
+  hacked: { entity: Entity; x: number; y: number; z: number; faction: number; home: number; back: boolean };
   /** An energy dome collapsed (see shields.ts). */
   shieldDown: { entity: Entity; faction: number; x: number; y: number; z: number; radius: number; by: Hit | null };
   /** A super unit blew a crater in the ground (see craters.ts). */

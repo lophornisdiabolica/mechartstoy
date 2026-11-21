@@ -5,6 +5,7 @@ import { entityHeight, inTrench, UNIT_HIT_SLACK } from '../lineOfFire';
 import * as D from '../../core/dmath';
 import { heatPerShot } from '../fire';
 import { hitDome } from '../shields';
+import { hack } from '../hacking';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -84,7 +85,9 @@ export function projectileSystem(ctx: SimContext): System {
             // Shard guns shatter what's frozen: anything standing on its enemies' frost (see frost.ts).
             const shattered = w.shatter !== undefined && ctx.frost.hostileAt(ctx, tt.x, tt.z, victim);
             if (shattered) ctx.events.emit('shatter', { x: tt.x, y: p.ey, z: tt.z });
-            applyDamage(world, ctx, p.target, shattered ? w.damage * w.shatter! : w.damage, by, w.pierce ?? 0);
+            // A hack turns what it lands on rather than hurting it (see hacking.ts).
+            if (w.hack) hack(world, ctx, p.target, p.faction, w.hack);
+            else applyDamage(world, ctx, p.target, shattered ? w.damage * w.shatter! : w.damage, by, w.pierce ?? 0);
             hit.add(p.target);
           }
         }

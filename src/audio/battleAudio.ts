@@ -18,6 +18,7 @@ const LOUDNESS: Record<SoundId, number> = {
   launch: 0.6,
   thud: 0.42,
   shatter: 0.4,
+  glitch: 0.3,
   shieldHit: 0.3,
   blast: 0.95,
   wreck: 0.65,
@@ -162,6 +163,7 @@ export class BattleAudio {
       if (e.faction >= 0 && e.faction !== NEUTRAL && (e.def.production || e.def.id === 'hq')) this.alert('chimeRazed', e.x, e.z);
     });
     on('shatter', (e) => this.cue('shatter', 'cannons', e.x, e.z, 1));
+    on('hacked', (e) => this.cue('glitch', 'cannons', e.x, e.z, e.back ? 0.6 : 1));
     on('shieldHit', (e) => this.cue('shieldHit', 'cannons', e.x, e.z, 1));
     on('shieldDown', (e) => this.cue('collapse', 'explosions', e.x, e.z, 0.7));
     on('constructionStarted', (e) => this.cue('build', 'buildings', e.x, e.z, 1));
@@ -268,6 +270,9 @@ export class BattleAudio {
       case 'beam':
         this.activity.add(STIR.shell);
         return this.cue('zap', 'cannons', e.x, e.z, 1);
+      case 'hack':
+        this.activity.add(STIR.flame);
+        return this.cue('zap', 'cannons', e.x, e.z, 0.6);
       case 'frost':
         this.activity.add(STIR.flame);
         return this.cue('hiss', 'gunfire', e.x, e.z, 1);
@@ -275,7 +280,7 @@ export class BattleAudio {
   }
 
   private impact(e: GameEvents['impact']): void {
-    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost') return;
+    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost' || e.kind === 'hack') return;
     if (e.splash >= 1.8) {
       this.activity.add(STIR.blast);
       this.cue('blast', 'explosions', e.x, e.z, Math.min(1.2, 0.6 + e.splash * 0.12));
