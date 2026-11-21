@@ -21,6 +21,25 @@ import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
 import { RemoteSim } from './sim/remoteSim';
 import { BattleAudio, listenerFrom } from './audio/battleAudio';
+import { DuelSetup, duelState, parseDuel, setupDuel } from './sim/duel';
+
+/** Seconds an arena round can run before it's called a draw, and the pause before the next one (battle time). */
+const ARENA_SECONDS = 180;
+const ARENA_PAUSE = 4;
+
+/** The arena (`?arena=reaver*4,lancer*4`): two hand-picked groups on open ground, round after round. */
+interface Arena {
+  duel: ReturnType<typeof parseDuel>;
+  /** The link's other options (map settings, unit multipliers), as the duel tool takes them. */
+  set: string;
+  gap: number;
+  round: number;
+  setup: DuelSetup | null;
+  /** Rounds won by A and B, and drawn. */
+  wins: [number, number, number];
+  /** Battle time this round ended, or null while it's on. */
+  ended: number | null;
+}
 
 /** Seconds the victory banner and summary show before the next battle (the clock stops while paused). */
 const VICTORY_PAUSE = 15;
@@ -118,9 +137,19 @@ export class App implements MatchControls {
   /** Plays the battle in a worker thread; null plays it on the page (`?worker=0`, or no worker support). */
   private readonly sim: RemoteSim | null;
   private panelCollapsed = window.matchMedia('(max-width: 600px)').matches;
+  /** The arena, when the link asks for one; null for ordinary battles. */
+  private readonly arena: Arena | null = null;
+  private readonly arenaBoard = el('div', { id: 'arena', hidden: '' });
 
   constructor(container: HTMLElement, hud: HTMLElement) {
     this.hud = hud;
+    const params = new URLSearchParams(location.search);
+    const arena = params.get('arena');
+    if (arena) {
+      const rest = new URLSearchParams(params);
+      for (const k of ['arena', 'gap', 'round', 'seed']) rest.delete(k);
+      this.arena = { duel: parseDuel(arena), set: rest.toString(), gap: Number(params.get('gap')) || 30, round: Math.max(0, Number(params.get('round')) || 0), setup: null, wins: [0, 0, 0], ended: null };
+    }
     this.settings = settingsFromParams(new URLSearchParams(location.search));
     this.stage = new Stage(container);
     // For poking at a running game from the browser console (and screenshot scripts) during development.
@@ -132,12 +161,13 @@ export class App implements MatchControls {
     this.stage.showFronts = view.fronts;
     this.stage.rig.smoothTurn = view.smoothTurn;
     this.tickerFeed.on = view.ticker;
-    this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
+    // The arena plays on the page: its rounds are laid out by hand rather than from a seed (see sim/duel.ts).
+    this.sim = params.get('worker') !== '0' && !this.arena && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
       render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha, frameSeconds),
     });
-    document.body.append(this.banner, this.skipNote);
+    document.body.append(this.banner, this.skipNote, this.arenaBoard);
     this.photo = new PhotoMode(this.stage, this.loop);
     this.perf = new PerfOverlay(this.stage, this.audio.stats);
     this.debug = new DebugPanel(this.stage);
@@ -165,8 +195,11 @@ export class App implements MatchControls {
       },
     });
     // `at` opens the battle straight away, fast-forwarded (e.g. a sims link plus &at=25m).
-    const at = parseAt(new URLSearchParams(location.search).get('at'));
-    if (at !== null) {
+    const at = parseAt(params.get('at'));
+    if (this.arena) {
+      this.setup.hide();
+      this.arenaRound();
+    } else if (at !== null) {
       this.setup.hide();
       this.startBattle(this.settings, this.settings.seed || randomSeed(), '', at);
     } else {
@@ -235,11 +268,61 @@ export class App implements MatchControls {
     this.battle.controls = null;
   }
 
-  /** Start a battle, fast-forwarded `skip` seconds (the `at` URL option). */
-  private startBattle(settings: BattleSettings, seed: string, label = '', skip = 0): void {
+  /** Lay out the arena's next round and start it. */
+  private arenaRound(): void {
+    const a = this.arena!;
+    a.setup = setupDuel(a.duel, a.round, { gap: a.gap, set: a.set });
+    a.ended = null;
+    const game = a.setup.game;
+    // Follow the fighting, close in: both groups are in shot from the start.
+    this.stage.followFights = true;
+    this.startBattle(game.settings, `duel-${a.round}`, '', 0, game);
+    this.stage.rig.jumpTo(0, 0, 2.2);
+  }
+
+  /** The arena's scoreboard, and the next round once this one is over. */
+  private arenaUpdate(): void {
+    const a = this.arena!;
+    const setup = a.setup!;
+    const game = setup.game;
+    const now = game.world.time;
+    const st = duelState(setup);
+    if (a.ended === null && (st.left[0] === 0 || st.left[1] === 0 || now >= ARENA_SECONDS)) {
+      a.ended = now;
+      const k = st.left[0] > 0 && st.left[1] === 0 ? 0 : st.left[1] > 0 && st.left[0] === 0 ? 1 : 2;
+      a.wins[k]++;
+    }
+    const { factions } = this.battle;
+    const side = (i: 0 | 1, group: string) => {
+      const row = el('div', { class: 'side' });
+      const name = el('b', {}, `${i === 0 ? 'A' : 'B'}: ${group}`);
+      name.style.color = textHex(factions[i].primary);
+      row.append(name, ` · ${st.left[i]}/${setup.units[i]} left · ${Math.round(st.health[i] * 100)}% health · ${Math.round(st.dealt[i])} damage dealt`);
+      return row;
+    };
+    const groups = a.duel.label.split(/\s+vs\s+|,/).map((g) => g.trim());
+    const rounds = a.wins[0] + a.wins[1] + a.wins[2];
+    const result = a.ended === null ? `Round ${a.round + 1} · ${clock(now)}` : `Round ${a.round + 1} over at ${clock(a.ended)}: ${st.left[0] > 0 && st.left[1] === 0 ? 'A wins' : st.left[1] > 0 && st.left[0] === 0 ? 'B wins' : 'draw'}`;
+    this.arenaBoard.replaceChildren(
+      el('div', { class: 'title' }, `Arena · ${result}`),
+      side(0, groups[0] ?? ''),
+      side(1, groups[1] ?? ''),
+      el('div', { class: 'tally' }, rounds > 0 ? `Rounds: A ${a.wins[0]} – B ${a.wins[1]}${a.wins[2] ? ` (${a.wins[2]} drawn)` : ''}` : 'Same rounds as npm run sims -- --duel'),
+    );
+    this.arenaBoard.hidden = false;
+    if (a.ended !== null && now - a.ended >= ARENA_PAUSE) {
+      a.round++;
+      this.arenaRound();
+    }
+  }
+
+  /** Start a battle, fast-forwarded `skip` seconds (the `at` URL option); `made` is a game already set up (the arena). */
+  private startBattle(settings: BattleSettings, seed: string, label = '', skip = 0, made?: Game): void {
     this.dropControls();
     let game: Game;
-    if (this.sim) {
+    if (made) {
+      game = made;
+    } else if (this.sim) {
       game = this.sim.start(hashSeed(seed), settings, skip);
       this.skipNote.hidden = skip <= 0;
       this.skipNote.textContent = `Fast-forwarding to ${clock(skip)}…`;
@@ -286,7 +369,8 @@ export class App implements MatchControls {
     // A battle that hasn't ended by the variety time limit gives way to the next.
     const after = this.battle.settings.variety.after;
     const ended = game.outcome !== null || (after > 0 && game.world.time >= after * 60);
-    if (ended && !this.setup.visible) {
+    if (this.arena) this.arenaUpdate();
+    else if (ended && !this.setup.visible) {
       if (this.bannerShownFor !== game) this.showBanner();
       if (this.loop.timeScale > 0) this.bannerTime += frameSeconds;
       const left = Math.ceil(VICTORY_PAUSE - this.bannerTime);
@@ -442,6 +526,8 @@ export class App implements MatchControls {
   }
 
   private writeUrl(settings: BattleSettings): void {
+    // The arena's link stays as it was given.
+    if (this.arena) return;
     const query = settingsToParams(settings).toString();
     history.replaceState(null, '', query ? `?${query}` : location.pathname);
   }
