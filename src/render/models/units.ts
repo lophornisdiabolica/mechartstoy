@@ -1251,9 +1251,14 @@ registerModel('freezerTruck', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.7, 0.62, 0);
   turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
+  // A cheek either side and a pin through them that the mortar tips on.
+  for (const z of [-0.14, 0.14]) turret.add(box(0.2, 0.24, 0.04, METAL, 0.05, 0.3, z));
+  const pin = cylinder(0.05, 0.05, 0.34, 6, DARK, 0.05, 0.36, 0);
+  pin.rotation.x = Math.PI / 2;
+  turret.add(pin);
   const tube = barrelPivot('freezerTruck', turret);
-  // Short of the pivot at the back, so it clears the bed when it rests tipped up.
-  tube.add(box(0.72, 0.22, 0.22, DARK, 0.44, 0, 0));
+  // Held a little behind its middle, its back end clearing the base when it rests tipped up.
+  tube.add(box(0.72, 0.22, 0.22, DARK, 0.3, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('freezerTruck', root, turret, [tube]) });
 });

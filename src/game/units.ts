@@ -80,7 +80,7 @@ export interface WeaponDef {
 }
 
 /**
- * An energy dome (Aegis; see shields.ts): a half sphere round its emitter
+ * An energy dome (Aegis; see shields.ts): a sphere round its emitter
  * that stops direct fire and missiles coming in from outside, soaking them
  * up until it collapses. Shots from inside go out freely, and lobbed shells
  * and flame fall straight through it.
