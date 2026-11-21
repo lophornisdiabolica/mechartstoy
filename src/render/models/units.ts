@@ -1573,7 +1573,7 @@ registerModel('overmind', (faction) => {
 /** Veil's soot-dark stacks and vents. */
 const SOOT = 0x34303a;
 
-registerModel('shadeTrooper', (faction) => infantry(faction, 'rifle'));
+registerModel('shadeTrooper', (faction) => infantry(faction, 'launcher'));
 
 // Veil: a truck with a smoke mortar on its bed and canisters racked behind the cab.
 registerModel('smokeTruck', (faction) => {
@@ -1587,8 +1587,14 @@ registerModel('smokeTruck', (faction) => {
   const turret = new THREE.Group();
   turret.position.set(-0.7, 0.62, 0);
   turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
+  // A cheek either side and a pin through them that the mortar tips on.
+  for (const z of [-0.155, 0.155]) turret.add(box(0.2, 0.28, 0.04, METAL, 0.05, 0.32, z));
+  const pin = cylinder(0.05, 0.05, 0.37, 6, DARK, 0.05, 0.4, 0);
+  pin.rotation.x = Math.PI / 2;
+  turret.add(pin);
   const tube = barrelPivot('smokeTruck', turret);
-  tube.add(box(0.9, 0.24, 0.24, SOOT, 0.35, 0, 0));
+  // Held a little behind its middle, its back end clearing the base when it rests tipped up.
+  tube.add(box(0.9, 0.24, 0.24, SOOT, 0.28, 0, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('smokeTruck', root, turret, [tube]) });
 });

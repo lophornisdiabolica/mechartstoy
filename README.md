@@ -436,8 +436,9 @@ battle, its exact map via `seed`).
     through another side's haze picks up extra spread (up to 0.35, at three
     units of haze), so shots into it and out of it scatter round their
     targets and miss a lot; Veil shoots through its own as if it were
-    clear. Shade squads vanish while they hold their fire in a forest, by a
-    building or in Veil's haze, moving or not; ghost tanks fade a few
+    clear. Its only infantry are shades, AT troopers that vanish while they
+    hold their fire in a forest, by a building or in Veil's haze, moving or
+    not; ghost tanks fade a few
     seconds after each shot. Firing gives a shade away for two seconds,
     a ghost tank for three.
     Spotters (guard towers, Bastion's scout copters, comms arrays) see

@@ -266,6 +266,26 @@ const rifle: WeaponDef = {
   targets: 'ground',
 };
 
+/** An AT trooper's rocket launcher (and a shade's). */
+const rocketLauncher: WeaponDef = {
+  // Slow, heavy rockets: they get through a tank's armour, but not much of a Titan's.
+  name: 'Rocket launcher',
+  range: 11,
+  minRange: 0,
+  damage: 40,
+  cooldown: 4.5,
+  burst: 1,
+  burstGap: 0,
+  projectile: 'missile',
+  speed: 24,
+  splash: 0.5,
+  spread: 0.06,
+  arc: false,
+  muzzleHeight: 0.45,
+  // Missiles are everyone's answer to aircraft (see the notes on air in the README).
+  targets: 'both',
+};
+
 export const UNIT_DEFS = {
   trooper: {
     id: 'trooper',
@@ -303,24 +323,7 @@ export const UNIT_DEFS = {
     sight: 14,
     turret: false,
     turretTurnRate: 6,
-    weapon: {
-      // Slow, heavy rockets: they get through a tank's armour, but not much of a Titan's.
-      name: 'Rocket launcher',
-      range: 11,
-      minRange: 0,
-      damage: 40,
-      cooldown: 4.5,
-      burst: 1,
-      burstGap: 0,
-      projectile: 'missile',
-      speed: 24,
-      splash: 0.5,
-      spread: 0.06,
-      arc: false,
-      muzzleHeight: 0.45,
-      // Missiles are everyone's answer to aircraft (see the notes on air in the README).
-      targets: 'both',
-    },
+    weapon: rocketLauncher,
     wreckTime: 0,
     siege: false,
   },
@@ -1742,7 +1745,8 @@ export const UNIT_DEFS = {
     sight: 14,
     turret: false,
     turretTurnRate: 6,
-    weapon: rifle,
+    // An AT trooper that hides: rockets for the armour it creeps up on unseen.
+    weapon: rocketLauncher,
     // In a forest, by a building or in Veil's haze, and holding its fire, it's gone, moving or not.
     stealth: { after: 2, cover: true },
     wreckTime: 0,
