@@ -2,7 +2,7 @@ import { defineComponent, Entity } from '../core/ecs';
 import { MoveClass } from '../world/moveClasses';
 import { BuildingDef, ProductionEntry } from './buildings';
 import { LaneId } from './lanes';
-import { ProjectileKind, UnitDef, UnitId, WeaponDef } from './units';
+import { ProjectileKind, ShieldDef, UnitDef, UnitId, WeaponDef } from './units';
 
 /**
  * Position and facing on the battlefield. `p*` fields hold the previous tick's
@@ -351,6 +351,17 @@ export interface Ai {
 }
 export const Ai = defineComponent<Ai>('Ai');
 
+/** An energy dome over an entity (see ShieldDef and shields.ts). */
+export interface Shield {
+  def: ShieldDef;
+  hp: number;
+  /** Down (collapsed) until this sim time; -Infinity while it's up. */
+  downUntil: number;
+  /** Sim time it was last hit, for when it starts to build back. */
+  hitAt: number;
+}
+export const Shield = defineComponent<Shield>('Shield');
+
 /** Carries an infantry squad and drops it off near the fight (see systems/carriers.ts and UnitDef.carries). */
 export interface Carrier {
   /** Whether a squad is aboard. */
@@ -417,6 +428,8 @@ export interface Projectile {
   ez: number;
   /** Peak height of a lobbed arc above the straight line. */
   arcHeight: number;
+  /** The emitter of an enemy energy dome the shot bursts on (see shields.ts), if one's in the way. */
+  dome?: Entity;
   elapsed: number;
   duration: number;
 }

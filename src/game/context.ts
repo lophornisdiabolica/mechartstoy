@@ -10,6 +10,8 @@ import { Building, Collider, Faction, Hit, Mover, Transform } from './components
 import type { Commander } from './commander/commander';
 import type { Divine, Power } from './god';
 import type { FireField } from './fire';
+import type { Domes } from './shields';
+import type { FrostField } from './frost';
 import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
@@ -76,6 +78,12 @@ export type GameEvents = {
   span: { faction: number; x: number; z: number; down: boolean };
   /** A town's people took up arms against a side that razed too much of it (see towns.ts). */
   militia: { town: number; faction: number; x: number; z: number };
+  /** A shot burst on an energy dome (see shields.ts): where, and how much of its strength it has left. */
+  shieldHit: { entity: Entity; faction: number; x: number; y: number; z: number; share: number };
+  /** A shard gun's shot shattered something frozen (see frost.ts). */
+  shatter: { x: number; y: number; z: number };
+  /** An energy dome collapsed (see shields.ts). */
+  shieldDown: { entity: Entity; faction: number; x: number; y: number; z: number; radius: number; by: Hit | null };
   /** A super unit blew a crater in the ground (see craters.ts). */
   crater: { x: number; z: number; radius: number };
 };
@@ -145,6 +153,10 @@ export interface SimContext {
   god: Divine;
   /** Burning and scorched ground (see fire.ts). */
   fire: FireField;
+  /** Frosted ground (see frost.ts). */
+  frost: FrostField;
+  /** Energy domes up this tick (see shields.ts). */
+  domes: Domes;
   /** The towns' people (see towns.ts). */
   towns: Towns;
   /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */

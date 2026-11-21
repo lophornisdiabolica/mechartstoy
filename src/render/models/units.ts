@@ -389,7 +389,7 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
 
 /** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
 const TOWN_CLOTHES: Record<string, [string, string, string]> = {
@@ -447,6 +447,10 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       px(0, 3, 1, 4, '#b0451c'); // fuel tank on the back
       px(5, 5, 2, 1, '#333'); // flame gun
       px(7, 5, 1, 1, '#ff8a2a');
+    } else if (kit === 'cryo') {
+      px(0, 3, 1, 4, '#bfe9ff'); // coolant tank on the back
+      px(5, 5, 2, 1, '#333'); // sprayer
+      px(7, 5, 1, 1, '#dff6ff');
     } else if (kit === 'wrench') {
       px(1, 2, 1, 1, '#f0c419'); // hard hat brim, either side of the face
       px(6, 2, 1, 1, '#f0c419');
@@ -1112,6 +1116,7 @@ registerModel('trooper', (faction) => infantry(faction, 'rifle'));
 registerModel('atTrooper', (faction) => infantry(faction, 'launcher'));
 registerModel('mortar', (faction) => infantry(faction, 'mortar'));
 registerModel('flameTrooper', (faction) => infantry(faction, 'flamer'));
+registerModel('cryoTrooper', (faction) => infantry(faction, 'cryo'));
 registerModel('engineer', (faction) => infantry(faction, 'wrench'));
 // Townsfolk (see game/towns.ts): three sets of everyday clothes, and the militia.
 registerModel('civilian:0', (faction) => infantry(faction, 'civilian0'));
@@ -1121,3 +1126,165 @@ registerModel('militia', (faction) => infantry(faction, 'militia'));
 
 // Shared dark material for burnt-out hulks.
 export const CHARRED = flatMaterial(0x2a2623);
+
+/** Pale glassy blue: Aegis's emitters, Rime's ice. */
+const ICE = 0xcfefff;
+const EMITTER = 0x9fe3ff;
+
+// Aegis: a truck with a dome emitter on its bed and a pintle gun on the cab.
+registerModel('domeTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.6, 0.6], 0.46, 0.44));
+  root.add(box(1.9, 0.25, 0.86, METAL, 0, 0.5, 0));
+  root.add(box(0.6, 0.55, 0.84, primary, 0.62, 0.88, 0)); // cab
+  root.add(box(0.06, 0.25, 0.6, GLASS, 0.93, 0.98, 0));
+  root.add(cylinder(0.32, 0.42, 0.3, 8, secondary, -0.4, 0.75, 0)); // emitter base
+  root.add(cylinder(0.12, 0.12, 0.4, 6, METAL, -0.4, 1.05, 0));
+  const orb = glowBox(0.32, 0.32, 0.32, EMITTER);
+  orb.position.set(-0.4, 1.32, 0);
+  root.add(orb);
+  const turret = new THREE.Group();
+  turret.position.set(0.55, 1.15, 0);
+  turret.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.04, 0)); // ring mount on the cab roof
+  turret.add(box(0.1, 0.18, 0.1, DARK, 0, 0.17, 0));
+  const gun = barrelPivot('domeTruck', turret);
+  gun.add(box(0.3, 0.15, 0.17, DARK, 0.03, 0.01, 0)); // receiver
+  gun.add(box(0.04, 0.2, 0.32, secondary, 0.21, 0.06, 0)); // gun shield
+  gun.add(box(0.58, 0.07, 0.07, DARK, 0.26, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('domeTruck', root, turret, [gun]) });
+});
+
+// Aegis: a two-legged walker with one long lance down its right side.
+registerModel('lanceWalker', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.75;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.6, 0.8, primary, 0, 0.15, 0));
+  turret.add(box(0.3, 0.22, 0.5, GLASS, 0.45, 0.3, 0));
+  turret.add(box(0.6, 0.14, 0.86, secondary, -0.1, 0.5, 0));
+  turret.add(box(0.3, 0.25, 0.2, METAL, 0, 0.05, -0.45)); // shoulder
+  turret.add(box(1.6, 0.14, 0.14, DARK, 0.7, 0, -0.5)); // the lance
+  turret.add(box(0.4, 0.24, 0.24, secondary, 0.32, 0, -0.5)); // its coil
+  const tip = glowBox(0.12, 0.1, 0.1, EMITTER);
+  tip.position.set(1.3, 0, -0.5);
+  turret.add(tip);
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.85, 0.9, 0.18, METAL, DARK);
+    leg.hip.position.set(-0.05, -0.05, side * 0.3);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 0.95, 0.5), ...mounted('lanceWalker', root, turret) });
+});
+
+// Aegis's super unit: a heavy walker with a dome emitter on its back and a lance on each arm.
+registerModel('citadel', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.8;
+  root.add(body);
+  body.add(box(1.3, 0.5, 1.6, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.3;
+  turret.add(box(2.0, 1.2, 2.0, primary, 0, 0.6, 0));
+  turret.add(box(0.3, 0.3, 1.1, GLASS, 1.05, 0.8, 0));
+  turret.add(box(1.6, 0.25, 2.1, secondary, -0.1, 1.3, 0));
+  turret.add(cylinder(0.5, 0.7, 0.4, 8, secondary, -0.2, 1.6, 0)); // emitter
+  const orb = glowBox(0.45, 0.3, 0.45, EMITTER);
+  orb.position.set(-0.2, 1.9, 0);
+  turret.add(orb);
+  for (const side of [-1, 1]) {
+    turret.add(box(0.6, 0.55, 0.45, secondary, 0.2, 0.5, side * 1.2)); // arms
+    turret.add(box(1.4, 0.2, 0.2, DARK, 0.9, 0.5, side * 1.2)); // lances
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.4, 1.4, 0.45, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.65);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('citadel', root, turret) });
+});
+
+// Rime: a tank with ice crystals along its hull.
+registerModel('shardTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.2, 0.4, 0.45, 0.58));
+  root.add(box(2.0, 0.45, 1.06, primary, 0, 0.6, 0));
+  root.add(box(0.45, 0.22, 1.12, secondary, 0.8, 0.48, 0)); // glacis
+  for (const z of [-0.35, 0.35]) {
+    const shard = box(0.18, 0.35, 0.18, ICE, -0.7, 0.92, z);
+    shard.rotation.x = z * 0.9;
+    root.add(shard);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(-0.1, 0.83, 0);
+  turret.add(box(1.0, 0.4, 0.85, primary, 0, 0.2, 0));
+  turret.add(box(0.45, 0.12, 0.6, ICE, -0.2, 0.45, 0));
+  const gun = barrelPivot('shardTank', turret);
+  gun.add(box(1.3, 0.14, 0.14, DARK, 0.65, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('shardTank', root, turret, [gun]) });
+});
+
+// Rime: a truck with a coolant tank and a frost mortar on the back.
+registerModel('freezerTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.7, 0, 0.7], 0.44, 0.42));
+  root.add(box(2.0, 0.25, 0.85, METAL, 0, 0.5, 0));
+  root.add(box(0.6, 0.6, 0.82, primary, 0.68, 0.9, 0)); // cab
+  root.add(box(0.06, 0.26, 0.62, GLASS, 1.01, 1.02, 0));
+  const tank = cylinder(0.3, 0.3, 0.65, 8, ICE, -0.02, 0.92, 0); // coolant tank, lying along the bed
+  tank.rotation.z = Math.PI / 2;
+  root.add(tank);
+  const turret = new THREE.Group();
+  turret.position.set(-0.7, 0.62, 0);
+  turret.add(box(0.45, 0.2, 0.45, secondary, 0, 0.1, 0));
+  const tube = barrelPivot('freezerTruck', turret);
+  // Short of the pivot at the back, so it clears the bed when it rests tipped up.
+  tube.add(box(0.72, 0.22, 0.22, DARK, 0.44, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('freezerTruck', root, turret, [tube]) });
+});
+
+// Rime's super unit: a frosted walker with shard cannons on its shoulders and ice on its back.
+registerModel('glacier', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.9;
+  root.add(body);
+  body.add(box(1.4, 0.55, 1.7, METAL, 0, 0, 0));
+  const turret = new THREE.Group();
+  turret.position.y = 0.35;
+  turret.add(box(2.2, 1.3, 2.0, primary, 0, 0.65, 0));
+  turret.add(box(0.35, 0.35, 1.2, GLASS, 1.2, 0.95, 0));
+  turret.add(box(1.8, 0.3, 2.1, ICE, -0.2, 1.45, 0));
+  for (const z of [-0.5, 0.5]) {
+    const spike = box(0.3, 0.6, 0.3, ICE, -0.6, 1.8, z);
+    spike.rotation.x = z * 0.6;
+    turret.add(spike);
+  }
+  for (const side of [-1, 1]) {
+    turret.add(box(0.6, 0.6, 0.5, secondary, 0.1, 0.55, side * 1.22));
+    turret.add(box(1.5, 0.22, 0.22, DARK, 0.8, 0.55, side * 1.22));
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.45, 1.45, 0.48, METAL, DARK);
+    leg.hip.position.set(0, -0.1, side * 0.7);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 1.8, 0.3), ...mounted('glacier', root, turret) });
+});

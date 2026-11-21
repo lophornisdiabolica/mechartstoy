@@ -17,6 +17,10 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   artillery: () => projectile(0.4, 0.22, 0xffc070),
   // A gout of burning fuel: short, fat and bright.
   flame: () => projectile(0.5, 0.32, 0xff7a1a),
+  // Aegis's lance: a long, thin, blue-white bolt.
+  beam: () => projectile(1.6, 0.07, 0xa8e4ff),
+  // Rime's cryo spray: a pale puff of freezing mist.
+  frost: () => projectile(0.4, 0.3, 0xdff6ff),
 };
 
 for (const kind of Object.keys(looks) as ProjectileKind[]) {

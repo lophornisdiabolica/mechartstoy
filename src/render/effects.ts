@@ -199,6 +199,8 @@ export class Effects {
     events.on('fired', (e) => this.muzzleFlash(e.x, e.y, e.z, e.heading, e.climb ?? 0, e.kind));
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
     events.on('struck', (e) => this.blow(e));
+    events.on('shatter', (e) => this.shatter(e.x, e.y, e.z));
+    events.on('shieldHit', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.25, size: 0.4, endSize: 1.4, color: 0xc8f0ff, endColor: 0x000000 }));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
     events.on('buildingDamaged', (e) => {
       this.burners.push({ entity: e.entity, x: e.x, y: e.y + e.def.radius * 0.8, z: e.z, size: e.def.radius * 0.7, until: Infinity, nextPuff: 0 });
@@ -349,6 +351,10 @@ export class Effects {
   /** A flash just out of the muzzle, and for big guns a puff of smoke blown on along the barrel. */
   private muzzleFlash(x: number, y: number, z: number, heading: number, climb: number, kind: ProjectileKind): void {
     const big = kind === 'shell' || kind === 'artillery';
+    if (kind === 'beam' || kind === 'frost') {
+      this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
+      return;
+    }
     const flat = Math.cos(climb);
     const dx = Math.cos(heading) * flat;
     const dy = Math.sin(climb);
@@ -367,7 +373,29 @@ export class Effects {
     }
   }
 
+  /** Frozen armour breaking up: a burst of pale shards and a glint. */
+  private shatter(x: number, y: number, z: number): void {
+    this.flashes.spawn({ x, y, z, life: 0.15, size: 0.5, endSize: 0.1, color: 0xffffff, endColor: 0x9fe3ff });
+    for (let i = 0; i < 8; i++) {
+      const a = rand(0, Math.PI * 2);
+      const sp = rand(1.5, 4);
+      this.flashes.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(1, 3.5), vz: Math.sin(a) * sp, life: rand(0.3, 0.6), size: 0.14, endSize: 0.04, color: 0xe8f8ff, endColor: 0x6aa8c8, drag: 1.5 });
+    }
+  }
+
   private impact(x: number, y: number, z: number, kind: ProjectileKind, splash: number): void {
+    if (kind === 'beam') {
+      this.flashes.spawn({ x, y, z, life: 0.14, size: 0.35, endSize: 0.8, color: 0xd8f6ff, endColor: 0x000000 });
+      this.smoke.spawn({ x, y, z, vy: 0.6, life: 0.5, size: 0.1, endSize: 0.3, color: 0x9fb8c8 });
+      return;
+    }
+    if (kind === 'frost') {
+      // A cold white puff where it bursts, drifting low: the patch itself is drawn by the frost ground.
+      for (let i = 0; i < 3; i++) {
+        this.smoke.spawn({ x: x + rand(-0.4, 0.4) * splash, y: y + 0.1, z: z + rand(-0.4, 0.4) * splash, vy: rand(0.1, 0.4), life: rand(0.8, 1.4), size: 0.2 + splash * 0.2, endSize: 0.5 + splash * 0.35, color: 0xf0faff, endColor: 0xc8dde8, drag: 1 });
+      }
+      return;
+    }
     if (kind === 'flame') {
       // Fire licking up where it lands, and a wisp of smoke: no blast, no dirt.
       for (let i = 0; i < 3; i++) {

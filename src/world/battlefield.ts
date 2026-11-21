@@ -179,6 +179,8 @@ export interface Bridge {
   level: number;
   /** Thrown across by a side's engineers (see commander/engineers.ts): it can come down. The side that built it. */
   builtBy?: number;
+  /** Frozen water rather than timber (Rime's engineers): it melts away sooner, and fire melts it fast. */
+  ice?: boolean;
   /** Come down (see removeBridge): kept in the list so other bridges keep their indices, but it's no longer there. */
   gone?: boolean;
 }

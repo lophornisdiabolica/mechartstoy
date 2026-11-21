@@ -1,5 +1,5 @@
 import { ComponentType, Entity } from '../core/ecs';
-import { Armed, Arsenal, Building, Tilt, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
+import { Armed, Arsenal, Shield, Building, Tilt, Collider, Construction, Faction, Guard, Health, Mover, OutpostPart, Producer, Renderable, Rubble, Transform, Unit, Wreck } from '../game/components';
 import { GameEvents } from '../game/context';
 import { Command, Game, SIM_HZ } from '../game/game';
 import { BattleSettings } from '../game/settings';
@@ -34,7 +34,7 @@ import { GodState } from '../game/god';
  * change to show (Health.lastHit is replaced on every hit). Transform is
  * packed separately.
  */
-const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer, Arsenal];
+const COPIED: ComponentType<unknown>[] = [Faction, Renderable, Unit, Building, Collider, Guard, OutpostPart, Armed, Health, Construction, Wreck, Rubble, Producer, Arsenal, Shield];
 /**
  * Numbers per entity in a Pose: id, x, y, z, heading, Armed.aim and
  * Armed.elev (NaN if unarmed), and Tilt.pitch and Tilt.roll (NaN for what
@@ -75,6 +75,9 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   span: true,
   militia: true,
   crater: true,
+  shieldHit: true,
+  shatter: true,
+  shieldDown: true,
   repair: true,
 };
 
@@ -239,6 +242,8 @@ export class SimHost {
   private commanderSent = -Infinity;
   /** The burning ground last sent (its version), sent again only when it changes. */
   private fireSent = 0;
+  /** The frost last sent (its version). */
+  private frostSent = 0;
   /** Fast-forwarded since the last frame (see skip). */
   private skipped = false;
   /** The stats need sending (see Frame.stats). */
@@ -442,6 +447,7 @@ export class SimHost {
         commander: ctx.commander.updatedAt !== this.commanderSent ? ctx.commander.state : null,
         god: ctx.god.blessings,
         fire: ctx.fire.version !== this.fireSent ? ctx.fire.snapshot() : null,
+        frost: ctx.frost.version !== this.frostSent ? ctx.frost.snapshot() : null,
       }),
       profile,
       ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed, townFolkLost: this.game.stats.townFolkLost, townAngered: [...this.game.stats.townAngered] } } : {}),
@@ -453,6 +459,7 @@ export class SimHost {
     this.statsDue = false;
     this.commanderSent = ctx.commander.updatedAt;
     this.fireSent = ctx.fire.version;
+    this.frostSent = ctx.frost.version;
     this.destroyed = [];
     this.events = [];
     this.areas = [];
@@ -473,6 +480,7 @@ interface CtxState {
   commander: Game['ctx']['commander']['state'] | null;
   god: GodState;
   fire: number[] | null;
+  frost: number[] | null;
 }
 
 /** The page's side: copies Frames into a view Game (see GameOptions.view). */
@@ -571,6 +579,7 @@ export class SimView {
     if (s.commander) ctx.commander.state = s.commander;
     ctx.god.blessings = s.god;
     if (s.fire) ctx.fire.apply(s.fire);
+    if (s.frost) ctx.frost.apply(s.frost);
     if (frame.routes) this.routes = frame.routes;
     if (frame.stats) {
       const stats = this.game.stats;

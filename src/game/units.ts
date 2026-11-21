@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost';
 
 export interface WeaponDef {
   name: string;
@@ -68,6 +68,32 @@ export interface WeaponDef {
    * blow sounds.
    */
   melee?: MeleeDef;
+  /** Times its damage against an energy shield (see shields.ts): Aegis's lances drain domes fast. */
+  breaker?: number;
+  /**
+   * Lays frost where it lands, this much per hit (Rime; see frost.ts):
+   * enemies on frosted ground slow right down, and the ground goes white.
+   */
+  frost?: number;
+  /** Times its damage against anything standing on its enemies' frost (Rime's shard guns: frozen things shatter). */
+  shatter?: number;
+}
+
+/**
+ * An energy dome (Aegis; see shields.ts): a half sphere round its emitter
+ * that stops direct fire and missiles coming in from outside, soaking them
+ * up until it collapses. Shots from inside go out freely, and lobbed shells
+ * and flame fall straight through it.
+ */
+export interface ShieldDef {
+  radius: number;
+  /** How much it soaks up before it collapses. */
+  hp: number;
+  /** Hit points it builds back per second, once it's gone `rest` seconds without a hit. */
+  regen: number;
+  rest: number;
+  /** Seconds a collapsed dome takes to come back up (at a third of its strength). */
+  downTime: number;
 }
 
 /**
@@ -139,6 +165,10 @@ export interface UnitDef {
   weapon: WeaponDef;
   /** More weapons, each on a mount of its own with its own target and cooldown (see WeaponMountDef). */
   mounts?: WeaponMountDef[];
+  /** An energy dome it carries over itself and the units round it (Aegis; see ShieldDef). */
+  shield?: ShieldDef;
+  /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
+  chill?: { radius: number; rate: number };
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -1337,6 +1367,156 @@ export const UNIT_DEFS = {
     wreckTime: 0,
     siege: false,
     builds: true,
+  },
+  // Aegis: energy domes (see shields.ts).
+  domeTruck: {
+    id: 'domeTruck',
+    name: 'Dome Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'support',
+    model: 'domeTruck',
+    hp: 170,
+    armor: 4,
+    speed: 3,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 4,
+    weapon: weapon({ name: 'Pintle gun', range: 11, damage: 5, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }),
+    // Big enough to cover the tanks it trails behind.
+    shield: { radius: 6, hp: 260, regen: 22, rest: 3, downTime: 10 },
+    wreckTime: 15,
+    siege: false,
+  },
+  lanceWalker: {
+    id: 'lanceWalker',
+    name: 'Lance Walker',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'walker',
+    role: 'frontline',
+    model: 'lanceWalker',
+    hp: 150,
+    armor: 5,
+    speed: 2.9,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 19,
+    turret: true,
+    turretTurnRate: 2.6,
+    // A straight, fast beam that bores through armour and drains enemy domes fast.
+    weapon: weapon({ name: 'Lance', range: 15, damage: 30, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.8, pierce: 0.6, breaker: 2.5 }),
+    wreckTime: 20,
+    siege: false,
+  },
+  citadel: {
+    id: 'citadel',
+    name: 'Citadel',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'citadel',
+    hp: 950,
+    armor: 18,
+    speed: 1.3,
+    turnRate: 0.8,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.1,
+    weapon: weapon({ name: 'Twin lances', range: 18, damage: 50, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.4, pierce: 0.5, breaker: 2.5 }),
+    // A dome over itself and the army round it.
+    shield: { radius: 10, hp: 900, regen: 35, rest: 4, downTime: 14 },
+    wreckTime: 35,
+    siege: true,
+  },
+  // Rime: frost (see frost.ts).
+  cryoTrooper: {
+    id: 'cryoTrooper',
+    name: 'Cryo Trooper',
+    class: 'infantry',
+    category: 'infantry',
+    move: 'foot',
+    role: 'frontline',
+    model: 'cryoTrooper',
+    hp: 40,
+    armor: 1,
+    speed: 1.7,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 13,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ name: 'Cryo sprayer', range: 9, damage: 7, cooldown: 1.4, burst: 3, burstGap: 0.1, projectile: 'frost', speed: 22, splash: 0.8, spread: 0.08, muzzleHeight: 0.4, frost: 1.5 }),
+    wreckTime: 0,
+    siege: false,
+  },
+  freezerTruck: {
+    id: 'freezerTruck',
+    name: 'Freezer Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
+    model: 'freezerTruck',
+    hp: 130,
+    armor: 3,
+    speed: 3.2,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2.5,
+    // Lobs canisters of coolant that burst into a wide white patch: the shard tanks' work is done on it.
+    weapon: weapon({ name: 'Frost mortar', range: 19, minRange: 4, damage: 14, cooldown: 4.2, projectile: 'frost', speed: 16, splash: 2.4, spread: 0.08, arc: true, muzzleHeight: 1.2, frost: 6 }),
+    wreckTime: 15,
+    siege: false,
+  },
+  shardTank: {
+    id: 'shardTank',
+    name: 'Shard Tank',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'shardTank',
+    hp: 220,
+    armor: 6,
+    speed: 2.7,
+    turnRate: 1.7,
+    radius: 1.05,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Shard cannon', range: 15, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.7, spread: 0.05, muzzleHeight: 1, shatter: 1.8, frost: 1.2 }),
+    wreckTime: 25,
+    siege: false,
+  },
+  glacier: {
+    id: 'glacier',
+    name: 'Glacier',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'glacier',
+    hp: 1150,
+    armor: 20,
+    speed: 1.25,
+    turnRate: 0.8,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1,
+    weapon: weapon({ name: 'Shard cannons', range: 18, damage: 44, cooldown: 4, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3, shatter: 1.8, frost: 2 }),
+    // The cold rolls off it: everything round it walks on ice.
+    chill: { radius: 7, rate: 1.2 },
+    wreckTime: 35,
+    siege: true,
   },
 } satisfies Record<string, UnitDef>;
 

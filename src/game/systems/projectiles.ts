@@ -1,9 +1,10 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Building, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
+import { Building, Shield, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { entityHeight, inTrench, UNIT_HIT_SLACK } from '../lineOfFire';
 import * as D from '../../core/dmath';
 import { heatPerShot } from '../fire';
+import { hitDome } from '../shields';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -64,15 +65,26 @@ export function projectileSystem(ctx: SimContext): System {
         const hit = new Set<Entity>();
         const w = p.weapon;
         const by: Hit = { source: p.source, faction: p.faction };
+        // Bursting on an enemy dome that's still up: the dome takes it all (see shields.ts).
+        if (p.dome !== undefined && world.get(p.dome, Shield)?.downUntil === -Infinity) {
+          hitDome(world, ctx, p.dome, w.damage * (w.breaker ?? 1), p.ex, p.ey, p.ez, by);
+          ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: 0 });
+          world.destroy(e);
+          continue;
+        }
         // Direct hit on what the shot was heading for, if it's still where the shot landed. Shots that
         // end on an allied building (direct fire it was in the way of) just spark off it.
         if (p.target !== null && world.has(p.target, Targetable)) {
           const tt = world.req(p.target, Transform);
           // Direct fire stops at the edge of what it hits, so it gets a little more room.
           const r = world.req(p.target, Collider).radius + (w.arc ? 0.4 : UNIT_HIT_SLACK + 0.5);
-          const friendly = ctx.sides.allied(world.req(p.target, Faction).id, p.faction);
+          const victim = world.req(p.target, Faction).id;
+          const friendly = ctx.sides.allied(victim, p.faction);
           if (!friendly && D.sq(tt.x - p.ex) + D.sq(tt.z - p.ez) <= r * r) {
-            applyDamage(world, ctx, p.target, w.damage, by, w.pierce ?? 0);
+            // Shard guns shatter what's frozen: anything standing on its enemies' frost (see frost.ts).
+            const shattered = w.shatter !== undefined && ctx.frost.hostileAt(ctx, tt.x, tt.z, victim);
+            if (shattered) ctx.events.emit('shatter', { x: tt.x, y: p.ey, z: tt.z });
+            applyDamage(world, ctx, p.target, shattered ? w.damage * w.shatter! : w.damage, by, w.pierce ?? 0);
             hit.add(p.target);
           }
         }
@@ -93,12 +105,14 @@ export function projectileSystem(ctx: SimContext): System {
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)) * cover, by);
           });
         }
+        // Cryo shots lay frost where they land (see frost.ts), on land or water; not in the air.
+        if (w.frost && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2) ctx.frost.add(p.ex, p.ez, Math.max(1.6, w.splash), w.frost, p.faction);
         // Flame keeps burning where it lands (see fire.ts); not in the air, or on the water.
         if (p.kind === 'flame' && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) {
           ctx.fire.add(p.ex, p.ez, w.splash, heatPerShot(w), p.faction, p.source);
         }
         // An engineers' bridge it lands on, or bursts by, takes the hit too (see commander/engineers.ts).
-        ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by);
+        ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by, p.kind === 'flame');
         // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them.
         ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });
         ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: w.splash });
