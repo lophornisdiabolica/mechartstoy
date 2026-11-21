@@ -5,8 +5,8 @@ import { Game } from '../game/game';
 /** Most smoke puffs drawn at once. */
 const MOST = 5000;
 
-const DARK = new THREE.Color(0x6e6a74);
-const PALE = new THREE.Color(0xb4b0ba);
+const DARK = new THREE.Color(0x8a8692);
+const PALE = new THREE.Color(0xc4c0ca);
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -43,7 +43,7 @@ export class SmokeClouds {
     this.root.name = 'smoke-clouds';
     // Faceted, like everything else: a low-poly lump, flat-shaded.
     const puff = new THREE.IcosahedronGeometry(SMOKE_CELL * 0.75, 0);
-    this.puffs = new THREE.InstancedMesh(puff, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.2, depthWrite: false, flatShading: true }), MOST);
+    this.puffs = new THREE.InstancedMesh(puff, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.17, depthWrite: false, flatShading: true }), MOST);
     this.puffs.count = 0;
     this.puffs.frustumCulled = false;
     this.puffs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -92,10 +92,10 @@ export class SmokeClouds {
       const thick = Math.min(1, amount / (THICK * 3));
       const size = (0.4 + 0.8 * Math.min(1, amount / THICK)) * (0.85 + hash(k + 3) * 0.3);
       _p.set(x, Math.max(field.surfaceAt(x, z), field.seaLevel) + size * 0.15, z);
-      _e.set(hash(k + 11) * 0.6, roll * 0.2, hash(k + 17) * 0.6);
+      _e.set(hash(k + 11) * 0.25, roll * 0.2, hash(k + 17) * 0.25);
       _q.setFromEuler(_e);
       // Low and wide: a bank lying over the ground, not a cloud standing on it.
-      _s.set(size * 1.35, size * (0.3 + thick * 0.35), size * 1.35);
+      _s.set(size * 1.35, size * (0.22 + thick * 0.18), size * 1.35);
       _m.compose(_p, _q, _s);
       this.puffs.setMatrixAt(q, _m);
       _c.copy(PALE).lerp(DARK, thick);
