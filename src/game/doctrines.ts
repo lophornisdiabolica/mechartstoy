@@ -318,22 +318,23 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   cipher: {
     id: 'cipher',
     name: 'Cipher',
-    blurb: 'Hacking. Hack trucks lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Jammer walkers slow the enemy guns round them. Its uplink mast turns out more and turns vehicles that come at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array on its back.',
+    blurb: 'Hacking. Hack vans lock on to an enemy vehicle and turn it to Cipher\'s side for a few seconds: it stops dead and fights whatever is round it, its old friends included, then comes back to itself and can\'t be turned again for a while. Arc tanks throw lightning that jumps from soldier to soldier, and jammer walkers send out pulses that slow the enemy guns they reach. Its uplink mast turns out more and jams what comes at the base. Infantry and super units can\'t be hacked. Super unit: the Overmind, a walker with a hack array on its back.',
     caps: { infantry: 1, vehicle: 1.1 },
     production: {
       factory: {
         table: [
-          { unit: 'tank', weight: 3, count: 1 },
-          { unit: 'hackTruck', weight: 1.5, count: 1 },
-          { unit: 'jammer', weight: 1.5, count: 1 },
-          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'tank', weight: 2.5, count: 1 },
+          { unit: 'arcTank', weight: 1.5, count: 1 },
+          { unit: 'hackVan', weight: 1.5, count: 1 },
+          { unit: 'jammer', weight: 1.2, count: 1 },
+          { unit: 'flakTank', weight: 0.8, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
       mechbay: { table: [{ unit: 'overmind', weight: 1, count: 1 }] },
     },
     signature: 'uplinkMast',
-    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'hackTruck', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'arcTank', weight: 1, count: 1 }, { unit: 'hackVan', weight: 1, count: 1 }, { unit: 'jammer', weight: 1, count: 1 }],
   },
 };
 

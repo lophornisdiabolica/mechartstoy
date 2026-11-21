@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'arc';
 
 export interface WeaponDef {
   name: string;
@@ -84,6 +84,13 @@ export interface WeaponDef {
    * only aims at vehicles it can turn.
    */
   hack?: number;
+  /**
+   * Lightning that arcs on from what it hits (Cipher's arc tanks): up to
+   * `jumps` more enemies, each the nearest within `reach` of the last one
+   * and not yet struck, each taking `falloff` of the hit before. It clears
+   * infantry packed round a vehicle.
+   */
+  chain?: { jumps: number; reach: number; falloff: number };
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -91,6 +98,8 @@ export interface JamDef {
   radius: number;
   /** How fast enemy weapons in it reload, as a share of their usual rate. */
   pace: number;
+  /** Seconds between its pulses: each one jams what it reaches until the next. */
+  every: number;
 }
 
 /**
@@ -1617,14 +1626,14 @@ export const UNIT_DEFS = {
   },
   // Cipher: hacking. Its hack weapons turn an enemy vehicle to its side for a few seconds
   // (see hacking.ts), and its jammers slow the enemy guns round them.
-  hackTruck: {
-    id: 'hackTruck',
-    name: 'Hack Truck',
+  hackVan: {
+    id: 'hackVan',
+    name: 'Hack Van',
     class: 'vehicle',
     category: 'vehicle',
     move: 'tracked',
     role: 'support',
-    model: 'hackTruck',
+    model: 'hackVan',
     hp: 140,
     armor: 3,
     speed: 3.3,
@@ -1635,8 +1644,29 @@ export const UNIT_DEFS = {
     turretTurnRate: 3,
     // A dish on the bed: it locks on to an enemy vehicle and turns it for a while.
     weapon: weapon({ name: 'Hack uplink', range: 13, damage: 0, cooldown: 10, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 1.5, hack: 6 }),
-    mounts: [{ weapon: weapon({ name: 'Pintle gun', range: 10, damage: 4, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }), mount: 'hackTruck#gun', turnRate: 4 }],
+    mounts: [{ weapon: weapon({ name: 'Pintle gun', range: 10, damage: 4, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }), mount: 'hackVan#gun', turnRate: 4 }],
     wreckTime: 15,
+    siege: false,
+  },
+  // Lightning that jumps from soldier to soldier: what clears the AT troopers round a hacked vehicle.
+  arcTank: {
+    id: 'arcTank',
+    name: 'Arc Tank',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'arcTank',
+    hp: 200,
+    armor: 5,
+    speed: 2.7,
+    turnRate: 1.8,
+    radius: 1.05,
+    sight: 17,
+    turret: true,
+    turretTurnRate: 2.4,
+    weapon: weapon({ name: 'Arc coil', range: 11, damage: 15, cooldown: 1.7, projectile: 'arc', speed: 90, spread: 0.02, muzzleHeight: 1.3, chain: { jumps: 4, reach: 3.5, falloff: 0.8 } }),
+    wreckTime: 20,
     siege: false,
   },
   jammer: {
@@ -1656,8 +1686,8 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 2.6,
     weapon: weapon({ name: 'Twin guns', range: 13, damage: 9, cooldown: 1.4, burst: 2, burstGap: 0.15, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.06, muzzleHeight: 1.7 }),
-    // Static off its mast: enemy guns round it reload slowly.
-    jam: { radius: 9, pace: 0.65 },
+    // Its mast sends out a pulse every few seconds: enemy guns it reaches reload slowly until the next.
+    jam: { radius: 14, pace: 0.6, every: 3 },
     wreckTime: 15,
     siege: false,
   },
@@ -1680,7 +1710,7 @@ export const UNIT_DEFS = {
     weapon: weapon({ name: 'Twin cannons', range: 18, damage: 46, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
     // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
     mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
-    jam: { radius: 10, pace: 0.6 },
+    jam: { radius: 13, pace: 0.6, every: 3 },
     wreckTime: 35,
     siege: true,
   },

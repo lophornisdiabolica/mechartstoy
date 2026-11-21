@@ -765,7 +765,7 @@ registerModel('bld:duelHall', (faction) => {
 });
 
 /** Cipher's signal glow. */
-const CIPHER_GLOW = 0x2ee6c4;
+const CIPHER_GLOW = 0x5fd8c0;
 
 // Cipher: a lattice mast with a dish on top that turns to lock on, beside a signal hut.
 registerModel('bld:uplinkMast', (faction) => {

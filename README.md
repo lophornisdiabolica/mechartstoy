@@ -408,16 +408,19 @@ battle, its exact map via `seed`).
     river or at a crossing it can't reach. Super unit: the Colossus, a
     giant whose hammer fists sweep everything round it and whose rocket
     rack reaches aircraft.
-  - *Cipher:* hacking (`game/hacking.ts`). Hack trucks lock on to an
+  - *Cipher:* hacking (`game/hacking.ts`). Hack vans lock on to an
     enemy vehicle and turn it to Cipher's side for six seconds: it stops
     dead and fights whatever is round it, its old friends included (and
     they it), then comes back to itself and can't be turned again for
     twelve. Kills it makes while turned are Cipher's; if it dies turned, it
     dies as its own side's. Infantry, super units, carriers and engineers
-    can't be hacked. Jammer walkers slow the enemy guns round them to about
-    two thirds of their rate of fire. Its **uplink mast** turns out more and hacks
-    vehicles that come at the base. Super unit: the Overmind, a walker
-    with a hack array on its back.
+    can't be hacked. Arc tanks throw lightning that jumps from one soldier
+    to the next (`WeaponDef.chain`), clearing the AT troopers that crowd a
+    hacked vehicle. Jammer walkers send out a pulse every few seconds, a
+    ring sweeping out to fourteen units: enemy guns it reaches reload at
+    0.6× until the next. Its **uplink mast** turns out more and jams what
+    comes at the base. Super unit: the Overmind, a walker with a hack array
+    on its back.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;
