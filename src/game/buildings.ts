@@ -1,4 +1,4 @@
-import { UnitId, WeaponDef, WeaponMountDef } from './units';
+import { ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -35,6 +35,10 @@ export interface BuildingDef {
   weapon?: WeaponDef;
   /** More weapons on mounts of their own, each with its own target and cooldown (see WeaponMountDef). */
   mounts?: WeaponMountDef[];
+  /** An energy dome over it and what's round it (Aegis; see ShieldDef). */
+  shield?: ShieldDef;
+  /** Keeps the ground round it frozen (Rime; see frost.ts): this much frost every second within the radius. */
+  chill?: { radius: number; rate: number };
   sight?: number;
   turretTurnRate?: number;
   /**
@@ -89,6 +93,25 @@ const towerShell: WeaponDef = {
   muzzleHeight: 2.1,
   targets: 'both',
   pierce: 0.5,
+};
+
+/** A frost tower's roof mortar (Rime): a lighter, slower freezer truck mortar. */
+const frostLobber: WeaponDef = {
+  name: 'Frost mortar',
+  range: 17,
+  minRange: 4,
+  damage: 10,
+  cooldown: 6,
+  burst: 1,
+  burstGap: 0.1,
+  projectile: 'frost',
+  speed: 16,
+  splash: 2.2,
+  spread: 0.08,
+  arc: true,
+  muzzleHeight: 2.5,
+  targets: 'ground',
+  frost: 4,
 };
 
 const towerCannon: WeaponDef = {
@@ -319,6 +342,34 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
+  // Aegis: turns out dome trucks and lance walkers, under a big dome of its own over the base.
+  shieldWorks: {
+    id: 'shieldWorks',
+    name: 'Shield Works',
+    model: 'bld:shieldWorks',
+    hp: 800,
+    armor: 7,
+    radius: 2.6,
+    height: 3,
+    production: { table: [{ unit: 'lanceWalker', weight: 1, count: 1 }, { unit: 'domeTruck', weight: 0.6, count: 1 }], interval: 34 },
+    shield: { radius: 13, hp: 1400, regen: 40, rest: 5, downTime: 20 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  // Rime: turns out freezer trucks and shard tanks, and keeps the ground round it frozen.
+  cryoPlant: {
+    id: 'cryoPlant',
+    name: 'Cryo Plant',
+    model: 'bld:cryoPlant',
+    hp: 750,
+    armor: 7,
+    radius: 2.6,
+    height: 3.2,
+    production: { table: [{ unit: 'shardTank', weight: 1, count: 1 }, { unit: 'freezerTruck', weight: 1, count: 1 }], interval: 32 },
+    chill: { radius: 12, rate: 1 },
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',
@@ -343,6 +394,24 @@ export const BUILDING_DEFS = {
     radius: 0.9,
     height: 2.2,
     weapon: towerCannon,
+    sight: 16,
+    turretTurnRate: 2.5,
+    lasts: 900,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 10,
+  },
+  // Rime's field tower: a field tower with a small frost mortar on its roof, lobbing frost onto what comes at the line.
+  frostTower: {
+    id: 'frostTower',
+    name: 'Frost Tower',
+    model: 'bld:frostTower',
+    hp: 400,
+    armor: 8,
+    radius: 0.9,
+    height: 2.2,
+    weapon: towerCannon,
+    mounts: [{ weapon: frostLobber, mount: 'frostTower#mortar', turnRate: 1.5 }],
     sight: 16,
     turretTurnRate: 2.5,
     lasts: 900,

@@ -5,6 +5,7 @@ import {
   Ammo,
   Armed,
   Arsenal,
+  Shield,
   Falling,
   Building,
   Collider,
@@ -75,7 +76,7 @@ export function deathSystem(ctx: SimContext): System {
             const speed = d.fixedWing ? d.speed * 0.8 : d.speed * 0.45;
             world.add(e, Falling, { vx: D.cos(t.heading) * speed, vz: -D.sin(t.heading) * speed, spin: d.fixedWing ? 0 : ((e % 2) * 2 - 1) * (d.radius > 2 ? 0.3 : 2.5), damage: 15 + d.hp * 0.08, radius: 1.5 + d.radius, ...(crater ? { crater } : {}) });
           }
-          for (const c of [Unit, Health, Armed, Arsenal, Ai, Mover, Collider, Targetable, Ammo]) world.remove(e, c);
+          for (const c of [Unit, Health, Armed, Arsenal, Shield, Ai, Mover, Collider, Targetable, Ammo]) world.remove(e, c);
           world.add(e, Wreck, { removeAt: world.time + unit.def.wreckTime });
           continue;
         }

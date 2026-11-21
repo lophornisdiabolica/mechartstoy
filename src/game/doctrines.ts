@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -250,6 +250,51 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     signature: 'fuelDepot',
     waves: [rifleSquad(4, 3), { unit: 'flameTrooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'cinderWalker', weight: 1.5, count: 1 }, { unit: 'scorchBuggy', weight: 1.5, count: 2 }],
   },
+  aegis: {
+    id: 'aegis',
+    name: 'Aegis',
+    blurb: 'Energy domes. Dome trucks throw a shield over the tanks they follow, lance walkers bore through armour and drain enemy domes, and its shield works keeps a big dome over the base. Shots from inside go out, but shells lobbed over the top and flame fall straight through. Super unit: the Citadel, a walker under a dome of its own.',
+    caps: { infantry: 0.9, vehicle: 1.2 },
+    production: {
+      factory: {
+        table: [
+          { unit: 'tank', weight: 3, count: 1 },
+          { unit: 'lanceWalker', weight: 2, count: 1 },
+          { unit: 'domeTruck', weight: 1.3, count: 1 },
+          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'citadel', weight: 1, count: 1 }] },
+    },
+    signature: 'shieldWorks',
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'lanceWalker', weight: 2, count: 1 }, { unit: 'domeTruck', weight: 1, count: 1 }],
+  },
+  rime: {
+    id: 'rime',
+    name: 'Rime',
+    blurb: 'Frost. Cryo troopers and freezer trucks lay frost that slows its enemies right down (water freezes too, so boats crawl), and shard tanks shatter whatever stands on it. Fire melts the frost. Its cryo plant keeps the ground round the base frozen. Super unit: the Glacier, a walker that freezes the ground it walks on.',
+    caps: { infantry: 0.9, vehicle: 1.35 },
+    production: {
+      barracks: {
+        table: [
+          rifleSquad(4, 2),
+          { unit: 'cryoTrooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } },
+        ],
+      },
+      factory: {
+        table: [
+          { unit: 'shardTank', weight: 3, count: 1 },
+          { unit: 'freezerTruck', weight: 1.8, count: 1 },
+          { unit: 'tank', weight: 1.2, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'glacier', weight: 1, count: 1 }] },
+    },
+    signature: 'cryoPlant',
+    waves: [rifleSquad(4, 3), { unit: 'cryoTrooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'shardTank', weight: 2, count: 1 }, { unit: 'freezerTruck', weight: 1.5, count: 1 }],
+  },
 };
 
 /**
@@ -267,7 +312,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];
@@ -283,7 +328,9 @@ export function canonicalDoctrine(id: DoctrineId): DoctrineId {
 /**
  * Each faction slot's default doctrine, in faction order (see FACTIONS):
  * Cobalt Armour, Crimson Raiders, Ashen Legion, Gilded Bastion, Violet
- * Talon, Ivory Skyline, Teal Tidewater, Ember Firestorm.
+ * Talon, Ivory Skyline, Teal Tidewater, Ember Firestorm (and, past the
+ * eight faction slots a battle has, Verdant Aegis and Frost Rime, who wear
+ * their own colours when re-rolled or picked).
  */
 export function defaultDoctrine(i: number): DoctrineId {
   return DOCTRINE_IDS[i % DOCTRINE_IDS.length];

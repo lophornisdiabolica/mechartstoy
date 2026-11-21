@@ -305,7 +305,8 @@ battle, its exact map via `seed`).
 - **Doctrines:** what kind of army a side fields, picked freely per side
   (each faction slot has a default: Cobalt Armour, Crimson Raiders, Ashen
   Legion, Gilded Bastion, Violet Talon, Ivory Skyline, Teal Tidewater,
-  Ember Firestorm). Every doctrine fields rifle squads with AT troopers,
+  Ember Firestorm; Aegis and Rime have no slot of their own, and wear
+  Verdant Protectorate and Celeste Dominion colours). Every doctrine fields rifle squads with AT troopers,
   the Scout Copter and a heavy unit.
   - *Armour:* tanks, striders and flak tanks from the factory, the Lancer
     heavy tank from its **tank depot**, fewer infantry (0.8× cap) and more
@@ -376,6 +377,26 @@ battle, its exact map via `seed`).
     which burns straight through armour. Every flame unit carries fuel:
     badly hurt, it breaks off and drives at the nearest enemy, and it
     explodes when destroyed. Super unit: the Inferno Walker.
+  - *Aegis:* energy domes (`game/shields.ts`). Tanks, lance walkers, dome
+    trucks and flak tanks from the factory; a **shield works** turns out
+    more and keeps a big dome over the base. A dome is a sphere round
+    its emitter, reaching down to the ground on a slope: shots and missiles from outside burst on its skin and it
+    soaks up their damage until it collapses, then comes back after a
+    while at a third of its strength. Shots from inside go out freely, and
+    lobbed shells and flame fall straight through, so artillery and
+    flamers crack an Aegis push. Dome trucks trail the tanks they cover;
+    lance walkers' beams pierce armour and drain enemy domes fast. Super
+    unit: the Citadel, a walker under a dome of its own.
+  - *Rime:* frost (`game/frost.ts`). Cryo troopers in the squads, shard
+    tanks and freezer trucks (which lob frost canisters) from the factory,
+    and a **cryo plant** that keeps the ground round the base frozen.
+    Frost turns the ground white and slows enemies of whoever laid it to
+    as little as half speed, on water too; it thaws on its own and fire
+    melts it at once. Shard guns frost a little of what they hit, and do
+    1.8× to anything standing on frost, so follow-up shots shatter it.
+    Its engineers throw ice bridges: quicker to put up, more of them, but
+    they melt away sooner and flame melts them fast. Super unit: the
+    Glacier, a walker that freezes the ground round it.
   - Walkers (on any side) step over walls, and don't waste shots on them.
   **Carriers** (`systems/carriers.ts`) bring a squad with them and drop it
   off when an enemy they're after is close or they reach their objective;

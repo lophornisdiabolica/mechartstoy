@@ -19,6 +19,7 @@ import {
   NEUTRAL,
   Producer,
   Renderable,
+  Shield,
   Targetable,
   Tilt,
   Transform,
@@ -27,6 +28,7 @@ import {
 import { SimContext } from './context';
 import { MoveClass, MOVE_RULES } from '../world/moveClasses';
 import { mountOf } from './mounts';
+import { makeShield } from './shields';
 import { UnitDef, WeaponDef, WeaponMountDef } from './units';
 import * as D from '../core/dmath';
 
@@ -175,6 +177,7 @@ export function spawnUnit(world: World, ctx: SimContext, def: UnitDef, faction: 
     escort: null,
   });
   if (def.carries) world.add(e, Carrier, { loaded: true, reloadAt: 0 });
+  if (def.shield) world.add(e, Shield, makeShield(def.shield));
   if (def.ammo) world.add(e, Ammo, { left: def.ammo, max: def.ammo, rearming: false, readyAt: null });
   ctx.events.emit('spawned', { entity: e, def, faction });
   return e;
@@ -208,6 +211,7 @@ export function spawnBuilding(
     const arsenal = arsenalFor(ctx, def.mounts, def.sight ?? def.weapon.range, def.turretTurnRate ?? 2, 0.5, heading);
     if (arsenal) world.add(e, Arsenal, arsenal);
   }
+  if (def.shield && faction !== NEUTRAL) world.add(e, Shield, makeShield(def.shield));
   const production = faction !== NEUTRAL ? productionFor(ctx, def, faction) : undefined;
   if (production) {
     world.add(e, Producer, {

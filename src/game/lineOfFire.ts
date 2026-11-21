@@ -4,6 +4,7 @@ import { HullPose, Mount, mountOf, muzzleWorld, pivotHeight, toHull, hullMatrix 
 import { SimContext } from './context';
 import { UnitDef } from './units';
 import * as D from '../core/dmath';
+import { domeInTheWay } from './shields';
 
 /**
  * Line of fire: direct-fire shots (bullets and shells) travel in a straight
@@ -26,8 +27,10 @@ export interface Trace {
   y: number;
   z: number;
   hit: Entity | null;
-  /** What stopped it: an entity (unit or building), a tree in a dense forest (see woods.ts), the ground, or nothing within reach. */
-  stoppedBy: 'unit' | 'building' | 'tree' | 'ground' | 'nothing';
+  /** What stopped it: an entity (unit or building), an enemy energy dome (see shields.ts), a tree in a dense forest (see woods.ts), the ground, or nothing within reach. */
+  stoppedBy: 'unit' | 'building' | 'shield' | 'tree' | 'ground' | 'nothing';
+  /** The dome's emitter, when a dome stopped it. */
+  dome?: Entity;
 }
 
 /** Extra width shots get against units, so a near miss still counts (matches the old direct-hit test). */
@@ -108,12 +111,25 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
     }
   });
 
+  // Enemy energy domes it would come in through from outside (see shields.ts).
+  let dome: Entity | undefined;
+  if (ctx.domes.list.length > 0) {
+    const shield = domeInTheWay(ctx, from, ux, uz, slope, best, faction);
+    if (shield) {
+      best = shield.s;
+      hit = null;
+      kind = 'shield';
+      dome = shield.dome.entity;
+    }
+  }
+
   // Dense forest's trees.
   const tree = ctx.field.woods.firstHit(from.x, from.z, ux, uz, best, yAt);
   if (tree !== null && tree < best) {
     best = tree;
     hit = null;
     kind = 'tree';
+    dome = undefined;
   }
 
   // The ground: walk the path until it dips under the surface (or water).
@@ -124,16 +140,20 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
       best = s;
       hit = null;
       kind = 'nothing';
+      dome = undefined;
       break;
     }
     if (yAt(s) < ctx.field.surfaceAt(x, z) - GROUND_SLACK) {
       best = s;
       hit = null;
       kind = 'ground';
+      dome = undefined;
       break;
     }
   }
-  return { x: from.x + ux * best, y: yAt(best), z: from.z + uz * best, hit, stoppedBy: kind };
+  const out: Trace = { x: from.x + ux * best, y: yAt(best), z: from.z + uz * best, hit, stoppedBy: kind };
+  if (dome !== undefined) out.dome = dome;
+  return out;
 }
 
 /** How far infantry in a trench stand up to fire over its berm (see inTrench). */
@@ -168,7 +188,8 @@ export function clearShot(world: World, ctx: SimContext, from: Point3, target: E
   const to = aimPoint(world, target);
   const flat = D.hypot(to.x - from.x, to.z - from.z);
   const trace = traceShot(world, ctx, from, to, flat, shooter, faction, target, pad);
-  return trace.hit === target || trace.stoppedBy === 'unit' || trace.stoppedBy === 'nothing';
+  // A dome in the way counts as clear: shooting it is how it comes down.
+  return trace.hit === target || trace.stoppedBy === 'unit' || trace.stoppedBy === 'shield' || trace.stoppedBy === 'nothing';
 }
 
 /** How an entity's hull sits now: level unless it's a vehicle lying along a slope (see Tilt). */

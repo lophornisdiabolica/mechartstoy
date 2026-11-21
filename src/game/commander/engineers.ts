@@ -110,6 +110,11 @@ export const ARRAYS_MOST = 2;
 const ARRAY_BACK = 5;
 const ARRAY_OUT = 0.38;
 
+/** A field tower of any doctrine's kind (Rime's frost tower too): they share the tower count. */
+function isFieldTower(id: string): boolean {
+  return id === 'fieldTower' || id === 'frostTower';
+}
+
 /**
  * Which doctrines get round a choke point better than their enemies, and
  * how: 'steep' (walkers that climb the slopes either side of a valley),
@@ -206,11 +211,34 @@ const SPAN_BUILD = 10;
 const SPAN_HP = 600;
 const SPAN_ARMOR = 6;
 const SPAN_LASTS = 600;
+/**
+ * Rime's engineers freeze the water instead (see iceBridges): ice bridges go
+ * up in this share of the time, a side can have this many more standing (and
+ * one more of them shortcuts), they melt away after ICE_LASTS, and flame
+ * does this many times its damage to them.
+ */
+const ICE_BUILD = 0.4;
+const ICE_MORE = 2;
+const ICE_LASTS = 240;
+const ICE_FLAME = 3;
 /** A bridge goes up only if it cuts the land way to the enemy to this share of what it was, and no nearer another bridge than this. */
 const SPAN_SHORTER = 0.8;
 const SPAN_APART = 10;
 /** Most canal stretches looked at for a bridge per update (spread evenly along what's dug). */
 const SPAN_CANDIDATES = 8;
+
+/** Whether a side's engineers throw ice bridges rather than timber ones (Rime). */
+function iceBridges(ctx: SimContext, side: number): boolean {
+  return canonicalDoctrine(doctrineOf(ctx, side).id) === 'rime';
+}
+
+/** Most engineers' bridges a side can have standing, and most of those as shortcuts. */
+function spansMost(ctx: SimContext, side: number): number {
+  return SPANS_MOST + (iceBridges(ctx, side) ? ICE_MORE : 0);
+}
+function shortcutsMost(ctx: SimContext, side: number): number {
+  return SHORTCUTS_MOST + (iceBridges(ctx, side) ? 1 : 0);
+}
 
 /** Seconds of an engineer's work per pulse of digging, and how far one pulse moves the ground. */
 const DIG_PULSE = 1;
@@ -506,7 +534,7 @@ export class Engineers {
       if (f >= 0 && f < n && def.id === 'hq') hq[f] = true;
       if (f >= 0 && f < n && def.id === 'helipad') this.pads[f]++;
       if (f < 0 || f >= n || !def.lasts) continue;
-      if (def.id === 'fieldTower') this.towers[f]++;
+      if (isFieldTower(def.id)) this.towers[f]++;
       else if (def.id === 'commsArray') this.arrays[f]++;
       else if (def.id === 'shoreBattery') this.batteries[f]++;
       else this.walls[f]++;
@@ -578,7 +606,7 @@ export class Engineers {
     const add = (job: BuildJob | null) => {
       if (!job) return;
       const id = job.def.id;
-      if (id === 'fieldTower' ? towers-- > 0 : id === 'commsArray' ? arrays-- > 0 : walls-- > 0) out.push(job);
+      if (isFieldTower(id) ? towers-- > 0 : id === 'commsArray' ? arrays-- > 0 : walls-- > 0) out.push(job);
     };
     // Bastion's first comms array goes out along the way to the nearest enemy, past the base mast's reach.
     if (doctrine === 'bastion') add(this.approachArray(world, ctx, side));
@@ -599,7 +627,9 @@ export class Engineers {
       if (doctrine === 'legion') out.push(...this.earthworkJobs(world, ctx, side, site));
       // A field tower just behind the middle of the line (further back behind a trench, clear of it).
       const back = doctrine === 'legion' ? LEGION_TOWER_BACK : TOWER_BACK;
-      add(this.buildAt(world, ctx, side, ctx.buildings.fieldTower, site.x - site.dx * back, site.z - site.dz * back, heading, site.dx, site.dz));
+      // Rime's have a frost mortar on the roof.
+      const tower = doctrine === 'rime' ? ctx.buildings.frostTower : ctx.buildings.fieldTower;
+      add(this.buildAt(world, ctx, side, tower, site.x - site.dx * back, site.z - site.dz * back, heading, site.dx, site.dz));
       // Bastion: a comms array behind lines out at the front.
       if (doctrine === 'bastion' && site.kind !== 'rally') {
         add(this.buildAt(world, ctx, side, ctx.buildings.commsArray, site.x - site.dx * ARRAY_BACK + site.dz * 3, site.z - site.dz * ARRAY_BACK - site.dx * 3, heading, site.dx, site.dz));
@@ -1174,7 +1204,7 @@ export class Engineers {
    * end toward home.
    */
   private bridgeJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
-    if (this.spansOf(side) >= SPANS_MOST) return null;
+    if (this.spansOf(side) >= spansMost(ctx, side)) return null;
     const { field, sides, lanes } = ctx;
     const canals = this.works.filter((w) => w.kind === 'canal' && w.done && sides.hostile(side, w.side));
     if (canals.length === 0) return null;
@@ -1220,7 +1250,7 @@ export class Engineers {
    * doesn't hold, much shorter, even out past the front.
    */
   private shortcutJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
-    if (!ctx.settings.armies.shortcuts || this.spansOf(side) >= SPANS_MOST || this.shortcutsOf(side) >= SHORTCUTS_MOST) return null;
+    if (!ctx.settings.armies.shortcuts || this.spansOf(side) >= spansMost(ctx, side) || this.shortcutsOf(side) >= shortcutsMost(ctx, side)) return null;
     const enemy = this.nearestEnemy(ctx, side);
     if (enemy === null) return null;
     const pick = this.shortcuts.pick(world, ctx, side, enemy);
@@ -1349,7 +1379,7 @@ export class Engineers {
 
   /** A timber bridge over a gap with water in it, while it's filled in, if it's short enough and there's a bridge to spare. */
   private gapBridge(world: World, ctx: SimContext, side: number, gap: Gap): BridgeJob | null {
-    if (!gap.water || this.spansOf(side) >= SPANS_MOST) return null;
+    if (!gap.water || this.spansOf(side) >= spansMost(ctx, side)) return null;
     // The one already going up, while the gap's still there.
     const going = this.gapSpans[side];
     if (going && gap.points.some((p) => D.hypot(p.x - going.x, p.z - going.z) < 6) && !ctx.field.nearBridge(going.x, going.z, SPAN_APART)) return going;
@@ -1424,7 +1454,7 @@ export class Engineers {
    * A shot landed at a point: an engineers' bridge it's on, or bursts by, of
    * a side hostile to the shooter's takes the hit (see projectiles.ts).
    */
-  blast(world: World, ctx: SimContext, x: number, y: number, z: number, damage: number, splash: number, by: Hit): void {
+  blast(world: World, ctx: SimContext, x: number, y: number, z: number, damage: number, splash: number, by: Hit, flame = false): void {
     if (this.spans.length === 0) return;
     for (const span of this.spans) {
       if (!ctx.sides.hostile(span.side, by.faction)) continue;
@@ -1432,7 +1462,9 @@ export class Engineers {
       if (!b || b.gone) continue;
       const off = distanceToSegment(x, z, { x: b.ax, z: b.az }, { x: b.bx, z: b.bz });
       if (off > b.width / 2 + splash || y > b.level + 2 + splash) continue;
-      span.hp -= damageThrough(damage * (off <= b.width / 2 ? 1 : 0.5), SPAN_ARMOR);
+      // Flame melts an ice bridge fast.
+      const melt = flame && b.ice ? ICE_FLAME : 1;
+      span.hp -= damageThrough(damage * melt * (off <= b.width / 2 ? 1 : 0.5), SPAN_ARMOR);
       if (span.hp <= 0) this.collapse(world, ctx, span, by);
     }
     this.spans = this.spans.filter((s) => s.hp > 0);
@@ -1571,13 +1603,14 @@ export class Engineers {
         const key = `${Math.round(job.x)},${Math.round(job.z)}`;
         const work = (this.spanWork.get(key) ?? 0) + dt;
         this.spanWork.set(key, work);
-        if (work < SPAN_BUILD) continue;
+        const ice = iceBridges(ctx, side);
+        if (work < SPAN_BUILD * (ice ? ICE_BUILD : 1)) continue;
         this.spanWork.delete(key);
         this.jobs.delete(e);
-        if (this.spansOf(side) >= SPANS_MOST || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
+        if (this.spansOf(side) >= spansMost(ctx, side) || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
         if (job.shortcut) this.shortcuts.drop(side);
-        if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, { builtBy: side })) {
-          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + SPAN_LASTS, shortcut: job.shortcut });
+        if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, ice ? { builtBy: side, ice } : { builtBy: side })) {
+          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + (ice ? ICE_LASTS : SPAN_LASTS), shortcut: job.shortcut });
           ctx.events.emit('span', { faction: side, x: job.x, z: job.z, down: false });
         }
         this.open[side] = Math.max(0, this.open[side] - 1);
@@ -1598,7 +1631,7 @@ export class Engineers {
       this.jobs.delete(e);
       const id = job.def.id;
       const full =
-        id === 'fieldTower'
+        isFieldTower(id)
           ? this.towers[side] >= TOWERS_MOST
           : id === 'commsArray'
             ? this.arrays[side] >= ARRAYS_MOST
@@ -1612,7 +1645,7 @@ export class Engineers {
       if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
-      if (id === 'fieldTower') this.towers[side]++;
+      if (isFieldTower(id)) this.towers[side]++;
       else if (id === 'commsArray') this.arrays[side]++;
       else if (id === 'helipad') this.pads[side]++;
       else if (id === 'shoreBattery') this.batteries[side]++;

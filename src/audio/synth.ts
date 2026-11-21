@@ -14,10 +14,14 @@
 export type SoundId =
   | 'rifle'
   | 'flame'
+  | 'zap'
+  | 'hiss'
   | 'cannon'
   | 'missile'
   | 'launch'
   | 'thud'
+  | 'shatter'
+  | 'shieldHit'
   | 'blast'
   | 'wreck'
   | 'collapse'
@@ -417,6 +421,40 @@ const SOUNDS: Record<SoundId, Render> = {
       mix(out, knock, 0.7 - k * 0.1, at);
     }
     return tail(normalize(lowpass(out, rate, 1800)), rate);
+  },
+  // Aegis's lances: a bright electric crack that falls away into a buzzing whine.
+  zap: (rate, rnd, v) => {
+    const n = Math.round(0.45 * rate);
+    const tone = envelope(sweep(n, rate, 1700 + v * 90, 240), rate, 0.001, 0.12);
+    const buzz = envelope(sweep(n, rate, 3400 + v * 150, 480), rate, 0.001, 0.07);
+    for (let i = 0; i < n; i++) buzz[i] = Math.sign(buzz[i]) * Math.min(1, Math.abs(buzz[i]) * 3) * Math.abs(tone[i]);
+    const crack = envelope(highpass(white(n, rnd), rate, 2500), rate, 0.0003, 0.008);
+    return tail(normalize(mix(mix(tone, buzz, 0.25), crack, 0.5)), rate);
+  },
+  // Rime's sprayers and frost canisters: a cold hiss of venting gas.
+  hiss: (rate, rnd, v) => {
+    const n = Math.round(0.6 * rate);
+    const gas = highpass(lowpass(white(n, rnd), rate, 6500 + v * 300), rate, 1800);
+    for (let i = 0; i < n; i++) gas[i] *= Math.min(1, i / (0.02 * rate)) * Math.pow(1 - i / n, 1.6);
+    return tail(normalize(gas), rate);
+  },
+  // Frozen things shattering: a glassy crack and a few high pings of falling ice.
+  shatter: (rate, rnd) => {
+    const n = Math.round(0.7 * rate);
+    const out = envelope(highpass(white(n, rnd), rate, 3000), rate, 0.0003, 0.02);
+    for (let k = 0; k < 5; k++) {
+      const at = Math.round((0.01 + (rnd() * 0.5 + 0.5) * 0.25) * rate);
+      const f = 2200 + (rnd() * 0.5 + 0.5) * 3000;
+      mix(out, envelope(sweep(n - at, rate, f, f * 0.97), rate, 0.0005, 0.05), 0.35, at);
+    }
+    return tail(normalize(out), rate);
+  },
+  // A shot bursting on an energy dome: a soft electric ping with a fizz.
+  shieldHit: (rate, rnd, v) => {
+    const n = Math.round(0.5 * rate);
+    const ping = envelope(sweep(n, rate, 900 + v * 60, 620), rate, 0.002, 0.14);
+    const fizz = envelope(bandpass(white(n, rnd), rate, 3200, 2), rate, 0.002, 0.08);
+    return tail(normalize(mix(ping, normalize(fizz), 0.4)), rate);
   },
   // Engineers digging: a dry scrape and spill of earth.
   dig: (rate, rnd, v) => {

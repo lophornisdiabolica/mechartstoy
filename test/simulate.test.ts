@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DOCTRINE_IDS } from '../src/game/doctrines';
 import {
   battlePlans,
   BattleResult,
@@ -86,10 +87,11 @@ describe('balance runs', () => {
   });
 
   it('doctrine plans give every side a doctrine, and doctrine results add up', () => {
-    // Eight doctrines: an 8-level array has 64 rows.
+    // Every pairing of doctrines once (ten doctrines: the 11-level array without the rows that name an eleventh).
+    const n = DOCTRINE_IDS.length;
     const plans = doctrinePlans(2);
-    expect(plans.length).toBe(64);
-    expect(new Set(plans).size).toBe(64);
+    expect(plans.length).toBe(n * n);
+    expect(new Set(plans).size).toBe(n * n);
     const s = scenarioSettings(SCENARIOS[0], 1, plans[5]);
     expect(s.factions.map((f) => f.doctrine)).toEqual(plans[5].split('&').map((p) => p.split('=')[1]));
 
@@ -162,26 +164,27 @@ describe('balance runs', () => {
   });
 
   it('map types are another column of the doctrine array', () => {
-    const plans = battlePlans(2, 64, { doctrines: true, maps: ['medium', 'wet', 'dry', 'hilly'], set: 'water=0.3' });
-    expect(plans.length).toBe(64);
+    const n = DOCTRINE_IDS.length;
+    const plans = battlePlans(2, n * n, { doctrines: true, maps: ['medium', 'wet', 'dry', 'hilly'], set: 'water=0.3' });
+    expect(plans.length).toBe(n * n);
     // The doctrine pairs are the same as without map types, so runs stay comparable.
     expect(plans.map((p) => p.set.split('&').filter((x) => x.startsWith('doc')).join('&'))).toEqual(doctrinePlans(2));
-    // Every doctrine meets every map type equally often, on each side.
+    // Every doctrine meets every map type as evenly as the numbers allow (within one), on each side.
     for (const side of [1, 2]) {
       const seen = new Map<string, number>();
       for (const p of plans) {
         const doc = new URLSearchParams(p.set).get(`doc${side}`);
         seen.set(`${doc}|${p.map}`, (seen.get(`${doc}|${p.map}`) ?? 0) + 1);
       }
-      expect(seen.size).toBe(8 * 4);
-      expect(new Set(seen.values())).toEqual(new Set([2]));
+      expect(seen.size).toBe(n * 4);
+      expect(Math.max(...seen.values()) - Math.min(...seen.values())).toBeLessThanOrEqual(1);
     }
     // The map type's settings win over --set's (the first value of a setting counts).
     const wet = plans.find((p) => p.map === 'wet')!;
     expect(scenarioSettings(SCENARIOS[0], 1, wet.set).map.water).toBe(1);
     expect(scenarioSettings(SCENARIOS[0], 1, plans.find((p) => p.map === 'medium')!.set).map.water).toBe(0.3);
     // Crossed, every battle is played on every map type; without doctrines, battles take turns.
-    expect(battlePlans(2, 64, { doctrines: true, maps: ['wet', 'dry'], cross: true }).length).toBe(128);
+    expect(battlePlans(2, n * n, { doctrines: true, maps: ['wet', 'dry'], cross: true }).length).toBe(2 * n * n);
     expect(battlePlans(2, 6, { maps: ['wet', 'dry', 'flat:hills=0'] }).map((p) => p.map)).toEqual(['wet', 'dry', 'flat', 'wet', 'dry', 'flat']);
     expect(() => battlePlans(2, 4, { maps: ['swamp'] })).toThrow();
   });

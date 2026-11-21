@@ -41,6 +41,8 @@ import { Commander, commanderSystem } from './commander/commander';
 import { engineerSystem } from './commander/engineers';
 import { Divine, godSystem, Power, powerSpot } from './god';
 import { FireField, fireSystem } from './fire';
+import { Domes, shieldSystem } from './shields';
+import { FrostField, frostSystem } from './frost';
 
 export type { GameEvents, Outcome } from './context';
 
@@ -133,6 +135,8 @@ export class Game {
       commander: new Commander({ field: this.field, navs }, settings.factions.length),
       god: new Divine(),
       fire: new FireField(this.field),
+      domes: new Domes(),
+      frost: new FrostField(this.field),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
@@ -159,11 +163,13 @@ export class Game {
       laneKeepSystem(ctx),
       groundFollowSystem(this.field, ctx),
       tiltSystem(ctx),
+      shieldSystem(ctx),
       weaponSystem(ctx),
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
       godSystem(ctx),
       projectileSystem(ctx),
       fireSystem(ctx),
+      frostSystem(ctx),
       deathSystem(ctx),
       wreckSystem(ctx),
       scrapSystem(ctx),

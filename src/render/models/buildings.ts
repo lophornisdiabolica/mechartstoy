@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { barrelPivot, box, cylinder, factionColors, gableRoof, glowBox, mounted, registerModel, setRig } from '../models';
+import { barrelPivot, box, cylinder, factionColors, gableRoof, getRig, glowBox, mounted, registerModel, setRig } from '../models';
+import { mountOf } from '../../game/mounts';
 import { TownStyle } from '../../world/biomes';
 
 /**
@@ -13,6 +14,8 @@ const CONCRETE = 0xb9b4a8;
 const WALLS = [0xe8e0d0, 0xd9cfbd, 0xf0ece4, 0xcfc6b4];
 const CIVIC_ROOFS = [0xb5654a, 0x8c4a3a, 0x6d7b86, 0x5d6b5a];
 const WINDOW = 0x40525e;
+/** Rime's pale ice. */
+const ICE = 0xcfe9f5;
 
 const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
@@ -224,7 +227,10 @@ registerModel('bld:barracksBlock', (faction) => {
   return g;
 });
 
-registerModel('bld:tower', (faction) => {
+registerModel('bld:tower', (faction) => guardTower(faction));
+
+/** A guard tower: a concrete drum with a twin-gun turret on top. */
+function guardTower(faction: number): THREE.Object3D {
   const { primary, secondary } = factionColors(faction);
   const g = new THREE.Group();
   g.add(cylinder(0.75, 0.9, 1.6, 8, CONCRETE, 0, 0.8, 0));
@@ -236,6 +242,27 @@ registerModel('bld:tower', (faction) => {
   for (const side of [-1, 1]) guns.add(box(1.0, 0.12, 0.12, DARK, 0.5, 0, side * 0.15));
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:tower', g, turret, [guns]) });
+}
+
+// Rime's field tower: a guard tower with a little frost mortar on its roof, turning on its own.
+registerModel('bld:frostTower', (faction) => {
+  const g = guardTower(faction);
+  const rig = getRig(g)!;
+  const mount = mountOf('frostTower#mortar')!;
+  const t = new THREE.Group();
+  t.position.set(...mount.turret);
+  t.add(cylinder(0.2, 0.24, 0.1, 8, METAL, 0, 0.05, 0));
+  // A cheek either side and a pin through them that the mortar tips on.
+  for (const z of [-0.12, 0.12]) t.add(box(0.14, 0.2, 0.03, METAL, 0, 0.17, z));
+  const pin = cylinder(0.04, 0.04, 0.28, 6, DARK, 0, 0.2, 0);
+  pin.rotation.x = Math.PI / 2;
+  t.add(pin);
+  const tube = barrelPivot('frostTower#mortar', t);
+  tube.add(box(0.6, 0.18, 0.18, DARK, 0.15, 0, 0));
+  tube.add(box(0.3, 0.2, 0.2, ICE, 0.1, 0, 0)); // coolant sleeve
+  mounted('frostTower#mortar', g, t, [tube]);
+  g.add(t);
+  return setRig(g, { ...rig, mounts: [{ turret: t, barrels: [tube] }] });
 });
 
 /** An outpost's post: a small hut on a round pad, with a radio mast flying its holder's flag. */
@@ -709,5 +736,40 @@ registerModel('rubble', () => {
   const wall = box(0.9, 0.5, 0.12, pick(WALLS), 0.2, 0.25, -0.3);
   wall.rotation.y = Math.random() * Math.PI;
   g.add(wall);
+  return g;
+});
+
+// Aegis: a hall with a tall dome emitter on its roof.
+registerModel('bld:shieldWorks', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(3.6, 2.2, 3.4, WALLS[3], 0.2, 1.35, 0));
+  g.add(box(3.7, 0.25, 3.5, primary, 0.2, 2.5, 0));
+  g.add(box(0.06, 1.2, 1.4, DARK, 2.01, 0.85, 0)); // door
+  g.add(cylinder(0.7, 0.95, 0.5, 10, secondary, 0, 2.85, 0));
+  g.add(cylinder(0.18, 0.18, 1.2, 6, METAL, 0, 3.6, 0));
+  const orb = glowBox(0.6, 0.6, 0.6, 0x9fe3ff);
+  orb.position.set(0, 4.4, 0);
+  g.add(orb);
+  for (const z of [-1.3, 1.3]) g.add(box(0.5, 0.5, 0.5, 0x9fe3ff, -1.9, 0.5, z)); // capacitor cells
+  return g;
+});
+
+// Rime: cooling towers and a coolant tank, frosted over.
+registerModel('bld:cryoPlant', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  for (const z of [-1.2, 1.2]) {
+    g.add(cylinder(0.8, 1.0, 2.6, 10, 0xdfeff5, -1.1, 1.55, z)); // cooling towers
+    g.add(cylinder(0.82, 0.82, 0.22, 10, primary, -1.1, 2.4, z));
+  }
+  g.add(box(1.8, 1.3, 1.8, WALLS[2], 1.2, 0.9, 0.8)); // plant shed
+  g.add(box(1.9, 0.15, 1.9, secondary, 1.2, 1.62, 0.8));
+  const tank = cylinder(0.45, 0.45, 1.6, 10, 0xcfefff, 1.2, 0.75, -1.4);
+  tank.rotation.x = Math.PI / 2;
+  g.add(tank);
+  g.add(box(0.15, 0.15, 2.0, DARK, 0.25, 0.5, 0)); // pipes
   return g;
 });

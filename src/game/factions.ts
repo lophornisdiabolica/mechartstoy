@@ -24,7 +24,11 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 5, name: 'Ivory Compact', primary: 0xe4ddcc, secondary: 0x34495e },
   { id: 6, name: 'Teal Concord', primary: 0x2f9e9a, secondary: 0x1f2a30 },
   { id: 7, name: 'Ember Syndicate', primary: 0xe07a1f, secondary: 0x2e2a28 },
+  // The canonical factions of the doctrines past the eighth: a side that picks one wears these colours
+  // (see variety.ts), but a battle still has at most eight slots.
+  { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
+  { id: 9, name: 'Celeste Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
 ];
 
 /** Most sides a battle can have. */
-export const MAX_FACTIONS = FACTIONS.length;
+export const MAX_FACTIONS = 8;
