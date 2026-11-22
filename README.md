@@ -191,6 +191,23 @@ points the camera, `--every 30s --count 6` takes a series, `--clean` hides
 the HUD and panel, `--plans` shows the Commanders' plans, and `--size`
 sets the picture size. `npm run shot -- --help` lists the rest.
 
+**Model viewer:** open the page with `?models` to see every unit of a
+doctrine (or every building) standing on a slope, drawn by the battle's own
+entity view. Sliders set the slope, the aim and the guns' elevation; buttons
+turn the models round, walk them round a little circle, make the melee units
+strike, wreck them (and give another set of wreck poses), and fade the
+stealthy ones out. Click a model to look closer. Everything is in the link
+(`?models&doctrine=sabre&slope=20&wreck=1`), so `npm run shot -- --models
+"doctrine=sabre&slope=20&wreck=1"` takes the same picture again, which makes
+checking a changed model a minute's work.
+
+**Arena:** `?arena=reaver*4,lancer*4` (or `reaver*4 vs lancer*4`) puts two
+hand-picked groups on open ground in the real page, the duel tool's rounds
+(see `--duel`) one after another, with each side's units left, health left
+and damage dealt on screen, and the tally of rounds won. `gap=40` sets the
+starting distance and the link's other settings (unit multipliers such as
+`tank=1.2,1,1,1`, `hills=1.2`) apply as they do to `--duel --set`.
+
 In the browser, **O** opens the **debug overlays**: every side's lanes
 and rally points, each unit's planned route, targets and line of fire
 (red where a shot is blocked, with a line to the spot the unit is moving
