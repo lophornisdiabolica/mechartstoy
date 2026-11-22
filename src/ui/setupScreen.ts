@@ -15,6 +15,7 @@ import { rollable } from '../game/rollables';
 
 /** The rollable setting (see rollables.ts) behind each slider, by its label... */
 const SLIDER_ROLL: Record<string, string> = {
+  'Hold to win': 'hold',
   Shape: 'shape',
   Water: 'water',
   'Dense forest': 'forest',
