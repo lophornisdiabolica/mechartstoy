@@ -28,12 +28,12 @@ type Lines = Record<VoiceMoment, string[]>;
 
 const VOICES: Partial<Record<DoctrineId, Lines>> = {
   armour: {
-    attack: ['Armour, roll out. Straight at {enemy}.', 'Hulls forward. We go through {enemy}, not round them.'],
-    regroup: ['Pull back and patch the plating.', 'Fall back to the depot. Refuel, rearm, roll again.'],
-    defend: ['Turn the guns round. They’re at our gate.', 'Hold the line at home. Nothing gets past the hulls.'],
-    took: ['{where} is ours. Park a tank on it.', 'Taken {where}. Dig the treads in.'],
-    hunt: ['That {unit} is shelling us. Send the fast hulls.', 'Find that {unit} and drive over it.'],
-    lost: ['The {unit} is gone. Close ranks.', 'We lost the {unit}. Keep rolling.'],
+    attack: ['All units, advance on {enemy}. Move out.', 'Orders are in: we take the fight to {enemy}. Go.'],
+    regroup: ['Fall back and reorganise. Casualty reports on my desk.', 'Pull back to the start line. Resupply and stand by.'],
+    defend: ['Contact at the base. All companies, return and hold.', 'They’re at the wire. Every unit back to defend HQ.'],
+    took: ['Objective {where} secured.', '{where} is ours. Consolidate and hold.'],
+    hunt: ['Enemy {unit} spotted. Detach a section to deal with it.', 'That {unit} is a priority target. Take it out.'],
+    lost: ['We’ve lost the {unit}. Close up and carry on.', 'The {unit} is down. Stick to the plan.'],
   },
   raiders: {
     attack: ['Floor it, lads, {enemy} won’t know what hit them!', 'Everyone in the trucks! We’re paying {enemy} a visit.'],
