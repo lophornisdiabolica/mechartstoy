@@ -107,6 +107,52 @@ function steps(from: { x: number; z: number }, route: { x: number; z: number }[]
   return out;
 }
 
+describe('getting off a bridge over the side', () => {
+  it("routes walkers and infantry off a deck's side only where they can wade, not into deep water a cell short of the bank", () => {
+    // Walkers and infantry may step over a railing (MoveRules.rail is low for them), but the channel
+    // under this deck is deeper than either can wade. Routes used to drop them over the side where a
+    // cell's middle was on the bank, and movement, reading the ground point by point, wouldn't let
+    // them go: they stood against the railing for good (and the dome trucks escorting them parked round them).
+    const game = bridged();
+    const f = game.field;
+    for (const move of ['walker', 'foot'] as const) {
+      const nav = game.ctx.navs.for(move);
+      for (let x = -5; x <= 5; x += 0.5) {
+        for (const z of [-2.3, -1, 0, 1, 2.3]) {
+          for (const goal of [{ x: 9, z: 9 }, { x: -9, z: 9 }, { x: 9, z: -9 }, { x: -9, z: -9 }, { x: 5, z: 12 }]) {
+            const from = { x, z };
+            expect(f.deckAt(x, z)).not.toBeNull();
+            const route = nav.findPath(from, goal, 0.9);
+            expect(route).not.toBeNull();
+            for (const [, p] of steps(from, route!)) expect(nav.terrainAllowsAt(p.x, p.z), `${move} from (${x}, ${z}) to (${goal.x}, ${goal.z}) at (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`).toBe(true);
+            expect(nav.lineClear(from, goal, 0.9) && !steps(from, [goal]).every(([, p]) => nav.terrainAllowsAt(p.x, p.z))).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('walks a walker standing at the edge of the deck off it and on, wherever it starts', () => {
+    for (const [x, z, gx, gz] of [
+      [3, 2.4, 9, 9],
+      [0, 2.4, 9, 9],
+      [-3, -2.4, -9, -9],
+      [2.5, -2.4, 5, 12],
+    ]) {
+      const game = bridged();
+      const { world, ctx } = game;
+      const e = spawnUnit(world, ctx, UNIT_DEFS.lanceWalker, 0, x, z);
+      world.remove(e, Ai);
+      const m = world.req(e, Mover);
+      m.targetX = gx;
+      m.targetZ = gz;
+      run(game, 25);
+      const t = world.req(e, Transform);
+      expect(Math.hypot(t.x - gx, t.z - gz), `from (${x}, ${z}) to (${gx}, ${gz}), at (${t.x.toFixed(1)}, ${t.z.toFixed(1)})`).toBeLessThan(3);
+    }
+  }, 60000);
+});
+
 describe('bridge ramps', () => {
   it('are open, with wings, for a stretch at each end, even where the deck is level with the banks', () => {
     const game = bridged();

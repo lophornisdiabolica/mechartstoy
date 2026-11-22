@@ -132,8 +132,29 @@ export interface BattleResult {
   /** With the profile option: milliseconds spent in each system over the whole battle, and the ticks played. */
   profile?: Record<string, number>;
   ticks?: number;
+  /** Units alive by type for each side, every MIX_EVERY seconds (see formatMix). */
+  mix?: MixPoint[];
+  /** The battle's big moments, for watching it (see formatMoments). */
+  moments?: Moment[];
   /** Query string that replays this battle in the browser. */
   link: string;
+}
+
+/** Seconds between army mix samples. */
+export const MIX_EVERY = 60;
+
+/** Units alive by type, per side, at one minute. */
+export interface MixPoint {
+  minute: number;
+  sides: Record<string, number>[];
+}
+
+/** One of a battle's big moments: when, what kind, and who it happened to. */
+export interface Moment {
+  minute: number;
+  kind: 'super' | 'base' | 'out' | 'swing';
+  side: number;
+  text: string;
 }
 
 /**
@@ -243,6 +264,19 @@ function teamShares(strength: number[], teams: number[]): number[] {
   return teams.map((t) => (total > 0 ? strength.reduce((a, x, g) => a + (teams[g] === t ? x : 0), 0) / total : 1 / count));
 }
 
+/** Units alive by type for every side, now. */
+function mixPoint(game: Game): MixPoint {
+  const { world } = game;
+  const sides: Record<string, number>[] = game.settings.factions.map(() => ({}));
+  for (const e of world.query(Unit, Faction)) {
+    const f = world.req(e, Faction).id;
+    if (f < 0 || f >= sides.length) continue;
+    const id = world.req(e, Unit).def.id;
+    sides[f][id] = (sides[f][id] ?? 0) + 1;
+  }
+  return { minute: world.time / 60, sides };
+}
+
 export interface RunOptions {
   /** Record a timeline (see TimelinePoint). */
   timeline?: boolean;
@@ -266,6 +300,20 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   const teams = settings.factions.map((f) => f.team);
   const shareSum = settings.factions.map(() => 0);
   let samples = 0;
+  const names = factionDefs(settings).map((d) => d.name);
+  // Big moments, for the moments list: super units falling, production lost, sides knocked out.
+  const moments: Moment[] = [];
+  const minute = () => game.world.time / 60;
+  game.events.on('unitDestroyed', (e) => {
+    if (e.def.category === 'super' && e.faction >= 0) moments.push({ minute: minute(), kind: 'super', side: e.faction, text: `${names[e.faction]}'s ${e.def.name} fell` });
+  });
+  game.events.on('buildingDestroyed', (e) => {
+    if (e.faction >= 0 && e.faction < names.length && (e.def.id === 'hq' || e.def.production)) moments.push({ minute: minute(), kind: 'base', side: e.faction, text: `${names[e.faction]} lost its ${e.def.name.toLowerCase()}` });
+  });
+  game.events.on('sideEliminated', (e) => moments.push({ minute: e.time / 60, kind: 'out', side: e.faction, text: `${names[e.faction]} is out` }));
+  /** Each side's team's share of the armies' strength at every sample, for the closest moment. */
+  const shareTrack: { minute: number; shares: number[] }[] = [];
+  const mix: MixPoint[] = [mixPoint(game)];
   const limit = (scenario.minutes ?? TIME_LIMIT) * 60;
   const dt = 1 / SIM_HZ;
   const start = now();
@@ -281,9 +329,12 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     ticks++;
     if (ticks % (SIM_HZ * TIMELINE_EVERY) === 0) {
       if (options.timeline) timeline.push(timelinePoint(game));
-      teamShares(armyStrength(game), teams).forEach((x, f) => (shareSum[f] += x));
+      const shares = teamShares(armyStrength(game), teams);
+      shares.forEach((x, f) => (shareSum[f] += x));
+      shareTrack.push({ minute: minute(), shares });
       samples++;
     }
+    if (ticks % (SIM_HZ * MIX_EVERY) === 0) mix.push(mixPoint(game));
     if (ticks % SIM_HZ === 0) {
       game.stats.sample(game.world, 1);
       for (let f = 0; f < sides.count; f++) {
@@ -295,7 +346,6 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
   }
   const outcome = game.outcome;
   if (options.timeline && ticks % (SIM_HZ * TIMELINE_EVERY) !== 0) timeline.push(timelinePoint(game));
-  const names = factionDefs(settings).map((d) => d.name);
   const endStrength = armyStrength(game);
   const endShares = teamShares(endStrength, teams);
   const winnerSide = outcome && outcome.team !== null ? teams.indexOf(outcome.team) : -1;
@@ -303,6 +353,12 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     endShares.forEach((x, f) => (shareSum[f] = x));
     samples = 1;
   }
+  // The closest it came: the winners' lowest share of the armies' strength (after the opening few minutes, when it's even anyway).
+  if (winnerSide >= 0) {
+    const low = shareTrack.filter((p) => p.minute >= 3).reduce<{ minute: number; shares: number[] } | null>((a, p) => (a === null || p.shares[winnerSide] < a.shares[winnerSide] ? p : a), null);
+    if (low && low.shares[winnerSide] < 0.5) moments.push({ minute: low.minute, kind: 'swing', side: winnerSide, text: `Closest moment: ${names[winnerSide]}'s team down to ${Math.round(low.shares[winnerSide] * 100)}% of the armies' strength, and still won` });
+  }
+  moments.sort((a, b) => a.minute - b.minute);
   return {
     scenario: scenario.id,
     seed: settings.seed,
@@ -331,6 +387,8 @@ export function runBattle(scenario: Scenario, battle: number, now: () => number 
     worstAt,
     ...(options.timeline ? { timeline } : {}),
     ...(game.world.profile ? { profile: Object.fromEntries(game.world.profile), ticks } : {}),
+    mix,
+    moments,
     link: settingsToParams(settings).toString(),
   };
 }
@@ -1342,4 +1400,95 @@ export function formatLengths(results: BattleResult[]): string {
     return [s, String(rs.length), min(q(0.25)), min(median(xs)), min(q(0.75)), min(q(0.9)), done(20), done(30), done(45), pct(rs.filter((r) => !r.decided).length / rs.length)];
   });
   return ['Battle lengths:', formatGrid(['Scenario', 'Battles', 'p25', 'Median', 'p75', 'p90', 'Won by 20m', 'by 30m', 'by 45m', 'Undecided'], rows)].join('\n');
+}
+
+/** Minute ranges the army mix is pooled over. */
+const MIX_BUCKETS: [number, number][] = [
+  [0, 5],
+  [5, 10],
+  [10, 15],
+  [15, 20],
+  [20, 30],
+  [30, Infinity],
+];
+
+/**
+ * Army mix over time: for each doctrine, the units it had alive by type in
+ * each stretch of the battle, pooled over every battle it played (a side
+ * counts while it's still in the war). Each cell is the average number
+ * alive per side, and that type's share of the side's army then (builders
+ * left out). Answers questions like "what is Aegis's army made of late on?"
+ * without a one-off script.
+ */
+export function formatMix(results: BattleResult[], doctrines?: string[]): string {
+  const withMix = results.filter((r) => r.mix && r.mix.length > 0);
+  if (withMix.length === 0) return 'Army mix: no samples in these results (they were played before the mix was recorded).';
+  const head = MIX_BUCKETS.map(([a, b]) => (b === Infinity ? `${a}m+` : `${a}-${b}m`));
+  const out: string[] = ['Army mix over time (average alive per side, and share of its army, pooled over battles):'];
+  for (const d of ALL_DOCTRINE_IDS) {
+    if (doctrines && !doctrines.includes(d)) continue;
+    const counts: Record<string, number[]> = {};
+    const totals = MIX_BUCKETS.map(() => 0);
+    const samples = MIX_BUCKETS.map(() => 0);
+    for (const r of withMix) {
+      r.sides.forEach((side, f) => {
+        if (side.doctrine !== d) return;
+        for (const p of r.mix!) {
+          if (side.out !== null && p.minute >= side.out) continue;
+          const k = MIX_BUCKETS.findIndex(([a, b]) => p.minute >= a && p.minute < b);
+          if (k < 0) continue;
+          samples[k]++;
+          for (const [unit, n] of Object.entries(p.sides[f] ?? {})) {
+            if (nicheClass(unit) === 'engineer') continue;
+            (counts[unit] ??= MIX_BUCKETS.map(() => 0))[k] += n;
+            totals[k] += n;
+          }
+        }
+      });
+    }
+    if (samples.every((n) => n === 0)) continue;
+    const units = Object.keys(counts).sort((a, b) => counts[b].reduce((x, y) => x + y, 0) - counts[a].reduce((x, y) => x + y, 0));
+    const rows = units.map((u) => [u, ...counts[u].map((c, k) => (samples[k] === 0 ? '-' : `${(c / samples[k]).toFixed(1)} (${totals[k] > 0 ? pct(c / totals[k]) : '-'})`))]);
+    rows.push(['(army)', ...totals.map((t, k) => (samples[k] === 0 ? '-' : (t / samples[k]).toFixed(1)))]);
+    rows.push(['(samples)', ...samples.map(String)]);
+    out.push('', `${d}:`, formatGrid(['Unit', ...head], rows));
+  }
+  out.push('', 'A sample is one side at one minute. Builders are left out of the army.');
+  return out.join('\n');
+}
+
+/** How long before a moment its link starts, seconds, so you see it coming. */
+const MOMENT_LEAD = 20;
+
+/**
+ * The moments list: each battle's big moments (super units falling, bases
+ * losing production, sides knocked out, and the winners' closest call),
+ * each with a link that opens the battle just before it. `base` is the
+ * page's address. Battles are listed longest first, or only those whose
+ * seed (or "seed map") matches `only`.
+ */
+export function formatMoments(results: BattleResult[], base = 'http://localhost:5173/', only?: string, most = 8): string {
+  const at = (m: number) => {
+    const s = Math.max(0, Math.round(m * 60 - MOMENT_LEAD));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const clockOf = (m: number) => `${Math.floor(m)}:${String(Math.floor((m * 60) % 60)).padStart(2, '0')}`;
+  const picked = results
+    .filter((r) => r.moments && (!only || r.seed === only || `${r.seed} ${r.map}` === only))
+    .sort((a, b) => b.minutes - a.minutes);
+  if (picked.length === 0) return 'Moments: none recorded in these results (they were played before moments were recorded).';
+  const out: string[] = [];
+  for (const r of picked) {
+    const won = r.winner !== null ? `team ${r.winner} won` : r.decided ? 'a draw' : 'no winner';
+    out.push(`${r.seed}${r.map ? ` (${r.map})` : ''}: ${r.sides.map((s) => s.doctrine).join(' vs ')}, ${won} after ${r.minutes.toFixed(1)} min`);
+    // The closest moment and knock-outs always; then supers and bases, merging repeats within a minute.
+    const ms = r.moments!;
+    const keep = ms.filter((m) => m.kind === 'swing' || m.kind === 'out');
+    const rest = ms.filter((m) => m.kind === 'super' || m.kind === 'base').filter((m, i, all) => i === 0 || all[i - 1].text !== m.text || m.minute - all[i - 1].minute > 1);
+    const shown = [...keep, ...rest.slice(0, Math.max(0, most - keep.length))].sort((a, b) => a.minute - b.minute);
+    for (const m of shown) out.push(`  ${clockOf(m.minute).padStart(6)}  ${m.text}  ${base}?${r.link}&at=${at(m.minute)}`);
+    if (shown.length < ms.length) out.push(`          (${ms.length - shown.length} more)`);
+  }
+  out.push('', `Each link opens the battle ${MOMENT_LEAD} seconds before the moment.`);
+  return out.join('\n');
 }

@@ -74,6 +74,22 @@ tighter numbers per map at that many times the cost. The niche report
 the longer half of the battles, which shows a doctrine that wins early
 and fades, or one that only comes good in long battles.
 
+`--mix` (and `--niche`) prints the **army mix over time**: for each
+doctrine, the units it had alive by type in each stretch of the battle
+(0-5 minutes, 5-10 and so on), averaged per side and as a share of its
+army, pooled over every battle it played while it was still in the war.
+It answers questions like "what is Aegis's army made of late on?" without
+a one-off script. Every battle records it, so `--pool` prints it for
+saved runs too.
+
+`--moments` lists each battle's **big moments**, longest battles first:
+super units falling, production buildings lost, sides knocked out, and
+the winners' closest call (their lowest share of the armies' strength),
+each with a link that opens the battle 20 seconds before it (`&at=`).
+`--moments --from sims-results/x.json` lists a saved run's moments
+without playing anything (add `--battle 1v1-7` for just that one), so
+the interesting battles of a big run are easy to find and watch.
+
 `--compare a.json b.json` compares two saved runs without playing anything:
 battle lengths, doctrine win rates (flagging changes bigger than the
 noise), how many of the same battles changed winner, and the units whose
@@ -175,12 +191,49 @@ points the camera, `--every 30s --count 6` takes a series, `--clean` hides
 the HUD and panel, `--plans` shows the Commanders' plans, and `--size`
 sets the picture size. `npm run shot -- --help` lists the rest.
 
+**Model viewer:** open the page with `?models` to see every unit of a
+doctrine (or every building) standing on a slope, drawn by the battle's own
+entity view. Sliders set the slope, the aim and the guns' elevation; buttons
+turn the models round, walk them round a little circle, make the melee units
+strike, wreck them (and give another set of wreck poses), and fade the
+stealthy ones out. Click a model to look closer. Everything is in the link
+(`?models&doctrine=sabre&slope=20&wreck=1`), so `npm run shot -- --models
+"doctrine=sabre&slope=20&wreck=1"` takes the same picture again, which makes
+checking a changed model a minute's work.
+
+**Arena:** `?arena=reaver*4,lancer*4` (or `reaver*4 vs lancer*4`) puts two
+hand-picked groups on open ground in the real page, the duel tool's rounds
+(see `--duel`) one after another, with each side's units left, health left
+and damage dealt on screen, and the tally of rounds won. `gap=40` sets the
+starting distance and the link's other settings (unit multipliers such as
+`tank=1.2,1,1,1`, `hills=1.2`) apply as they do to `--duel --set`.
+
 In the browser, **O** opens the **debug overlays**: every side's lanes
 and rally points, each unit's planned route, targets and line of fire
 (red where a shot is blocked, with a line to the spot the unit is moving
 to for a clear one), the strength map the Commanders read, and what the
 ground costs each movement class to cross. They stay on across battles
 until switched off.
+
+`npm run flicker` plays a battle in headless Chromium, slowed down so
+every moment is drawn, and watches how every unit, building and effect
+looks: parts shown, how far a unit has faded out, an effect's opacity.
+Anything that goes back and forth more than twice in one second of
+battle is listed as flicker, worst first, and the command fails. The
+default battle is an eight-way free-for-all of the doctrines with the
+most going on (Veil, Cipher, Aegis, Rime, Firestorm, Skyline, Sabre,
+Tidewater); give it a link or seed to watch another, `--at` and
+`--seconds` to pick the stretch. It caught Veil's ghost tanks blinking
+between solid and faint four times a second as they hid between shots;
+they now stay solid until they've been hidden for 0.6 seconds.
+
+`npm run pairs` takes the same fixed set of pictures (the model viewer
+for every doctrine, upright and wrecked, the buildings, and four battle
+moments from fixed camera spots) from the branch a change is based on
+(`--base`, default `origin/main`) and from the working tree, and saves
+each pair side by side in `shots-out/pairs/` with how much of the picture
+changed and an `index.html` to look through. CI does this on every pull
+request and uploads the pairs as the **screenshot-pairs** artifact.
 
 Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
