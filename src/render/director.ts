@@ -2,6 +2,7 @@ import { Entity } from '../core/ecs';
 import { Armed, Building, Collider, Faction, Health, Mover, Transform, Unit, Wreck } from '../game/components';
 import { Game } from '../game/game';
 import { CameraRig } from './cameraRig';
+import { TREE_HEIGHT } from '../world/woods';
 
 /** Size of a scoring cell, world units; a fight is scored over the 3x3 cells round one. */
 const CELL = 14;
@@ -13,7 +14,7 @@ const MEMORY = 8;
 const HOLD = 14;
 /** How much better another fight must score to cut to it. */
 const BETTER = 1.8;
-/** A big event (a super unit arriving or dying, an HQ falling) can cut in once a shot is this old. */
+/** A big event (a super unit dying, an HQ falling) can cut in once a shot is this old. */
 const EARLY_CUT = 2.5;
 /** Below this score nothing is worth a shot. */
 const DULL = 1.5;
@@ -28,24 +29,37 @@ const CLOSE = 2.6;
 const HIGH_TILT = 0.95;
 const LOW_TILT = 0.42;
 /** Seconds the camera takes to get most of the way to a new shot's centre. */
-const GLIDE = 2.2;
-/** While a shot is held, the camera turns only if the fight's line has swung round more than this (radians). */
-const TURN_SLACK = 1.0;
+const GLIDE = 1.6;
+/**
+ * While a shot is held the camera doesn't turn, unless the line between the
+ * sides has swung this far (radians) from left-to-right on screen, so one
+ * army has come round in front of the other; then, once the shot is
+ * SETTLE seconds old, it's composed afresh (and counts as a new shot).
+ */
+const TURN_SLACK = 0.9;
+const SETTLE = 6;
+/** On a cut, the camera keeps its angle if that's within this (radians) of straight across the new fight. */
+const KEEP = 0.4;
+/** A side with fewer fighting units than this (or this share of the other's) doesn't say which way the fight runs. */
+const FEW = 3;
+const FEW_SHARE = 0.2;
 /** Height of the picture at zoom 1, world units (as the rig has it). */
 const VIEW_HEIGHT = 70;
 /** Room left round a fight's edge, world units, so the outermost units aren't on the frame. */
 const MARGIN = 4;
 /** While a shot is held, it moves only once the fight's middle has drifted this share of the view from it... */
-const DRIFT = 0.35;
+const DRIFT = 0.45;
 /** ...and zooms out only when the fight needs this much more room, or in when it needs this much less. */
-const ROOM_OUT = 1.2;
-const ROOM_IN = 0.6;
+const ROOM_OUT = 1.3;
+const ROOM_IN = 0.55;
 /** Share of each side's fighting units, nearest the other side, that make up its front. */
 const FRONT = 0.35;
 /** Ground this many units higher or lower across a shot is worth showing side-on, and buildings in it too. */
 const RELIEF = 6;
 /** How far (radians) the camera will turn away from straight across the fight to show a slope better. */
-const SWING = [0, 0.35, -0.35, 0.7, -0.7];
+const SWING = [0, 0.25, -0.25, 0.5, -0.5];
+/** Fighting units sampled to see how much of a fight a camera angle shows. */
+const SAMPLES = 16;
 
 /** How much each event says "this fight is worth watching". */
 const ACTIVITY = { impact: 1, unitDestroyed: 6, buildingDamaged: 2, buildingDestroyed: 12 };
@@ -102,6 +116,18 @@ export function acrossAzimuth(ax: number, az: number, bx: number, bz: number, ne
   return turnBetween(near, one) <= turnBetween(near, two) ? [one, two] : [two, one];
 }
 
+/**
+ * The middles of the two biggest sides, if both are big enough to say which
+ * way the fight runs (a lone straggler on one side says nothing).
+ */
+function lineOf(sides: { x: number; z: number }[][]): [{ x: number; z: number }, { x: number; z: number }] | null {
+  if (sides.length < 2) return null;
+  const [a, b] = sides;
+  if (b.length < FEW || b.length < a.length * FEW_SHARE) return null;
+  const mid = (list: { x: number; z: number }[]) => ({ x: list.reduce((s, p) => s + p.x, 0) / list.length, z: list.reduce((s, p) => s + p.z, 0) / list.length });
+  return [mid(a), mid(b)];
+}
+
 function turnBetween(a: number, b: number): number {
   let d = (b - a) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -116,15 +142,18 @@ function turnBetween(a: number, b: number): number {
  * buildings under fire), how even the fight is (an even fight beats a rout)
  * and whether super units are in it. It holds a shot for at least HOLD
  * seconds and cuts only to a fight that scores BETTER times as much, unless
- * a big event (a super unit arriving or dying, an HQ falling) happens.
+ * a big event (a super unit dying, an HQ falling) happens.
  *
  * Each shot centres on the gap between the two sides' fronts, where the
  * fighting is, with both armies in the picture, one to the left and one to
- * the right. It's composed once, when the director cuts to it: the angle
- * that shows the slopes and buildings in the fight side-on without them
- * hiding it, tilted lower where there's high ground to show and the closer
- * it is. It then holds still, moving, zooming or turning only when the
- * fight clearly outgrows it. The rig glides between shots, never cutting.
+ * the right. It's composed once, when the director cuts to it (see compose):
+ * keeping the angle it had if that's near enough, else turning to look
+ * across the new fight, with a hill's crest running up the screen rather
+ * than across it, low where that shows the fight and higher where hills,
+ * trees or buildings would hide it. It then holds still: it never turns
+ * while a shot lasts (unless one army comes right round in front of the
+ * other), and moves or zooms only when the fight clearly drifts or
+ * outgrows it. The rig glides between shots, never cutting.
  *
  * Reads events and the page's copy of the world only, so it can't affect the battle.
  */
@@ -164,11 +193,6 @@ export class Director {
     });
     events.on('buildingDestroyed', (e) => {
       if (e.def.id === 'hq') this.cue = { x: e.x, z: e.z };
-    });
-    events.on('spawned', (e) => {
-      if (e.def.category !== 'super') return;
-      const t = game.world.get(e.entity, Transform);
-      if (t) this.cue = { x: t.x, z: t.z };
     });
   }
 
@@ -274,7 +298,8 @@ export class Director {
     if (act <= 0) return 0;
     near.sort((a, b) => b - a);
     const even = near.length >= 2 ? evenness(near[0], near[1]) : 0;
-    return act * (0.4 + 0.6 * even) + (sup > 0 ? 10 * Math.min(sup, 3) : 0);
+    // Super units make a fight more worth watching, not a quiet spot (a base where one's just been built).
+    return act * (0.4 + 0.6 * even) * (1 + 0.5 * Math.min(sup, 3));
   }
 
   private centreOf(i: number): { x: number; z: number } {
@@ -330,7 +355,7 @@ export class Director {
     const fit = this.fitZoom(all, focus, sides, shot?.azimuth ?? Math.PI / 4);
 
     if (cut || !shot) {
-      this.shot = this.compose(focus.x, focus.z, fit, spread, sides, shot?.azimuth ?? Math.PI / 4);
+      this.shot = this.compose(focus.x, focus.z, fit, spread, sides, shot?.azimuth ?? Math.PI / 4, all);
       return;
     }
     // Held: stay put unless the fight has clearly moved, grown or shrunk, or turned.
@@ -343,13 +368,11 @@ export class Director {
     }
     const need = (0.5 * VIEW_HEIGHT * this.aspect) / fit;
     if (need > view * ROOM_OUT || need < view * ROOM_IN) zoom = fit;
-    if (sides.length >= 2) {
-      const [one, two] = sides.map((list) => ({ x: list.reduce((s, p) => s + p.x, 0) / list.length, z: list.reduce((s, p) => s + p.z, 0) / list.length }));
-      const across = acrossAzimuth(one.x, one.z, two.x, two.z, shot.azimuth)[0];
-      if (turnBetween(shot.azimuth, across) > TURN_SLACK) {
-        this.shot = this.compose(sx, sz, zoom, spread, sides, shot.azimuth);
-        return;
-      }
+    const line = lineOf(sides);
+    if (line && this.held >= SETTLE && turnBetween(shot.azimuth, acrossAzimuth(line[0].x, line[0].z, line[1].x, line[1].z, shot.azimuth)[0]) > TURN_SLACK) {
+      this.shot = this.compose(sx, sz, zoom, spread, sides, shot.azimuth, all);
+      this.held = 0;
+      return;
     }
     if (zoom !== shot.zoom && elevation > tiltFor(zoom) + 0.05) elevation = tiltFor(zoom);
     this.shot = { x: sx, z: sz, azimuth, elevation, zoom };
@@ -364,11 +387,8 @@ export class Director {
    */
   private fitZoom(all: { x: number; z: number }[], focus: { x: number; z: number }, sides: { x: number; z: number }[][], was: number): number {
     if (all.length === 0) return zoomFor(10, VIEW_HEIGHT);
-    let az = was;
-    if (sides.length >= 2) {
-      const [one, two] = sides.slice(0, 2).map((list) => ({ x: list.reduce((s, p) => s + p.x, 0) / list.length, z: list.reduce((s, p) => s + p.z, 0) / list.length }));
-      az = acrossAzimuth(one.x, one.z, two.x, two.z, was)[0];
-    }
+    const line = lineOf(sides);
+    const az = line ? acrossAzimuth(line[0].x, line[0].z, line[1].x, line[1].z, was)[0] : was;
     // Screen-right and screen-up on the ground, as the rig sees them.
     const rx = Math.sin(az);
     const rz = -Math.cos(az);
@@ -386,14 +406,19 @@ export class Director {
   }
 
   /**
-   * Pick the angle and tilt for a shot of the fight at (x, z): across the
-   * line between the two biggest sides, swung a little either way (SWING)
-   * if that shows the ground's rise and fall better, and never from where
-   * the hills or buildings hide the middle. With high ground or buildings
-   * in the fight the camera comes down lower, so a hill the fight is
-   * running up stands out in profile rather than being flattened.
+   * Pick the angle and tilt for a shot of the fight at (x, z). The camera
+   * looks across the line between the two biggest sides, so one army is on
+   * the left and one on the right, swung a little either way (SWING) if
+   * that shows the ground better: a hill the fight runs over is best seen
+   * with its crest running up the screen, units climbing it on the left and
+   * right, rather than across the screen, where it hides everything behind
+   * it. It keeps the angle it had if that's near enough (KEEP), rather than
+   * swinging round for every new fight. It comes down low where there's
+   * high ground or buildings to show in profile, unless from that low the
+   * hills, trees or buildings would hide much of the fight; then it goes
+   * higher, as far as it must.
    */
-  private compose(x: number, z: number, zoom: number, spread: number, sides: { x: number; z: number }[][], was: number): Shot {
+  private compose(x: number, z: number, zoom: number, spread: number, sides: { x: number; z: number }[][], was: number, fighting: { x: number; z: number }[]): Shot {
     const field = this.game.field;
     const reach = Math.max(8, spread);
     // How much the ground rises and falls, and how many buildings stand, in the fight.
@@ -414,65 +439,77 @@ export class Director {
     }
     const relief = Math.min(1, (hi - lo) / RELIEF + Math.min(0.6, buildings * 0.15));
     const flat = tiltFor(zoom);
-    let tilt = Math.max(LOW_TILT * 0.85, flat - 0.4 * relief);
+    const low = Math.max(LOW_TILT * 0.85, flat - 0.4 * relief);
+    const tilts = [low, low + 0.18, low + 0.36, HIGH_TILT].filter((t, i) => i === 0 || t <= HIGH_TILT);
 
-    let bases: number[];
-    if (sides.length >= 2) {
-      const [one, two] = sides.map((list) => ({ x: list.reduce((s, p) => s + p.x, 0) / list.length, z: list.reduce((s, p) => s + p.z, 0) / list.length }));
-      bases = acrossAzimuth(one.x, one.z, two.x, two.z, was);
-    } else bases = [was, was + Math.PI];
-    // Each candidate: how much the ground rises and falls across the picture (left to right, where it
-    // shows as a skyline), less a little for swinging away from straight across, and a little for turning far.
-    const score = (az: number, swing: number) => {
-      const hx = -Math.sin(az);
-      const hz = Math.cos(az);
+    // What has to stay in sight: the middle and a spread of the fighting units.
+    const points: { x: number; z: number }[] = [{ x, z }];
+    const step = Math.max(1, fighting.length / SAMPLES);
+    for (let k = 0; k < fighting.length && points.length <= SAMPLES; k += step) points.push(fighting[Math.floor(k)]);
+
+    // Which way the fight runs: straight across it, either way round, nearest the way the camera looks now.
+    const line = lineOf(sides);
+    const bases = line ? acrossAzimuth(line[0].x, line[0].z, line[1].x, line[1].z, was) : [was];
+    const candidates: { az: number; off: number }[] = [];
+    for (const base of bases) for (const swing of SWING) candidates.push({ az: base + swing, off: Math.abs(swing) });
+    const stay = line ? turnBetween(was, bases[0]) : 0;
+    if (stay <= KEEP) candidates.push({ az: was, off: stay });
+
+    // How much the ground rises and falls along a line through the middle.
+    const range = (dx: number, dz: number) => {
       let min = Infinity;
       let max = -Infinity;
       for (let k = -4; k <= 4; k++) {
-        const h = field.heightAt(x + hx * (k / 4) * reach, z + hz * (k / 4) * reach);
+        const h = field.heightAt(x + dx * (k / 4) * reach, z + dz * (k / 4) * reach);
         min = Math.min(min, h);
         max = Math.max(max, h);
       }
-      return max - min - Math.abs(swing) * 2 - turnBetween(was, az) * 0.6;
+      return max - min;
     };
-    for (let tries = 0; tries < 5; tries++) {
-      let best: number | null = null;
-      let bestScore = -Infinity;
-      for (const base of bases) {
-        for (const swing of SWING) {
-          const az = base + swing;
-          if (this.blocked(x, z, az, tilt, zoom)) continue;
-          const sc = score(az, swing);
-          if (sc > bestScore) {
-            bestScore = sc;
-            best = az;
-          }
+    let best: Shot | null = null;
+    let bestScore = -Infinity;
+    for (const { az, off } of candidates) {
+      // Ground rising and falling across the picture shows the slopes side-on (good);
+      // up and down the picture it's a crest across the screen hiding what's behind it (bad).
+      const across = Math.min(5, range(Math.sin(az), -Math.cos(az)));
+      const deep = Math.min(5, range(Math.cos(az), Math.sin(az)));
+      const turn = turnBetween(was, az);
+      const base = (across - deep) * 0.5 - off * 3 - (turn > 0.05 ? 1.5 + turn * 1.5 : 0);
+      for (const tilt of tilts) {
+        let seen = 0;
+        for (const p of points) if (!this.hidden(p.x, p.z, az, tilt, zoom)) seen++;
+        const sc = base + (seen / points.length) * 12 - (tilt - low) * 4;
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = { x, z, azimuth: az, elevation: tilt, zoom };
         }
+        // Higher only helps if lower hid some of it.
+        if (seen === points.length) break;
       }
-      if (best !== null) return { x, z, azimuth: best, elevation: tilt, zoom };
-      // Everything's hidden from this low: come up higher and try again.
-      tilt = Math.min(HIGH_TILT, tilt + 0.15);
     }
-    return { x, z, azimuth: bases[0], elevation: Math.max(tilt, flat), zoom };
+    return best ?? { x, z, azimuth: bases[0], elevation: Math.max(low, flat), zoom };
   }
 
   /**
-   * Whether the ground or a building would hide (x, z) from a camera looking
-   * from `azimuth` at `elevation`: step along the sight line from the target
-   * back toward the camera, as far as the view reaches, and see if anything
-   * rises above it.
+   * Whether the hills, the dense forest or a building stand between the
+   * ground at (x, z) and a camera looking from `azimuth` at `elevation`:
+   * walk from the spot back toward the camera, as far as the view reaches,
+   * and see if anything rises above the line of sight.
    */
-  blocked(x: number, z: number, azimuth: number, elevation: number, zoom: number): boolean {
+  hidden(x: number, z: number, azimuth: number, elevation: number, zoom: number): boolean {
     const field = this.game.field;
     const y0 = field.surfaceAt(x, z) + 1;
     const ca = Math.cos(azimuth);
     const sa = Math.sin(azimuth);
     const rise = Math.tan(elevation);
-    const reach = 35 / zoom / Math.sin(elevation);
+    const reach = Math.min(60, 35 / zoom / Math.sin(elevation));
     for (let s = 2; s <= reach; s += 1.5) {
       const sx = x + ca * s;
       const sz = z + sa * s;
-      if (field.heightAt(sx, sz) > y0 + s * rise) return true;
+      const y = y0 + s * rise;
+      const ground = field.heightAt(sx, sz);
+      if (ground > y) return true;
+      if (ground + TREE_HEIGHT > y && field.woods.hasTreesAt(sx, sz)) return true;
     }
     const { world } = this.game;
     for (const e of world.query(Building, Transform, Collider)) {
@@ -509,10 +546,10 @@ export class Director {
 const MOURN = 3;
 /** Units ahead of a unit going nowhere that the camera looks at. */
 const LEAD = 6;
-/** How far toward what the unit is doing the picture's middle sits (0 on the unit, 1 on the thing). */
-const TOWARD = 0.6;
-/** Furthest the unit sits from the middle, as a share of the way to the picture's edge: on screen, toward the bottom. */
-const OFF_CENTRE = 0.55;
+/** How far below the middle the unit sits, as a share of the way to the picture's bottom edge: in its bottom quarter or so. */
+const LOW_IN_FRAME = 0.45;
+/** How far ahead of the unit the picture reaches, at least, world units of ground. */
+const AHEAD = 14;
 /** Zoom range for the unit camera: close on a unit at work nearby, a bit wider when its target is a way off. */
 const UNIT_CLOSE = 3.4;
 const UNIT_WIDE = 2;
@@ -520,8 +557,14 @@ const UNIT_WIDE = 2;
 const UNIT_TILT = 0.42;
 /** Beyond this, what the unit is doing is too far off to fit in: the camera stays close and just looks that way. */
 const UNIT_REACH = 30;
-/** How far the camera stands off to one side of the line from the unit to what it's doing (radians), so the unit isn't hidden behind itself. */
-const SIDE_ON = 0.35;
+/**
+ * How far (radians) the camera stands off to one side of straight behind
+ * the unit, so the unit isn't hidden behind itself: a little, either way,
+ * or more where a hill, trees or a building would block the view.
+ */
+const SIDES = [0.12, -0.12, 0.4, -0.4, 0.7, -0.7];
+/** Seconds between checks that the view of the unit is still clear. */
+const RECHECK = 1;
 /** Turns of the line to what the unit is doing smaller than this (radians) don't move the camera. */
 const UNIT_SLACK = 0.3;
 /** A goal nearer than this doesn't count: the unit has as good as arrived. */
@@ -529,11 +572,12 @@ const ARRIVED = 3;
 
 /**
  * The unit camera: rides with one unit, looking at what it's doing. The
- * middle of the picture sits between the unit and what it's shooting at
- * (or, when it isn't shooting, where it's headed), nearer the thing, with
- * the unit on screen toward one side and the camera behind it, so you look
- * over its shoulder at its fight. It zooms out a little when its target is
- * a way off, but stays close for a far goal. It follows the selected unit, or picks a strong one in the
+ * camera stands behind the unit, a little to one side (further round if a
+ * hill, trees or a building would block the view), looking toward what
+ * it's shooting at (or, when it isn't shooting, where it's headed), so
+ * the unit sits low in the picture, in its bottom quarter or so, and what
+ * it's doing is up the screen ahead of it. It zooms out a little when its
+ * target is a way off, but stays close for a far goal. It follows the selected unit, or picks a strong one in the
  * director's fight. When its unit dies it holds on the wreck for MOURN
  * seconds, then moves to another unit nearby.
  */
@@ -547,7 +591,8 @@ export class UnitCam {
   private lostFor = 0;
   private last: { x: number; z: number; heading: number } | null = null;
   /** The way the camera looks now, and how far it zooms (kept steady while what the unit does barely moves). */
-  private look: { azimuth: number; zoom: number } | null = null;
+  private look: { azimuth: number; zoom: number; side: number } | null = null;
+  private sinceCheck = 0;
 
   constructor(private readonly game: Game) {}
 
@@ -609,6 +654,23 @@ export class UnitCam {
   }
 
   /**
+   * Which side of straight behind the unit to stand (see SIDES): the one it
+   * stands on now if the view's still clear, else the nearest that shows
+   * the unit and what it's doing.
+   */
+  private side(at: { x: number; z: number }, thing: { x: number; z: number }, d: number, behind: number, zoom: number, director: Director): number {
+    const was = this.look?.side ?? SIDES[0];
+    const order = [was, ...SIDES.filter((s) => s !== was)].sort((a, b) => Math.abs(a) - Math.abs(b) || (a === was ? -1 : b === was ? 1 : 0));
+    for (const side of order) {
+      const az = behind + side;
+      if (director.hidden(at.x, at.z, az, UNIT_TILT, zoom)) continue;
+      if (d < UNIT_REACH && director.hidden(thing.x, thing.z, az, UNIT_TILT, zoom)) continue;
+      return side;
+    }
+    return was;
+  }
+
+  /**
    * Move the rig to look over the unit's shoulder at what it's doing.
    * `alpha` is how far between sim ticks the picture is, so the camera
    * moves with the drawn unit. Returns false when it has no unit and none
@@ -644,21 +706,31 @@ export class UnitCam {
     const dx = thing.x - at.x;
     const dz = thing.z - at.z;
     const d = Math.hypot(dx, dz);
-    // Looking from behind the unit toward the thing, a little off to one side.
+    // Looking from behind the unit toward the thing, so the thing is up the screen and the unit
+    // low in it, a little off to one side.
     const facing = d > 0.5 ? Math.atan2(-dz, dx) : at.heading;
-    const azimuth = Math.PI - facing + SIDE_ON;
-    // The line to the thing runs up the screen, and the tilt stretches the
-    // screen's height over ground, so fit the unit and the thing in that
-    // way; a far goal doesn't pull the camera out, it just sets the way to look.
+    const behind = Math.PI - facing;
+    // The line to the thing runs up the screen, and the low tilt stretches the screen's height over
+    // ground: fit the thing in above the unit. A far goal doesn't pull the camera out, it just sets
+    // the way to look.
     const sinTilt = Math.sin(UNIT_TILT);
-    const zoom = Math.max(UNIT_WIDE, Math.min(UNIT_CLOSE, (0.5 * VIEW_HEIGHT) / ((Math.min(d, UNIT_REACH) * 0.7 + 8) * sinTilt)));
-    if (!this.look || turnBetween(this.look.azimuth, azimuth) > UNIT_SLACK || Math.abs(this.look.zoom - zoom) > 0.35) this.look = { azimuth, zoom };
-    // The middle sits most of the way to the thing, but never so far that the unit leaves the picture.
-    const halfDepth = (0.5 * VIEW_HEIGHT) / (this.look.zoom * sinTilt);
-    const off = Math.min(d * TOWARD, halfDepth * OFF_CENTRE);
-    const k = d > 0 ? off / d : 0;
-    rig.setView(this.look.azimuth, UNIT_TILT, this.look.zoom);
-    rig.glideTo(at.x + dx * k, at.z + dz * k, frameSeconds, 0.6);
+    const reachUp = Math.max(AHEAD, Math.min(d, UNIT_REACH) / (1 + LOW_IN_FRAME - 0.25));
+    const zoom = Math.max(UNIT_WIDE, Math.min(UNIT_CLOSE, (0.5 * VIEW_HEIGHT) / (reachUp * sinTilt)));
+    this.sinceCheck += frameSeconds;
+    const turned = !this.look || turnBetween(this.look.azimuth - this.look.side, behind) > UNIT_SLACK || Math.abs(this.look.zoom - zoom) > 0.35;
+    if (turned || this.sinceCheck >= RECHECK) {
+      this.sinceCheck = 0;
+      const side = this.side(at, thing, d, behind, turned ? zoom : this.look!.zoom, director);
+      if (turned || side !== this.look!.side) this.look = { azimuth: behind + side, zoom: turned ? zoom : this.look!.zoom, side };
+    }
+    const look = this.look!;
+    // The middle sits ahead of the unit, so the unit is in the bottom quarter or so of the picture.
+    const halfDepth = (0.5 * VIEW_HEIGHT) / (look.zoom * sinTilt);
+    const off = halfDepth * LOW_IN_FRAME;
+    const ux = d > 0.5 ? dx / d : Math.cos(at.heading);
+    const uz = d > 0.5 ? dz / d : -Math.sin(at.heading);
+    rig.setView(look.azimuth, UNIT_TILT, look.zoom);
+    rig.glideTo(at.x + ux * off, at.z + uz * off, frameSeconds, 0.6);
     return true;
   }
 }

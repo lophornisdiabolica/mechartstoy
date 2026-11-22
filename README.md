@@ -493,20 +493,25 @@ The **camera** buttons pick who moves the camera. **Free** is you.
 works like a sports broadcast: every second it scores each fight by its
 hits, kills, buildings under fire and super units, and by how even it is
 (an even fight beats a rout). It holds a shot at least 14 seconds and cuts
-only to a fight nearly twice as good, or early for a super unit arriving or
-dying or an HQ falling. Each shot centres on the gap between the two sides'
-fronts and looks across it, so one army is on the left and the other on the
-right, zoomed in as close as fits them. It turns a little either way to show
-hills and buildings side-on (a slope the fight runs up stands out in profile),
-comes down lower where there is high ground to show, and never looks from
-where they hide the fight. Then it stays put: it moves only if the fight
-drifts well off centre, zooms only if it outgrows the picture or shrinks well
-inside it, and turns only if the line between the sides swings right round.
-It glides between shots, turning slowly and rising for far jumps; it never
-cuts or fades. **Unit** (U) rides with one unit: the one you clicked, or a
-strong one in the director's fight. It looks over the unit's shoulder at what
-it's doing, with the middle of the picture on its target (or where it's
-headed, or just ahead of it), and the unit on screen below and to one side.
+only to a fight nearly twice as good, or early for a super unit dying or
+an HQ falling. Each shot centres on the gap between the two sides' fronts
+and looks across it, so one army is on the left and the other on the
+right, zoomed in as close as fits them. On a cut it keeps the angle it had
+if that's near enough, rather than swinging round for every new fight. It
+turns a little either way to put a hill's crest up the screen, so you see
+units climbing it on the left and right, rather than across the screen,
+where it hides what's behind; it comes down low to show the slopes in
+profile, and goes higher where hills, dense forest or buildings would hide
+the fight from low down. Then it stays put: it doesn't turn while a shot
+lasts (unless one army comes right round in front of the other), moves
+only if the fight drifts well off centre, and zooms only if it outgrows
+the picture or shrinks well inside it. It glides between shots, rising
+for far jumps; it never cuts or fades. **Unit** (U) rides with one unit:
+the one you clicked, or a strong one in the director's fight. It looks
+from behind the unit, a little to one side (further round if a hill, trees
+or a building would block the view), toward what it's doing: its target,
+or where it's headed, or just ahead of it. The unit sits in the bottom
+quarter or so of the picture, with what it's doing up the screen ahead.
 When it dies the camera stays on the wreck for 3 seconds, then picks another
 unit nearby; click a unit to ride
 with it instead, Esc to stop. Panning by hand gives the camera back to

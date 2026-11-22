@@ -10,8 +10,8 @@ const ROTATE_SPEED = 1.4;
 /** Radians of turn per pixel of left-drag orbit. */
 const ORBIT_PER_PIXEL = 0.006;
 /** How quickly a gentle camera eases toward where it's heading, per second, and the fastest it turns, radians a second. */
-const GENTLE_EASE = 1.4;
-const GENTLE_TURN = 0.45;
+const GENTLE_EASE = 2;
+const GENTLE_TURN = 0.8;
 /** Pixels a left press can wander and still count as a click (picking a unit), not an orbit. */
 const CLICK_SLOP = 4;
 
