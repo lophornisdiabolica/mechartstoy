@@ -12,6 +12,7 @@
     "sims": "node scripts/sims.mjs",
     "map": "node scripts/map.mjs",
     "bench": "node scripts/bench.mjs",
+    "fps": "node scripts/fps.mjs",
     "shot": "node scripts/shot.mjs",
     "leaks": "node --expose-gc scripts/leaks.mjs",
     "sounds": "node scripts/sounds.mjs",

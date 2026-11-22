@@ -7,6 +7,8 @@ import { CameraMode, ShadowQuality } from '../render/stage';
  */
 export interface ViewPrefs {
   shadows: ShadowQuality;
+  /** Share of the screen's pixels the battle is drawn with (see Stage.renderScale). */
+  resolution: number;
   /** Spectator camera that follows the fighting. */
   follow: boolean;
   /** Who moves the camera (see Stage.cameraMode); older saves have only `follow`. */
@@ -28,12 +30,15 @@ export interface ViewPrefs {
 const KEY = 'mbt.view';
 const SHADOWS: ShadowQuality[] = ['high', 'low', 'off'];
 const CAMERAS: CameraMode[] = ['free', 'follow', 'director', 'unit'];
+/** The resolutions offered (see Controls). */
+export const RESOLUTIONS = [1, 0.75, 0.5];
 
 export function loadViewPrefs(): ViewPrefs {
-  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false, fronts: false, ticker: true, voices: [], smoothTurn: false, god: false };
+  const prefs: ViewPrefs = { shadows: 'high', resolution: 1, follow: false, plans: false, fronts: false, ticker: true, voices: [], smoothTurn: false, god: false };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<ViewPrefs>;
     if (SHADOWS.includes(saved.shadows as ShadowQuality)) prefs.shadows = saved.shadows!;
+    if (RESOLUTIONS.includes(saved.resolution as number)) prefs.resolution = saved.resolution!;
     if (typeof saved.follow === 'boolean') prefs.follow = saved.follow;
     if (CAMERAS.includes(saved.camera as CameraMode)) prefs.camera = saved.camera;
     if (typeof saved.plans === 'boolean') prefs.plans = saved.plans;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { TREE_HEIGHT } from '../world/woods';
@@ -100,12 +101,16 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const redraw = (k: number, colour: boolean) => {
     const entry = drawn.get(k);
     if (!entry) return;
+    // Just this tree's instances go up to the GPU, not the whole forest's.
     entry.plants.forEach((p, n) => {
-      place(entry.mesh, p, entry.instances[n]);
-      if (colour) entry.mesh.setColorAt(entry.instances[n], fallen);
+      const i = entry.instances[n];
+      place(entry.mesh, p, i);
+      markRange(entry.mesh.instanceMatrix, i * 16, 16);
+      if (colour && entry.mesh.instanceColor) {
+        entry.mesh.setColorAt(i, fallen);
+        markRange(entry.mesh.instanceColor, i * 3, 3);
+      }
     });
-    entry.mesh.instanceMatrix.needsUpdate = true;
-    if (colour && entry.mesh.instanceColor) entry.mesh.instanceColor.needsUpdate = true;
   };
   addChunk(trees.map((_, k) => k));
 

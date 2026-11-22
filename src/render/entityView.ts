@@ -41,6 +41,10 @@ interface ViewEntry {
   grounded: boolean;
   /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
   strike: { t: number; style: MeleeDef['style']; jab: number } | null;
+  /** How far from its origin the model reaches, world units, with room for swinging and breaking parts (see the culling in batch). */
+  radius: number;
+  /** The frame it was last posed and drawn in (see batch): a model left out since has stale part matrices. */
+  posed: number;
   /**
    * How far it has faded out (0 solid, 1 a ghost): stealthed units (see
    * game/smoke.ts) fade out slowly and back in quickly, so one that hides
@@ -71,6 +75,7 @@ const FADE_IN = 0.25;
 const STRIKE_TIME = 0.35;
 
 const _ahead = new THREE.Vector3();
+const _sphere = new THREE.Sphere();
 /** Where round a boat to look for a deck overhead (scaled by its size), and the gap it keeps under one. */
 const DUCK_RING: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
 const DUCK_GAP = 0.2;
@@ -107,6 +112,17 @@ export class EntityView {
   private readonly owners = new WeakMap<THREE.Object3D, Entity>();
   /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
   hidden: ReadonlySet<Entity> | null = null;
+  /**
+   * What the camera sees, set by the Stage each frame: models outside it
+   * are still moved and animated, but not posed part by part or drawn.
+   * `shadow` is how far a model's shadow reaches past it for each unit of
+   * its height (from the sun's angle), so one just off screen whose shadow
+   * falls on screen still gets drawn. Null draws everything.
+   */
+  cull: { frustum: THREE.Frustum; shadow: number } | null = null;
+  /** Models drawn in the last frame (for the stats readout). */
+  drawnCount = 0;
+  private frameNo = 0;
 
   /** `surface` is the ground height at a world point, which wrecks lie along. */
   /** `deck` is the height of a bridge deck over a world point, or null: tall boats duck under them. */
@@ -178,8 +194,10 @@ export class EntityView {
         const move = w.get(e, Unit)?.def.move;
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
-        const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0 };
+        const bounds = new THREE.Box3().setFromObject(obj);
+        const top = naval ? bounds.max.y : 0;
+        const radius = 1 + 1.25 * Math.max(bounds.min.length(), bounds.max.length());
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1 };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -300,10 +318,24 @@ export class EntityView {
 
   /** Copy every visible part into the batches. */
   private batch(): void {
-    this.root.updateMatrixWorld();
     const b = this.batcher;
+    const cull = this.cull;
     b.begin();
+    let drawn = 0;
+    this.frameNo++;
     for (const entry of this.entries.values()) {
+      // Hidden (not born yet in the moment drawn): nothing of it shows.
+      if (!entry.obj.visible) continue;
+      if (cull) {
+        // Its reach, plus as far as the shadow of something that tall falls.
+        _sphere.center.copy(entry.obj.position);
+        _sphere.radius = entry.radius * (1 + 2 * cull.shadow);
+        if (!cull.frustum.intersectsSphere(_sphere)) continue;
+      }
+      // Pose it part by part (root itself never moves, so this is what root.updateMatrixWorld would do for it).
+      entry.obj.updateMatrixWorld();
+      entry.posed = this.frameNo;
+      drawn++;
       // Solid for the first fifth of the fade, then a step fainter each fifth after.
       const step = Math.floor(entry.fade * 5) - 1;
       const ghost = step < 0 ? undefined : GHOSTS[Math.min(step, GHOSTS.length - 1)];
@@ -311,6 +343,7 @@ export class EntityView {
       // A stealthed trooper is drawn faint and see-through, once it's halfway faded.
       for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.fade >= 0.5);
     }
+    this.drawnCount = drawn;
     b.end();
   }
 
@@ -341,11 +374,15 @@ export class EntityView {
     return this.entries.get(e)?.obj;
   }
 
-  /** Which entity a raycast hit belongs to (walks up to the model's root). */
+  /**
+   * Which entity a raycast hit belongs to (walks up to the model's root):
+   * only one drawn in the last frame, since one left out off screen is
+   * still posed where it was last drawn.
+   */
   entityForObject(hit: THREE.Object3D): Entity | null {
     for (let o: THREE.Object3D | null = hit; o; o = o.parent) {
       const e = this.owners.get(o);
-      if (e !== undefined) return e;
+      if (e !== undefined) return this.entries.get(e)?.posed === this.frameNo ? e : null;
     }
     return null;
   }

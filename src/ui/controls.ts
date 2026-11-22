@@ -407,6 +407,22 @@ export class Controls {
     shadowRow.append(el('span', {}, 'Shadows'), shadows.row);
     cam.append(shadowRow);
     this.sync.push(() => shadows.set(this.stage.shadows));
+    const resolution = segmented<number>(
+      [
+        { label: 'Full', value: 1, title: "Drawn at the screen's full sharpness" },
+        { label: '¾', value: 0.75, title: 'Three quarters as sharp: a little softer, about half the pixel work' },
+        { label: '½', value: 0.5, title: 'Half as sharp: softer, a quarter of the pixel work (for big screens or a slow GPU)' },
+      ],
+      (r) => {
+        this.stage.renderScale = r;
+        this.saveView();
+        this.refresh();
+      },
+    );
+    const resolutionRow = el('div', { class: 'labelled' });
+    resolutionRow.append(el('span', {}, 'Resolution'), resolution.row);
+    cam.append(resolutionRow);
+    this.sync.push(() => resolution.set(this.stage.renderScale));
     const ts = this.stage.tiltShift;
     const toggleLabel = el('label', { class: 'check' });
     const toggle = el('input', { type: 'checkbox' });
@@ -553,7 +569,7 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, camera: this.stage.cameraMode, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, voices: this.match.voices, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
+    saveViewPrefs({ shadows: this.stage.shadows, resolution: this.stage.renderScale, follow: this.stage.followFights, camera: this.stage.cameraMode, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, voices: this.match.voices, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
   }
 
   private setSpeed(v: number): void {

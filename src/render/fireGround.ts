@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { FIRE_CELL, LIT, WHITE_HOT } from '../game/fire';
 import { Game } from '../game/game';
 
@@ -164,8 +165,7 @@ export class FireGround {
       this.scorchMap.needsUpdate = true;
     }
     this.flames.count = n;
-    this.flames.instanceMatrix.needsUpdate = true;
-    if (this.flames.instanceColor) this.flames.instanceColor.needsUpdate = true;
+    uploadInstances(this.flames);
   }
 
   /** Spread the scorch grid SPREAD cells round the burnt area (keeping the darkest where it's burnt), into the texture. */

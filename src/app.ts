@@ -169,6 +169,7 @@ export class App implements MatchControls {
     if (import.meta.env.DEV) (window as unknown as { app: App }).app = this;
     const view = loadViewPrefs();
     this.stage.shadows = view.shadows;
+    this.stage.renderScale = view.resolution;
     this.stage.cameraMode = view.camera ?? (view.follow ? 'follow' : 'free');
     this.stage.showPlans = view.plans;
     this.stage.showFronts = view.fronts;
@@ -179,7 +180,12 @@ export class App implements MatchControls {
     this.sim = params.get('worker') !== '0' && !this.arena && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
-      render: (alpha, frameSeconds) => this.frame(this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha, frameSeconds),
+      render: (alpha, frameSeconds) => {
+        this.perf.beginFrame();
+        const at = this.sim ? this.sim.sync(frameSeconds * this.loop.timeScale) : alpha;
+        this.perf.lap('sim snapshot');
+        this.frame(at, frameSeconds);
+      },
     });
     document.body.append(this.banner, this.skipNote, this.arenaBoard);
     this.photo = new PhotoMode(this.stage, this.loop);
@@ -422,8 +428,10 @@ export class App implements MatchControls {
     controls?.update(frameSeconds);
     this.tickerFeed.update(frameSeconds);
     this.hillBar.update(this.setup.visible);
-    this.audio.update(frameSeconds, listenerFrom(this.stage.rig), this.setup.visible);
     this.history.update();
+    this.perf.lap('HUD, ticker, panel');
+    this.audio.update(frameSeconds, listenerFrom(this.stage.rig), this.setup.visible);
+    this.perf.lap('audio');
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
     this.perf.frame(frameSeconds);
 

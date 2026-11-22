@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { Entity } from '../core/ecs';
 import { Rng } from '../core/rng';
@@ -38,6 +37,8 @@ import './models/god';
 import { BIOMES } from '../world/biomes';
 import { setTownStyle } from './models/buildings';
 import { TiltShift } from './tiltShift';
+import { RenderProfile } from './renderProfile';
+
 
 const DEBUG_IDS = DEBUG_LAYERS.map((l) => l.id);
 
@@ -46,6 +47,7 @@ const _right = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _up2 = new THREE.Vector3();
 const _snap = new THREE.Vector3();
+const _vp = new THREE.Matrix4();
 
 /**
  * Shadow detail. Shadows are drawn only around what the camera can see;
@@ -124,6 +126,9 @@ export class Stage {
   /** Half the size of the whole map, the most shadow coverage ever needed. */
   private mapHalf = 100;
   private readonly raycaster = new THREE.Raycaster();
+  private readonly frustum = new THREE.Frustum();
+  /** Leave out models off screen (see EntityView.cull); off draws every model every frame, as before. */
+  cullModels = true;
   private ground!: THREE.Object3D;
   private battle: THREE.Group | null = null;
   /** Stops the terrain redrawing for the battle being replaced (see buildTerrain). */
@@ -136,7 +141,7 @@ export class Stage {
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.scale);
     this.renderer.shadowMap.enabled = true;
     // Counted over the whole frame (shadow and post passes too) and reset in render, for the stats readout.
     this.renderer.info.autoReset = false;
@@ -175,11 +180,55 @@ export class Stage {
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.rig.camera));
+    // The tilt-shift's last pass also does the output conversion OutputPass would (see TiltShift).
     for (const pass of this.tiltShift.passes) this.composer.addPass(pass);
-    this.composer.addPass(new OutputPass());
+    this.hookProfile();
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
+  }
+
+  /**
+   * Where each frame's time goes (see RenderProfile), while the stats
+   * readout or `npm run fps` is watching; null the rest of the time.
+   */
+  profile: RenderProfile | null = null;
+
+  /** A profile for this renderer (with GPU timers when the browser has them). */
+  newProfile(): RenderProfile {
+    return new RenderProfile(this.renderer.getContext() as WebGL2RenderingContext);
+  }
+
+  /**
+   * Time the shadow pass and the scene and post passes apart: wrap the
+   * shadow map's render and each post pass so they lap the profile (and
+   * switch the GPU timer) as they finish. Costs nothing with no profile.
+   */
+  private hookProfile(): void {
+    const shadows = this.renderer.shadowMap;
+    const drawShadows = shadows.render.bind(shadows);
+    shadows.render = (...args: Parameters<typeof drawShadows>) => {
+      const p = this.profile;
+      if (!p) return drawShadows(...args);
+      // The scene pass has worked out what to draw by now; the shadow map comes first.
+      p.lap('draw: scene');
+      p.gpu?.begin('shadows');
+      const calls = this.renderer.info.render.calls;
+      drawShadows(...args);
+      p.shadowCalls += this.renderer.info.render.calls - calls;
+      p.lap('draw: shadows');
+      p.gpu?.begin('scene');
+    };
+    for (const pass of this.composer.passes) {
+      const draw = pass.render.bind(pass);
+      const scene = pass instanceof RenderPass;
+      pass.render = (...args: Parameters<typeof draw>) => {
+        const p = this.profile;
+        if (p && !scene) p.gpu?.begin('post');
+        draw(...args);
+        if (p && scene) p.lap('draw: scene');
+      };
+    }
   }
 
   /** Show a new battle, replacing whatever was loaded before. */
@@ -411,6 +460,7 @@ export class Stage {
   /** `simSeconds` is frame time scaled by sim speed, so animations pause with the game. */
   render(alpha: number, frameSeconds: number, simSeconds: number): void {
     if (!this.battle) return;
+    const p = this.profile;
     this.fights.update(simSeconds);
     this.director.update(simSeconds);
     if (this.mode === 'follow' && this.fights.focus) this.rig.glideTo(this.fights.focus.x, this.fights.focus.z, frameSeconds);
@@ -419,22 +469,50 @@ export class Stage {
     this.rig.update(frameSeconds);
     this.shakeCamera();
     this.fitShadow();
+    p?.lap('cameras');
+    this.entities.cull = this.cullView();
     this.entities.sync(alpha, simSeconds);
+    p?.lap('units');
     this.effects.update(simSeconds);
     this.godEffects.update(simSeconds);
+    p?.lap('effects');
     this.markers.update(frameSeconds, this.selected);
     this.outpostRings.update();
     this.commanderOverlay.update();
     this.frontLines.update(frameSeconds);
+    this.debugOverlay.update(frameSeconds);
+    p?.lap('overlays');
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
-    this.wreckage.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
     this.jamMarks.update(simSeconds);
-    this.debugOverlay.update(frameSeconds);
+    p?.lap('fire, frost, smoke, domes');
+    this.wreckage.update(simSeconds);
+    p?.lap('wreckage');
     this.renderer.info.reset();
+    p?.gpu?.begin('scene');
     this.composer.render(frameSeconds);
+    if (p) {
+      p.lap('draw: post');
+      p.gpu?.endFrame();
+      p.calls += this.renderer.info.render.calls;
+      p.triangles += this.renderer.info.render.triangles;
+      p.modelsDrawn += this.entities.drawnCount;
+      p.models += this.entities.count;
+    }
+  }
+
+  /** What the camera sees now, for EntityView to leave out models off screen (see EntityView.cull). */
+  private cullView(): EntityView['cull'] {
+    if (!this.cullModels) return null;
+    const cam = this.rig.camera;
+    cam.updateMatrixWorld();
+    this.frustum.setFromProjectionMatrix(_vp.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    // A low sun (photo mode's dawn and dusk) throws long shadows: the reach grows to match.
+    const o = this.sunOffset;
+    const shadow = this.shadowQuality === 'off' ? 0 : Math.min(25, Math.hypot(o.x, o.z) / Math.max(0.01, o.y));
+    return { frustum: this.frustum, shadow };
   }
 
   /** Quakes and the big bomb judder the camera (see Effects.shake); the rig puts it back each frame. */
@@ -472,9 +550,55 @@ export class Stage {
     this.raycaster.setFromCamera(ndc, this.rig.camera);
   }
 
+  /**
+   * How many pixels the battle is drawn with, as a share of the screen's own
+   * (up to 2 per CSS pixel on high-DPI screens): 1 is full sharpness, 0.5
+   * draws a quarter of the pixels, then scales up. The GPU's work in the
+   * shadowless parts of the frame (the ground, the post chain, multisampling)
+   * goes with the number of pixels.
+   */
+  get renderScale(): number {
+    return this.scale;
+  }
+
+  set renderScale(scale: number) {
+    if (scale === this.scale) return;
+    this.scale = scale;
+    this.resize();
+  }
+
+  private scale = 1;
+
+  /** Draw with 4x multisampling (smooth edges); off for the cost check. */
+  get multisample(): boolean {
+    return this.composer.renderTarget1.samples > 0;
+  }
+
+  set multisample(on: boolean) {
+    const samples = on ? 4 : 0;
+    for (const target of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (target.samples === samples) continue;
+      target.samples = samples;
+      // Made again at the new sample count when next drawn to.
+      target.dispose();
+    }
+  }
+
+  /** One of the battle's layers by name (terrain, woods, props, wreckage, batches, effects...), for the cost check. */
+  layer(name: string): THREE.Object3D | undefined {
+    return this.battle?.getObjectByName(name);
+  }
+
+  /** The size the battle is drawn at, in pixels, as WIDTHxHEIGHT. */
+  pixels(): string {
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    return `${size.x}x${size.y}`;
+  }
+
   private resize(): void {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.scale);
     this.renderer.setSize(w, h);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);

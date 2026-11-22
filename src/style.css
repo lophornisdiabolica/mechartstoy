@@ -334,6 +334,29 @@ body {
 }
 
 #debug[hidden],
+#perf button {
+  margin-top: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+#perf button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#perf .perf-report:not(:empty) {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 #perf[hidden],
 #hud[hidden] {
   display: none;

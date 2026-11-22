@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markRange } from './upload';
 import { RoadTops } from './roadTops';
 import { disposeTree } from './dispose';
 import { Rng } from '../core/rng';
@@ -55,6 +56,9 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   // Two triangles per cell, three vertices each, written in cell order so a cell's vertices are easy to find.
   const positions = new Float32Array(cols * rows * 18);
   const colors = new Float32Array(cols * rows * 18);
+  // Each facet's own normal on its three corners (what computeVertexNormals gives a mesh like this),
+  // written with the cell so a change to the ground redoes only the cells it touched.
+  const normals = new Float32Array(cols * rows * 18);
   const colorsOf = palette(field);
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
@@ -87,6 +91,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       [a, b, c].forEach((p, v) => {
         positions.set([p.x, p.y, p.z], base + v * 3);
         colors.set([color.r, color.g, color.b], base + v * 3);
+        normals.set([normal.x, normal.y, normal.z], base + v * 3);
       });
     });
   };
@@ -95,11 +100,18 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   const ground = new THREE.BufferGeometry();
   const posAttr = new THREE.BufferAttribute(positions, 3);
   const colAttr = new THREE.BufferAttribute(colors, 3);
+  const normAttr = new THREE.BufferAttribute(normals, 3);
   ground.setAttribute('position', posAttr);
   ground.setAttribute('color', colAttr);
-  ground.computeVertexNormals();
+  ground.setAttribute('normal', normAttr);
+  ground.computeBoundingSphere();
+  // Room for the ground to rise a little (fills, raised banks) without leaving its bounds, which picking reads.
+  ground.boundingSphere!.radius += 4;
   const groundMesh = new THREE.Mesh(ground, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }));
   groundMesh.name = 'ground';
+  // The ground fills the view whatever the camera does, and its bounds would need working out
+  // again over the whole map each time the ground changes: just always draw it.
+  groundMesh.frustumCulled = false;
   groundMesh.receiveShadow = true;
   groundMesh.castShadow = true;
 
@@ -136,13 +148,17 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   let drawnBridges = field.bridges.length;
   const { cellSize } = field.config;
   const stop = field.onChange((area: CellArea) => {
-    for (let j = Math.max(0, area.j0 - 1); j <= Math.min(rows - 1, area.j1 + 1); j++) {
-      for (let i = Math.max(0, area.i0 - 1); i <= Math.min(cols - 1, area.i1 + 1); i++) writeCell(i, j);
+    const j0 = Math.max(0, area.j0 - 1);
+    const j1 = Math.min(rows - 1, area.j1 + 1);
+    const i0 = Math.max(0, area.i0 - 1);
+    const i1 = Math.min(cols - 1, area.i1 + 1);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) writeCell(i, j);
+      // Upload just the cells rewritten, row by row, rather than the whole map's buffers.
+      const start = (j * cols + i0) * 18;
+      const count = (i1 - i0 + 1) * 18;
+      for (const attr of [posAttr, colAttr, normAttr]) markRange(attr, start, count);
     }
-    posAttr.needsUpdate = true;
-    colAttr.needsUpdate = true;
-    ground.computeVertexNormals();
-    ground.computeBoundingSphere();
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
     // Engineers' bridges come down.
     for (let k = 0; k < drawnBridges; k++) if (field.bridges[k]?.gone && bridges.children[k]?.visible) bridges.children[k].visible = false;
