@@ -34,10 +34,10 @@ import { blastCrater, craterOf } from '../craters';
 
 /**
  * Seconds a hulk spends falling apart before it's gone: its parts drop off
- * and lie on the ground, then go one by one (drawn by the page, see
- * render/wrecks.ts), while its wreckage comes down round it as they do.
+ * and lie on the ground, then sink away one by one, well apart (drawn by
+ * the page, see render/wrecks.ts), while its wreckage comes down round it.
  */
-export const CRUMBLE_TIME = 4;
+export const CRUMBLE_TIME = 12;
 /**
  * How much longer a hulk stays than its unit's wreckTime says. Hulks used
  * to go within half a minute; now they linger long enough for a fight's

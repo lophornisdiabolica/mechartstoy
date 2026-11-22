@@ -21,7 +21,7 @@ describe('wreckage', () => {
     const w = field();
     w.add(10, 10, 2, 4);
     w.rust(60);
-    expect(w.total).toBeGreaterThan(3);
+    expect(w.total).toBeGreaterThan(2.5);
     for (let t = 0; t < 40 * 60; t += 3) w.rust(3);
     expect(w.total).toBe(0);
     expect(w.count).toBe(0);

@@ -7,8 +7,9 @@ import * as D from '../core/dmath';
  * comes down where its hulk falls apart (see wreckSystem), so wreckage
  * piles up where the fighting was heaviest, and a field fought over again
  * and again turns into a scrapyard. It rusts away slowly over many minutes
- * (a light scattering is gone in a quarter of an hour, a heap of a dozen
- * wrecks lasts half an hour or more), so the map shows where the
+ * (a light scattering is gone in about nine minutes, a heap of a dozen
+ * wrecks in about a quarter of an hour; a spot fought over again and
+ * again is topped up by each new wave's wrecks), so the map shows where the
  * old battles were for a good while, but not forever.
  *
  * What a watcher sees: heaps of torn plates, girders and drums round the
@@ -31,7 +32,7 @@ export const WRECKAGE_CELL = 1.5;
  */
 export const MAX_WRECKAGE = 14;
 /** Seconds wreckage takes to rust to about a third. */
-const RUST = 420;
+const RUST = 200;
 /** Below this a cell is clear. */
 const GONE = 0.03;
 /** Seconds between rusting steps. */
@@ -228,9 +229,9 @@ export class WreckageField {
 
 /**
  * How much wreckage a vehicle leaves, in tank-sized wrecks (by its
- * footprint, as the scrap does): a battle tank leaves about 2.5, a jeep
- * under 1, the biggest super units 12.
+ * footprint, as the scrap does): a battle tank leaves about 1.8, a jeep
+ * under 1, the biggest super units 8.5.
  */
 export function wreckageOf(radius: number): number {
-  return Math.min(12, 2 * radius * radius);
+  return Math.min(8.5, 1.4 * radius * radius);
 }
