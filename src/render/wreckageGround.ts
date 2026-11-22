@@ -19,6 +19,8 @@ const REDRAW = 0.2;
 const SINK_STEP = 0.15;
 /** How many pieces are on their way into the ground at once on a heap that's going: each sinks over this many pieces' worth of rust. */
 const SINK_SPAN = 3;
+/** How far into its sinking a piece is gone: the last sliver isn't left poking out. */
+const SUNK = 0.9;
 /** How fast a heap that starts going starts sinking its top pieces (per second), so they don't drop all at once. */
 const SINK_EASE = 1.5;
 /** How high a full cell's heap rises, world units. */
@@ -329,8 +331,13 @@ export class WreckageGround {
         // The heap's surface: as high as the wreckage round that spot (smoothed across cells, so the
         // cells of one heap make one mound), and the later pieces lie on top of the earlier ones.
         const lift = HEAP * this.depth(x, z) * (0.25 + 0.75 * Math.sqrt(fill)) * (0.7 + r(11) * 0.3);
-        // The top pieces of a heap that's going sink into the ground before they're gone.
-        const sink = going * Math.max(0, Math.min(1, (i + SINK_SPAN - pieces) / SINK_SPAN));
+        // The top pieces of a heap that's going sink into the ground before they're gone, each at
+        // its own pace and finishing at its own time (some a little before their turn), slowly at
+        // first and faster at the end, so few linger with just a sliver showing.
+        const span = SINK_SPAN * (0.5 + r(16));
+        const under = (i + r(17) * 0.8 + span - pieces) / span;
+        if (going > 0 && under >= SUNK) continue;
+        const sink = going * Math.max(0, Math.min(1, under)) ** 1.6;
         const height = Math.max(_s.x, _s.y, _s.z) * 0.6;
         _p.set(x, ground + lift + _s.y * 0.3 - sink * (lift + height + 0.05), z);
         _m.compose(_p, _q, _s);

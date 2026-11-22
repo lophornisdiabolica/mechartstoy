@@ -17,14 +17,32 @@ describe('wreckage', () => {
     expect(w.near(0, 0, 30) - w.near(0, 0, 3)).toBeGreaterThan(1);
   });
 
-  it('rusts away over many minutes, not at once', () => {
+  it('rusts away over minutes, not at once, a lone wreck sooner than a heap', () => {
     const w = field();
     w.add(10, 10, 2, 4);
     w.rust(60);
-    expect(w.total).toBeGreaterThan(2.5);
+    expect(w.total).toBeGreaterThan(2);
     for (let t = 0; t < 40 * 60; t += 3) w.rust(3);
     expect(w.total).toBe(0);
     expect(w.count).toBe(0);
+    // A lone tank's junk and a heap of a dozen, side by side: after five minutes the lone one's gone, the heap isn't.
+    const both = field();
+    both.add(-20, 0, 1.5, 1.5);
+    for (let i = 0; i < 12; i++) both.add(20, 0, 1.5, 1.5);
+    for (let t = 0; t < 5 * 60; t += 3) both.rust(3);
+    expect(both.near(-20, 0, 6)).toBe(0);
+    expect(both.near(20, 0, 8)).toBeGreaterThan(3);
+  });
+
+  it('lasts longer or shorter by the battle setting', () => {
+    const game = new Game(3, { populate: false, autoSpawn: false });
+    const short = new WreckageField(game.field, 0.5);
+    const long = new WreckageField(game.field, 2);
+    for (const w of [short, long]) {
+      w.add(0, 0, 2, 4);
+      for (let t = 0; t < 120; t += 3) w.rust(3);
+    }
+    expect(long.total).toBeGreaterThan(short.total * 1.5);
   });
 
   it('can be taken, nearest first', () => {

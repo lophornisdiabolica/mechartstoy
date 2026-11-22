@@ -383,10 +383,10 @@ export interface Crumble {
 
 /** Seconds a part takes to drop to the ground once it comes off. */
 const DROP = 0.45;
-/** Seconds a part takes to sink out of sight. */
-const SINK_AWAY = 1.6;
+/** Seconds a part takes to sink out of sight: it starts slowly and speeds up. */
+const SINK_AWAY = 2.6;
 /** Share of the crumble over which the parts come off; they then lie a while and sink away one by one over the rest. */
-const COME_OFF = 0.25;
+const COME_OFF = 0.2;
 
 /**
  * Start a hulk falling apart, `window` seconds before it's gone (see
@@ -451,7 +451,10 @@ export function stepCrumble(c: Crumble, dt: number): void {
     const k = t * t;
     p.mesh.position.lerpVectors(p.p0, p.p1, k);
     p.mesh.quaternion.slerpQuaternions(p.q0, p.q1, k);
-    // Then, in its turn, it settles into the ground and out of sight.
-    if (c.elapsed > p.sink) p.mesh.position.y -= p.depth * Math.min(1, (c.elapsed - p.sink) / SINK_AWAY);
+    // Then, in its turn, it settles into the ground and out of sight: gently at first, then faster.
+    if (c.elapsed > p.sink) {
+      const u = Math.min(1, (c.elapsed - p.sink) / SINK_AWAY);
+      p.mesh.position.y -= p.depth * u * u;
+    }
   }
 }

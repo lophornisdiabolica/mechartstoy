@@ -141,7 +141,7 @@ export class Game {
       fire: new FireField(this.field),
       domes: new Domes(),
       frost: new FrostField(this.field),
-      wreckage: new WreckageField(this.field),
+      wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),

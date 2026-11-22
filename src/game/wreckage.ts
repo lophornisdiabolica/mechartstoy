@@ -6,11 +6,13 @@ import * as D from '../core/dmath';
  * A vehicle throws some of it about when it's destroyed, and the rest
  * comes down where its hulk falls apart (see wreckSystem), so wreckage
  * piles up where the fighting was heaviest, and a field fought over again
- * and again turns into a scrapyard. It rusts away slowly over many minutes
- * (a light scattering is gone in about nine minutes, a heap of a dozen
- * wrecks in about a quarter of an hour; a spot fought over again and
- * again is topped up by each new wave's wrecks), so the map shows where the
- * old battles were for a good while, but not forever.
+ * and again turns into a scrapyard. It rusts away over minutes,
+ * and a lone wreck's scattering much faster than a heap (a lone tank's is
+ * gone in about four minutes; a heap of a dozen wrecks lasts a quarter of
+ * an hour or more, and a spot fought over again and again is topped up by
+ * each new wave's wrecks), so the map shows heaps where the big fights
+ * were rather than an even coating everywhere. The battle settings scale
+ * how much a wreck leaves and how long it lasts.
  *
  * What a watcher sees: heaps of torn plates, girders and drums round the
  * hulks (see render/wreckageGround.ts), growing as more vehicles die there.
@@ -31,8 +33,12 @@ export const WRECKAGE_CELL = 1.5;
  * keeps its own thick heap rather than spreading into a thin field.
  */
 export const MAX_WRECKAGE = 14;
-/** Seconds wreckage takes to rust to about a third. */
+/** Seconds wreckage in a heap takes to rust to about a third... */
 const RUST = 200;
+/** ...and the share of that a lone wreck's scattering takes: it clears up much sooner. */
+const LONE = 0.3;
+/** Wreckage round a cell (its own and its neighbours', in tank-sized wrecks) that rusts as a heap does. */
+const HEAPED = 8;
 /** Below this a cell is clear. */
 const GONE = 0.03;
 /** Seconds between rusting steps. */
@@ -50,7 +56,8 @@ export class WreckageField {
   /** Changes whenever the wreckage changes (see the mirror's snapshot). */
   version = 0;
 
-  constructor(field: Battlefield) {
+  /** `life` scales how long wreckage lasts (the battle setting; 1 is the usual). */
+  constructor(field: Battlefield, private readonly life = 1) {
     this.minX = field.bounds.minX;
     this.minZ = field.bounds.minZ;
     this.cols = Math.ceil(field.width / WRECKAGE_CELL);
@@ -153,11 +160,15 @@ export class WreckageField {
   rust(dt: number): void {
     this.sinceRust += dt;
     if (this.sinceRust < RUST_EVERY || this.active.length === 0) return;
-    const keep = D.exp(-this.sinceRust / RUST);
+    const spell = this.sinceRust;
     this.sinceRust = 0;
+    // How much is round each cell, before any of it rusts this step: thin wreckage goes faster.
+    const round = this.active.map((k) => this.round(k));
     const next: number[] = [];
-    for (const k of this.active) {
-      this.mass[k] *= keep;
+    for (let n = 0; n < this.active.length; n++) {
+      const k = this.active[n];
+      const heaped = Math.min(1, round[n] / HEAPED);
+      this.mass[k] *= D.exp(-spell / (RUST * this.life * (LONE + (1 - LONE) * heaped)));
       if (this.mass[k] >= GONE) next.push(k);
       else {
         this.mass[k] = 0;
@@ -166,6 +177,22 @@ export class WreckageField {
     }
     this.active = next;
     this.version++;
+  }
+
+  /** Wreckage on a cell and the eight round it. */
+  private round(k: number): number {
+    const i = k % this.cols;
+    const j = (k - i) / this.cols;
+    let sum = 0;
+    for (let dj = -1; dj <= 1; dj++) {
+      const jj = j + dj;
+      if (jj < 0 || jj >= this.rows) continue;
+      for (let di = -1; di <= 1; di++) {
+        const ii = i + di;
+        if (ii >= 0 && ii < this.cols) sum += this.mass[jj * this.cols + ii];
+      }
+    }
+    return sum;
   }
 
   /** The cells with wreckage, for the page: cell and mass, in pairs. */
@@ -229,9 +256,9 @@ export class WreckageField {
 
 /**
  * How much wreckage a vehicle leaves, in tank-sized wrecks (by its
- * footprint, as the scrap does): a battle tank leaves about 1.8, a jeep
- * under 1, the biggest super units 8.5.
+ * footprint, as the scrap does): a battle tank leaves about 1.5, a jeep
+ * under 1, the biggest super units 7.
  */
 export function wreckageOf(radius: number): number {
-  return Math.min(8.5, 1.4 * radius * radius);
+  return Math.min(7, 1.2 * radius * radius);
 }

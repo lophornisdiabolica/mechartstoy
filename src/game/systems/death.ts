@@ -37,7 +37,7 @@ import { blastCrater, craterOf } from '../craters';
  * and lie on the ground, then sink away one by one, well apart (drawn by
  * the page, see render/wrecks.ts), while its wreckage comes down round it.
  */
-export const CRUMBLE_TIME = 12;
+export const CRUMBLE_TIME = 20;
 /**
  * How much longer a hulk stays than its unit's wreckTime says. Hulks used
  * to go within half a minute; now they linger long enough for a fight's
@@ -50,14 +50,16 @@ const BLOWN_OFF = 0.25;
 
 /** How long a unit's hulk stays on the field, seconds (0 for none). */
 export function wreckLife(def: { wreckTime: number }): number {
-  return def.wreckTime * WRECK_LINGER;
+  // Plus the time it spends falling apart, which grew from 12 seconds to CRUMBLE_TIME.
+  return def.wreckTime * WRECK_LINGER + CRUMBLE_TIME - 12;
 }
 
 /** Wreckage a destroyed unit leaves, or 0: infantry leave none, and nothing lands in water. */
 function wreckageFor(ctx: SimContext, def: UnitDef, x: number, z: number): number {
   if (def.class === 'infantry' || def.move === 'naval' || def.wreckTime <= 0) return 0;
   if (ctx.field.isWater(x, z) && ctx.field.deckAt(x, z) === null) return 0;
-  return wreckageOf(def.radius);
+  // The battle setting scales it (0 for none: the hulks still fall apart, but leave no junk).
+  return wreckageOf(def.radius) * (ctx.settings.map.wreckage ?? 1);
 }
 /** How fast a shot-down aircraft falls, world units per second; and a plane, which glides down. */
 const FALL_SPEED = 7;
