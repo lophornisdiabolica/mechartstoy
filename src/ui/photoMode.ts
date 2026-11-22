@@ -44,6 +44,8 @@ export class PhotoMode {
   enter(): void {
     if (this.active) return;
     const rig = this.stage.rig;
+    // The tilt and zoom are the photographer's now, not the director's.
+    if (this.stage.cameraMode === 'director' || this.stage.cameraMode === 'unit') this.stage.cameraMode = 'free';
     this.saved = { elevation: rig.elevation, maxZoom: rig.maxZoom };
     rig.maxZoom = PHOTO_ZOOM;
     rig.freeRotation = true;

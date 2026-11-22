@@ -12,6 +12,7 @@ import { disposeTree } from './dispose';
 import { Effects } from './effects';
 import { EntityView } from './entityView';
 import { FightWatch } from './fightWatch';
+import { Director, UnitCam } from './director';
 import { OutpostRings } from './outpostRings';
 import { Markers } from './markers';
 import { CommanderOverlay } from './commanderOverlay';
@@ -50,6 +51,9 @@ const _snap = new THREE.Vector3();
  * `low` uses a coarser shadow map, `off` skips the shadow pass, which
  * otherwise draws every visible unit and building a second time.
  */
+/** Who moves the camera (see Stage.cameraMode). */
+export type CameraMode = 'free' | 'follow' | 'director' | 'unit';
+
 export type ShadowQuality = 'high' | 'low' | 'off';
 
 const SHADOW_MAP: Record<Exclude<ShadowQuality, 'off'>, number> = { high: 4096, low: 2048 };
@@ -100,9 +104,18 @@ export class Stage {
   fights!: FightWatch;
   /** Entity highlighted by the UI. */
   selected: Entity | null = null;
-  /** Spectator camera: glide to wherever the fighting is. Panning by hand turns it off. */
-  followFights = false;
-  /** Called when panning by hand turns `followFights` off. */
+  /** Picks and frames the fight most worth watching (see Director). */
+  director!: Director;
+  /** Rides behind one unit (see UnitCam). */
+  unitCam!: UnitCam;
+  /**
+   * Who moves the camera: the player (free), the spectator camera that
+   * glides to wherever the fighting is (follow), the director that picks
+   * and frames fights like a broadcast (director), or the unit camera
+   * riding behind one unit (unit). Panning by hand goes back to free.
+   */
+  private mode: CameraMode = 'free';
+  /** Called when panning by hand stops the camera following anything. */
   onFollowStopped: (() => void) | null = null;
   private shadowQuality: ShadowQuality = 'high';
   /** Half the size of the whole map, the most shadow coverage ever needed. */
@@ -131,8 +144,8 @@ export class Stage {
 
     this.rig = new CameraRig(this.renderer.domElement, { minX: 0, maxX: 0, minZ: 0, maxZ: 0 });
     this.rig.onManualPan = () => {
-      if (!this.followFights) return;
-      this.followFights = false;
+      if (this.mode === 'free') return;
+      this.cameraMode = 'free';
       this.onFollowStopped?.();
     };
 
@@ -238,8 +251,31 @@ export class Stage {
     this.battle = battle;
 
     this.fights = new FightWatch(game.events, field.bounds);
+    this.director = new Director(game);
+    this.unitCam = new UnitCam(game);
     this.mapHalf = Math.max(field.width, field.depth) * 0.6;
     this.rig.setBounds(field.bounds);
+  }
+
+  get cameraMode(): CameraMode {
+    return this.mode;
+  }
+
+  set cameraMode(mode: CameraMode) {
+    if (mode === this.mode) return;
+    const moving = mode === 'director' || mode === 'unit';
+    if (!moving && (this.mode === 'director' || this.mode === 'unit')) this.rig.release();
+    this.mode = mode;
+    if (mode === 'unit' && this.unitCam) this.unitCam.follow(this.selected);
+  }
+
+  /** The spectator camera that glides to wherever the fighting is (the follow camera mode). */
+  get followFights(): boolean {
+    return this.mode === 'follow';
+  }
+
+  set followFights(on: boolean) {
+    this.cameraMode = on ? 'follow' : 'free';
   }
 
   /** Front lines: a soft shading of who holds which ground (see FrontLines). */
@@ -369,7 +405,10 @@ export class Stage {
   render(alpha: number, frameSeconds: number, simSeconds: number): void {
     if (!this.battle) return;
     this.fights.update(simSeconds);
-    if (this.followFights && this.fights.focus) this.rig.glideTo(this.fights.focus.x, this.fights.focus.z, frameSeconds);
+    this.director.update(simSeconds);
+    if (this.mode === 'follow' && this.fights.focus) this.rig.glideTo(this.fights.focus.x, this.fights.focus.z, frameSeconds);
+    else if (this.mode === 'director') this.director.drive(this.rig, frameSeconds);
+    else if (this.mode === 'unit' && !this.unitCam.drive(this.rig, frameSeconds, simSeconds, alpha, this.director)) this.director.drive(this.rig, frameSeconds);
     this.rig.update(frameSeconds);
     this.shakeCamera();
     this.fitShadow();

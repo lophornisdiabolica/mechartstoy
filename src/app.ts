@@ -127,7 +127,7 @@ export class App implements MatchControls {
     if (import.meta.env.DEV) (window as unknown as { app: App }).app = this;
     const view = loadViewPrefs();
     this.stage.shadows = view.shadows;
-    this.stage.followFights = view.follow;
+    this.stage.cameraMode = view.camera ?? (view.follow ? 'follow' : 'free');
     this.stage.showPlans = view.plans;
     this.stage.showFronts = view.fronts;
     this.stage.rig.smoothTurn = view.smoothTurn;
@@ -437,7 +437,7 @@ export class App implements MatchControls {
     return (
       `${lines.join('\n')}\n` +
       `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
-      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · G god powers · 1-4 speed · space pause · M mute · P stats · O overlays · H photo mode`
+      `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · V director · U unit cam · G god powers · 1-4 speed · space pause · M mute · P stats · O overlays · H photo mode`
     );
   }
 
