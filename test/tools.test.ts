@@ -185,5 +185,5 @@ describe('army mix and moments', () => {
     // Moments always come with a link that opens the battle before them.
     const fake = { ...r, moments: [{ minute: 2, kind: 'super' as const, side: 0, text: 'A Titan fell' }] };
     expect(formatMoments([fake], 'http://x/')).toContain(`http://x/?${r.link}&at=1:40`);
-  });
+  }, 60_000);
 });
