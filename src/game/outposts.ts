@@ -110,21 +110,21 @@ export function createOutposts(sites: OutpostSite[]): Outpost[] {
   return sites.map((s) => ({ index: s.index, x: s.x, z: s.z, owner: GARRISON, progress: 0, claimant: -1, kind: OUTPOST_KINDS[s.kind] }));
 }
 
-/** An outpost's post, two towers and a bunker, laid out round the site, and its kind's own building opposite the bunker. */
+/**
+ * An outpost's post, two towers and a bunker, laid out round the site, and
+ * its kind's own building opposite the bunker. The hill is only its beacon,
+ * standing where the post would.
+ */
 export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rng: Rng): void {
   const a = rng.range(0, Math.PI * 2);
   const at = (angle: number, dist: number) => ({ x: outpost.x + D.cos(a + angle) * dist, z: outpost.z + D.sin(a + angle) * dist });
-  const post = spawnOutpostPart(world, ctx, ctx.buildings.outpost, outpost, outpost.x, outpost.z, -a, false);
+  // The hill's post is its beacon, and the hill is bare ground round it: no towers or guards to give whoever takes it first a fort.
+  const hill = outpost.kind.id === 'hill';
+  const post = spawnOutpostPart(world, ctx, hill ? ctx.buildings.hillBeacon : ctx.buildings.outpost, outpost, outpost.x, outpost.z, -a, false);
   // The post can't be shot or destroyed: outposts change hands, they don't go away.
   world.remove(post, Health);
   world.remove(post, Targetable);
-  // The hill is bare ground round its beacon: no towers or guards to give whoever takes it first a fort.
-  if (outpost.kind.id === 'hill') {
-    const def = ctx.buildings.hillBeacon;
-    const q = at(-Math.PI / 2, 2.2 + def.radius);
-    spawnOutpostPart(world, ctx, def, outpost, q.x, q.z, -(a - Math.PI / 2), false);
-    return;
-  }
+  if (hill) return;
   for (const angle of [0, Math.PI]) {
     const p = at(angle, 4.6);
     spawnOutpostPart(world, ctx, ctx.buildings.tower, outpost, p.x, p.z, -(a + angle), false);

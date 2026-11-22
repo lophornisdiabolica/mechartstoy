@@ -1,5 +1,6 @@
-import { System } from '../core/ecs';
-import { Faction, Unit } from './components';
+import { System, World } from '../core/ecs';
+import * as D from '../core/dmath';
+import { Faction, Guard, Mover, Transform, Unit } from './components';
 import { SimContext } from './context';
 import { CAPTURE_RADIUS, Outpost } from './outposts';
 
@@ -61,6 +62,42 @@ export function hillUrgency(ctx: SimContext, side: number): number {
   const hill = hillOf(ctx);
   if (!hill || hill.owner < 0 || ctx.sides.allied(hill.owner, side)) return 0;
   return Math.min(1, teamHeld(ctx, ctx.sides.teams[hill.owner]) / ctx.settings.armies.hillHold);
+}
+
+/**
+ * Seconds until an enemy of `side` wins on the hill if nobody stops its
+ * clock (Infinity when no enemy of `side` holds it).
+ */
+export function hillTimeLeft(ctx: SimContext, side: number): number {
+  const hill = hillOf(ctx);
+  if (!hill || hill.owner < 0 || ctx.sides.allied(hill.owner, side)) return Infinity;
+  return Math.max(0, ctx.settings.armies.hillHold - teamHeld(ctx, ctx.sides.teams[hill.owner]));
+}
+
+/** Roads wind: a straight line to the hill is about this much shorter than the way there. */
+const WINDING = 1.3;
+/** Share of an army that has to be able to get there in time: the slowest stragglers don't hold the rest back. */
+const MOST = 0.75;
+
+/**
+ * Seconds most of these sides' land army (not boats, which can't take the
+ * hill, nor outpost guards) would take to reach the hill from where it
+ * stands now.
+ */
+export function hillReach(world: World, ctx: SimContext, sides: readonly number[]): number {
+  const hill = hillOf(ctx);
+  if (!hill) return 0;
+  const times: number[] = [];
+  for (const e of world.query(Unit, Faction, Mover, Transform)) {
+    if (!sides.includes(world.req(e, Faction).id) || world.has(e, Guard)) continue;
+    const m = world.req(e, Mover);
+    if (m.move === 'naval' || m.speed <= 0 || world.req(e, Unit).def.builds) continue;
+    const t = world.req(e, Transform);
+    times.push((D.hypot(t.x - hill.x, t.z - hill.z) * WINDING) / m.speed);
+  }
+  if (times.length === 0) return 0;
+  times.sort((a, b) => a - b);
+  return times[Math.min(times.length - 1, Math.floor(times.length * MOST))];
 }
 
 export function hillSystem(ctx: SimContext): System {

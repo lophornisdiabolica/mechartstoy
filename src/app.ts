@@ -21,7 +21,7 @@ import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
 import { Ticker } from './ui/ticker';
 import { HillBar } from './ui/hillBar';
-import { teamHeld } from './game/hill';
+import { hillOf, teamHeld } from './game/hill';
 import { BattleHistory } from './ui/battleChart';
 import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
@@ -71,6 +71,10 @@ function plan(game: Game, faction: number, factions: FactionDef[]): string {
   const time = game.world.time;
   const target = sides.target(faction, offensive.attack(faction, time));
   const name = target !== null ? factions[target]?.name ?? '' : '';
+  // King of the hill: attacks are for the hill, which a side holding it is keeping.
+  const hill = hillOf(game.ctx);
+  if (hill && offensive.allIn(faction)) return ' · all in for the hill';
+  if (hill && offensive.attacking(faction, time)) return sides.allied(hill.owner, faction) ? ' · holding the hill' : ' · going for the hill';
   if (offensive.attacking(faction, time)) return target !== null ? ` · attacking ${name}` : '';
   if (game.settings.armies.attackTiming === 'tide') return ' · building up';
   const p = offensive.plan(faction);

@@ -587,15 +587,22 @@ battle, its exact map via `seed`).
   screen instead, and "End battle and set up" goes there right away.
 - **King of the hill:** Conquest's rules plus one more outpost, the hill,
   on the fairest ground near the middle (about as far from every base; towns
-  keep off it). It's bare ground round a tall beacon flying its holder's
-  banner, with no towers or guards, so whoever takes it has to hold it with
+  keep off it). It's bare ground round a tall beacon in its middle (the
+  hill's post) flying its holder's banner, with no towers or guards, so whoever takes it has to hold it with
   their army. Attacks go for the hill instead of the enemy base, and a team
   that holds it keeps its army there between attacks. The holder's clock
   runs while no enemy is within a few units of the ring; the first team to
   hold it for **Hold to win** (5 minutes by default) in all wins. A bar at
   the top shows each team's time left, and the ticker calls the last minute
   and the last 30 seconds. The nearer the holder is to winning, the smaller
-  the edge (and the army) the others wait for before going in.
+  the edge (and the army) the others wait for before going in. Near the
+  end, once the holder is about as close to winning as the others' army is
+  from the hill (plus 25 seconds), they go **all in**: everything they have
+  sets out at once, nobody stays to hold other outposts or goes home to
+  regroup, and they keep at it until the clock is stopped, so a match ends
+  in one big last fight rather than a standoff. The ticker calls it. (The
+  holder walking round the hill isn't an attack on anyone's base, so
+  nobody stays home for it.)
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
 rotate, F follows the fighting, V the director camera, U the unit camera, T toggles tilt-shift, G opens the god powers,

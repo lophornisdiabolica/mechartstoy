@@ -122,6 +122,13 @@ export interface Mover {
   /** A melee unit charging what it's closing on (see MeleeDef.charge): its speed multiplier for now. */
   surge?: number;
   /**
+   * Slower than full speed for now, as a share of it: a unit walking an
+   * outpost's or the hill's perimeter keeps to the patrol's own pace
+   * instead of hurrying to its place and stopping there (see patrol in
+   * systems/ai.ts). The AI sets it every tick it wants it.
+   */
+  pace?: number;
+  /**
    * A lunge or a knock under way (see systems/melee.ts): it's carried along
    * at (vx, vz) for `left` more seconds, a quick dash rather than a jump.
    */

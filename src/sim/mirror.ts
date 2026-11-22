@@ -70,6 +70,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   battleOver: true,
   hillClock: true,
   hillHeld: true,
+  hillAllIn: true,
   power: true,
   godUsed: true,
   earthwork: true,

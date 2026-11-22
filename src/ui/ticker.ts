@@ -84,6 +84,7 @@ export class Ticker {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([this.side(e.faction), e.left >= 60 ? ` is a minute from holding the hill` : ` is ${e.left} seconds from holding the hill`]);
     });
+    events.on('hillAllIn', (e) => this.game === game && e.faction >= 0 && e.faction < this.factions.length && this.say([this.side(e.faction), ' throws everything at the hill']));
     events.on('hillHeld', (e) => this.game === game && e.faction >= 0 && e.faction < this.factions.length && this.say([this.side(e.faction), ' held the hill']));
     events.on('sideEliminated', (e) => this.game === game && this.say([this.side(e.faction), ' is out of the war']));
     events.on('battleOver', (o) => {

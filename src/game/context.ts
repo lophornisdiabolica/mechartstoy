@@ -63,6 +63,8 @@ export type GameEvents = {
   hillClock: { faction: number; left: number };
   /** King of the hill: the holder's team has held it long enough, and wins. */
   hillHeld: { faction: number; time: number };
+  /** King of the hill: a side's team has thrown everything at the hill, with an enemy this many seconds from winning on it. */
+  hillAllIn: { faction: number; left: number };
   /**
    * A god power did something worth showing beyond what its shells and map
    * changes show: a quake's heave (`strength` is how hard), the big bomb, a
