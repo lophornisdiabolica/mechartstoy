@@ -1306,3 +1306,70 @@ body.photo #debug {
     padding: 2px 4px;
   }
 }
+
+/* The model viewer (?models). */
+.viewer-labels {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.viewer-label {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(16, 20, 28, 0.65);
+  color: #e6edf3;
+  font: 11px system-ui, sans-serif;
+  white-space: nowrap;
+}
+#panel.viewer {
+  width: 330px;
+}
+#panel.viewer .body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#panel.viewer .row {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+#panel.viewer .row select {
+  grid-column: span 2;
+}
+#panel.viewer .seg {
+  flex-wrap: wrap;
+}
+#panel.viewer a {
+  color: #9fc3ff;
+  align-self: center;
+  margin-left: 6px;
+}
+#panel.viewer .hint {
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* The arena (?arena=): the round's scoreboard. */
+#arena {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(16, 20, 28, 0.78);
+  color: #e6edf3;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  max-width: calc(100vw - 320px);
+}
+#arena .title {
+  font-weight: 600;
+}
+#arena .tally {
+  opacity: 0.75;
+}
