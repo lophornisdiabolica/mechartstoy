@@ -132,6 +132,7 @@ export class App implements MatchControls {
     this.stage.showFronts = view.fronts;
     this.stage.rig.smoothTurn = view.smoothTurn;
     this.tickerFeed.on = view.ticker;
+    this.tickerFeed.voices = view.voices;
     this.sim = new URLSearchParams(location.search).get('worker') !== '0' && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
       step: (dt) => (this.sim ? this.sim.step() : this.perf.step(() => this.battle.game.step(dt))),
@@ -197,6 +198,14 @@ export class App implements MatchControls {
 
   set ticker(on: boolean) {
     this.tickerFeed.on = on;
+  }
+
+  get voices(): 'all' | string[] {
+    return this.tickerFeed.voices;
+  }
+
+  set voices(v: 'all' | string[]) {
+    this.tickerFeed.voices = v;
   }
 
   photoMode(): void {
