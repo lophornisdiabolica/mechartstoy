@@ -11,15 +11,23 @@ const EVERY = 0.5;
 const HITCH_MS = 25;
 /** Hitches kept in the log. */
 const HITCHES = 5;
+/** The profile's name for waiting on the GPU (see Stage.waitForGpu). */
+const GPU_WAIT = 'GPU wait';
 
 /** What a stretch of frames cost, as `measure` and the cost check report it. */
 export interface FrameStats {
   frames: number;
   /** Milliseconds between frames on average (vsync caps this: a fast frame still waits for the screen). */
   frameMs: number;
-  /** The page's own work per frame, in total and by part. */
+  /** The page's own work per frame, in total and by part (not counting the GPU wait). */
   pageMs: number;
   page: Record<string, number>;
+  /**
+   * Milliseconds per frame spent waiting for the GPU to finish the frame,
+   * when the stage was told to wait (see Stage.waitForGpu); 0 otherwise.
+   * Page time plus this is roughly when the GPU finished each frame.
+   */
+  gpuWaitMs: number;
   /** GPU milliseconds per frame, in total and by pass; null where the browser has no GPU timers. */
   gpuMs: number | null;
   gpu: Record<string, number> | null;
@@ -54,6 +62,7 @@ export class PerfOverlay {
   readonly root = el('div', { id: 'perf', hidden: '' });
   private readonly text = el('div', { class: 'perf-text' });
   private readonly checkButton = el('button', { type: 'button', title: 'Turn shadows, blur, multisampling and each layer off in turn for a moment, and show what each costs on this machine' }, 'Cost check');
+  private readonly copyButton = el('button', { type: 'button', title: 'Copy the readout and the last cost check, to paste somewhere' }, 'Copy');
   private readonly report = el('div', { class: 'perf-report' });
   private frames = 0;
   private frameTime = 0;
@@ -80,7 +89,10 @@ export class PerfOverlay {
   ) {
     this.profile = stage.newProfile();
     this.checkButton.addEventListener('click', () => void this.costCheck());
-    this.root.append(this.text, this.checkButton, this.report);
+    this.copyButton.addEventListener('click', () => void this.copy());
+    const buttons = el('div', { class: 'perf-buttons' });
+    buttons.append(this.checkButton, this.copyButton);
+    this.root.append(this.text, buttons, this.report);
     document.body.append(this.root);
   }
 
@@ -155,7 +167,8 @@ export class PerfOverlay {
 
   /** Log the frame just finished if its page work ran long, with the parts that took the time. */
   private noteHitch(): void {
-    const parts = [...this.profile.thisFrame()];
+    // The cost check's deliberate GPU waits aren't hitches.
+    const parts = [...this.profile.thisFrame()].filter(([k]) => k !== GPU_WAIT);
     const total = parts.reduce((s, [, v]) => s + v, 0);
     if (total < HITCH_MS) return;
     const top = parts.sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
@@ -178,7 +191,8 @@ export class PerfOverlay {
   private stats(): FrameStats {
     const p = this.profile;
     const n = Math.max(1, p.frames);
-    const page = Object.fromEntries([...p.parts].map(([k, v]) => [k, v / n]));
+    const page = Object.fromEntries([...p.parts].filter(([k]) => k !== GPU_WAIT).map(([k, v]) => [k, v / n]));
+    const gpuWaitMs = (p.parts.get(GPU_WAIT) ?? 0) / n;
     const g = p.gpu;
     const gpu = g && g.frames > 0 ? Object.fromEntries([...g.parts].map(([k, v]) => [k, v / g.frames])) : null;
     const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
@@ -187,6 +201,7 @@ export class PerfOverlay {
       frameMs: this.frames > 0 ? (this.frameTime / this.frames) * 1000 : 0,
       pageMs: sum(page),
       page,
+      gpuWaitMs,
       gpuMs: gpu ? sum(gpu) : null,
       gpu,
       calls: p.calls / n,
@@ -294,6 +309,10 @@ export class PerfOverlay {
     const ms = (v: number) => v.toFixed(1);
     const lines: string[] = [];
     const show = (extra = '') => (this.report.textContent = [...lines, extra].filter(Boolean).join('\n'));
+    // Without GPU timers, make each frame wait for the GPU to finish it, so its time shows up
+    // (only during the check: waiting stalls the pipeline the browser otherwise keeps busy).
+    const timers = this.profile.gpu !== null;
+    if (!timers) stage.waitForGpu = true;
     try {
       show('Cost check: measuring with everything on...');
       // Settle, then the baseline; it's taken again at the end and averaged, in case things drifted.
@@ -309,23 +328,53 @@ export class PerfOverlay {
       }
       await this.measure(0.4);
       const again = await this.measure(seconds);
-      const base = (k: 'pageMs' | 'frameMs') => (first[k] + again[k]) / 2;
+      // Page time plus the wait: when the GPU had finished the frame.
+      const done = (s: FrameStats) => s.pageMs + s.gpuWaitMs;
+      const base = (f: (s: FrameStats) => number) => (f(first) + f(again)) / 2;
+      const page = (s: FrameStats) => s.pageMs;
+      const frame = (s: FrameStats) => s.frameMs;
       const gpuBase = first.gpuMs !== null && again.gpuMs !== null ? (first.gpuMs + again.gpuMs) / 2 : null;
       lines.push(`Cost check (each thing off in turn; what it saved per frame)`);
-      lines.push(`with everything on: page ${ms(base('pageMs'))} ms${gpuBase !== null ? ` · GPU ${ms(gpuBase)} ms` : ''} · frame ${ms(base('frameMs'))} ms`);
+      const gpuNow = gpuBase !== null ? ` · GPU ${ms(gpuBase)} ms` : ` · GPU done ${ms(base(done))} ms`;
+      lines.push(`with everything on: page ${ms(base(page))} ms${gpuNow} · frame ${ms(base(frame))} ms`);
       for (const { label, s } of rows) {
-        const gpu = gpuBase !== null && s.gpuMs !== null ? ` · GPU ${ms(gpuBase - s.gpuMs)}` : '';
-        lines.push(`${label}: page ${ms(base('pageMs') - s.pageMs)}${gpu} · frame ${ms(base('frameMs') - s.frameMs)}`);
+        const gpu = gpuBase !== null ? (s.gpuMs !== null ? ` · GPU ${ms(gpuBase - s.gpuMs)}` : '') : ` · GPU done ${ms(base(done) - done(s))}`;
+        lines.push(`${label}: page ${ms(base(page) - page(s))}${gpu} · frame ${ms(base(frame) - frame(s))}`);
       }
-      if (gpuBase === null) lines.push('(no GPU timers in this browser: the frame column is the closest to GPU cost, and vsync hides savings below the screen rate)');
+      if (gpuBase === null) {
+        lines.push(
+          '(no GPU timers in this browser, so each frame waited for the GPU during the check: "GPU done" is how long after the frame began the GPU had finished it. Frame time is capped by the screen rate, so it only drops when a frame was running late)',
+        );
+      }
       show();
       console.info(`[perf] ${lines.join('\n')}`);
       return lines.join('\n');
     } finally {
+      stage.waitForGpu = false;
       this.checking = false;
       this.checkButton.disabled = false;
       this.reset();
     }
+  }
+
+  /** Put the readout and the last cost check on the clipboard. */
+  private async copy(): Promise<void> {
+    const text = [this.text.textContent, this.report.textContent].filter(Boolean).join('\n\n');
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      // No clipboard permission (or not a secure page): fall back to selecting it in a text box.
+      const box = el('textarea');
+      box.value = text;
+      document.body.append(box);
+      box.select();
+      ok = document.execCommand('copy');
+      box.remove();
+    }
+    this.copyButton.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => (this.copyButton.textContent = 'Copy'), 1500);
   }
 
   private readout(): string {

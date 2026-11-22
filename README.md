@@ -192,7 +192,11 @@ the time (and to the console). The **Cost check** button turns shadows,
 the tilt-shift blur, multisampling, half the pixels, and
 each layer (terrain, woods and props, wreckage, units, effects) off in
 turn for a moment on whatever's on screen, and reports what each saved
-in page and GPU time on this machine.
+in page and GPU time on this machine. Where the browser has no GPU
+timers, each frame waits for the GPU during the check (a one-pixel
+read-back), and "GPU done" is how long after the frame began the GPU had
+finished it. **Copy** puts the readout and the last check on the
+clipboard.
 
 `npm run fps` does the same headlessly on fixed scenes (the bench battles
 at 5, 10 and 25 minutes, the whole map or close on a fight): page time by

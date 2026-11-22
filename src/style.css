@@ -346,6 +346,11 @@ body {
   cursor: pointer;
 }
 
+#perf .perf-buttons {
+  display: flex;
+  gap: 6px;
+}
+
 #perf button:disabled {
   opacity: 0.5;
   cursor: default;

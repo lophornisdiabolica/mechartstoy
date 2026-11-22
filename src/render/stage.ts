@@ -48,6 +48,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _up2 = new THREE.Vector3();
 const _snap = new THREE.Vector3();
 const _vp = new THREE.Matrix4();
+const _pixel = new Uint8Array(4);
 
 /**
  * Shadow detail. Shadows are drawn only around what the camera can see;
@@ -193,6 +194,12 @@ export class Stage {
    * readout or `npm run fps` is watching; null the rest of the time.
    */
   profile: RenderProfile | null = null;
+  /**
+   * Wait for the GPU to finish each frame before going on, timed as the
+   * profile's 'GPU wait': a stand-in for GPU timers on browsers without
+   * them (the cost check). Stalls the pipeline, so only while measuring.
+   */
+  waitForGpu = false;
 
   /** A profile for this renderer (with GPU timers when the browser has them). */
   newProfile(): RenderProfile {
@@ -495,6 +502,12 @@ export class Stage {
     this.composer.render(frameSeconds);
     if (p) {
       p.lap('draw: post');
+      if (this.waitForGpu) {
+        // Reading a pixel back makes the page wait until the GPU has drawn the frame.
+        const gl = this.renderer.getContext();
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _pixel);
+        p.lap('GPU wait');
+      }
       p.gpu?.endFrame();
       p.calls += this.renderer.info.render.calls;
       p.triangles += this.renderer.info.render.triangles;
