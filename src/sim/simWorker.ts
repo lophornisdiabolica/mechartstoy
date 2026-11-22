@@ -63,6 +63,7 @@ self.onmessage = (ev: MessageEvent<ToSim>) => {
     if (m.type === 'command') host.command(m.command);
     else if (m.type === 'settings') host.settings(m.settings);
     else if (m.type === 'routes') host.routes = m.on;
+    else if (m.type === 'watch') host.watch = m.entity;
     else if (m.type === 'step') {
       if (skipping > 0) waiting = m;
       else answer(m);

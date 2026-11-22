@@ -1,4 +1,4 @@
-import { ShadowQuality } from '../render/stage';
+import { CameraMode, ShadowQuality } from '../render/stage';
 
 /**
  * Display preferences: how the battle looks and where the camera goes,
@@ -9,6 +9,8 @@ export interface ViewPrefs {
   shadows: ShadowQuality;
   /** Spectator camera that follows the fighting. */
   follow: boolean;
+  /** Who moves the camera (see Stage.cameraMode); older saves have only `follow`. */
+  camera?: CameraMode;
   /** Draw each side's plan on the map. */
   plans: boolean;
   /** Shade who holds which ground (see FrontLines). */
@@ -23,6 +25,7 @@ export interface ViewPrefs {
 
 const KEY = 'mbt.view';
 const SHADOWS: ShadowQuality[] = ['high', 'low', 'off'];
+const CAMERAS: CameraMode[] = ['free', 'follow', 'director', 'unit'];
 
 export function loadViewPrefs(): ViewPrefs {
   const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false, fronts: false, ticker: true, smoothTurn: false, god: false };
@@ -30,6 +33,7 @@ export function loadViewPrefs(): ViewPrefs {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<ViewPrefs>;
     if (SHADOWS.includes(saved.shadows as ShadowQuality)) prefs.shadows = saved.shadows!;
     if (typeof saved.follow === 'boolean') prefs.follow = saved.follow;
+    if (CAMERAS.includes(saved.camera as CameraMode)) prefs.camera = saved.camera;
     if (typeof saved.plans === 'boolean') prefs.plans = saved.plans;
     if (typeof saved.fronts === 'boolean') prefs.fronts = saved.fronts;
     if (typeof saved.ticker === 'boolean') prefs.ticker = saved.ticker;
