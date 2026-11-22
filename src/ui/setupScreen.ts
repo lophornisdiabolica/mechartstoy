@@ -11,6 +11,56 @@ import { isStyle, STYLE_IDS, STYLES } from '../game/commander/advice';
 import { dropdown, el, hex, segmented } from './dom';
 import { Rng } from '../core/rng';
 import { MAP_STYLES, rollBattle, VARIETY_AFTER, VARIETY_KEYS, VarietyKey, VarietyTeams } from '../game/variety';
+import { rollable } from '../game/rollables';
+
+/** The rollable setting (see rollables.ts) behind each slider, by its label... */
+const SLIDER_ROLL: Record<string, string> = {
+  Shape: 'shape',
+  Water: 'water',
+  'Dense forest': 'forest',
+  Wreckage: 'junk',
+  'Wreckage lasts': 'junklife',
+  Hills: 'hills',
+  'Infantry cap': 'icap',
+  'Vehicle cap': 'vcap',
+  'Aircraft cap': 'acap',
+  'Super units': 'scap',
+  Production: 'prod',
+  'Starting army': 'army',
+  'Building HP': 'bhp',
+  'Tide swing': 'tide',
+  'Tide length': 'tidelen',
+  Flanking: 'flank',
+  'Build advice': 'advice',
+  Engineers: 'eng',
+  'Tide ramp': 'rtide',
+  'Siege ramp': 'rsiege',
+  Bonus: 'obonus',
+  Holding: 'ohold',
+  'Task forces': 'tforce',
+  'Team boost': 'boost',
+};
+/** ...and behind each other row. */
+const ROW_ROLL: Record<string, string> = {
+  Mode: 'mode',
+  Size: 'size',
+  Biome: 'biome',
+  Bases: 'layout',
+  Waterways: 'ways',
+  Scrap: 'scrap',
+  Craters: 'crater',
+  Towns: 'towns',
+  'Town size': 'tsize',
+  City: 'city',
+  Townsfolk: 'folk',
+  'Super cap grows': 'grow',
+  'Super units': 'gate',
+  Attacks: 'timing',
+  Squads: 'avoid',
+  'Gun hunts': 'hunt',
+  Shortcuts: 'span',
+  Outposts: 'outposts',
+};
 
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual' },
@@ -249,11 +299,60 @@ export class SetupScreen {
       body.append(s);
       return s;
     };
-    const row = (parent: HTMLElement, label: string, control: HTMLElement, value?: HTMLElement) => {
+    // A die and (for settings a preset re-rolls) a lock, at the end of a setting's row: see rollables.ts.
+    const rollControl = (id: string) => {
+      const r = rollable(id)!;
+      const box = el('span', { class: 'roll' });
+      const die = el('button', { type: 'button', class: 'die', 'aria-label': `Roll ${r.label} every battle` }, '🎲');
+      const lock = el('button', { type: 'button', class: 'lock', 'aria-label': `Lock ${r.label} through re-rolls` }, '🔒');
+      die.addEventListener('click', () => {
+        const v = this.settings.variety;
+        if (v.dice[id] !== undefined) delete v.dice[id];
+        else {
+          v.dice[id] = r.kind === 'range' ? [LIMITS[r.limit].min, LIMITS[r.limit].max] : true;
+          v.locks = v.locks.filter((x) => x !== id);
+        }
+        this.changed();
+      });
+      lock.addEventListener('click', () => {
+        const v = this.settings.variety;
+        if (v.locks.includes(id)) v.locks = v.locks.filter((x) => x !== id);
+        else {
+          v.locks = [...v.locks, id];
+          delete v.dice[id];
+        }
+        this.changed();
+      });
+      box.append(die, lock);
+      if (!r.preset) lock.classList.add('none');
+      this.sync.push(() => {
+        const v = this.settings.variety;
+        const diced = v.dice[id] !== undefined;
+        const locked = v.locks.includes(id);
+        const preset = r.preset ? VARIETY_LABELS[r.preset].label : '';
+        const byPreset = !!r.preset && v.roll[r.preset] && !locked && !diced;
+        die.setAttribute('aria-pressed', String(diced));
+        die.classList.toggle('preset', byPreset);
+        die.title = diced
+          ? `Rolled every battle${r.kind === 'range' ? ', between the low and high below' : ''}. Click to stop.`
+          : byPreset
+            ? `Re-rolled with ${preset} (Between battles). Click to roll it on its own instead${r.kind === 'range' ? ', between a low and a high' : ''}.`
+            : `Roll ${r.label} every battle after the first${r.kind === 'range' ? ', between a low and a high' : ''}.`;
+        lock.setAttribute('aria-pressed', String(locked));
+        lock.classList.toggle('idle', !!r.preset && !v.roll[r.preset]);
+        lock.title = locked ? `Locked: ${preset} re-rolls leave ${r.label} as it is. Click to unlock.` : `Lock ${r.label}: ${preset} re-rolls (Between battles) leave it as it is.`;
+      });
+      return box;
+    };
+    const row = (parent: HTMLElement, label: string, control: HTMLElement, value?: HTMLElement, rollId?: string) => {
       const r = el('div', { class: 'field' });
+      const id = rollId ?? ROW_ROLL[label];
       r.append(el('span', { class: 'label' }, label), control);
       if (value) r.append(value);
+      else control.classList.add('wide');
+      r.append(id ? rollControl(id) : el('span', { class: 'roll' }));
       parent.append(r);
+      return r;
     };
     const slider = (
       parent: HTMLElement,
@@ -271,10 +370,40 @@ export class SetupScreen {
         set(this.settings, Number(input.value));
         this.changed();
       });
-      row(parent, label, input, value);
+      const id = SLIDER_ROLL[label];
+      row(parent, label, input, value, id);
       this.sync.push(() => {
         input.value = String(get(this.settings));
         value.textContent = format(get(this.settings));
+      });
+      if (!id) return;
+      // With a die on it: the low and high it rolls between.
+      const span = el('div', { class: 'field dice-range' });
+      const lo = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), 'aria-label': `${label}: lowest roll` });
+      const hi = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), 'aria-label': `${label}: highest roll` });
+      const both = el('div', { class: 'inline' });
+      both.append(lo, hi);
+      const text = el('span', { class: 'value' });
+      span.append(el('span', { class: 'label' }, 'rolls'), both, text, el('span', { class: 'roll' }));
+      const move = (which: 0 | 1) => {
+        const d = this.settings.variety.dice[id];
+        if (!Array.isArray(d)) return;
+        const a = Number(lo.value);
+        const b = Number(hi.value);
+        // Dragging one past the other pushes it along.
+        this.settings.variety.dice[id] = which === 0 ? [a, Math.max(a, b)] : [Math.min(a, b), b];
+        this.changed();
+      };
+      lo.addEventListener('input', () => move(0));
+      hi.addEventListener('input', () => move(1));
+      parent.append(span);
+      this.sync.push(() => {
+        const d = this.settings.variety.dice[id];
+        span.hidden = !Array.isArray(d);
+        if (!Array.isArray(d)) return;
+        lo.value = String(d[0]);
+        hi.value = String(d[1]);
+        text.textContent = d[0] === d[1] ? format(d[0]) : `${format(d[0])} – ${format(d[1])}`;
       });
     };
     const times = (v: number) => `${Math.round(v * 100) / 100}×`;
@@ -373,7 +502,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        `The battle you start uses the settings as they are here. Every battle after it re-rolls what’s picked, and keeps the rest. Map styles: ${MAP_STYLES.map((m) => m.label).join(', ')}.`,
+        `The battle you start uses the settings as they are here. Every battle after it re-rolls what’s picked, and keeps the rest. These are presets over the settings further down: each lights up the die on the settings it rolls. A lock (🔒) on one of those keeps it as it is while the preset rolls the rest (a map style, but always large and wet); a die (🎲) on any setting rolls it on its own every battle, a slider between a low and a high you set. Map styles: ${MAP_STYLES.map((m) => m.label).join(', ')}.`,
       ),
     );
     const sideCounts = Array.from({ length: MAX_FACTIONS - 1 }, (_, i) => ({ label: String(i + 2), value: i + 2 }));
@@ -480,10 +609,22 @@ export class SetupScreen {
       this.settings = rollBattle(this.settings, new Rng(Math.floor(Math.random() * 2 ** 32))).settings;
       this.changed();
     });
+    const unroll = el('button', { type: 'button', title: 'Take every die and lock off the settings (the presets stay as they are)' }, 'Clear dice and locks');
+    unroll.addEventListener('click', () => {
+      this.settings.variety.dice = {};
+      this.settings.variety.locks = [];
+      this.changed();
+    });
     const rollRow = el('div', { class: 'inline' });
-    rollRow.append(rollNow);
+    rollRow.append(rollNow, unroll);
     variety.append(rollRow, el('p', { class: 'hint' }, 'Move on ends a battle that’s still going after that long (an Eternal war never ends by itself), so the toy can be left running. Roll now re-rolls what’s picked into the settings here, to look at or start.'));
-    this.sync.push(() => (rollNow.disabled = !VARIETY_KEYS.some((k) => this.settings.variety.roll[k])));
+    this.sync.push(() => {
+      const v = this.settings.variety;
+      const dice = Object.keys(v.dice).length;
+      rollNow.disabled = !VARIETY_KEYS.some((k) => v.roll[k]) && dice === 0;
+      unroll.hidden = dice === 0 && v.locks.length === 0;
+      unroll.textContent = `Clear ${[dice && `${dice} ${dice === 1 ? 'die' : 'dice'}`, v.locks.length && `${v.locks.length} ${v.locks.length === 1 ? 'lock' : 'locks'}`].filter(Boolean).join(' and ')}`;
+    });
 
     // Map
     const map = section('Map', false);
@@ -809,8 +950,13 @@ export class SetupScreen {
       this.changed();
     });
     presets.append(add, ffa, halves);
-    const sidesHint = el('p', { class: 'hint' });
-    factions.append(list, presets, sidesHint);
+    const sidesHint = el('p', { class: 'hint warn keep' });
+    factions.append(
+      list,
+      presets,
+      el('p', { class: 'hint' }, 'Sides on the same team are allies and start next to each other. More sides make a bigger map. Each side picks a doctrine, the kind of army it fields (hover over one for what it brings), and a Commander style, how it plays. A locked side (🔒) keeps its doctrine, name and colour through re-rolls.'),
+      sidesHint,
+    );
     slider(factions, 'Team boost', 'evenTeams', 0.05, (s) => s.armies.evenTeams, (s, v) => (s.armies.evenTeams = v), (v) =>
       v === 0 ? 'Off' : `1 vs 3: ${Math.round(3 ** v * 10) / 10}×`,
     );
@@ -827,11 +973,8 @@ export class SetupScreen {
       const n = this.settings.factions.length;
       add.disabled = n >= MAX_FACTIONS;
       const teams = new Set(this.settings.factions.map((f) => f.team)).size;
-      sidesHint.classList.toggle('warn', teams < 2);
-      sidesHint.textContent =
-        teams < 2
-          ? 'Everyone is on the same team, so there is nobody to fight. Put at least one side on another team.'
-          : 'Sides on the same team are allies and start next to each other. More sides make a bigger map. Each side picks a doctrine, the kind of army it fields (hover over one for what it brings).';
+      sidesHint.hidden = teams >= 2;
+      sidesHint.textContent = 'Everyone is on the same team, so there is nobody to fight. Put at least one side on another team.';
       start.disabled = teams < 2;
     });
 
@@ -899,5 +1042,59 @@ export class SetupScreen {
     start.addEventListener('click', () => this.callbacks.start(cloneSettings(this.settings)));
     foot.append(resetAll, start);
     card.append(foot);
+    this.tuckHints(body);
+  }
+
+  /**
+   * Fold each setting's explanation into a ? after its row's name (or its
+   * section's heading), shown on hover or tap, so the screen is the settings
+   * themselves. A hint that changes with the setting (the mode's, say) keeps
+   * changing: the tooltip shows its words as they are when it opens.
+   */
+  private tuckHints(body: HTMLElement): void {
+    const pop = el('div', { class: 'tip-pop', role: 'tooltip' });
+    pop.hidden = true;
+    this.root.append(pop);
+    const show = (icon: HTMLElement, hints: HTMLElement[]) => {
+      pop.replaceChildren(...hints.map((h) => el('p', {}, h.textContent ?? '')));
+      pop.hidden = false;
+      const r = icon.getBoundingClientRect();
+      const w = Math.min(360, window.innerWidth - 16);
+      pop.style.width = `${w}px`;
+      pop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left - 12))}px`;
+      // Below the icon, or above it when there's no room.
+      const h = pop.offsetHeight;
+      pop.style.top = `${r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - 6 - h) : r.bottom + 6}px`;
+    };
+    const hide = () => (pop.hidden = true);
+    const groups = new Map<HTMLElement, HTMLElement[]>();
+    for (const hint of [...body.querySelectorAll<HTMLElement>('p.hint')]) {
+      if (hint.classList.contains('keep')) continue;
+      // The row it explains: the nearest setting above it, else the section's heading.
+      let at: Element | null = hint.previousElementSibling;
+      while (at && !(at.classList.contains('field') && !at.classList.contains('dice-range'))) at = at.previousElementSibling;
+      const label = (at?.querySelector(':scope > .label') ?? hint.closest('details')?.querySelector(':scope > summary h2')) as HTMLElement | null;
+      if (!label) continue;
+      hint.remove();
+      const list = groups.get(label) ?? [];
+      list.push(hint);
+      groups.set(label, list);
+    }
+    for (const [label, hints] of groups) {
+      const icon = el('button', { type: 'button', class: 'tip', 'aria-label': 'What this does' }, '?');
+      icon.addEventListener('mouseenter', () => show(icon, hints));
+      icon.addEventListener('mouseleave', hide);
+      icon.addEventListener('focus', () => show(icon, hints));
+      icon.addEventListener('blur', hide);
+      // A tap on a summary's ? shouldn't fold the section.
+      icon.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        icon.focus();
+        show(icon, hints);
+      });
+      label.append(icon);
+    }
+    body.addEventListener('scroll', hide, { passive: true });
   }
 }
