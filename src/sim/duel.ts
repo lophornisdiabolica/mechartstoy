@@ -37,7 +37,8 @@ export function parseGroup(text: string): Group {
 
 /** A matchup written as "tank*4 vs trooper*12". */
 export function parseDuel(text: string): { a: Group; b: Group; label: string } {
-  const halves = text.split(/\s+vs\s+/);
+  // "vs" between them, or (in the arena's link, where spaces are awkward) a comma.
+  const halves = /\svs\s/.test(text) ? text.split(/\s+vs\s+/) : text.split(',');
   if (halves.length !== 2) throw new Error(`A duel is two line-ups with "vs" between them, e.g. "tank*4 vs trooper*12", not "${text}"`);
   return { a: parseGroup(halves[0]), b: parseGroup(halves[1]), label: text.trim() };
 }
@@ -76,14 +77,22 @@ function duelGame(round: number, set: string): Game {
   return new Game(hashSeed(s.seed), { settings: s, populate: false, autoSpawn: false });
 }
 
+/** A duel round laid out and ready to play: the game, and units and health per side at the start. */
+export interface DuelSetup {
+  game: Game;
+  units: number[];
+  startHealth: number[];
+}
+
 /**
- * One round of a duel. Each round is a fresh map (its own seed) with the
- * groups a little shuffled, so a run of rounds averages over the ground.
- * Both groups are ordered to march on the other's starting point, and fight
- * whatever they meet on the way, as they would in a battle.
+ * Lay out one round of a duel. Each round is a fresh map (its own seed)
+ * with the groups a little shuffled, so a run of rounds averages over the
+ * ground. Both groups are ordered to march on the other's starting point,
+ * and fight whatever they meet on the way, as they would in a battle.
+ * The arena (`?arena=` in the page) plays these too.
  */
-export function runDuel(duel: { a: Group; b: Group; label: string }, round: number, options: DuelOptions = {}): DuelResult {
-  const { gap = 30, seconds = 180, set = '' } = options;
+export function setupDuel(duel: { a: Group; b: Group }, round: number, options: DuelOptions = {}): DuelSetup {
+  const { gap = 30, set = '' } = options;
   const game = duelGame(round, set);
   const { world, ctx } = game;
   const rng = ctx.rng.fork(77);
@@ -115,22 +124,40 @@ export function runDuel(duel: { a: Group; b: Group; label: string }, round: numb
     // March on the other group's start, fighting what they meet.
     ctx.orders[side] = { stance: 'hold', rally: at(1 - side) };
   });
-  const startHealth = health(game);
+  return { game, units, startHealth: health(game) };
+}
+
+/** Where a duel round stands: units left and the share of health left per side, and damage done. */
+export function duelState(setup: DuelSetup): { left: number[]; health: number[]; dealt: number[] } {
+  const { game, startHealth } = setup;
+  const hp = health(game);
+  return {
+    left: count(game),
+    health: hp.map((h, side) => (startHealth[side] > 0 ? h / startHealth[side] : 0)),
+    dealt: [0, 1].map((side) => Object.values(game.stats.sides[side].types).reduce((s, t) => s + t.dealt, 0)),
+  };
+}
+
+/** Play one round of a duel to the end (see setupDuel). */
+export function runDuel(duel: { a: Group; b: Group; label: string }, round: number, options: DuelOptions = {}): DuelResult {
+  const { seconds = 180 } = options;
+  const setup = setupDuel(duel, round, options);
+  const { game, units } = setup;
+  const { world } = game;
   const dt = 1 / SIM_HZ;
   let alive = count(game);
   while (world.time < seconds && alive[0] > 0 && alive[1] > 0) {
     game.step(dt);
     alive = count(game);
   }
-  const endHealth = health(game);
+  const end = duelState(setup);
   const winner = alive[0] > 0 && alive[1] === 0 ? 'a' : alive[1] > 0 && alive[0] === 0 ? 'b' : null;
-  const dealt = (side: number) => Object.values(game.stats.sides[side].types).reduce((s, t) => s + t.dealt, 0);
   return {
     label: duel.label,
     round,
     winner,
     seconds: world.time,
-    sides: [0, 1].map((side) => ({ units: units[side], left: alive[side], health: startHealth[side] > 0 ? endHealth[side] / startHealth[side] : 0, dealt: dealt(side) })),
+    sides: [0, 1].map((side) => ({ units: units[side], left: alive[side], health: end.health[side], dealt: end.dealt[side] })),
   };
 }
 
