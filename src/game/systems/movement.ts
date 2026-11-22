@@ -145,7 +145,9 @@ function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, rad
   const path = nav.path;
   if (!path || path.length === 0) return goal;
 
-  while (nav.pathIndex < path.length - 1 && D.hypot(path[nav.pathIndex].x - t.x, path[nav.pathIndex].z - t.z) < WAYPOINT_RADIUS) {
+  // Near enough a waypoint counts as there, unless the way on from here runs off a bridge deck's side
+  // into water it can't wade (a walker at the deck's edge, by a waypoint on it): then right up to it first.
+  while (nav.pathIndex < path.length - 1 && D.hypot(path[nav.pathIndex].x - t.x, path[nav.pathIndex].z - t.z) < WAYPOINT_RADIUS && grid.sideClear(here, path[nav.pathIndex + 1])) {
     nav.pathIndex++;
   }
   // Skip ahead when a later waypoint is already in clear view (e.g. after being pushed aside).
@@ -276,7 +278,8 @@ function checkStuck(ctx: SimContext, world: World, e: Entity, t: Transform, m: M
     for (const [side, fwd] of tries) {
       const x = t.x + (-dirZ * side + dirX * fwd) * r;
       const z = t.z + (dirX * side + dirZ * fwd) * r;
-      if (ctx.navs.for(m.move).fitsAt(x, z, fit) && ctx.field.contains(x, z, 1)) {
+      const grid = ctx.navs.for(m.move);
+      if (grid.fitsAt(x, z, fit) && ctx.field.contains(x, z, 1) && grid.sideClear(t, { x, z })) {
         nav.detourX = x;
         nav.detourZ = z;
         nav.detourUntil = world.time + 1.2;

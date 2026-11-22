@@ -15,6 +15,9 @@ Opens a battle in headless Chromium with the real renderer and saves
 screenshots of it as PNGs. Needs Playwright with Chromium:
 npm i -D playwright && npx playwright install chromium.
 
+\`npm run shot -- --models "doctrine=aegis&slope=20"\` photographs the model
+viewer instead (the page's ?models link options; see src/ui/modelViewer.ts).
+
 WHAT is a battle's link or query string (quote it in the shell), or a sims
 battle seed such as 1v1-7 (as played by \`npm run sims\` without --doctrines
 or --maps; for those, use the link the sims results give).
@@ -36,10 +39,11 @@ or --maps; for those, use the link the sims results give).
   --plans          show the Commanders' plans on the map
   --out FILE       where to write it (default shots-out/<seed>-<time>.png;
                    a series adds -1, -2, ...)
+  --models QUERY   the model viewer with these options, instead of a battle
   --help           this text`;
 
 function parseArgs(argv) {
-  const opts = { what: null, set: '', at: null, look: null, zoom: null, size: [1280, 800], every: null, count: null, speed: 4, clean: false, plans: false, out: null, help: false };
+  const opts = { what: null, set: '', at: null, look: null, zoom: null, size: [1280, 800], every: null, count: null, speed: 4, clean: false, plans: false, out: null, help: false, models: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') opts.help = true;
@@ -57,6 +61,7 @@ function parseArgs(argv) {
     else if (a === '--clean') opts.clean = true;
     else if (a === '--plans') opts.plans = true;
     else if (a === '--out') opts.out = resolve(argv[++i]);
+    else if (a === '--models') opts.models = argv[++i] ?? '';
     else if (a.startsWith('--')) throw new Error(`Unknown option ${a} (try --help)`);
     else if (opts.what === null) opts.what = a;
     else throw new Error(`One battle at a time: "${a}" is extra`);
@@ -75,8 +80,9 @@ function loadPlaywright() {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (opts.help || !opts.what) return console.log(HELP);
+  if (opts.help || (!opts.what && opts.models === null)) return console.log(HELP);
   const { chromium } = loadPlaywright();
+  if (opts.models !== null) return modelShot(chromium, opts);
   const tool = (await runnerImport(join(root, 'src/sim/mapTool.ts'))).module;
   const url = (await runnerImport(join(root, 'src/ui/settingsUrl.ts'))).module;
   const settings = tool.settingsFor(opts.what, opts.set);
@@ -146,6 +152,32 @@ async function main() {
         await page.waitForTimeout(300);
       }
     }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+/** A picture of the model viewer (see src/ui/modelViewer.ts). */
+async function modelShot(chromium, opts) {
+  const server = await createServer({ root, logLevel: 'error', server: { port: 0, strictPort: false } });
+  await server.listen();
+  const port = server.httpServer.address().port;
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+  try {
+    const page = await browser.newPage({ viewport: { width: opts.size[0], height: opts.size[1] } });
+    page.on('pageerror', (e) => console.error(`Page error: ${e.message}`));
+    const query = opts.models.replace(/^\?/, '');
+    await page.goto(`http://localhost:${port}/?models${query ? `&${query}` : ''}`);
+    await page.waitForFunction(() => window.viewer && window.viewer.ready, null, { timeout: 0 });
+    if (opts.zoom) await page.evaluate((z) => window.viewer.zoom(z), opts.zoom);
+    if (opts.clean) await page.addStyleTag({ content: '#panel { display: none !important; }' });
+    await page.waitForTimeout(600);
+    const name = `models-${(query || 'armour').replace(/[^\w.-]+/g, '_')}.png`;
+    const file = opts.out ?? join(root, 'shots-out', name);
+    mkdirSync(dirname(file), { recursive: true });
+    await page.screenshot({ path: file });
+    console.log(file);
   } finally {
     await browser.close();
     await server.close();
