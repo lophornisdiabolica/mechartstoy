@@ -172,3 +172,18 @@ describe('matchups apart from maps', () => {
     expect(text).toContain('the map decides): armour v legion');
   });
 });
+
+describe('army mix and moments', () => {
+  it('records units alive by type every minute, and lists moments with links', async () => {
+    const { formatMix, formatMoments, MIX_EVERY } = await import('../src/sim/simulate');
+    const r = runBattle({ ...short, minutes: 3 }, 1);
+    expect(r.mix!.length).toBe(1 + Math.floor((3 * 60) / MIX_EVERY));
+    expect(Object.values(r.mix![1].sides[0]).reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    const mix = formatMix([r]);
+    expect(mix).toContain('armour:');
+    expect(mix).toContain('0-5m');
+    // Moments always come with a link that opens the battle before them.
+    const fake = { ...r, moments: [{ minute: 2, kind: 'super' as const, side: 0, text: 'A Titan fell' }] };
+    expect(formatMoments([fake], 'http://x/')).toContain(`http://x/?${r.link}&at=1:40`);
+  });
+});

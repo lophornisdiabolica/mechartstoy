@@ -44,6 +44,8 @@ interface ViewEntry {
    * for a moment between shots only dims a little instead of blinking.
    */
   fade: number;
+  /** Seconds it has been hidden without a break (see HIDE_HOLD). */
+  hiddenFor: number;
 }
 
 /**
@@ -51,6 +53,13 @@ interface ViewEntry {
  * see-through shimmer of itself, down to a ghost at the last.
  */
 const GHOSTS = [0.8, 0.6, 0.45, 0.3].map((opacity) => new THREE.MeshLambertMaterial({ transparent: true, opacity, depthWrite: false }));
+/**
+ * Seconds a unit has to stay hidden before it starts to fade, so one that
+ * hides between shots a moment apart stays solid instead of blinking
+ * between solid and the first ghost step (the flicker check caught ghost
+ * tanks doing that four times a second).
+ */
+const HIDE_HOLD = 0.6;
 /** Seconds to fade out to a ghost, and back in. */
 const FADE_OUT = 0.9;
 const FADE_IN = 0.25;
@@ -167,7 +176,7 @@ export class EntityView {
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null, fade: 0 };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0 };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -274,7 +283,8 @@ export class EntityView {
       entry.lastX = x;
       entry.lastZ = z;
       const veiled = w.get(e, Veiled)?.hidden === true;
-      entry.fade = veiled ? Math.min(1, entry.fade + dt / FADE_OUT) : Math.max(0, entry.fade - dt / FADE_IN);
+      entry.hiddenFor = veiled ? entry.hiddenFor + dt : 0;
+      entry.fade = veiled ? (entry.hiddenFor >= HIDE_HOLD ? Math.min(1, entry.fade + dt / FADE_OUT) : entry.fade) : Math.max(0, entry.fade - dt / FADE_IN);
     }
     this.batch();
   }
@@ -297,6 +307,24 @@ export class EntityView {
 
   get count(): number {
     return this.entries.size;
+  }
+
+  /**
+   * How each entity looks right now, as a number that changes whenever its
+   * look does: parts shown (lights blinking, parts hidden), how far it has
+   * faded out, and whether its sprites are drawn faint. For the flicker
+   * check (scripts/flicker.mjs), which watches these for anything changing
+   * back and forth faster than the eye is comfortable with.
+   */
+  *looks(): IterableIterator<[Entity, number]> {
+    for (const [e, entry] of this.entries) {
+      if (!entry.obj.visible) continue;
+      let parts = 0;
+      for (const m of entry.meshes) if (shown(m, entry.obj)) parts++;
+      for (const s of entry.sprites) if (shown(s, entry.obj)) parts++;
+      const ghost = Math.max(0, Math.floor(entry.fade * 5));
+      yield [e, parts + ghost * 1000];
+    }
   }
 
   /** The scene object drawing an entity, if any. */

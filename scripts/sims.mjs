@@ -94,6 +94,15 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      win rate by map type, battle size and battle length
                      (shorter vs longer half; always on with
                      --doctrines, --latin and --pool)
+  --mix              also print the army mix over time: per doctrine, units
+                     alive by type in each stretch of the battle (0-5 min,
+                     5-10...), pooled over battles (also with --niche)
+  --moments          also print each battle's big moments (super units
+                     falling, production lost, sides out, the winners'
+                     closest call), each with a link that opens the battle
+                     just before it (--page URL sets the page's address).
+                     With --from FILE and nothing to play, lists a saved
+                     run's moments; --battle SEED with it picks one battle
   --list             list the scenarios and stop
   --help             this text
 
@@ -130,6 +139,9 @@ function parseArgs(argv) {
     offset: 0,
     pool: null,
     niche: false,
+    mix: false,
+    moments: false,
+    page: 'http://localhost:5173/',
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -160,6 +172,9 @@ function parseArgs(argv) {
     else if (a === '--offset') opts.offset = Math.max(0, Math.floor(Number(argv[++i])));
     else if (a === '--fresh') opts.offset = 1000 * (1 + Math.floor(Math.random() * 99000));
     else if (a === '--niche') opts.niche = true;
+    else if (a === '--mix') opts.mix = true;
+    else if (a === '--moments') opts.moments = true;
+    else if (a === '--page') opts.page = argv[++i];
     else if (a === '--pool') {
       opts.pool = [];
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opts.pool.push(argv[++i]);
@@ -180,7 +195,12 @@ async function main() {
     });
     return console.log(sim.compareRuns(before, after));
   }
-  if (opts.pool) return pool(sim, opts.pool);
+  if (opts.moments && opts.from) {
+    // A saved run's moments, without playing anything.
+    const saved = JSON.parse(readFileSync(resolve(opts.from), 'utf8'));
+    return console.log(sim.formatMoments(saved.battles, opts.page, opts.battle ?? undefined));
+  }
+  if (opts.pool) return pool(sim, opts.pool, opts);
   if (opts.duel) return duels(opts);
   if (opts.battle) return oneBattle(sim, opts);
   if (opts.list) {
@@ -277,6 +297,15 @@ async function main() {
     console.log(sim.formatNiche(results));
     console.log('');
   }
+  if ((opts.mix || opts.niche) && !variants) {
+    console.log(sim.formatMix(results));
+    console.log('');
+  }
+  if (opts.moments) {
+    console.log('Moments worth watching:');
+    console.log(sim.formatMoments(results, opts.page));
+    console.log('');
+  }
   if ((opts.doctrines || opts.latin || opts.units) && !variants) {
     console.log('Units, all battles together:');
     console.log(sim.formatUnits(results));
@@ -312,7 +341,7 @@ async function main() {
 }
 
 /** --pool: several saved runs added up, as if they were one. */
-async function pool(sim, files) {
+async function pool(sim, files, opts) {
   if (files.length === 0) throw new Error('--pool needs saved runs, e.g. --pool sims-results/a.json sims-results/b.json');
   const runs = files.map((f) => ({ f, run: JSON.parse(readFileSync(resolve(f), 'utf8')) }));
   const commits = [...new Set(runs.map((r) => r.run.commit ?? '?'))];
@@ -350,6 +379,12 @@ async function pool(sim, files) {
   }
   console.log(sim.formatNiche(results));
   console.log('');
+  console.log(sim.formatMix(results));
+  console.log('');
+  if (opts.moments) {
+    console.log(sim.formatMoments(results, opts.page));
+    console.log('');
+  }
   console.log('Units, all battles together:');
   console.log(sim.formatUnits(results));
 }
