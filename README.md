@@ -492,15 +492,23 @@ The **camera** buttons pick who moves the camera. **Free** is you.
 **Follow** (F) glides to wherever the biggest fight is. **Director** (V)
 works like a sports broadcast: every second it scores each fight by its
 hits, kills, buildings under fire and super units, and by how even it is
-(an even fight beats a rout). It holds a shot at least 7 seconds and cuts
-only to a fight half as good again, or early for a super unit arriving or
-dying or an HQ falling. Each shot is framed to fit the units fighting,
-turned so the fight runs across the screen from whichever side the hills
-and buildings don't hide, and tilted lower the closer it is. It glides
-between shots, turning slowly and rising for far jumps; it never cuts or
-fades. **Unit** (U) rides close behind one unit: the one you clicked, or a
-strong one in the director's fight. When it dies the camera stays on the
-wreck for 3 seconds, then picks another unit nearby; click a unit to ride
+(an even fight beats a rout). It holds a shot at least 14 seconds and cuts
+only to a fight nearly twice as good, or early for a super unit arriving or
+dying or an HQ falling. Each shot centres on the gap between the two sides'
+fronts and looks across it, so one army is on the left and the other on the
+right, zoomed in as close as fits them. It turns a little either way to show
+hills and buildings side-on (a slope the fight runs up stands out in profile),
+comes down lower where there is high ground to show, and never looks from
+where they hide the fight. Then it stays put: it moves only if the fight
+drifts well off centre, zooms only if it outgrows the picture or shrinks well
+inside it, and turns only if the line between the sides swings right round.
+It glides between shots, turning slowly and rising for far jumps; it never
+cuts or fades. **Unit** (U) rides with one unit: the one you clicked, or a
+strong one in the director's fight. It looks over the unit's shoulder at what
+it's doing, with the middle of the picture on its target (or where it's
+headed, or just ahead of it), and the unit on screen below and to one side.
+When it dies the camera stays on the wreck for 3 seconds, then picks another
+unit nearby; click a unit to ride
 with it instead, Esc to stop. Panning by hand gives the camera back to
 you. **Shadows**
 High / Low / Off trades looks for speed in huge battles; shadows are only

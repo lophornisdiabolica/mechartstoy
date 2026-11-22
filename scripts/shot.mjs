@@ -151,7 +151,8 @@ async function main() {
         await page.evaluate((s) => (window.app.loop.timeScale = s), opts.speed);
         await page.waitForFunction((t) => window.app.game.world.time >= t || window.app.game.outcome !== null, next, { timeout: 0 });
         await page.evaluate(() => (window.app.loop.timeScale = 0));
-        await page.waitForTimeout(300);
+        // A moving camera needs a moment to settle where it was heading.
+        await page.waitForTimeout(opts.look === 'director' || opts.look === 'unit' ? 3000 : 300);
       }
     }
   } finally {

@@ -71,6 +71,7 @@ export class RemoteSim {
     this.view = new SimView(game);
     this.post({ type: 'start', battle, seed, settings, skip });
     this.routesOn = false;
+    this.watching = null;
     this.waiting = false;
     this.due = 0;
     this.inbox = null;
@@ -88,6 +89,17 @@ export class RemoteSim {
     return this.view?.routes ?? null;
   }
   private routesOn = false;
+
+  /** Where a unit is headed (for the unit camera): ask the worker to send it with each frame. Null until it arrives, or while the unit is going nowhere. */
+  goal(e: number | null): { x: number; z: number } | null {
+    if (e !== this.watching) {
+      this.watching = e;
+      this.post({ type: 'watch', battle: this.battle, entity: e });
+    }
+    const g = this.view?.goal;
+    return e !== null && g && g[0] === e && g.length >= 3 ? { x: g[1], z: g[2] } : null;
+  }
+  private watching: number | null = null;
 
   /** The battle's settings changed live (the control panel): pass them on. */
   settings(settings: BattleSettings): void {

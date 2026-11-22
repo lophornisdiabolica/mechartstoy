@@ -265,6 +265,7 @@ export class Stage {
     if (mode === this.mode) return;
     const moving = mode === 'director' || mode === 'unit';
     if (!moving && (this.mode === 'director' || this.mode === 'unit')) this.rig.release();
+    if (this.mode === 'unit' && this.unitCam) this.unitCam.stop();
     this.mode = mode;
     if (mode === 'unit' && this.unitCam) this.unitCam.follow(this.selected);
   }

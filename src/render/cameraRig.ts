@@ -190,6 +190,11 @@ export class CameraRig {
     this.targetAzimuth = Math.PI / 4 + Math.round((this.targetAzimuth - Math.PI / 4) / quarter) * quarter;
   }
 
+  /** The picture's width over its height. */
+  get shape(): number {
+    return this.aspect;
+  }
+
   /** Ground distance from the view's centre to its farthest visible corner, roughly. */
   get viewRadius(): number {
     const h = this.viewHeight / this.zoom;

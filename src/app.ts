@@ -257,6 +257,7 @@ export class App implements MatchControls {
     if (this.sim) this.stage.entities.hidden = this.sim.hidden;
     const sim = this.sim;
     this.stage.debugOverlay.routeSource = sim ? (on) => sim.routes(on) : null;
+    this.stage.unitCam.goalSource = sim ? (e) => sim.goal(e) : null;
     this.stage.restoreDebug();
     this.debug.refresh();
     this.perf.attach(game);
