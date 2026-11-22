@@ -258,6 +258,8 @@ export class NavGrid {
   private readonly clearance: Float32Array;
   /** Per cell, which of its 8 steps by a bridge deck have been read point by point (low byte) and are clear (high byte); see sideStep. */
   private readonly sides: Uint16Array;
+  /** 1 on cells a deck's edge runs through or beside (railing cells, and deck cells next to one off the deck): see byDeck. */
+  private readonly deckEdge: Uint8Array;
   /** The obstacles' blockVersion and this grid's terrainVersion the clearance map was built for. */
   private clearanceBlocks = -1;
   private clearanceTerrain = -1;
@@ -302,6 +304,7 @@ export class NavGrid {
     this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
     this.clearance = new Float32Array(n);
     this.sides = new Uint16Array(n);
+    this.deckEdge = new Uint8Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
@@ -339,6 +342,22 @@ export class NavGrid {
     if (rules.town !== 1 && samples.settled[k] === 1) cost *= rules.town;
     if (!rules.flies && depth <= 0) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
+    this.deckEdge[k] = samples.rail[k] !== 0 || (samples.deck[k] === 1 && this.offDeckBeside(k)) ? 1 : 0;
+  }
+
+  /** Whether a cell has a cell off the deck next to it. */
+  private offDeckBeside(k: number): boolean {
+    const cols = this.cols;
+    const i = k % cols;
+    const j = (k - i) / cols;
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni >= 0 && nj >= 0 && ni < cols && nj < this.rows && this.samples.deck[nj * cols + ni] === 0) return true;
+      }
+    }
+    return false;
   }
 
   /** Whether a cell has a railing cell next to it (see CellSamples.rail). */
@@ -612,8 +631,7 @@ export class NavGrid {
    */
   private byDeck(a: number, b: number): boolean {
     if (this.rules.flies || this.railWalls()) return false;
-    const { rail, deck } = this.samples;
-    return deck[a] + rail[a] + deck[b] + rail[b] > 0;
+    return this.deckEdge[a] + this.deckEdge[b] > 0;
   }
 
   /** offSideClear between a cell's middle and its neighbour n's (cell b), worked out once and kept. */
