@@ -527,8 +527,12 @@ export interface Falling {
 }
 export const Falling = defineComponent<Falling>('Falling');
 
-/** A destroyed unit's hulk, left on the field for a while before sinking away. */
+/** A destroyed unit's hulk, left on the field for a while before it falls apart (see CRUMBLE_TIME in systems/death.ts). */
 export interface Wreck {
   removeAt: number;
+  /** Wreckage it leaves where it falls apart (see wreckage.ts), in tank-sized wrecks. */
+  mass?: number;
+  /** How far its wreckage spreads when it falls apart, world units (its footprint). */
+  size?: number;
 }
 export const Wreck = defineComponent<Wreck>('Wreck');

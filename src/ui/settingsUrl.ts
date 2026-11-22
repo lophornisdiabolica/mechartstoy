@@ -18,6 +18,8 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
   { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
+  { key: 'junk', limit: 'wreckage', get: (s) => s.map.wreckage, set: (s, v) => (s.map.wreckage = v) },
+  { key: 'junklife', limit: 'wreckageLife', get: (s) => s.map.wreckageLife, set: (s, v) => (s.map.wreckageLife = v) },
   { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
   { key: 'icap', limit: 'infantryCap', get: (s) => s.armies.caps.infantry, set: (s, v) => (s.armies.caps.infantry = Math.round(v)) },
   { key: 'vcap', limit: 'vehicleCap', get: (s) => s.armies.caps.vehicle, set: (s, v) => (s.armies.caps.vehicle = Math.round(v)) },

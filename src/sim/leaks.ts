@@ -114,6 +114,8 @@ export const BOUNDED: Record<string, string> = {
   'game.ctx.offensive.plans[*].roster': 'Offensive.plans',
   // A route search's open cells, emptied when the next search starts: what's left is whatever the last search left, no more than the grid's cells.
   'game.ctx.navs.grids[*].open.items': 'NavGrid.findPath',
+  // Cells with wreckage on them: no more than the map's wreckage cells, and it rusts away (WreckageField). It fills up over a long battle as the fighting spreads.
+  'game.ctx.wreckage.active': 'WreckageField.add',
 };
 
 export interface Grower {
