@@ -18,6 +18,7 @@ import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
 import { FireGround } from './fireGround';
 import { FrostGround } from './frostGround';
+import { WreckageGround } from './wreckageGround';
 import { SmokeClouds } from './smokeClouds';
 import { Domes } from './domes';
 import { JamMarks } from './jamMarks';
@@ -80,6 +81,8 @@ export class Stage {
   frontLines!: FrontLines;
   private fireGround!: FireGround;
   private frostGround!: FrostGround;
+  /** Heaps of junk where wrecks fell apart (see WreckageGround). */
+  wreckage!: WreckageGround;
   private smokeClouds!: SmokeClouds;
   private domes!: Domes;
   private jamMarks!: JamMarks;
@@ -179,6 +182,7 @@ export class Stage {
       this.frontLines.dispose();
       this.fireGround.dispose();
       this.frostGround.dispose();
+      this.wreckage.dispose();
       this.smokeClouds.dispose();
       this.domes.dispose();
       this.jamMarks.dispose();
@@ -220,6 +224,8 @@ export class Stage {
     battle.add(this.fireGround.root);
     this.frostGround = new FrostGround(game);
     battle.add(this.frostGround.root);
+    this.wreckage = new WreckageGround(game);
+    battle.add(this.wreckage.root);
     this.smokeClouds = new SmokeClouds(game);
     battle.add(this.smokeClouds.root);
     this.domes = new Domes(game);
@@ -382,6 +388,7 @@ export class Stage {
     this.frontLines.update(frameSeconds);
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
+    this.wreckage.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.domes.update(simSeconds);
     this.jamMarks.update(simSeconds);

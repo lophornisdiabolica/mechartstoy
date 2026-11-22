@@ -530,5 +530,7 @@ export const Falling = defineComponent<Falling>('Falling');
 /** A destroyed unit's hulk, left on the field for a while before sinking away. */
 export interface Wreck {
   removeAt: number;
+  /** Wreckage it leaves where it falls apart (see wreckage.ts), in tank-sized wrecks. */
+  mass?: number;
 }
 export const Wreck = defineComponent<Wreck>('Wreck');

@@ -295,7 +295,18 @@ battle, its exact map via `seed`).
   blasts knock them down too, and a cleared patch is open ground again.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
-  until it's cleared away four minutes later. **Craters** (on by default):
+  until it's cleared away four minutes later. **Wreckage:** a destroyed
+  vehicle's hulk stays on the field two and a half times as long as it
+  used to (a tank's about a minute), then falls apart into the junk round
+  it; some is thrown about as it's destroyed, too. The junk is drawn as
+  heaps of torn plates, girders, wheels and chunks of hull in char, rust
+  and bare steel, a clump for one wreck and a knee-high heap where many
+  fell, spilling outward once a spot is full, so the places fought over
+  most turn into scrapyards. It rusts away over many minutes (a full heap
+  lasts about a quarter of an hour). It's kept in the sim
+  (`game/wreckage.ts`) for doctrines that will feed on it, and the heaps
+  shrink a piece at a time as it's taken. It gets in nobody's way: the
+  scrap ground does that. **Craters** (on by default):
   a super unit blowing up leaves a small crater with a rim of churned
   earth (a shot-down airship, where it hits the ground), so a front that's
   been fought over for an hour is worn down and pocked. On low ground a
@@ -600,6 +611,7 @@ src/
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
+    wreckage.ts      the junk wrecks leave on the ground, rusting away (and taken by doctrines that use it)
     craters.ts       craters where super units blow up
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there

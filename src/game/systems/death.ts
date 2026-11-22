@@ -28,10 +28,33 @@ import { SimContext } from '../context';
 import { applyDamage } from './projectiles';
 import * as D from '../../core/dmath';
 import { MOVE_RULES } from '../../world/moveClasses';
+import { wreckageOf } from '../wreckage';
+import type { UnitDef } from '../units';
 import { blastCrater, craterOf } from '../craters';
 
 /** Seconds a wreck spends sinking into the ground before it's removed. */
 const SINK_TIME = 3;
+/**
+ * How much longer a hulk stays than its unit's wreckTime says. Hulks used
+ * to go within half a minute; now they linger long enough for a fight's
+ * wrecks to be seen piling up round it, before they fall apart into the
+ * wreckage on the ground (see wreckage.ts).
+ */
+export const WRECK_LINGER = 2.5;
+/** Share of a vehicle's wreckage thrown about as it's destroyed; the rest comes down when the hulk falls apart. */
+const BLOWN_OFF = 0.35;
+
+/** How long a unit's hulk stays on the field, seconds (0 for none). */
+export function wreckLife(def: { wreckTime: number }): number {
+  return def.wreckTime * WRECK_LINGER;
+}
+
+/** Wreckage a destroyed unit leaves, or 0: infantry leave none, and nothing lands in water. */
+function wreckageFor(ctx: SimContext, def: UnitDef, x: number, z: number): number {
+  if (def.class === 'infantry' || def.move === 'naval' || def.wreckTime <= 0) return 0;
+  if (ctx.field.isWater(x, z) && ctx.field.deckAt(x, z) === null) return 0;
+  return wreckageOf(def.radius);
+}
 /** How fast a shot-down aircraft falls, world units per second; and a plane, which glides down. */
 const FALL_SPEED = 7;
 const GLIDE_SPEED = 3;
@@ -77,7 +100,11 @@ export function deathSystem(ctx: SimContext): System {
             world.add(e, Falling, { vx: D.cos(t.heading) * speed, vz: -D.sin(t.heading) * speed, spin: d.fixedWing ? 0 : ((e % 2) * 2 - 1) * (d.radius > 2 ? 0.3 : 2.5), damage: 15 + d.hp * 0.08, radius: 1.5 + d.radius, ...(crater ? { crater } : {}) });
           }
           for (const c of [Unit, Health, Armed, Arsenal, Shield, Ai, Mover, Collider, Targetable, Ammo]) world.remove(e, c);
-          world.add(e, Wreck, { removeAt: world.time + unit.def.wreckTime });
+          // Bits fly off as it goes (an aircraft's land where it comes down); the hulk keeps the rest.
+          const mass = wreckageFor(ctx, unit.def, t.x, t.z);
+          const falls = world.has(e, Falling);
+          if (mass > 0 && !falls) ctx.wreckage.add(t.x, t.z, unit.def.radius * 1.2, mass * BLOWN_OFF);
+          world.add(e, Wreck, { removeAt: world.time + wreckLife(unit.def), mass: falls ? mass : mass * (1 - BLOWN_OFF) });
           continue;
         }
 
@@ -121,6 +148,7 @@ export function wreckSystem(ctx?: SimContext): System {
   return {
     name: 'wrecks',
     update(world, dt) {
+      ctx?.wreckage.rust(dt);
       for (const e of world.query(Wreck)) {
         const wreck = world.req(e, Wreck);
         const g = world.get(e, GroundFollow);
@@ -134,6 +162,14 @@ export function wreckSystem(ctx?: SimContext): System {
           g.offset = Math.max(0, g.offset - dt * (falling.spin === 0 ? GLIDE_SPEED : FALL_SPEED));
           if (g.offset <= 0) {
             world.remove(e, Falling);
+            if (ctx && wreck.mass) {
+              // Bits of it scatter where it comes down.
+              if (ctx.field.isWater(t.x, t.z) && ctx.field.deckAt(t.x, t.z) === null) wreck.mass = 0;
+              else {
+                ctx.wreckage.add(t.x, t.z, 2.5, wreck.mass * BLOWN_OFF);
+                wreck.mass *= 1 - BLOWN_OFF;
+              }
+            }
             if (ctx) {
               explode(world, ctx, t, { damage: falling.damage, radius: falling.radius }, null);
               if (falling.crater) blastCrater(world, ctx, t.x, t.z, falling.crater.radius, falling.crater.depth);
@@ -143,6 +179,11 @@ export function wreckSystem(ctx?: SimContext): System {
         }
         if (g && g.offset > 0 && world.time < wreck.removeAt - SINK_TIME) g.offset = Math.max(0, g.offset - dt * FALL_SPEED);
         if (world.time >= wreck.removeAt) {
+          // The hulk falls apart into the wreckage round it.
+          if (ctx && wreck.mass) {
+            const t = world.req(e, Transform);
+            ctx.wreckage.add(t.x, t.z, 0.75, wreck.mass);
+          }
           world.destroy(e);
         } else if (world.time >= wreck.removeAt - SINK_TIME) {
           if (g) g.offset -= dt * 0.7;
