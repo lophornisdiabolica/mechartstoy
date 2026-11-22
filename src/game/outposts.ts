@@ -55,6 +55,7 @@ export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
   gun: { id: 'gun', name: 'Hilltop gun', blurb: 'A long-range gun on the highest ground, firing for whoever holds it', bonus: null, building: 'bigGun' },
   relay: { id: 'relay', name: 'Comms relay', blurb: 'Attacks set out sooner, and its mast spots for the holder’s guns', bonus: { kind: 'readiness', amount: 0.4 }, building: 'relayMast' },
   fuel: { id: 'fuel', name: 'Fuel depot', blurb: 'Faster production, but its tanks blow up when destroyed', bonus: { kind: 'production', amount: 0.1 }, building: 'fuelTanks' },
+  hill: { id: 'hill', name: 'The hill', blurb: 'King of the hill: the first team to hold it long enough wins', bonus: null, building: 'hillBeacon' },
   factory: { id: 'factory', name: 'Ruined factory', blurb: 'Patched up to turn out the odd vehicle for its holder', bonus: null, building: 'ruinedFactory', salvage: 75 },
 };
 
@@ -117,6 +118,13 @@ export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rn
   // The post can't be shot or destroyed: outposts change hands, they don't go away.
   world.remove(post, Health);
   world.remove(post, Targetable);
+  // The hill is bare ground round its beacon: no towers or guards to give whoever takes it first a fort.
+  if (outpost.kind.id === 'hill') {
+    const def = ctx.buildings.hillBeacon;
+    const q = at(-Math.PI / 2, 2.2 + def.radius);
+    spawnOutpostPart(world, ctx, def, outpost, q.x, q.z, -(a - Math.PI / 2), false);
+    return;
+  }
   for (const angle of [0, Math.PI]) {
     const p = at(angle, 4.6);
     spawnOutpostPart(world, ctx, ctx.buildings.tower, outpost, p.x, p.z, -(a + angle), false);

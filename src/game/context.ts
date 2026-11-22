@@ -17,6 +17,7 @@ import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
 import { Outpost } from './outposts';
+import { HillState } from './hill';
 import { Sides } from './sides';
 import { SquadRoster } from './territory';
 import { FactionOrders } from './orders';
@@ -57,6 +58,10 @@ export type GameEvents = {
   sideEliminated: { faction: number; time: number };
   /** Conquest only: one team is left standing (or nobody is). */
   battleOver: Outcome;
+  /** King of the hill: the holder's team has this many seconds left to hold it (see hill.ts). */
+  hillClock: { faction: number; left: number };
+  /** King of the hill: the holder's team has held it long enough, and wins. */
+  hillHeld: { faction: number; time: number };
   /**
    * A god power did something worth showing beyond what its shells and map
    * changes show: a quake's heave (`strength` is how hard), the big bomb, a
@@ -144,6 +149,8 @@ export interface SimContext {
   lanes: Lanes;
   /** Capturable outposts, one per Battlefield.outpostSites entry. */
   outposts: Outpost[];
+  /** King of the hill: who has held the hill how long (see hill.ts); null in other modes. */
+  hill: HillState | null;
   /** Counter for squad ids (see spawn.newSquad). */
   squads: number;
   /** Infantry squads' line-ups by squad id, for refilling them (see territory.ts). */

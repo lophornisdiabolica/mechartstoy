@@ -482,6 +482,17 @@ battle, its exact map via `seed`).
   battle (units fielded and lost, kills, buildings razed, each side's top
   unit) a fresh map starts with the same settings. "Set up after this battle" goes to the setup
   screen instead, and "End battle and set up" goes there right away.
+- **King of the hill:** Conquest's rules plus one more outpost, the hill,
+  on the fairest ground near the middle (about as far from every base; towns
+  keep off it). It's bare ground round a tall beacon flying its holder's
+  banner, with no towers or guards, so whoever takes it has to hold it with
+  their army. Attacks go for the hill instead of the enemy base, and a team
+  that holds it keeps its army there between attacks. The holder's clock
+  runs while no enemy is within a few units of the ring; the first team to
+  hold it for **Hold to win** (5 minutes by default) in all wins. A bar at
+  the top shows each team's time left, and the ticker calls the last minute
+  and the last 30 seconds. The nearer the holder is to winning, the smaller
+  the edge (and the army) the others wait for before going in.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
 rotate, F follows the fighting, T toggles tilt-shift, G opens the god powers,
@@ -598,6 +609,7 @@ src/
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
+    hill.ts          king of the hill: the hill's clock and who's winning on it
     towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
     craters.ts       craters where super units blow up
@@ -636,6 +648,7 @@ src/
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     perfOverlay.ts   render and sim stats readout (P)
     ticker.ts        the battle ticker's feed
+    hillBar.ts       king of the hill's scoreboard: each team's time left on the hill
     battleChart.ts   army strength through the battle, for the end-of-battle chart
     photoMode.ts     photo mode (H): no interface, free camera, time of day, save a picture
     debugPanel.ts    the debug overlays' switches (O)

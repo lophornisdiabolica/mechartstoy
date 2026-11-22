@@ -17,7 +17,7 @@ export function conquestSystem(ctx: SimContext): System {
   return {
     name: 'conquest',
     update(world) {
-      if (ctx.settings.mode !== 'conquest' || ctx.outcome || world.time < nextCheck) return;
+      if (ctx.settings.mode === 'eternal' || ctx.outcome || world.time < nextCheck) return;
       nextCheck = world.time + CHECK_INTERVAL;
       const { sides } = ctx;
       const producers = new Array<number>(sides.count).fill(0);

@@ -16,6 +16,8 @@ import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl'
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
 import { Ticker } from './ui/ticker';
+import { HillBar } from './ui/hillBar';
+import { teamHeld } from './game/hill';
 import { BattleHistory } from './ui/battleChart';
 import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
@@ -110,6 +112,7 @@ export class App implements MatchControls {
   private bannerTime = 0;
   private readonly perf: PerfOverlay;
   private readonly tickerFeed = new Ticker();
+  private readonly hillBar = new HillBar();
   private readonly history = new BattleHistory();
   private readonly photo: PhotoMode;
   private readonly debug: DebugPanel;
@@ -262,6 +265,7 @@ export class App implements MatchControls {
     this.perf.attach(game);
     this.audio.attach(game);
     this.tickerFeed.attach(game, factions);
+    this.hillBar.attach(game, factions);
     this.history.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
@@ -278,6 +282,7 @@ export class App implements MatchControls {
     this.stage.render(alpha, frameSeconds, frameSeconds * this.loop.timeScale);
     controls?.update(frameSeconds);
     this.tickerFeed.update(frameSeconds);
+    this.hillBar.update(this.setup.visible);
     this.audio.update(frameSeconds, listenerFrom(this.stage.rig), this.setup.visible);
     this.history.update();
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
@@ -328,7 +333,7 @@ export class App implements MatchControls {
     const title = !outcome ? 'Time’s up' : winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`;
     this.banner.replaceChildren(
       el('div', { class: 'title' }, title),
-      el('div', { class: 'sub' }, outcome ? `after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
+      el('div', { class: 'sub' }, outcome ? `${game.ctx.hill && outcome.team !== null && teamHeld(game.ctx, outcome.team) >= game.settings.armies.hillHold ? 'held the hill ' : ''}after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
       this.summary(),
       ...(chart ? [chart] : []),
       el('div', { class: 'next' }),
@@ -422,7 +427,7 @@ export class App implements MatchControls {
       buildings[f]++;
       if (w.has(e, Producer)) producers[f]++;
     }
-    const conquest = game.settings.mode === 'conquest';
+    const conquest = game.settings.mode !== 'eternal';
     const labels = teamLabels(game.settings);
     const lines = factions.map((f) => {
       const strength = game.ctx.sides.strength[f.id];
@@ -436,7 +441,7 @@ export class App implements MatchControls {
     });
     return (
       `${lines.join('\n')}\n` +
-      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
+      `${game.settings.mode === 'hill' ? 'King of the hill' : conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
       `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · G god powers · 1-4 speed · space pause · M mute · P stats · O overlays · H photo mode`
     );
   }

@@ -5,7 +5,8 @@ import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
 import { armyCap } from './caps';
-import { outpostBonus } from './outposts';
+import { CAPTURE_RADIUS, outpostBonus } from './outposts';
+import { hillOf, hillUrgency } from './hill';
 import { STYLES } from './commander/advice';
 import { attackNumber, isAttacking, TideSettings } from './tide';
 
@@ -204,9 +205,11 @@ export class Offensive {
       const relays = members.reduce((sum, f) => sum + outpostBonus(ctx, f, 'readiness'), 0);
       // Its Commanders' styles make it want more or less of an edge (see commander/advice.ts).
       const style = members.reduce((sum, f) => sum + STYLES[ctx.settings.factions[f]?.style ?? 'balanced'].margin, 0) / members.length;
-      plan.need = this.defence(world, ctx, target) * this.margin((time - plan.since) * (1 + relays)) * style;
+      // King of the hill: the closer the holder is to winning, the less of an edge a team waits for, and the smaller an army it goes with.
+      const urgency = hillUrgency(ctx, members[0]);
+      plan.need = this.defence(world, ctx, target, members[0]) * this.margin((time - plan.since) * (1 + relays)) * style * (1 - 0.5 * urgency);
       const units = members.reduce((s, f) => s + count[f], 0);
-      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0);
+      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0) * (1 - 0.5 * urgency);
       plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));
       if (units >= cap * MIN_ARMY && plan.army >= plan.need) {
         plan.state = 'attacking';
@@ -249,8 +252,24 @@ export class Offensive {
     return all > 0 && afloat >= all * AFLOAT;
   }
 
-  /** Strength at an enemy base: its team's units nearby and its armed buildings. */
-  private defence(world: World, ctx: SimContext, target: number): number {
+  /**
+   * Strength at an enemy base: its team's units nearby and its armed
+   * buildings. In king of the hill, attacks go for the hill, so it's the
+   * strength round the hill (its holder's or garrison's, and anyone else
+   * fighting there) that `side` would have to beat.
+   */
+  private defence(world: World, ctx: SimContext, target: number, side: number): number {
+    const hill = hillOf(ctx);
+    if (hill) {
+      if (this.sides.allied(hill.owner, side)) return 0;
+      let sum = 0;
+      ctx.grid.forEachNear(hill.x, hill.z, CAPTURE_RADIUS + 14, (e) => {
+        const f = world.get(e, Faction);
+        if (!f || !this.sides.hostile(f.id, side) || !world.has(e, Transform)) return;
+        sum += fightingStrength(world, e);
+      });
+      return sum;
+    }
     const base = ctx.field.baseSites[target];
     let sum = 0;
     ctx.grid.forEachNear(base.x, base.z, DEFENCE_RANGE, (e) => {

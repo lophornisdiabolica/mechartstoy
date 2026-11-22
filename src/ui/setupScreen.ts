@@ -1,4 +1,4 @@
-import { AttackTiming, BaseLayout, CityMode, BattleMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
+import { AttackTiming, BaseLayout, CityMode, BattleMode, rampMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { weaponsOf } from '../game/arsenal';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
@@ -23,6 +23,7 @@ const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
 const MODE_HINTS: Record<BattleMode, string> = {
   eternal: 'Ruined buildings are rebuilt and the war goes on forever.',
   conquest: 'No rebuilding. A side loses when its HQ and every production building are destroyed, then a fresh map is generated.',
+  hill: 'King of the hill: one outpost on the most contested ground near the middle. Attacks go for the hill, and whoever holds it keeps their army there. The first team to hold it long enough wins (its clock stops while enemies are in the ring). Conquest rules otherwise.',
 };
 
 const TIMING_HINTS: Record<AttackTiming, string> = {
@@ -41,6 +42,7 @@ const STAT_LABELS: Record<keyof UnitTuning, string> = { hp: 'HP', damage: 'Damag
 const RAMP_HINTS: Record<BattleMode, string> = {
   eternal: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Off keeps the war at a steady pace.`,
   conquest: `Escalation every ${RAMP_INTERVAL / 60} minutes, levelling off at ${RAMP_MAX + 1}×, so long battles build to a finish. Tide ramp makes production surges swing harder; siege ramp makes hits on buildings land harder. Both off gives the steadier pacing (and longer battles).`,
+  hill: 'King of the hill escalates like Conquest (these are the same sliders).',
 };
 
 /** Trim to a readable number of digits: 8.6, 45, 520. */
@@ -284,6 +286,7 @@ export class SetupScreen {
       [
         { label: 'Eternal', value: 'eternal' },
         { label: 'Conquest', value: 'conquest' },
+        { label: 'King of the hill', value: 'hill' },
       ],
       (v) => {
         this.settings.mode = v;
@@ -293,6 +296,10 @@ export class SetupScreen {
     row(battle, 'Mode', mode.row);
     const modeHint = el('p', { class: 'hint' });
     battle.append(modeHint);
+    const holdRow = el('div');
+    battle.append(holdRow);
+    slider(holdRow, 'Hold to win', 'hillHold', 15, (s) => s.armies.hillHold, (s, v) => (s.armies.hillHold = v), (v) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}`);
+    this.sync.push(() => (holdRow.hidden = this.settings.mode !== 'hill'));
     this.sync.push(() => {
       mode.set(this.settings.mode);
       modeHint.textContent = MODE_HINTS[this.settings.mode];
@@ -673,8 +680,8 @@ export class SetupScreen {
     this.sync.push(() => (span.checked = this.settings.armies.shortcuts));
     // Each mode keeps its own ramps: Conquest ramps by default, Eternal doesn't.
     const ramped = (v: number) => (v === 0 ? 'Off' : `+${percent(v)}`);
-    slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v), ramped);
-    slider(armies, 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].siege, (s, v) => (s.armies.ramp[s.mode].siege = v), ramped);
+    slider(armies, 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[rampMode(s.mode)].tide, (s, v) => (s.armies.ramp[rampMode(s.mode)].tide = v), ramped);
+    slider(armies, 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[rampMode(s.mode)].siege, (s, v) => (s.armies.ramp[rampMode(s.mode)].siege = v), ramped);
     const rampHint = el('p', { class: 'hint' });
     armies.append(rampHint);
     this.sync.push(() => (rampHint.textContent = RAMP_HINTS[this.settings.mode]));

@@ -80,6 +80,11 @@ export class Ticker {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([`The townsfolk${this.direction(e.x, e.z, ' in the ')} take up arms against `, this.side(e.faction)]);
     });
+    events.on('hillClock', (e) => {
+      if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
+      this.say([this.side(e.faction), e.left >= 60 ? ` is a minute from holding the hill` : ` is ${e.left} seconds from holding the hill`]);
+    });
+    events.on('hillHeld', (e) => this.game === game && e.faction >= 0 && e.faction < this.factions.length && this.say([this.side(e.faction), ' held the hill']));
     events.on('sideEliminated', (e) => this.game === game && this.say([this.side(e.faction), ' is out of the war']));
     events.on('battleOver', (o) => {
       if (this.game !== game) return;
@@ -100,7 +105,11 @@ export class Ticker {
       const now = !sides.eliminated[f] && offensive.attacking(f, time);
       if (now && !this.attacking[f]) {
         const target = sides.target(f, offensive.attack(f, time));
-        if (target !== null) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
+        const hill = game.ctx.hill ? game.ctx.outposts[game.ctx.hill.outpost] : null;
+        // King of the hill: attacks go for the hill, and a team already on it just stays.
+        if (hill) {
+          if (!sides.allied(hill.owner, f)) this.say([this.side(f), hill.owner >= 0 ? ' sets out to take the hill from ' : ' sets out to take the hill', ...(hill.owner >= 0 && hill.owner < this.factions.length ? [this.side(hill.owner)] : [])]);
+        } else if (target !== null) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
       }
       this.attacking[f] = now;
     }
@@ -117,7 +126,7 @@ export class Ticker {
     const game = this.game!;
     const o = game.ctx.outposts[index];
     if (!o || faction < 0 || faction >= this.factions.length) return;
-    const what = `the ${o.kind.name.toLowerCase()}${this.direction(o.x, o.z, ' in the ')}`;
+    const what = o.kind.id === 'hill' ? 'the hill' : `the ${o.kind.name.toLowerCase()}${this.direction(o.x, o.z, ' in the ')}`;
     const from = previous >= 0 && previous < this.factions.length ? [' from ', this.side(previous)] : [];
     this.say([this.side(faction), ` took ${what}`, ...from]);
   }

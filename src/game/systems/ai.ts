@@ -3,6 +3,7 @@ import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, 
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
+import { hillOf } from '../hill';
 import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
@@ -271,6 +272,13 @@ export function aiSystem(ctx: SimContext): System {
           }
           const home = ctx.field.baseSites[faction];
           const defend = orders.rally ? null : ctx.sides.defencePoint(faction);
+          // King of the hill: a team holding the hill keeps its army round it between attacks.
+          const hill = naval || orders.rally || defend ? null : hillOf(ctx);
+          if (hill && ctx.sides.allied(hill.owner, faction)) {
+            const p = patrolPoint(hill, ai.squad, world.time);
+            moveTo(mover, t, p.x + ai.rallyOffsetX * 0.4, p.z + ai.rallyOffsetZ * 0.4, p.x * 2 - hill.x, p.z * 2 - hill.z);
+            continue;
+          }
           if (!orders.rally && outpost && holdsOutposts(ai.squad, armies.outpostHold) && !ctx.sides.underAttack(faction)) {
             const p = patrolPoint(outpost, ai.squad, world.time);
             moveTo(mover, t, p.x + ai.rallyOffsetX * 0.4, p.z + ai.rallyOffsetZ * 0.4, ours ? p.x * 2 - outpost.x : outpost.x, ours ? p.z * 2 - outpost.z : outpost.z);
@@ -312,6 +320,21 @@ export function aiSystem(ctx: SimContext): System {
         if (job?.kind === 'escort' && job.lead !== null && world.isAlive(job.lead)) {
           const lt = world.req(job.lead, Transform);
           moveTo(mover, t, lt.x + job.x, lt.z + job.z, lt.x + D.cos(lt.heading) * 10, lt.z - D.sin(lt.heading) * 10);
+          continue;
+        }
+
+        // King of the hill: attacks are for the hill. Into its ring to take it, or round it to hold it.
+        const hill = naval || orders.rally ? null : hillOf(ctx);
+        if (hill) {
+          const p = patrolPoint(hill, ai.squad, world.time);
+          if (ctx.sides.allied(hill.owner, faction)) {
+            moveTo(mover, t, p.x + ai.rallyOffsetX * 0.4, p.z + ai.rallyOffsetZ * 0.4, p.x * 2 - hill.x, p.z * 2 - hill.z);
+          } else {
+            mover.targetX = hill.x + (p.x - hill.x) * 0.5 + ai.rallyOffsetX * 0.3;
+            mover.targetZ = hill.z + (p.z - hill.z) * 0.5 + ai.rallyOffsetZ * 0.3;
+            mover.faceX = hill.x;
+            mover.faceZ = hill.z;
+          }
           continue;
         }
 

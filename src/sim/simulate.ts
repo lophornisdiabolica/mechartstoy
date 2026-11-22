@@ -74,6 +74,8 @@ export const SCENARIOS: Scenario[] = [
   { id: 'ffa3', label: 'Free-for-all, 3 sides', battles: 12, quick: 4, setup: conquest(sides([0, 1, 2])) },
   { id: 'ffa4', label: 'Free-for-all, 4 sides', battles: 8, quick: 3, setup: conquest(sides([0, 1, 2, 3])) },
   { id: 'ffa6', label: 'Free-for-all, 6 sides', battles: 4, quick: 2, setup: conquest(sides([0, 1, 2, 3, 4, 5])) },
+  { id: 'hill', label: 'King of the hill, 1v1', battles: 12, quick: 4, setup: conquest(sides([0, 1]), (s) => (s.mode = 'hill')) },
+  { id: 'hill-ffa4', label: 'King of the hill, 4 sides', battles: 8, quick: 3, setup: conquest(sides([0, 1, 2, 3]), (s) => (s.mode = 'hill')) },
   { id: 'eternal', label: 'Eternal 1v1, first 10 minutes', battles: 6, quick: 2, setup: sides([0, 1]), minutes: 10 },
 ];
 
