@@ -326,6 +326,32 @@ registerModel('bld:airstrip', (faction) => {
   return g;
 });
 
+/** King of the hill's beacon: a stepped stone cairn with a tall mast flying a big banner in the holder's colour, and a steady lamp on top. */
+registerModel('bld:hillBeacon', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.5, 1.7, 0.5, 8, 0x9a9588, 0, 0.25, 0));
+  g.add(cylinder(1.1, 1.3, 0.5, 8, 0x8a8578, 0, 0.75, 0));
+  g.add(cylinder(1.12, 1.12, 0.08, 8, secondary, 0, 1.02, 0));
+  g.add(cylinder(0.09, 0.12, 5.6, 6, DARK, 0, 3.8, 0));
+  g.add(box(0.5, 0.1, 0.1, METAL, 0, 6.5, 0));
+  const banner = new THREE.Group();
+  banner.position.set(0, 6.2, 0);
+  banner.add(box(1.9, 1.15, 0.05, primary, 0.97, -0.6, 0));
+  banner.add(box(1.84, 0.14, 0.06, secondary, 0.97, -1.12, 0)); // a touch narrower, so its ends don't sit flush with the banner's
+  g.add(banner);
+  const lamp = glowBox(0.22, 0.22, 0.22, 0xffd070);
+  lamp.position.set(0, 6.75, 0);
+  g.add(lamp);
+  return setRig(g, {
+    // A slow sway, no blinking.
+    animate: ({ dt }) => {
+      banner.userData.t = (banner.userData.t ?? Math.random() * 6) + dt;
+      banner.rotation.y = Math.sin(banner.userData.t * 0.9) * 0.3;
+    },
+  });
+});
+
 /** The hilltop gun: a sandbagged concrete emplacement with a long-barrelled gun on a turntable. */
 registerModel('bld:bigGun', (faction) => {
   const { primary, secondary } = factionColors(faction);

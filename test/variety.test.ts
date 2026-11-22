@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { DOCTRINE_IDS } from '../src/game/doctrines';
 import { FACTIONS } from '../src/game/factions';
-import { defaultSettings, factionDefs, LIMITS } from '../src/game/settings';
+import { defaultSettings, factionDefs, LIMITS, rampMode } from '../src/game/settings';
 import { MAP_STYLES, rollBattle } from '../src/game/variety';
 import { generateIdentity, IDENTITY_COLORS, isGeneratedIdentity } from '../src/game/identity';
 import { settingsFromParams } from '../src/ui/settingsUrl';
@@ -256,5 +256,21 @@ describe('variety between battles', () => {
     expect(diced.map.water).toBe(plain.map.water);
     expect(diced.armies.caps.vehicle).toBeGreaterThanOrEqual(10);
     expect(diced.armies.caps.vehicle).toBeLessThanOrEqual(20);
+  });
+
+  it('rolls king of the hill and its hold time, and the ramps in it', () => {
+    const base = defaultSettings();
+    base.variety.dice = { mode: true, hold: [60, 120], rtide: [0.2, 0.4] };
+    const modes = new Set<string>();
+    for (let seed = 0; seed < 30; seed++) {
+      const s = rollBattle(base, new Rng(seed)).settings;
+      modes.add(s.mode);
+      expect(s.armies.hillHold).toBeGreaterThanOrEqual(60);
+      expect(s.armies.hillHold).toBeLessThanOrEqual(120);
+      const tide = s.armies.ramp[rampMode(s.mode)].tide;
+      expect(tide).toBeGreaterThanOrEqual(0.2);
+      expect(tide).toBeLessThanOrEqual(0.4);
+    }
+    expect(modes.has('hill')).toBe(true);
   });
 });

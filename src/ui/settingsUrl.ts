@@ -36,6 +36,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'siege', limit: 'ramp', get: (s) => s.armies.ramp.conquest.siege, set: (s, v) => (s.armies.ramp.conquest.siege = v) },
   { key: 'eramp', limit: 'ramp', get: (s) => s.armies.ramp.eternal.tide, set: (s, v) => (s.armies.ramp.eternal.tide = v) },
   { key: 'esiege', limit: 'ramp', get: (s) => s.armies.ramp.eternal.siege, set: (s, v) => (s.armies.ramp.eternal.siege = v) },
+  { key: 'hold', limit: 'hillHold', get: (s) => s.armies.hillHold, set: (s, v) => (s.armies.hillHold = Math.round(v)) },
   { key: 'advice', limit: 'advice', get: (s) => s.armies.advice, set: (s, v) => (s.armies.advice = v) },
   { key: 'eng', limit: 'engineers', get: (s) => s.armies.engineers, set: (s, v) => (s.armies.engineers = Math.round(v)) },
   { key: 'tforce', limit: 'taskForces', get: (s) => s.armies.taskForces, set: (s, v) => (s.armies.taskForces = v) },
@@ -135,7 +136,7 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   const seed = p.get('seed');
   if (seed !== null) s.seed = seed.slice(0, 40);
   const mode = p.get('mode');
-  if (mode === 'eternal' || mode === 'conquest') s.mode = mode;
+  if (mode === 'eternal' || mode === 'conquest' || mode === 'hill') s.mode = mode;
   const attacks = p.get('attacks');
   if (attacks === 'readiness' || attacks === 'tide') s.armies.attackTiming = attacks;
   const grow = p.get('sgrow');

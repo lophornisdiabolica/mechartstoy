@@ -372,7 +372,7 @@ export function movementSystem(ctx: SimContext): System {
         const field = ctx.field;
         const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
         // A charging melee unit runs (see Mover.surge).
-        const pace = m.surge ? m.speed * m.surge : m.speed;
+        const pace = (m.surge ? m.speed * m.surge : m.speed) * (m.pace ?? 1);
         let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : pace * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
         // An enemy's frost underfoot (or frozen water under a boat) slows it right down (see frost.ts).
         if (!rules.flies && ctx.frost.count > 0) speed *= ctx.frost.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);

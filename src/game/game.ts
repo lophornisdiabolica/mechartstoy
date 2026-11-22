@@ -20,6 +20,7 @@ import { newSquad, spawnBuilding, spawnUnit } from './spawn';
 import * as D from '../core/dmath';
 import { aiSystem } from './systems/ai';
 import { conquestSystem } from './systems/conquest';
+import { createHill, hillSystem } from './hill';
 import { constructionSystem } from './systems/construction';
 import { deathSystem, wreckSystem } from './systems/death';
 import { laneKeepSystem, Traffic, trafficSystem } from './traffic';
@@ -130,6 +131,7 @@ export class Game {
       tide,
       lanes: new Lanes(this.field, nav, seed),
       outposts: createOutposts(this.field.outpostSites),
+      hill: null,
       sides,
       offensive: new Offensive(sides, tide, () => settings.armies.attackTiming, this.field.config.cols),
       squads: 0,
@@ -149,6 +151,7 @@ export class Game {
 
     // Order matters: snapshot first, then index, decide, move, fight, and clean up.
     const ctx = this.ctx;
+    ctx.hill = createHill(ctx, settings.factions.length);
     const navObstacles = navObstacleSystem(ctx);
     // A view builds none: some systems (scrap) listen to events, which a view only replays.
     const systems = view
@@ -186,6 +189,7 @@ export class Game {
       outpostSystem(ctx),
       constructionSystem(ctx),
       conquestSystem(ctx),
+      hillSystem(ctx),
       // Last: it only reads the battle (see commander/commander.ts).
       commanderSystem(ctx),
     ];

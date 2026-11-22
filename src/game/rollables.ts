@@ -1,7 +1,7 @@
 import { Rng } from '../core/rng';
 import { BIOME_IDS } from '../world/biomes';
 import type { AttackTiming, BaseLayout, BattleMode, BattleSettings, CityMode, MapSize, SuperGrowth, TownSize } from './settings';
-import { LIMITS, MAP_SIZES, TOWN_SIZES } from './settings';
+import { LIMITS, MAP_SIZES, rampMode, TOWN_SIZES } from './settings';
 import type { VarietyKey } from './variety';
 
 /**
@@ -76,7 +76,8 @@ export function rollable(id: string): Rollable | undefined {
 }
 
 const build = (): Rollable[] => [
-  choice<BattleMode>('mode', 'Mode', ['eternal', 'conquest'], (s) => s.mode, (s, v) => (s.mode = v)),
+  choice<BattleMode>('mode', 'Mode', ['eternal', 'conquest', 'hill'], (s) => s.mode, (s, v) => (s.mode = v)),
+  range('hold', 'Hold to win', 'hillHold', 15, (s) => s.armies.hillHold, (s, v) => (s.armies.hillHold = v)),
   // Map
   choice<MapSize>('size', 'Size', Object.keys(MAP_SIZES) as MapSize[], (s) => s.map.size, (s, v) => (s.map.size = v), 'size'),
   range('shape', 'Shape', 'shape', 0.05, (s) => s.map.shape, (s, v) => (s.map.shape = v), 'size'),
@@ -133,8 +134,8 @@ const build = (): Rollable[] => [
   flag('hunt', 'Gun hunts', (s) => s.armies.hunts, (s, v) => (s.armies.hunts = v)),
   flag('span', 'Bridge shortcuts', (s) => s.armies.shortcuts, (s, v) => (s.armies.shortcuts = v)),
   // The ramps of whichever mode the battle is in.
-  range('rtide', 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].tide, (s, v) => (s.armies.ramp[s.mode].tide = v)),
-  range('rsiege', 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[s.mode].siege, (s, v) => (s.armies.ramp[s.mode].siege = v)),
+  range('rtide', 'Tide ramp', 'ramp', 0.05, (s) => s.armies.ramp[rampMode(s.mode)].tide, (s, v) => (s.armies.ramp[rampMode(s.mode)].tide = v)),
+  range('rsiege', 'Siege ramp', 'ramp', 0.05, (s) => s.armies.ramp[rampMode(s.mode)].siege, (s, v) => (s.armies.ramp[rampMode(s.mode)].siege = v)),
   // Outposts
   choice<number | 'auto'>(
     'outposts',

@@ -38,6 +38,12 @@ export interface BattlefieldConfig {
    * with a hilltop gun going to the highest site.
    */
   outpostKinds: OutpostKind[];
+  /**
+   * King of the hill: one more outpost, the hill, on the most contested
+   * ground near the middle of the map, as fair to every base as the land
+   * allows (see placeHill). It comes first in outpostSites.
+   */
+  hill: boolean;
   /** The map's look: ground and water colours, scenery and town style (see biomes.ts). */
   biome: BiomeId;
   /**
@@ -74,6 +80,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   baseRadius: 16,
   seats: [0, 1],
   outposts: 0,
+  hill: false,
   outpostKinds: ['supply'],
   biome: 'temperate',
   waterways: 'joined',
@@ -150,7 +157,8 @@ export interface TownSite {
  * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot or a ruined
  * factory.
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'hill';
+/** The kinds a map deals out to ordinary outposts (the hill is placed on its own, see BattlefieldConfig.hill). */
 export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory'];
 
 /** A flattened clearing in no-man's land where a capturable outpost stands. */
@@ -938,6 +946,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   if (config.waterways !== 'off') bridgeChannels(field, carveWaterways(field, { everyBase: config.waterways === 'everyBase' }));
   bridgeLand(field);
 
+  // King of the hill: the hill takes the fairest ground first, and towns keep off it.
+  const hill = config.hill ? placeHill(field, rng.fork(0x68696c6c)) : null;
+
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = config.townRadius;
   const townSpot = (x: number, z: number, townRadius = config.townRadius) => {
@@ -951,6 +962,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     if (field.nearBridge(x, z, townRadius * 1.35)) score += 50;
     // With bases along the long edges too, keep the town off their pads.
     for (const site of baseSites) if (D.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
+    if (hill && D.hypot(hill.x - x, hill.z - z) < OUTPOST_RADIUS + townRadius + 6) score += 100;
     return score;
   };
   let best: { x: number; z: number; score: number } | null = null;
@@ -1093,7 +1105,26 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     : square && config.outposts > 0
       ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
       : placeOutposts(field, rng, config.outposts);
-  const kinds = dealOutpostKinds(spots, config.outpostKinds, rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
+  const kinds = dealOutpostKinds(spots, config.outpostKinds.filter((k) => k !== 'hill'), rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
+  // King of the hill: the hill (placed before the towns) goes first, and the other outposts keep clear of it.
+  if (hill) {
+    if (!config.outpostPlaces) {
+      // Re-place the others round it, so none sits on top of it.
+      const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : [])];
+      const rest = square && config.outposts > 0 ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng.fork(0x72657374), config.outposts - 1, taken)] : placeOutposts(field, rng.fork(0x72657374), config.outposts, taken);
+      spots.splice(0, spots.length, ...rest.filter((p) => D.hypot(p.x - hill.x, p.z - hill.z) > OUTPOST_RADIUS * 2.5));
+      kinds.splice(0, kinds.length, ...dealOutpostKinds(spots, config.outpostKinds.filter((k) => k !== 'hill'), rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z)));
+    } else {
+      for (let k = spots.length - 1; k >= 0; k--) {
+        if (D.hypot(spots[k].x - hill.x, spots[k].z - hill.z) < OUTPOST_RADIUS * 2.5) {
+          spots.splice(k, 1);
+          kinds.splice(k, 1);
+        }
+      }
+    }
+    spots.unshift(hill);
+    kinds.unshift('hill');
+  }
   spots.forEach((p, k) => {
     const height = Math.max(seaLevel + 1, field.heightAt(p.x, p.z));
     field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
@@ -1328,6 +1359,43 @@ function dealOutpostKinds<P>(sites: P[], allowed: OutpostKind[], rng: Rng, heigh
     [dealt[gun], dealt[top]] = [dealt[top], dealt[gun]];
   }
   return dealt;
+}
+
+/**
+ * Where the hill goes (king of the hill): flat, dry land every base can walk
+ * to, as near the same distance from every base as the ground allows, near
+ * the middle of the map. Placed before the towns, which keep off it. Picked
+ * from random candidates.
+ */
+function placeHill(field: Battlefield, rng: Rng): { x: number; z: number } | null {
+  const reach = landReach(field);
+  const r = OUTPOST_RADIUS;
+  let best: { x: number; z: number } | null = null;
+  let bestScore = Infinity;
+  const half = Math.min(field.width, field.depth) * 0.5;
+  for (let n = 0; n < 900; n++) {
+    // Half the candidates near the middle, the rest anywhere (with three or more sides, the fairest spot can be well off-centre).
+    const spread = n < 450 ? 0.4 : 0.85;
+    const x = rng.range(-1, 1) * (field.width * 0.5 - r - 4) * spread;
+    const z = rng.range(-1, 1) * (field.depth * 0.5 - r - 4) * spread;
+    if (!reach[vertexAt(field, x, z)] || field.nearBridge(x, z, r * 1.35)) continue;
+    const dist = field.baseSites.map((b) => D.hypot(b.x - x, b.z - z));
+    if (Math.min(...dist) < r + field.config.baseRadius + 10) continue;
+    let rough = 0;
+    for (let a = 0; a < 8; a++) {
+      const px = x + D.cos((a / 8) * Math.PI * 2) * r * 0.8;
+      const pz = z + D.sin((a / 8) * Math.PI * 2) * r * 0.8;
+      rough += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
+    }
+    // Fairness first: how much further the furthest base is than the nearest.
+    const unfair = (Math.max(...dist) - Math.min(...dist)) / Math.max(1, Math.min(...dist));
+    const score = unfair * 40 + rough * 2 + (D.hypot(x, z) / half) * 1.5;
+    if (score < bestScore) {
+      bestScore = score;
+      best = { x, z };
+    }
+  }
+  return best;
 }
 
 /**

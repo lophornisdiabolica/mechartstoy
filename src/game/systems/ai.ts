@@ -3,6 +3,7 @@ import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, 
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
+import { hillOf } from '../hill';
 import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
 import { MOVE_RULES } from '../../world/moveClasses';
@@ -13,7 +14,7 @@ import * as D from '../../core/dmath';
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
 /** Radians per second squads walk round an outpost they're holding. */
-const PATROL_SPEED = 0.06;
+const PATROL_SPEED = 0.09;
 /** Distance from the post that squads holding an outpost patrol at. */
 const PATROL_RADIUS = CAPTURE_RADIUS - 2;
 /** How far around itself a support unit looks for a frontline ally to follow. */
@@ -70,6 +71,7 @@ export function aiSystem(ctx: SimContext): System {
         const def = world.get(e, Unit)?.def;
         // A charge lasts only while the AI keeps calling it (see the melee notes below).
         if (mover.surge) mover.surge = undefined;
+        if (mover.pace) mover.pace = undefined;
         // Engineers go and build what the Commander wants built, or wait at home (see commander/engineers.ts).
         if (def?.builds) {
           const job = ctx.commander.engineers.jobFor(e);
@@ -213,8 +215,7 @@ export function aiSystem(ctx: SimContext): System {
 
         if (post) {
           // Walk the outpost's perimeter, ready for whoever comes.
-          const p = patrolPoint(post, ai.squad, world.time);
-          moveTo(mover, t, p.x, p.z, post.x * 2 - p.x, post.z * 2 - p.z);
+          patrol(mover, t, post, ai.squad, world.time, 0, 0);
           continue;
         }
 
@@ -246,7 +247,8 @@ export function aiSystem(ctx: SimContext): System {
         // On auto, an attack is called off while the side's own base can't hold (Sides.recalling).
         // The Commander's job for this unit, if any; the flag and stances override it.
         const job = orders.stance === 'auto' && !orders.rally ? ctx.commander.roles.jobFor(e) : undefined;
-        const recalled = ctx.sides.recalling[faction];
+        // Not when the team has gone all in for the hill: it's win there or lose anyway.
+        const recalled = ctx.sides.recalling[faction] && !ctx.offensive.allIn(faction);
         const auto = orders.stance === 'auto' && !recalled && ctx.offensive.attacking(faction, world.time);
         const attacking = target >= 0 && (orders.stance === 'attack' || auto);
         if (!attacking) {
@@ -258,9 +260,10 @@ export function aiSystem(ctx: SimContext): System {
           const force = orders.stance === 'auto' && !orders.rally ? ctx.commander.taskForces.forSquad(ai.squad) : undefined;
           if (force && force.side === faction) {
             const o = ctx.outposts[force.outpost];
-            const p = patrolPoint(o, ai.squad, world.time);
-            const k = force.kind === 'take' ? 0.5 : 1;
-            moveTo(mover, t, o.x + (p.x - o.x) * k + ai.rallyOffsetX * 0.3, o.z + (p.z - o.z) * k + ai.rallyOffsetZ * 0.3, force.kind === 'take' ? o.x : p.x * 2 - o.x, force.kind === 'take' ? o.z : p.z * 2 - o.z);
+            if (force.kind === 'take') {
+              const p = patrolPoint(o, ai.squad, world.time);
+              moveTo(mover, t, o.x + (p.x - o.x) * 0.5 + ai.rallyOffsetX * 0.3, o.z + (p.z - o.z) * 0.5 + ai.rallyOffsetZ * 0.3, o.x, o.z);
+            } else patrol(mover, t, o, ai.squad, world.time, ai.rallyOffsetX * 0.3, ai.rallyOffsetZ * 0.3);
             continue;
           }
           // Flak covering something of ours, or artillery waiting on high ground (see commander/roles.ts).
@@ -271,9 +274,18 @@ export function aiSystem(ctx: SimContext): System {
           }
           const home = ctx.field.baseSites[faction];
           const defend = orders.rally ? null : ctx.sides.defencePoint(faction);
+          // King of the hill: a team holding the hill keeps its army round it between attacks.
+          const hill = naval || orders.rally || defend ? null : hillOf(ctx);
+          if (hill && ctx.sides.allied(hill.owner, faction)) {
+            patrol(mover, t, hill, ai.squad, world.time, ai.rallyOffsetX * 0.4, ai.rallyOffsetZ * 0.4);
+            continue;
+          }
           if (!orders.rally && outpost && holdsOutposts(ai.squad, armies.outpostHold) && !ctx.sides.underAttack(faction)) {
-            const p = patrolPoint(outpost, ai.squad, world.time);
-            moveTo(mover, t, p.x + ai.rallyOffsetX * 0.4, p.z + ai.rallyOffsetZ * 0.4, ours ? p.x * 2 - outpost.x : outpost.x, ours ? p.z * 2 - outpost.z : outpost.z);
+            if (ours) patrol(mover, t, outpost, ai.squad, world.time, ai.rallyOffsetX * 0.4, ai.rallyOffsetZ * 0.4);
+            else {
+              const p = patrolPoint(outpost, ai.squad, world.time);
+              moveTo(mover, t, p.x + ai.rallyOffsetX * 0.4, p.z + ai.rallyOffsetZ * 0.4, outpost.x, outpost.z);
+            }
             continue;
           }
           const rally = orders.rally ?? defend ?? (target >= 0 ? ctx.lanes.rally(faction, target, ai.lane) : home);
@@ -312,6 +324,21 @@ export function aiSystem(ctx: SimContext): System {
         if (job?.kind === 'escort' && job.lead !== null && world.isAlive(job.lead)) {
           const lt = world.req(job.lead, Transform);
           moveTo(mover, t, lt.x + job.x, lt.z + job.z, lt.x + D.cos(lt.heading) * 10, lt.z - D.sin(lt.heading) * 10);
+          continue;
+        }
+
+        // King of the hill: attacks are for the hill. Into its ring to take it, or round it to hold it.
+        const hill = naval || orders.rally ? null : hillOf(ctx);
+        if (hill) {
+          const p = patrolPoint(hill, ai.squad, world.time);
+          if (ctx.sides.allied(hill.owner, faction)) {
+            patrol(mover, t, hill, ai.squad, world.time, ai.rallyOffsetX * 0.4, ai.rallyOffsetZ * 0.4);
+          } else {
+            mover.targetX = hill.x + (p.x - hill.x) * 0.5 + ai.rallyOffsetX * 0.3;
+            mover.targetZ = hill.z + (p.z - hill.z) * 0.5 + ai.rallyOffsetZ * 0.3;
+            mover.faceX = hill.x;
+            mover.faceZ = hill.z;
+          }
           continue;
         }
 
@@ -478,6 +505,36 @@ function near(world: World, e: Entity, post: Outpost, range: number): boolean {
 function patrolPoint(outpost: Outpost, squad: number, time: number): { x: number; z: number } {
   const angle = squad * 2.399 + time * PATROL_SPEED;
   return { x: outpost.x + D.cos(angle) * PATROL_RADIUS, z: outpost.z + D.sin(angle) * PATROL_RADIUS };
+}
+
+/** Seconds ahead round the circle a patrolling unit steers for, so its goal stays well ahead of it. */
+const PATROL_LEAD = 8;
+/** How far ahead that is, round the circle. */
+const PATROL_AHEAD = 2 * PATROL_RADIUS * D.sin((PATROL_SPEED * PATROL_LEAD) / 2);
+/** The patrol's own walking pace (its place's speed round the circle). */
+const PATROL_WALK = PATROL_SPEED * PATROL_RADIUS;
+/** Slowest a patroller walks while it's ahead of its place: still fast enough not to count as stuck. */
+const PATROL_SLOWEST = 0.75;
+
+/**
+ * Walk an outpost's (or the hill's) perimeter, facing outward when stopped.
+ * Steering for the squad's place on the circle a little ahead (not where
+ * it is now), at the patrol's own pace (a little faster when it has fallen
+ * behind, slower when it's ahead), keeps a unit walking smoothly round,
+ * where going to its place now made it hurry there, stop, wait for the
+ * place to move on, and go again. Units far from their place (on their way
+ * to it, or after a fight) catch up at up to full speed.
+ */
+function patrol(mover: Mover, t: Transform, o: Outpost, squad: number, time: number, offX: number, offZ: number): void {
+  const ahead = patrolPoint(o, squad, time + PATROL_LEAD);
+  mover.targetX = ahead.x + offX;
+  mover.targetZ = ahead.z + offZ;
+  mover.faceX = ahead.x * 2 - o.x;
+  mover.faceZ = ahead.z * 2 - o.z;
+  const toGoal = D.hypot(mover.targetX - t.x, mover.targetZ - t.z);
+  // Behind its place (farther from the goal than the lead), it speeds up in proportion; ahead, it slows.
+  const want = PATROL_WALK * Math.max(PATROL_SLOWEST, toGoal / PATROL_AHEAD);
+  if (mover.speed > 0 && want < mover.speed) mover.pace = want / mover.speed;
 }
 
 /** Head for a spot and face a point; stop when close so units settle rather than jostle. */

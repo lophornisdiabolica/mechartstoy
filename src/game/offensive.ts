@@ -5,7 +5,8 @@ import { SimContext } from './context';
 import { AttackTiming, MAP_SIZES } from './settings';
 import { Sides } from './sides';
 import { armyCap } from './caps';
-import { outpostBonus } from './outposts';
+import { CAPTURE_RADIUS, outpostBonus } from './outposts';
+import { hillOf, hillReach, hillTimeLeft, hillUrgency } from './hill';
 import { STYLES } from './commander/advice';
 import { attackNumber, isAttacking, TideSettings } from './tide';
 
@@ -49,6 +50,14 @@ const REGROUP = 45;
  * side goes on massing and hits back at the enemy's base, which is on land.
  */
 const AFLOAT = 0.6;
+/**
+ * King of the hill, near the end: a team goes all in (everything it has,
+ * at once, and no falling back) once an enemy is this many seconds from
+ * winning beyond what its army needs to get to the hill. Early enough that
+ * the army arrives together for one big last fight, not so early that the
+ * whole match is a trickle of half-built attacks.
+ */
+const ALL_IN_SLACK = 25;
 
 /** What a team is doing, for the HUD. */
 export type PlanState = 'massing' | 'attacking' | 'regrouping' | 'defending';
@@ -72,6 +81,12 @@ export interface TeamPlan {
   need: number;
   /** How ready it is to attack, 0 to 1, while massing: the lower of its strength and its numbers against what it needs. */
   ready: number;
+  /**
+   * King of the hill: an enemy is about to win on the hill, so the team has
+   * thrown everything at it (see ALL_IN_SLACK): every unit attacks, nobody
+   * holds other outposts or goes home to regroup, until the clock is stopped.
+   */
+  allIn?: boolean;
 }
 
 /**
@@ -136,6 +151,7 @@ export class Offensive {
 
   /** Whether a side is on the attack (before any player orders or a recall). */
   attacking(faction: number, time: number): boolean {
+    if (this.plan(faction).allIn) return true;
     if (this.timing() === 'tide') return isAttacking(time, this.sides.phase[faction], this.tide);
     return this.plan(faction).state === 'attacking';
   }
@@ -157,10 +173,38 @@ export class Offensive {
     return START_MARGIN - (START_MARGIN - LEAST_MARGIN) * k;
   }
 
+  /** Whether a side's team has gone all in for the hill (see ALL_IN_SLACK). */
+  allIn(faction: number): boolean {
+    return this.plan(faction).allIn === true;
+  }
+
+  /**
+   * King of the hill: whether a team should go all in, and say so when it
+   * starts. Teams that hold the hill, or while nobody's clock is running
+   * out, don't.
+   */
+  private goAllIn(world: World, ctx: SimContext, plan: TeamPlan, members: number[]): boolean {
+    const left = hillTimeLeft(ctx, members[0]);
+    // Once in, it stays in while the enemy still holds the hill, however the numbers wobble.
+    const all = left < Infinity && (plan.allIn === true || left <= hillReach(world, ctx, members) + ALL_IN_SLACK);
+    if (all && !plan.allIn) ctx.events.emit('hillAllIn', { faction: members[0], left });
+    plan.allIn = all;
+    return all;
+  }
+
   /** Re-plan every team (see offensiveSystem). */
   update(world: World, ctx: SimContext): void {
     const { sides } = this;
     const time = world.time;
+    // On the tide, the tide's clock times attacks; only a team's last push for the hill is planned here.
+    if (this.timing() === 'tide') {
+      if (!ctx.hill) return;
+      for (const [team, plan] of this.plans) {
+        const members = sides.standing().filter((f) => sides.teams[f] === team);
+        if (members.length > 0) this.goAllIn(world, ctx, plan, members);
+      }
+      return;
+    }
     // Each side's army: its units, not counting outpost guards.
     const army = new Array<number>(sides.count).fill(0);
     const count = new Array<number>(sides.count).fill(0);
@@ -180,6 +224,23 @@ export class Offensive {
       const target = sides.target(members[0], plan.attack);
       if (target === null) continue;
 
+      // King of the hill, nearly lost: everything goes now, and keeps going.
+      if (ctx.hill && this.goAllIn(world, ctx, plan, members)) {
+        plan.ready = 1;
+        if (plan.state !== 'attacking') {
+          plan.state = 'attacking';
+          plan.target = target;
+          plan.roster = [];
+        }
+        // Counted from now, so once the clock is stopped the attack runs its usual course from here.
+        plan.since = time;
+        for (const e of world.query(Unit, Faction, Armed, Health)) {
+          if (!world.has(e, Guard) && members.includes(world.req(e, Faction).id) && !plan.roster.includes(e)) plan.roster.push(e);
+        }
+        plan.launch = plan.roster.reduce((s, e) => s + (world.isAlive(e) ? fightingStrength(world, e) : 0), 0);
+        continue;
+      }
+
       if (plan.state === 'attacking') {
         // Spent, target knocked out, or gone on too long: fall back and build up for the next one.
         const left = plan.roster.reduce((s, e) => s + (world.isAlive(e) ? fightingStrength(world, e) : 0), 0);
@@ -194,7 +255,7 @@ export class Offensive {
       }
       if (plan.state === 'regrouping' && time - plan.since < REGROUP * this.scale) continue;
       // While every one of the team's bases is under attack, it stays home and fights it out first.
-      const targeted = this.targetedSides();
+      const targeted = this.targetedSides(ctx);
       if (members.every((f) => targeted.has(f) && !this.shelledFromWater(world, ctx, f))) {
         plan.state = 'defending';
         continue;
@@ -204,9 +265,11 @@ export class Offensive {
       const relays = members.reduce((sum, f) => sum + outpostBonus(ctx, f, 'readiness'), 0);
       // Its Commanders' styles make it want more or less of an edge (see commander/advice.ts).
       const style = members.reduce((sum, f) => sum + STYLES[ctx.settings.factions[f]?.style ?? 'balanced'].margin, 0) / members.length;
-      plan.need = this.defence(world, ctx, target) * this.margin((time - plan.since) * (1 + relays)) * style;
+      // King of the hill: the closer the holder is to winning, the less of an edge a team waits for, and the smaller an army it goes with.
+      const urgency = hillUrgency(ctx, members[0]);
+      plan.need = this.defence(world, ctx, target, members[0]) * this.margin((time - plan.since) * (1 + relays)) * style * (1 - 0.5 * urgency);
       const units = members.reduce((s, f) => s + count[f], 0);
-      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0);
+      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0) * (1 - 0.5 * urgency);
       plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));
       if (units >= cap * MIN_ARMY && plan.army >= plan.need) {
         plan.state = 'attacking';
@@ -221,9 +284,16 @@ export class Offensive {
     }
   }
 
-  /** Sides some enemy team is attacking right now. */
-  private targetedSides(): Set<number> {
+  /**
+   * Sides some enemy team is attacking right now. In king of the hill every
+   * attack is for the hill (a team holding it is only keeping it), so none
+   * is on a base: an army that does turn up at one is met as any is (see
+   * Sides.defencePoint), and the rest don't stay home for an attack that
+   * isn't coming.
+   */
+  private targetedSides(ctx: SimContext): Set<number> {
     const out = new Set<number>();
+    if (ctx.hill) return out;
     for (const [team, plan] of this.plans) {
       if (plan.state !== 'attacking') continue;
       const lead = this.sides.standing().find((f) => this.sides.teams[f] === team);
@@ -249,8 +319,24 @@ export class Offensive {
     return all > 0 && afloat >= all * AFLOAT;
   }
 
-  /** Strength at an enemy base: its team's units nearby and its armed buildings. */
-  private defence(world: World, ctx: SimContext, target: number): number {
+  /**
+   * Strength at an enemy base: its team's units nearby and its armed
+   * buildings. In king of the hill, attacks go for the hill, so it's the
+   * strength round the hill (its holder's or garrison's, and anyone else
+   * fighting there) that `side` would have to beat.
+   */
+  private defence(world: World, ctx: SimContext, target: number, side: number): number {
+    const hill = hillOf(ctx);
+    if (hill) {
+      if (this.sides.allied(hill.owner, side)) return 0;
+      let sum = 0;
+      ctx.grid.forEachNear(hill.x, hill.z, CAPTURE_RADIUS + 14, (e) => {
+        const f = world.get(e, Faction);
+        if (!f || !this.sides.hostile(f.id, side) || !world.has(e, Transform)) return;
+        sum += fightingStrength(world, e);
+      });
+      return sum;
+    }
     const base = ctx.field.baseSites[target];
     let sum = 0;
     ctx.grid.forEachNear(base.x, base.z, DEFENCE_RANGE, (e) => {
@@ -268,7 +354,8 @@ export function offensiveSystem(ctx: SimContext): System {
   return {
     name: 'offensive',
     update(world) {
-      if (ctx.settings.armies.attackTiming !== 'readiness' || world.time < next) return;
+      // On the tide, only king of the hill's last pushes are planned here.
+      if ((ctx.settings.armies.attackTiming !== 'readiness' && !ctx.hill) || world.time < next) return;
       next = world.time + CHECK_INTERVAL;
       ctx.offensive.update(world, ctx);
     },

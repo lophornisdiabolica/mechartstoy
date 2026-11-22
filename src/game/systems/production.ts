@@ -133,7 +133,7 @@ export function productionSystem(ctx: SimContext): System {
         // Ratio > 1 means this side is outnumbered.
         const ratio = outnumbered(ctx, alive, faction);
         // Conquest needs a winner, so it skips the rubber band and lets an advantage snowball.
-        const band = ctx.settings.mode === 'conquest' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
+        const band = ctx.settings.mode !== 'eternal' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
         // An outpost adds the same to every side, not a share of a big side's boosted rate.
         const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
         const rate = armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);

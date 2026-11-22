@@ -1369,6 +1369,75 @@ body.photo #debug {
   }
 }
 
+/* King of the hill's scoreboard (see HillBar). */
+#hillbar {
+  position: fixed;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(16, 20, 28, 0.72);
+  color: #e6edf3;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 4;
+  min-width: 260px;
+}
+#hillbar[hidden] {
+  display: none;
+}
+#hillbar .title {
+  text-align: center;
+  color: #8b98a8;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+#hillbar .row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) 1fr 3.2em;
+  gap: 8px;
+  align-items: center;
+  line-height: 18px;
+  opacity: 0.75;
+}
+#hillbar .row.holding {
+  opacity: 1;
+  font-weight: 600;
+}
+#hillbar .row.holding .name::before {
+  content: '▲ ';
+}
+#hillbar .row.contested .fill {
+  filter: saturate(0.4) brightness(0.8);
+}
+#hillbar .bar {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+#hillbar .fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  transition: width 0.3s linear;
+}
+#hillbar .time {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 600px) {
+  #hillbar {
+    min-width: 0;
+    width: calc(100% - 32px);
+    box-sizing: border-box;
+  }
+}
+body.photo #hillbar { display: none; }
+
 /* Tournament bracket on the banner between battles (see bracketCard). */
 #banner .bracket {
   margin-top: 12px;

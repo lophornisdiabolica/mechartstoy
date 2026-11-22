@@ -68,6 +68,9 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,
+  hillClock: true,
+  hillHeld: true,
+  hillAllIn: true,
   power: true,
   godUsed: true,
   earthwork: true,
@@ -458,6 +461,7 @@ export class SimHost {
         escalation: ctx.escalation,
         orders: ctx.orders,
         outposts: ctx.outposts.map((o) => [o.owner, o.progress, o.claimant]),
+        hill: ctx.hill ? [ctx.hill.held, ctx.hill.contested] : null,
         eliminatedAt: ctx.sides.eliminatedAt,
         plans: ctx.offensive.plansState,
         outcome: ctx.outcome,
@@ -496,6 +500,7 @@ interface CtxState {
   escalation: { tide: number; siege: number };
   orders: Game['ctx']['orders'];
   outposts: [number, number, number][];
+  hill: [number[], boolean] | null;
   eliminatedAt: (number | null)[];
   plans: Game['ctx']['offensive']['plansState'];
   outcome: Game['ctx']['outcome'];
@@ -597,6 +602,10 @@ export class SimView {
     Object.assign(ctx.escalation, s.escalation);
     s.orders.forEach((o, f) => Object.assign(ctx.orders[f], o));
     s.outposts.forEach(([owner, progress, claimant], i) => Object.assign(ctx.outposts[i], { owner, progress, claimant }));
+    if (s.hill && ctx.hill) {
+      ctx.hill.held = s.hill[0];
+      ctx.hill.contested = s.hill[1];
+    }
     s.eliminatedAt.forEach((at, f) => {
       if (at !== null && !ctx.sides.eliminated[f]) ctx.sides.eliminate(f, at);
     });

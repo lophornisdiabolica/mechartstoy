@@ -55,6 +55,7 @@ export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
   gun: { id: 'gun', name: 'Hilltop gun', blurb: 'A long-range gun on the highest ground, firing for whoever holds it', bonus: null, building: 'bigGun' },
   relay: { id: 'relay', name: 'Comms relay', blurb: 'Attacks set out sooner, and its mast spots for the holder’s guns', bonus: { kind: 'readiness', amount: 0.4 }, building: 'relayMast' },
   fuel: { id: 'fuel', name: 'Fuel depot', blurb: 'Faster production, but its tanks blow up when destroyed', bonus: { kind: 'production', amount: 0.1 }, building: 'fuelTanks' },
+  hill: { id: 'hill', name: 'The hill', blurb: 'King of the hill: the first team to hold it long enough wins', bonus: null, building: 'hillBeacon' },
   factory: { id: 'factory', name: 'Ruined factory', blurb: 'Patched up to turn out the odd vehicle for its holder', bonus: null, building: 'ruinedFactory', salvage: 75 },
 };
 
@@ -109,14 +110,21 @@ export function createOutposts(sites: OutpostSite[]): Outpost[] {
   return sites.map((s) => ({ index: s.index, x: s.x, z: s.z, owner: GARRISON, progress: 0, claimant: -1, kind: OUTPOST_KINDS[s.kind] }));
 }
 
-/** An outpost's post, two towers and a bunker, laid out round the site, and its kind's own building opposite the bunker. */
+/**
+ * An outpost's post, two towers and a bunker, laid out round the site, and
+ * its kind's own building opposite the bunker. The hill is only its beacon,
+ * standing where the post would.
+ */
 export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rng: Rng): void {
   const a = rng.range(0, Math.PI * 2);
   const at = (angle: number, dist: number) => ({ x: outpost.x + D.cos(a + angle) * dist, z: outpost.z + D.sin(a + angle) * dist });
-  const post = spawnOutpostPart(world, ctx, ctx.buildings.outpost, outpost, outpost.x, outpost.z, -a, false);
+  // The hill's post is its beacon, and the hill is bare ground round it: no towers or guards to give whoever takes it first a fort.
+  const hill = outpost.kind.id === 'hill';
+  const post = spawnOutpostPart(world, ctx, hill ? ctx.buildings.hillBeacon : ctx.buildings.outpost, outpost, outpost.x, outpost.z, -a, false);
   // The post can't be shot or destroyed: outposts change hands, they don't go away.
   world.remove(post, Health);
   world.remove(post, Targetable);
+  if (hill) return;
   for (const angle of [0, Math.PI]) {
     const p = at(angle, 4.6);
     spawnOutpostPart(world, ctx, ctx.buildings.tower, outpost, p.x, p.z, -(a + angle), false);

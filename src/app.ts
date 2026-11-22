@@ -20,6 +20,8 @@ import { parseAt, settingsFromParams, settingsToParams } from './ui/settingsUrl'
 import { SetupScreen } from './ui/setupScreen';
 import { PerfOverlay } from './ui/perfOverlay';
 import { Ticker } from './ui/ticker';
+import { HillBar } from './ui/hillBar';
+import { hillOf, teamHeld } from './game/hill';
 import { BattleHistory } from './ui/battleChart';
 import { PhotoMode } from './ui/photoMode';
 import { DebugPanel } from './ui/debugPanel';
@@ -69,6 +71,10 @@ function plan(game: Game, faction: number, factions: FactionDef[]): string {
   const time = game.world.time;
   const target = sides.target(faction, offensive.attack(faction, time));
   const name = target !== null ? factions[target]?.name ?? '' : '';
+  // King of the hill: attacks are for the hill, which a side holding it is keeping.
+  const hill = hillOf(game.ctx);
+  if (hill && offensive.allIn(faction)) return ' · all in for the hill';
+  if (hill && offensive.attacking(faction, time)) return sides.allied(hill.owner, faction) ? ' · holding the hill' : ' · going for the hill';
   if (offensive.attacking(faction, time)) return target !== null ? ` · attacking ${name}` : '';
   if (game.settings.armies.attackTiming === 'tide') return ' · building up';
   const p = offensive.plan(faction);
@@ -133,6 +139,7 @@ export class App implements MatchControls {
   private bannerTime = 0;
   private readonly perf: PerfOverlay;
   private readonly tickerFeed = new Ticker();
+  private readonly hillBar = new HillBar();
   /** Tournament mode (see tournament.ts): the bracket, and the match being played (null for a battle that isn't one). */
   private tournament: { bracket: Bracket; match: Match | null } | null = null;
   private readonly history = new BattleHistory();
@@ -388,6 +395,7 @@ export class App implements MatchControls {
     this.perf.attach(game);
     this.audio.attach(game);
     this.tickerFeed.attach(game, factions);
+    this.hillBar.attach(game, factions);
     this.history.attach(game);
     // The panel only belongs to a live battle, not the backdrop behind setup.
     const controls = this.setup.visible ? null : new Controls(game, this.stage, this.loop, factions, this, this.panelCollapsed);
@@ -404,6 +412,7 @@ export class App implements MatchControls {
     this.stage.render(alpha, frameSeconds, frameSeconds * this.loop.timeScale);
     controls?.update(frameSeconds);
     this.tickerFeed.update(frameSeconds);
+    this.hillBar.update(this.setup.visible);
     this.audio.update(frameSeconds, listenerFrom(this.stage.rig), this.setup.visible);
     this.history.update();
     if (frameSeconds > 0) this.fps += (1 / frameSeconds - this.fps) * 0.05;
@@ -466,7 +475,7 @@ export class App implements MatchControls {
     }
     this.banner.replaceChildren(
       el('div', { class: 'title' }, title),
-      el('div', { class: 'sub' }, outcome ? `after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
+      el('div', { class: 'sub' }, outcome ? `${game.ctx.hill && outcome.team !== null && teamHeld(game.ctx, outcome.team) >= game.settings.armies.hillHold ? 'held the hill ' : ''}after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
       this.summary(),
       ...(card ? [card] : chart ? [chart] : []),
       el('div', { class: 'next' }),
@@ -560,7 +569,7 @@ export class App implements MatchControls {
       buildings[f]++;
       if (w.has(e, Producer)) producers[f]++;
     }
-    const conquest = game.settings.mode === 'conquest';
+    const conquest = game.settings.mode !== 'eternal';
     const labels = teamLabels(game.settings);
     const lines = factions.map((f) => {
       const strength = game.ctx.sides.strength[f.id];
@@ -574,7 +583,7 @@ export class App implements MatchControls {
     });
     return (
       `${lines.join('\n')}\n` +
-      `${conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
+      `${game.settings.mode === 'hill' ? 'King of the hill' : conquest ? 'Conquest' : 'Eternal'} · ${clock(w.time)}${escalation(game)}${label ? ` · ${label}` : ''} · seed ${seed} · ${Math.round(this.fps)} fps\n` +
       `WASD / right-drag pan · wheel zoom · Q/E rotate · F follow fights · V director · U unit cam · G god powers · 1-4 speed · space pause · M mute · P stats · O overlays · H photo mode`
     );
   }
