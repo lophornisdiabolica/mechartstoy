@@ -5,11 +5,12 @@ import { Building, GARRISON, Health, Producer, Transform, Unit } from '../src/ga
 import { Game } from '../src/game/game';
 import { capture, OUTPOST_KINDS, outpostBonus } from '../src/game/outposts';
 import { capFor } from '../src/game/caps';
-import { defaultSettings } from '../src/game/settings';
+import { battlefieldConfig, defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { traceShot } from '../src/game/lineOfFire';
 import { BRIDGE_WIDTH } from '../src/world/waterways';
-import { DECK_GRADE, OUTPOST_KIND_IDS } from '../src/world/battlefield';
+import { Bridge, DECK_GRADE, distanceToSegment, generateBattlefield, OUTPOST_KIND_IDS } from '../src/world/battlefield';
+import { hashSeed, Rng } from '../src/core/rng';
 import { MOVE_RULES } from '../src/world/moveClasses';
 import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 
@@ -317,5 +318,67 @@ describe('placing by hand', () => {
       { x: 0.75, z: -0.33 },
     ];
     expect(settingsFromParams(settingsToParams(s)).map.placed).toEqual(s.map.placed);
+  });
+});
+
+describe('bridges and levelled ground', () => {
+  // Jbt's map (2026-11-22): a city levelled over the channel a bridge crossed, leaving the
+  // deck on dry ground with its streets running under the deck's end.
+  const LINK =
+    'seed=dqk0nu&mode=conquest&size=small&biome=forest&city=1&water=0.84&hills=0.82&sides=4&team1=2&team3=2&doc3=sabre&team4=1&doc4=armour';
+  const fieldFor = (query: string, change: (s: ReturnType<typeof defaultSettings>) => void = () => {}) => {
+    const s = settingsFromParams(new URLSearchParams(query));
+    change(s);
+    return generateBattlefield(new Rng(hashSeed(s.seed)).fork(1), battlefieldConfig(s));
+  };
+  /** The longest stretch along a bridge with water under its middle. */
+  const waterUnder = (f: ReturnType<typeof fieldFor>, b: Bridge) => {
+    const len = Math.hypot(b.bx - b.ax, b.bz - b.az);
+    let run = 0;
+    let longest = 0;
+    for (let s = 0; s <= len; s += 0.25) {
+      run = f.isWater(b.ax + ((b.bx - b.ax) * s) / len, b.az + ((b.bz - b.az) * s) / len) ? run + 0.25 : 0;
+      longest = Math.max(longest, run);
+    }
+    return longest;
+  };
+
+  it("a rolled city keeps its levelling clear of the map's bridges", () => {
+    const f = fieldFor(LINK);
+    expect(f.bridges.length).toBeGreaterThan(0);
+    for (const b of f.bridges) expect(waterUnder(f, b)).toBeGreaterThan(2);
+    for (const seed of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      const g = fieldFor(`seed=${seed}&size=large&city=1&water=0.9&hills=0.8`);
+      const city = g.townSites.find((t) => t.city);
+      for (const b of g.bridges) {
+        expect(waterUnder(g, b)).toBeGreaterThan(2);
+        if (!city?.city) continue;
+        // No street runs under a deck.
+        for (const a of [...city.city.avenues, ...city.city.alleys]) {
+          for (const p of a.points) expect(distanceToSegment(p.x, p.z, b.ax, b.az, b.bx, b.bz)).toBeGreaterThan(b.width / 2 + 2);
+        }
+      }
+    }
+  });
+
+  it('a town placed over a bridge fills its water in, and the bridge goes', () => {
+    const before = fieldFor(LINK.replace('city=1', 'city=0'));
+    const b = before.bridges.find((b) => waterUnder(before, b) > 2)!;
+    const mid = { x: (b.ax + b.bx) / 2, z: (b.az + b.bz) / 2 };
+    const half = { x: (before.bounds.maxX - before.bounds.minX) / 2, z: (before.bounds.maxZ - before.bounds.minZ) / 2 };
+    const after = fieldFor(LINK.replace('city=1', 'city=0'), (s) => {
+      s.map.placed.towns = [{ x: mid.x / half.x, z: mid.z / half.z }];
+    });
+    expect(after.townSites.length).toBe(1);
+    expect(after.bridges.length).toBe(before.bridges.length - 1);
+    for (const left of after.bridges) expect(waterUnder(after, left)).toBeGreaterThan(2);
+    expect(after.bridgeAt(mid.x, mid.z)).toBe(-1);
+    // Every bridge cell points at a bridge that's still there.
+    for (let z = after.bounds.minZ; z < after.bounds.maxZ; z += 1) {
+      for (let x = after.bounds.minX; x < after.bounds.maxX; x += 1) {
+        const k = after.bridgeAt(x, z);
+        if (k >= 0) expect(after.bridges[k]).toBeDefined();
+      }
+    }
   });
 });
