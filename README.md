@@ -96,6 +96,23 @@ noise), how many of the same battles changed winner, and the units whose
 damage per cap slot moved most. Run the same command before and after a
 change and compare the two.
 
+`--baseline main` does both in one go: it plays the same battles on
+another version of the code (a branch, tag or commit) first, in a
+temporary copy it removes afterwards, then on this one, and prints the
+`--compare` report between them. Both runs are saved. With no change to
+the sim in between, every battle comes out the same.
+
+`--trace LINK` replays the battle a link shows (the page's whole address,
+or just what follows the `?`) and writes down **what each Commander is up
+to**: every 30 seconds (`--every 1m` to change it) its plan (massing, and
+how much of the army it needs it has; attacking; regrouping; defending;
+all in for the hill), each side's army and where it stands (home, on the
+hill, at an enemy base, in the field), and in between the moments a plan
+changes, an outpost or the hill changes hands, the hill's clock runs down
+or a super unit falls. It stops at the end or at `--minutes` (default
+60). For "why did the AI do that?": paste the link of the battle where it
+happened. The code is in `src/sim/trace.ts`.
+
 `--duel "tank*4 vs trooper*12"` skips battles and sets two groups on each
 other on open ground, with no bases or reinforcements, over `--rounds`
 (default 20) different maps, and prints who won, how fast and with how
@@ -807,6 +824,7 @@ src/
   sim/
     simulate.ts      headless balance scenarios and stats (npm run sims; scripts/sims.mjs runs them)
     duel.ts          unit-against-unit duels on open ground (npm run sims -- --duel)
+    trace.ts         a battle replayed from its link, with each Commander's plans (npm run sims -- --trace)
     bench.ts         fixed battles timed for npm run bench, with result fingerprints
     mapTool.ts       settings and pictures for npm run map (scripts/map.mjs)
     mirror.ts        the worker's battle copied onto the page's view of it, frame by frame

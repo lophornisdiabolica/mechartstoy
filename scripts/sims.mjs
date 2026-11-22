@@ -2,9 +2,9 @@
 // and prints a stats table. Run with `npm run sims`; `npm run sims -- --help`
 // lists the options. Results (every battle, with a replay link) are saved
 // under sims-results/.
-import { execSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
@@ -13,6 +13,7 @@ import { runnerImport } from 'vite';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const load = async () => (await runnerImport(join(root, 'src/sim/simulate.ts'))).module;
 const loadDuels = async () => (await runnerImport(join(root, 'src/sim/duel.ts'))).module;
+const loadTrace = async () => (await runnerImport(join(root, 'src/sim/trace.ts'))).module;
 
 const HELP = `Usage: npm run sims -- [options]
 
@@ -103,6 +104,20 @@ Plays battles headlessly at full speed and prints stats per scenario.
                      just before it (--page URL sets the page's address).
                      With --from FILE and nothing to play, lists a saved
                      run's moments; --battle SEED with it picks one battle
+  --trace LINK       replay the battle a link shows (the page's whole
+                     address, or just what follows the ?) and write down
+                     what each Commander is up to: its plan, the army it
+                     has and needs, where its army is (home, on the hill,
+                     at an enemy base, in the field), and the moments a
+                     plan changes, an outpost or the hill changes hands or
+                     the hill's clock runs down. For "why did the AI do
+                     that?". --every 30s sets how often (default 30 s) and
+                     --minutes N where to stop (default 60)
+  --baseline REF     play the same battles on another version of the code
+                     too (a branch, tag or commit, e.g. main or HEAD~3)
+                     and compare the two with --compare's report. It's
+                     checked out into a temporary copy, played first with
+                     the same options, then removed; both runs are saved
   --list             list the scenarios and stop
   --help             this text
 
@@ -175,6 +190,10 @@ function parseArgs(argv) {
     else if (a === '--mix') opts.mix = true;
     else if (a === '--moments') opts.moments = true;
     else if (a === '--page') opts.page = argv[++i];
+    else if (a === '--trace') opts.trace = argv[++i];
+    else if (a === '--every') opts.every = parseSeconds(argv[++i]);
+    else if (a === '--minutes') opts.minutes = Math.max(1, Number(argv[++i]));
+    else if (a === '--baseline') opts.baseline = argv[++i];
     else if (a === '--pool') {
       opts.pool = [];
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opts.pool.push(argv[++i]);
@@ -200,9 +219,13 @@ async function main() {
     const saved = JSON.parse(readFileSync(resolve(opts.from), 'utf8'));
     return console.log(sim.formatMoments(saved.battles, opts.page, opts.battle ?? undefined));
   }
+  if (opts.trace) return trace(opts);
   if (opts.pool) return pool(sim, opts.pool, opts);
   if (opts.duel) return duels(opts);
   if (opts.battle) return oneBattle(sim, opts);
+  if (opts.baseline && (opts.list || opts.sweep)) throw new Error('--baseline compares two runs of battles: leave out --list and --sweep');
+  // The other version's run, played first so it doesn't compete with this one for the cores.
+  const before = opts.baseline ? baselineRun(opts.baseline) : null;
   if (opts.list) {
     for (const s of sim.SCENARIOS) console.log(`${s.id.padEnd(16)} ${s.label} (${s.battles} battles, ${s.quick} quick)`);
     return;
@@ -324,7 +347,8 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
   const dir = join(root, 'sims-results');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ set: opts.set, maps: opts.maps, sweep: opts.sweep, latin: opts.latin, offset: opts.offset, commit: gitCommit(), summaries, battles: results }, null, 2));
+  const run = { set: opts.set, maps: opts.maps, sweep: opts.sweep, latin: opts.latin, offset: opts.offset, commit: gitCommit(), summaries, battles: results };
+  writeFileSync(join(dir, `${stamp}.json`), JSON.stringify(run, null, 2));
   const csv = [
     'scenario,seed,map,variant,doctrines,minutes,winner,margin,decided,kills,razed,captured,attacks,ms_per_tick,link',
     ...results.map((r) => {
@@ -338,6 +362,63 @@ async function main() {
   const longest = summaries.filter((s) => !eternal.has(s.scenario)).sort((a, b) => b.longest - a.longest)[0];
   const replay = longest && results.find((r) => r.seed === longest.longestSeed);
   if (replay) console.log(`To watch one, run \`npm run dev\` and open its link, e.g. the longest (${replay.seed}): http://localhost:5173/?${replay.link}`);
+  if (before) {
+    console.log('');
+    console.log(`Against ${opts.baseline} (${before.run.commit || 'its run'}, saved as ${before.file}):`);
+    console.log(sim.compareRuns(before.run, run));
+  }
+}
+
+/** "30s", "1m", "90" (seconds), for --every. */
+function parseSeconds(value) {
+  const m = /^(\d+(?:\.\d+)?)(s|m)?$/.exec(String(value ?? '').trim());
+  if (!m) throw new Error(`--every takes a time like 30s or 2m, not "${value}"`);
+  return Number(m[1]) * (m[2] === 'm' ? 60 : 1);
+}
+
+/** --trace: one battle from its link, described as it goes (see src/sim/trace.ts). */
+async function trace(opts) {
+  const { traceBattle } = await loadTrace();
+  console.error('Tracing…');
+  console.log(traceBattle(opts.trace, { every: opts.every, minutes: opts.minutes }));
+}
+
+/**
+ * --baseline: the same run on another version of the code. It's checked out
+ * into a temporary worktree (sharing this one's installed packages), its own
+ * sims script plays it with the same options, minus --baseline, and its saved
+ * run is copied into this sims-results folder before the worktree goes.
+ */
+function baselineRun(ref) {
+  const commit = execFileSync('git', ['rev-parse', '--short', `${ref}^{commit}`], { cwd: root }).toString().trim();
+  const dir = join(tmpdir(), `sims-baseline-${commit}-${process.pid}`);
+  console.error(`Baseline: playing the same battles on ${ref} (${commit}) first…`);
+  execFileSync('git', ['worktree', 'add', '--detach', '--quiet', dir, commit], { cwd: root, stdio: 'inherit' });
+  try {
+    symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
+    const args = [];
+    const argv = process.argv.slice(2);
+    for (let i = 0; i < argv.length; i++) {
+      if (argv[i] === '--baseline') i++;
+      else args.push(argv[i]);
+    }
+    const r = spawnSync(process.execPath, [join(dir, 'scripts/sims.mjs'), ...args], { cwd: dir, stdio: ['ignore', 'pipe', 'inherit'] });
+    const out = r.stdout.toString();
+    const saved = /Saved sims-results\/(\S+)\.json/.exec(out);
+    if (r.status !== 0 || !saved) throw new Error(`The baseline run on ${ref} failed${r.status !== 0 ? ` (exit ${r.status})` : ''}:\n${out.slice(-2000)}`);
+    const text = readFileSync(join(dir, 'sims-results', `${saved[1]}.json`), 'utf8');
+    const results = join(root, 'sims-results');
+    mkdirSync(results, { recursive: true });
+    const file = `sims-results/${saved[1]}-baseline-${commit}.json`;
+    writeFileSync(join(root, file), text);
+    console.error(`Baseline done (${file}). Now this version…`);
+    const run = JSON.parse(text);
+    if (!run.commit) run.commit = commit;
+    return { run, file };
+  } finally {
+    execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root });
+    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** --pool: several saved runs added up, as if they were one. */
