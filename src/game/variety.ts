@@ -5,6 +5,7 @@ import { FACTIONS } from './factions';
 import { generateIdentity, isGeneratedIdentity } from './identity';
 import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
 import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
+import { applyLocksAndDice, rollable } from './rollables';
 
 /**
  * Variety between battles: the setup screen picks which settings to re-roll,
@@ -48,6 +49,10 @@ export interface VarietySettings {
   tournament: boolean;
   /** How many doctrines enter a tournament, 2 to 16 (repeats when the pool has fewer). */
   entrants: number;
+  /** Settings kept as they are even when their preset re-rolls the rest (ids from rollables.ts). */
+  locks: string[];
+  /** Settings rolled every battle on their own (ids from rollables.ts): a number between a low and a high, or (true) any choice. */
+  dice: Record<string, [number, number] | true>;
 }
 
 /** The choices the setup screen offers for `after`. */
@@ -65,12 +70,14 @@ export function defaultVariety(): VarietySettings {
     after: 0,
     tournament: false,
     entrants: 8,
+    locks: [],
+    dice: {},
   };
 }
 
 /** Whether anything is re-rolled between battles. */
 export function varietyOn(v: VarietySettings): boolean {
-  return v.tournament || VARIETY_KEYS.some((k) => v.roll[k]);
+  return v.tournament || VARIETY_KEYS.some((k) => v.roll[k]) || Object.keys(v.dice ?? {}).length > 0;
 }
 
 /**
@@ -189,6 +196,14 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     if (!v.roll.sides) label.push(s.factions.map((f) => DOCTRINES[f.doctrine].name).join(' v '));
   }
   if (v.roll.sides || v.roll.doctrines) assignIdentities(s, rng.fork(0x1d3e));
+  // Then the settings locked or rolled one by one.
+  const diced = applyLocksAndDice(s, base, rng.fork(0xd1ce));
+  for (const id of diced.slice(0, 3)) {
+    const r = rollable(id)!;
+    const value = r.get(s);
+    label.push(r.kind === 'flag' ? `${r.label} ${value ? 'on' : 'off'}` : `${r.label} ${value}`);
+  }
+  if (diced.length > 3) label.push(`${diced.length - 3} more rolled`);
   return { settings: s, label: label.join(' · ') };
 }
 

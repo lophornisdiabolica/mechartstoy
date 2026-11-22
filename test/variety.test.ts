@@ -206,4 +206,55 @@ describe('variety between battles', () => {
     expect(s.variety.after).toBe(15);
     expect(s.variety.identities).toBe('all');
   });
+
+  it('keeps locked settings when their preset rolls the rest', () => {
+    const base = defaultSettings();
+    base.variety.roll.style = true;
+    base.variety.roll.size = true;
+    base.map.size = 'large';
+    base.map.water = 0.9;
+    base.variety.locks = ['size', 'water'];
+    for (let seed = 0; seed < 20; seed++) {
+      const s = rollBattle(base, new Rng(seed)).settings;
+      expect(s.map.size).toBe('large');
+      expect(s.map.water).toBe(0.9);
+    }
+    // The rest of the style still varies.
+    const hills = new Set(Array.from({ length: 20 }, (_, seed) => rollBattle(base, new Rng(seed)).settings.map.hills));
+    expect(hills.size).toBeGreaterThan(3);
+  });
+
+  it('rolls a setting with a die on its own, between its low and high', () => {
+    const base = defaultSettings();
+    base.variety.dice = { water: [0.3, 0.6], biome: true, scrap: true };
+    const waters = new Set<number>();
+    const biomes = new Set<string>();
+    for (let seed = 0; seed < 40; seed++) {
+      const roll = rollBattle(base, new Rng(seed));
+      const s = roll.settings;
+      expect(s.map.water).toBeGreaterThanOrEqual(0.3);
+      expect(s.map.water).toBeLessThanOrEqual(0.6);
+      // Steps of the slider's own size.
+      expect(Math.round(s.map.water * 100) % 5).toBe(0);
+      waters.add(s.map.water);
+      biomes.add(s.map.biome);
+      // Nothing else changes.
+      expect(s.map.hills).toBe(base.map.hills);
+      expect(roll.label).toContain('Water');
+    }
+    expect(waters.size).toBeGreaterThan(4);
+    expect(biomes.size).toBeGreaterThan(2);
+  });
+
+  it('rolls the presets the same with or without dice on other settings', () => {
+    const base = defaultSettings();
+    base.variety.roll.style = true;
+    const plain = rollBattle(base, new Rng(7)).settings;
+    base.variety.dice = { vcap: [10, 20] };
+    const diced = rollBattle(base, new Rng(7)).settings;
+    expect(diced.map.hills).toBe(plain.map.hills);
+    expect(diced.map.water).toBe(plain.map.water);
+    expect(diced.armies.caps.vehicle).toBeGreaterThanOrEqual(10);
+    expect(diced.armies.caps.vehicle).toBeLessThanOrEqual(20);
+  });
 });
