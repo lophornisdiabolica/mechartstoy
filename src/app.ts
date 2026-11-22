@@ -174,6 +174,7 @@ export class App implements MatchControls {
     this.stage.showFronts = view.fronts;
     this.stage.rig.smoothTurn = view.smoothTurn;
     this.tickerFeed.on = view.ticker;
+    this.tickerFeed.voices = view.voices;
     // The arena plays on the page: its rounds are laid out by hand rather than from a seed (see sim/duel.ts).
     this.sim = params.get('worker') !== '0' && !this.arena && typeof Worker !== 'undefined' ? new RemoteSim() : null;
     this.loop = new FixedLoop(1 / SIM_HZ, {
@@ -243,6 +244,14 @@ export class App implements MatchControls {
 
   set ticker(on: boolean) {
     this.tickerFeed.on = on;
+  }
+
+  get voices(): 'all' | string[] {
+    return this.tickerFeed.voices;
+  }
+
+  set voices(v: 'all' | string[]) {
+    this.tickerFeed.voices = v;
   }
 
   photoMode(): void {

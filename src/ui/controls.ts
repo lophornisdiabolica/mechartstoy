@@ -13,7 +13,7 @@ import { Role } from '../game/units';
 import { MoveClass } from '../world/moveClasses';
 import { factionColors } from '../render/models';
 import { CameraMode, ShadowQuality, Stage } from '../render/stage';
-import { el, hex, segmented } from './dom';
+import { el, hex, segmented, textHex } from './dom';
 import { saveViewPrefs } from './viewPrefs';
 import { GodPanel } from './godPanel';
 import { BattleAudio } from '../audio/battleAudio';
@@ -34,6 +34,8 @@ export interface MatchControls {
   settingsChanged(): void;
   /** The battle ticker's feed: whether it shows. */
   ticker: boolean;
+  /** Commander voices in the ticker: the names of the sides to hear, or 'all' (see Ticker.voices). */
+  voices: 'all' | string[];
   /** Hide the interface for pictures (see PhotoMode). */
   photoMode(): void;
   /** Whether the god powers tab is open (remembered between battles). */
@@ -338,7 +340,38 @@ export class Controls {
     });
     tickerLabel.append(showTicker, document.createTextNode(' Battle ticker'));
     this.sync.push(() => (showTicker.checked = this.match.ticker));
-    plans.append(plansLabel, frontsLabel, tickerLabel, this.plans);
+    // Commander voices: which sides' Commanders speak in the ticker, picked by name so it carries over between battles.
+    const voices = el('div', { class: 'inline voices', title: 'Lines from the Commanders as their plans change, in their doctrines’ manner. Pick whose to hear, so the ticker stays readable.' });
+    const voiceChip = (label: string, color: number | null, on: () => boolean, toggle: () => void) => {
+      const b = el('button', { type: 'button', class: 'chip', 'aria-pressed': 'false' }, label);
+      if (color !== null) b.style.color = textHex(color);
+      b.addEventListener('click', () => {
+        toggle();
+        this.saveView();
+        this.refresh();
+      });
+      this.sync.push(() => {
+        b.classList.toggle('on', on());
+        b.setAttribute('aria-pressed', String(on()));
+      });
+      return b;
+    };
+    const names = this.factions.map((f) => f.name);
+    const heard = () => {
+      const v = this.match.voices;
+      return v === 'all' ? names : v.filter((n) => names.includes(n));
+    };
+    voices.append(
+      voiceChip('All', null, () => heard().length === names.length, () => (this.match.voices = heard().length === names.length ? [] : 'all')),
+      ...this.factions.map((f) =>
+        voiceChip(f.name.split(' ')[0], f.primary, () => heard().includes(f.name), () => {
+          const v = this.match.voices;
+          const now = v === 'all' ? [...names] : [...v];
+          this.match.voices = now.includes(f.name) ? now.filter((n) => n !== f.name) : [...now, f.name];
+        }),
+      ),
+    );
+    plans.append(plansLabel, frontsLabel, tickerLabel, el('div', { class: 'hint' }, 'Commander voices in the ticker:'), voices, this.plans);
 
     // Camera
     const cam = section('Camera');
@@ -520,7 +553,7 @@ export class Controls {
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, camera: this.stage.cameraMode, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, camera: this.stage.cameraMode, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, voices: this.match.voices, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
   }
 
   private setSpeed(v: number): void {

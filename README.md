@@ -668,8 +668,16 @@ Pick the side you're acting for, then:
 The **battle ticker** (top left, on by default) is a quiet feed of what's
 happening: outposts changing hands, super units falling and where ("at the
 fuel depot in the north", "on a bridge", "outside Crimson Brigade's base"),
-production buildings razed, attacks setting out, sides knocked out. **Show
-front lines** shades the ground in the colour of whoever holds it, from
+production buildings razed, attacks setting out, sides knocked out.
+**Commander voices** (chips under the ticker checkbox, off by default) let
+the Commanders of the sides you pick speak in the ticker as their plans
+change, each in its doctrine's manner: setting out ("Floor it, lads,
+Cobalt Accord won't know what hit them!"), pulling back, defending the base,
+taking an outpost, sending a gun hunt, losing the super unit. A voice line
+takes the place of the plain line for that side, and a Commander keeps
+quiet for 15 seconds after speaking (except when its base is attacked or
+its super unit falls). Picks are kept by side name, so they carry over
+between battles. **Show front lines** shades the ground in the colour of whoever holds it, from
 where each side's strength is (buildings hold the ground they stand on),
 greyer where it's contested; the front is where the colours meet. Both are
 remembered in this browser.
@@ -787,6 +795,7 @@ src/
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     perfOverlay.ts   render and sim stats readout (P)
     ticker.ts        the battle ticker's feed
+    voices.ts        Commander voices: each doctrine's lines for the ticker
     hillBar.ts       king of the hill's scoreboard: each team's time left on the hill
     bracketCard.ts   the tournament bracket shown between battles
     battleChart.ts   army strength through the battle, for the end-of-battle chart

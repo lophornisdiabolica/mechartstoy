@@ -17,6 +17,8 @@ export interface ViewPrefs {
   fronts: boolean;
   /** The battle ticker's feed (see Ticker). */
   ticker: boolean;
+  /** Commander voices in the ticker: the names of the sides to hear, or 'all' (see Ticker.voices). */
+  voices: 'all' | string[];
   /** Held Q / E turn the camera smoothly to any angle, instead of in 90 degree steps. */
   smoothTurn: boolean;
   /** The god powers tab is open (see GodPanel). */
@@ -28,7 +30,7 @@ const SHADOWS: ShadowQuality[] = ['high', 'low', 'off'];
 const CAMERAS: CameraMode[] = ['free', 'follow', 'director', 'unit'];
 
 export function loadViewPrefs(): ViewPrefs {
-  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false, fronts: false, ticker: true, smoothTurn: false, god: false };
+  const prefs: ViewPrefs = { shadows: 'high', follow: false, plans: false, fronts: false, ticker: true, voices: [], smoothTurn: false, god: false };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<ViewPrefs>;
     if (SHADOWS.includes(saved.shadows as ShadowQuality)) prefs.shadows = saved.shadows!;
@@ -37,6 +39,7 @@ export function loadViewPrefs(): ViewPrefs {
     if (typeof saved.plans === 'boolean') prefs.plans = saved.plans;
     if (typeof saved.fronts === 'boolean') prefs.fronts = saved.fronts;
     if (typeof saved.ticker === 'boolean') prefs.ticker = saved.ticker;
+    if (saved.voices === 'all' || (Array.isArray(saved.voices) && saved.voices.every((n) => typeof n === 'string'))) prefs.voices = saved.voices;
     if (typeof saved.smoothTurn === 'boolean') prefs.smoothTurn = saved.smoothTurn;
     if (typeof saved.god === 'boolean') prefs.god = saved.god;
   } catch {

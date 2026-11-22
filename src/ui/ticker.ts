@@ -3,6 +3,8 @@ import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
 import { GameEvents } from '../game/context';
 import { el, textHex } from './dom';
+import { voiceLine, VoiceMoment } from './voices';
+import { PlanState } from '../game/offensive';
 
 /** Lines shown at once, and seconds (real time) each stays before fading. */
 const MOST = 6;
@@ -12,6 +14,8 @@ const AT_BASE = 26;
 const AT_OUTPOST = 14;
 const AT_BRIDGE = 8;
 const AT_TOWN = 16;
+/** Seconds of battle a Commander keeps quiet after speaking (see speak). */
+const QUIET = 15;
 
 interface Line {
   node: HTMLElement;
@@ -32,6 +36,12 @@ export class Ticker {
   private factions: readonly FactionDef[] = [];
   private attacking: boolean[] = [];
   private enabled = true;
+  /** Commander voices: the names of the sides to hear, or 'all'. */
+  private heard: 'all' | Set<string> = new Set();
+  /** Each side's plan last frame, for its Commander's voice. */
+  private plans: (PlanState | 'attacking')[] = [];
+  /** Each side's lines so far and when it last spoke (battle time), so it doesn't chatter. */
+  private spoke: { n: number; at: number }[] = [];
 
   constructor() {
     document.body.append(this.root);
@@ -46,11 +56,28 @@ export class Ticker {
     this.root.hidden = !v;
   }
 
+  /** Which sides' Commanders speak in the ticker: their names, or 'all'. */
+  get voices(): 'all' | string[] {
+    return this.heard === 'all' ? 'all' : [...this.heard];
+  }
+
+  set voices(v: 'all' | string[]) {
+    this.heard = v === 'all' ? 'all' : new Set(v);
+  }
+
+  /** Whether side `f`'s Commander speaks. */
+  hears(f: number): boolean {
+    const d = this.factions[f];
+    return d !== undefined && (this.heard === 'all' || this.heard.has(d.name));
+  }
+
   /** Follow a new battle (the old one's lines go). */
   attach(game: Game, factions: readonly FactionDef[]): void {
     this.game = game;
     this.factions = factions;
     this.attacking = factions.map(() => false);
+    this.plans = factions.map(() => 'massing');
+    this.spoke = factions.map(() => ({ n: 0, at: -Infinity }));
     this.lines = [];
     this.strokes.clear();
     this.root.replaceChildren();
@@ -59,6 +86,7 @@ export class Ticker {
     events.on('outpostCaptured', (e) => this.game === game && this.captured(e.outpost, e.faction, e.previous));
     events.on('unitDestroyed', (e) => {
       if (this.game !== game || e.def.category !== 'super') return;
+      if (this.speak(e.faction, 'lost', { unit: e.def.name })) return;
       this.say([this.side(e.faction), `'s ${e.def.name} fell ${this.where(e.x, e.z, e.faction)}`, ...this.by(e.killer)]);
     });
     events.on('buildingDestroyed', (e) => {
@@ -70,6 +98,7 @@ export class Ticker {
     events.on('hunt', (e) => {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       const name = ((game.ctx.units as Record<string, { name: string }>)[e.unit]?.name ?? 'gun').toLowerCase();
+      if (!e.done && this.speak(e.faction, 'hunt', { unit: name })) return;
       this.say([this.side(e.faction), e.done ? ` hunted down a ${name}` : ` sends squads to hunt a ${name}`, this.direction(e.x, e.z, ' in the ')]);
     });
     events.on('span', (e) => {
@@ -107,12 +136,22 @@ export class Ticker {
       if (now && !this.attacking[f]) {
         const target = sides.target(f, offensive.attack(f, time));
         const hill = game.ctx.hill ? game.ctx.outposts[game.ctx.hill.outpost] : null;
-        // King of the hill: attacks go for the hill, and a team already on it just stays.
+        // King of the hill: attacks go for the hill (from whoever holds it), and a team already on it just stays.
         if (hill) {
-          if (!sides.allied(hill.owner, f)) this.say([this.side(f), hill.owner >= 0 ? ' sets out to take the hill from ' : ' sets out to take the hill', ...(hill.owner >= 0 && hill.owner < this.factions.length ? [this.side(hill.owner)] : [])]);
-        } else if (target !== null) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
+          const holder = hill.owner >= 0 && hill.owner < this.factions.length ? hill.owner : null;
+          if (!sides.allied(hill.owner, f) && !this.speak(f, 'attack', { enemy: holder !== null ? this.factions[holder]?.name : 'the hill', where: 'the hill' })) {
+            this.say([this.side(f), holder !== null ? ' sets out to take the hill from ' : ' sets out to take the hill', ...(holder !== null ? [this.side(holder)] : [])]);
+          }
+        } else if (target !== null && !this.speak(f, 'attack', { enemy: this.factions[target]?.name })) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
       }
       this.attacking[f] = now;
+      // The Commander's voice on the rest of its plan: falling back, and staying home to defend.
+      const plan = sides.eliminated[f] ? this.plans[f] : now ? 'attacking' : offensive.plan(f).state;
+      if (plan !== this.plans[f]) {
+        if (plan === 'regrouping' && this.plans[f] === 'attacking') this.speak(f, 'regroup', {});
+        else if (plan === 'defending') this.speak(f, 'defend', {});
+        this.plans[f] = plan;
+      }
     }
     for (const line of this.lines) {
       line.age += frameSeconds;
@@ -129,6 +168,7 @@ export class Ticker {
     if (!o || faction < 0 || faction >= this.factions.length) return;
     const what = o.kind.id === 'hill' ? 'the hill' : `the ${o.kind.name.toLowerCase()}${this.direction(o.x, o.z, ' in the ')}`;
     const from = previous >= 0 && previous < this.factions.length ? [' from ', this.side(previous)] : [];
+    if (this.speak(faction, 'took', { where: what })) return;
     this.say([this.side(faction), ` took ${what}`, ...from]);
   }
 
@@ -228,6 +268,26 @@ export class Ticker {
       case 'unbless':
         return this.say(['✦ ', this.side(p.faction), '’s blessings and curses were lifted']);
     }
+  }
+
+  /**
+   * A line from side `f`'s Commander, if the player listens to it: its
+   * name, then the line in quotes. Returns whether it spoke (a Commander
+   * that spoke in the last QUIET seconds keeps quiet, except when its base
+   * is attacked or its super unit falls).
+   */
+  private speak(f: number, moment: VoiceMoment, fill: { enemy?: string; where?: string; unit?: string }): boolean {
+    if (!this.enabled || !this.hears(f)) return false;
+    const game = this.game!;
+    const doctrine = game.settings.factions[f]?.doctrine;
+    const spoke = this.spoke[f];
+    if (!doctrine || !spoke) return false;
+    const urgent = moment === 'defend' || moment === 'lost';
+    if (!urgent && game.world.time - spoke.at < QUIET) return false;
+    spoke.at = game.world.time;
+    const line = voiceLine(doctrine, moment, spoke.n++ + f, fill);
+    this.say([this.side(f), ': ', el('q', { class: 'voice' }, line)]);
+    return true;
   }
 
   private say(parts: (string | HTMLElement)[]): void {

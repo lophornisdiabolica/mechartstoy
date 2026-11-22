@@ -1369,6 +1369,31 @@ body.photo #debug {
   }
 }
 
+/* Commander voices: which sides speak in the ticker (see Controls). */
+#panel .voices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+#panel .voices button {
+  padding: 1px 7px;
+  font-size: 11px;
+  opacity: 0.55;
+}
+#panel .voices button.on {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: currentColor;
+  opacity: 1;
+}
+#panel .voices button:first-child.on {
+  color: #e8d27a;
+}
+#ticker q.voice {
+  font-style: italic;
+  color: #dfe6ee;
+}
+
 /* King of the hill's scoreboard (see HillBar). */
 #hillbar {
   position: fixed;
