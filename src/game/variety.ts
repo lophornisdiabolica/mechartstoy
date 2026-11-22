@@ -40,6 +40,12 @@ export interface VarietySettings {
   identities: VarietyIdentities;
   /** Minutes before a battle that hasn't ended gives way to the next one; 0 never does. */
   after: number;
+  /**
+   * Tournament mode (see tournament.ts): battles are the matches of a
+   * knockout bracket of doctrines from the pool, 1v1, with the bracket shown
+   * between battles. The sides and doctrines rolls are left aside.
+   */
+  tournament: boolean;
 }
 
 /** The choices the setup screen offers for `after`. */
@@ -55,12 +61,13 @@ export function defaultVariety(): VarietySettings {
     repeats: true,
     identities: 'repeats',
     after: 0,
+    tournament: false,
   };
 }
 
 /** Whether anything is re-rolled between battles. */
 export function varietyOn(v: VarietySettings): boolean {
-  return VARIETY_KEYS.some((k) => v.roll[k]);
+  return v.tournament || VARIETY_KEYS.some((k) => v.roll[k]);
 }
 
 /**
@@ -189,7 +196,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
  * with `identities: 'all'`, every such side gets a generated one. Sides named
  * or coloured by hand keep theirs.
  */
-function assignIdentities(s: BattleSettings, rng: Rng): void {
+export function assignIdentities(s: BattleSettings, rng: Rng): void {
   const all = s.variety.identities === 'all';
   const plain = s.factions.map((f, i) => !f.locked && isPlainIdentity(f, i));
   const done: FactionSettings[] = s.factions.filter((_, i) => !plain[i]);

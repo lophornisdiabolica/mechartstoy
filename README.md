@@ -222,6 +222,15 @@ battle, its exact map via `seed`).
   coloured yourself keep theirs. The lock button on a side keeps it in every
   re-roll with its doctrine, name and colour (`lock3=1` in the link), so you
   can watch, say, Tidewater against a different doctrine each battle.
+- **Tournament** (Between battles, `tourney=1` in the link): pressing Start
+  draws a knockout bracket of eight doctrines from the pool (four or two if
+  the pool is smaller). They meet 1v1 in quarter-finals, semi-finals and a
+  final, each under its doctrine's own name and colour. The victory banner
+  shows the bracket, with the winner put through and the next match marked,
+  and the HUD names the match. After the final a new bracket is drawn. Map
+  style, biome and size re-rolls still apply. A match that runs past Move on
+  (15 minutes in Eternal, if Move on is off) goes to the side with the
+  stronger army.
 - **Sides and teams:** every side picks a team. All on different teams is a
   free-for-all; any split works (2v2, 1v3, 3v3v2...). Allies don't shoot
   each other, attack the same enemy together, start next to each other (unless
@@ -598,6 +607,7 @@ src/
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
     lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
+    tournament.ts    tournament mode: the bracket, its matches and their settings
     towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
     craters.ts       craters where super units blow up
@@ -636,6 +646,7 @@ src/
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
     perfOverlay.ts   render and sim stats readout (P)
     ticker.ts        the battle ticker's feed
+    bracketCard.ts   the tournament bracket shown between battles
     battleChart.ts   army strength through the battle, for the end-of-battle chart
     photoMode.ts     photo mode (H): no interface, free camera, time of day, save a picture
     debugPanel.ts    the debug overlays' switches (O)
