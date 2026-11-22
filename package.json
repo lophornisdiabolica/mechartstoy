@@ -14,7 +14,9 @@
     "bench": "node scripts/bench.mjs",
     "shot": "node scripts/shot.mjs",
     "leaks": "node --expose-gc scripts/leaks.mjs",
-    "sounds": "node scripts/sounds.mjs"
+    "sounds": "node scripts/sounds.mjs",
+    "flicker": "node scripts/flicker.mjs",
+    "pairs": "node scripts/pairs.mjs"
   },
   "dependencies": {
     "simplex-noise": "^4.0.3",

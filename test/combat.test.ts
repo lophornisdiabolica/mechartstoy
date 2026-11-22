@@ -1,3 +1,4 @@
+import { wreckLife } from '../src/game/systems/death';
 import { describe, expect, it } from 'vitest';
 import { Armed, Faction, Health, Transform, Unit, Wreck } from '../src/game/components';
 import { Game } from '../src/game/game';
@@ -59,8 +60,13 @@ describe('combat', () => {
     game.step(DT);
     expect(game.world.has(tank, Wreck)).toBe(true);
     expect(game.world.has(tank, Unit)).toBe(false);
-    run(game, UNIT_DEFS.tank.wreckTime + 1);
+    // Some wreckage flies off as it's destroyed; the rest comes down when the hulk falls apart.
+    const blown = game.ctx.wreckage.total;
+    expect(blown).toBeGreaterThan(0);
+    run(game, wreckLife(UNIT_DEFS.tank) + 1);
     expect(game.world.isAlive(tank)).toBe(false);
+    expect(game.ctx.wreckage.total).toBeGreaterThan(blown * 2);
+    expect(game.ctx.wreckage.near(base.x, base.z, 4)).toBeGreaterThan(0.5);
   });
 
   it('keeps fighting indefinitely without either side being wiped out', () => {

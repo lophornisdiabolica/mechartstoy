@@ -12,6 +12,7 @@ import type { Divine, Power } from './god';
 import type { FireField } from './fire';
 import type { Domes } from './shields';
 import type { FrostField } from './frost';
+import type { WreckageField } from './wreckage';
 import type { SmokeField } from './smoke';
 import type { Towns } from './towns';
 import { Lanes } from './lanes';
@@ -165,6 +166,8 @@ export interface SimContext {
   fire: FireField;
   /** Frosted ground (see frost.ts). */
   frost: FrostField;
+  /** Wreckage on the ground (see wreckage.ts). */
+  wreckage: WreckageField;
   /** Drifting smoke (see smoke.ts). */
   smoke: SmokeField;
   /** Energy domes up this tick (see shields.ts). */
