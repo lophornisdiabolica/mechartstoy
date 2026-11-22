@@ -276,9 +276,12 @@ battle, its exact map via `seed`).
   re-roll with its doctrine, name and colour (`lock3=1` in the link), so you
   can watch, say, Tidewater against a different doctrine each battle.
 - **Tournament** (Between battles, `tourney=1` in the link): pressing Start
-  draws a knockout bracket of eight doctrines from the pool (four or two if
-  the pool is smaller). They meet 1v1 in quarter-finals, semi-finals and a
-  final, each under its doctrine's own name and colour. The victory banner
+  draws a knockout bracket of doctrines from the pool: Entrants of them
+  (2 to 16, eight by default, `entrants=` in the link), each doctrine once
+  while the pool lasts, then some again if the pool is smaller (the second
+  as a made-up side of the same doctrine). A field that isn't 2, 4, 8 or 16
+  gives some entrants a bye through the first round. They meet 1v1,
+  knockout, each under its doctrine's own name and colour. The victory banner
   shows the bracket, with the winner put through and the next match marked,
   and the HUD names the match. After the final a new bracket is drawn. Map
   style, biome and size re-rolls still apply. A match that runs past Move on

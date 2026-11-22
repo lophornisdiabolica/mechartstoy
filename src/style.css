@@ -1297,6 +1297,19 @@ body.photo #debug {
 #banner .bracket .entrant.tbd {
   color: #5d6875;
 }
+#banner .bracket .match.bye .entrant.tbd {
+  font-style: italic;
+}
+/* Sixteen entrants: a tighter bracket so the banner stays on screen. */
+#banner .bracket.big {
+  font-size: 11px;
+}
+#banner .bracket.big .round {
+  gap: 2px;
+}
+#banner .bracket.big .match {
+  padding: 1px 6px;
+}
 @media (max-width: 600px) {
   #banner .bracket .rounds {
     gap: 6px;

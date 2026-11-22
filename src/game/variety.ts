@@ -46,6 +46,8 @@ export interface VarietySettings {
    * between battles. The sides and doctrines rolls are left aside.
    */
   tournament: boolean;
+  /** How many doctrines enter a tournament, 2 to 16 (repeats when the pool has fewer). */
+  entrants: number;
 }
 
 /** The choices the setup screen offers for `after`. */
@@ -62,6 +64,7 @@ export function defaultVariety(): VarietySettings {
     identities: 'repeats',
     after: 0,
     tournament: false,
+    entrants: 8,
   };
 }
 

@@ -4,8 +4,8 @@ import { Bracket, champion, matchName, nextMatch } from '../game/tournament';
 import { el, textHex } from './dom';
 
 /** A doctrine's name in its own faction's colour. */
-function entrant(d: DoctrineId | null, state: 'won' | 'lost' | 'upcoming' | ''): HTMLElement {
-  if (d === null) return el('div', { class: 'entrant tbd' }, '—');
+function entrant(d: DoctrineId | null, state: 'won' | 'lost' | 'upcoming' | '', bye = false): HTMLElement {
+  if (d === null) return el('div', { class: 'entrant tbd' }, bye ? 'bye' : '—');
   const node = el('div', { class: `entrant ${state}` }, DOCTRINES[d].name);
   const home = FACTIONS[DOCTRINE_IDS.indexOf(canonicalDoctrine(d))];
   if (home) node.style.color = textHex(home.primary);
@@ -18,7 +18,7 @@ function entrant(d: DoctrineId | null, state: 'won' | 'lost' | 'upcoming' | ''):
  * struck through, and the next match picked out.
  */
 export function bracketCard(b: Bracket): HTMLElement {
-  const card = el('div', { class: 'bracket' });
+  const card = el('div', { class: b.rounds[0].length >= 8 ? 'bracket big' : 'bracket' });
   const next = nextMatch(b);
   const won = champion(b);
   card.append(el('div', { class: 'heading' }, won ? `${DOCTRINES[won].name} won tournament ${b.number}` : next ? `Tournament ${b.number} · next: ${matchName(b, next)}` : `Tournament ${b.number}`));
@@ -30,9 +30,14 @@ export function bracketCard(b: Bracket): HTMLElement {
       const m = el('div', { class: 'match' });
       const isNext = next !== null && next.round === round && next.index === index;
       if (isNext) m.classList.add('upcoming');
-      for (const d of [fieldOf[index * 2], fieldOf[index * 2 + 1]]) {
-        m.append(entrant(d, winner === null ? (isNext ? 'upcoming' : '') : d === winner ? 'won' : 'lost'));
-      }
+      const pair = [fieldOf[index * 2], fieldOf[index * 2 + 1]];
+      const bye = round === 0 && pair[1] === null;
+      if (bye) m.classList.add('bye');
+      const went = b.through?.[round]?.[index] ?? null;
+      pair.forEach((d, k) => {
+        const state = winner === null ? (isNext ? 'upcoming' : '') : bye && k === 1 ? '' : went === null ? (d === winner ? 'won' : 'lost') : went === k ? 'won' : 'lost';
+        m.append(entrant(d, state, bye));
+      });
       col.append(m);
     });
     grid.append(col);

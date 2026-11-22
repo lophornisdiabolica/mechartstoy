@@ -449,11 +449,12 @@ export class SetupScreen {
     const tourneyLabel = el('label', { class: 'check' });
     tourneyLabel.append(tourney, document.createTextNode(' Run a knockout tournament'));
     row(variety, 'Tournament', tourneyLabel);
+    slider(variety, 'Entrants', 'entrants', 1, (s) => s.variety.entrants, (s, v) => (s.variety.entrants = Math.round(v)), (v) => String(Math.round(v)));
     variety.append(
       el(
         'p',
         { class: 'hint' },
-        'Eight doctrines from the pool (four or two if it’s smaller) meet 1v1 in quarter-finals, semi-finals and a final, under each doctrine’s own name and colour; the bracket shows between battles, and a new one is drawn after the final. The other re-rolls (map style, biome, size) still apply; sides and doctrines come from the bracket. A match that runs past Move on goes to the stronger army.',
+        'Entrants doctrines from the pool meet 1v1, knockout, under each doctrine’s own name and colour; the bracket shows between battles, and a new one is drawn after the final. If the pool has fewer doctrines than entrants, some are drawn twice, the second as a made-up side of the same doctrine; a field that isn’t 2, 4, 8 or 16 gives some a bye through the first round. The other re-rolls (map style, biome, size) still apply; sides and doctrines come from the bracket. A match that runs past Move on goes to the stronger army.',
       ),
     );
     this.sync.push(() => (tourney.checked = this.settings.variety.tournament));

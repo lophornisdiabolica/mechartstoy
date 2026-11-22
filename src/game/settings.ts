@@ -264,6 +264,7 @@ export const LIMITS = {
   advice: { min: 0, max: 0.6 },
   engineers: { min: 0, max: 4 },
   unitStat: { min: 0.25, max: 3 },
+  entrants: { min: 2, max: 16 },
 } as const;
 
 function defaultUnitTuning(): Record<UnitId, UnitTuning> {

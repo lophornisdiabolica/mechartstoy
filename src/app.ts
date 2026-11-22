@@ -266,7 +266,7 @@ export class App implements MatchControls {
     const seed = settings.seed || randomSeed();
     if (settings.variety.tournament) {
       // A fresh bracket, starting with its first match.
-      this.tournament = { bracket: drawBracket(settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`))), match: null };
+      this.tournament = { bracket: drawBracket(settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`)), 1, settings.variety.entrants ?? 8), match: null };
       this.startMatch(seed);
       return;
     }
@@ -277,7 +277,7 @@ export class App implements MatchControls {
   /** Start the tournament's next match, drawing a new bracket after a final. */
   private startMatch(seed: string): void {
     const t = this.tournament!;
-    if (champion(t.bracket)) t.bracket = drawBracket(this.settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`)), t.bracket.number + 1);
+    if (champion(t.bracket)) t.bracket = drawBracket(this.settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`)), t.bracket.number + 1, this.settings.variety.entrants ?? 8);
     const match = nextMatch(t.bracket)!;
     t.match = match;
     const roll = matchSettings(this.settings, match, new Rng(hashSeed(`variety:${seed}`)));
@@ -286,19 +286,20 @@ export class App implements MatchControls {
   }
 
   /**
-   * Who goes through from the match that just ended: the winning side's
-   * doctrine, or (time up, or nobody left) the side with the stronger army.
+   * Who goes through from the match that just ended (0 its first side, 1
+   * its second): the winning side, or (time up, or nobody left) the side
+   * with the stronger army.
    */
-  private matchWinner(): Match['a'] {
+  private matchWinner(): 0 | 1 {
     const { game, settings } = this.battle;
     const winner = game.outcome?.winners[0];
-    if (winner !== undefined) return settings.factions[winner].doctrine;
+    if (winner !== undefined) return winner === 1 ? 1 : 0;
     const strength = settings.factions.map(() => 0);
     for (const e of game.world.query(Unit, Faction)) {
       const f = game.world.req(e, Faction).id;
       if (f >= 0 && f < strength.length) strength[f] += fightingStrength(game.world, e);
     }
-    return settings.factions[strength[1] > strength[0] ? 1 : 0].doctrine;
+    return strength[1] > strength[0] ? 1 : 0;
   }
 
   private dropControls(): void {
