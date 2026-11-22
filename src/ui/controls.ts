@@ -12,7 +12,7 @@ import { RAMP_INTERVAL } from '../game/tide';
 import { Role } from '../game/units';
 import { MoveClass } from '../world/moveClasses';
 import { factionColors } from '../render/models';
-import { ShadowQuality, Stage } from '../render/stage';
+import { CameraMode, ShadowQuality, Stage } from '../render/stage';
 import { el, hex, segmented, textHex } from './dom';
 import { saveViewPrefs } from './viewPrefs';
 import { GodPanel } from './godPanel';
@@ -370,15 +370,21 @@ export class Controls {
 
     // Camera
     const cam = section('Camera');
-    const followLabel = el('label', { class: 'check', title: 'Glide to wherever the fighting is. Panning the camera yourself turns this off.' });
-    const follow = el('input', { type: 'checkbox' });
-    follow.addEventListener('change', () => this.setFollow(follow.checked));
-    followLabel.append(follow, document.createTextNode(' Follow the fighting (F)'));
-    cam.append(followLabel);
-    this.sync.push(() => (follow.checked = this.stage.followFights));
+    const camMode = segmented<CameraMode>(
+      [
+        { label: 'Free', value: 'free', title: 'You move the camera' },
+        { label: 'Follow', value: 'follow', title: 'Glide to wherever the fighting is (F)' },
+        { label: 'Director', value: 'director', title: 'Pick the best fight and frame it like a broadcast: across the front, close in, gliding between shots (V)' },
+        { label: 'Unit', value: 'unit', title: 'Ride close behind one unit: the selected one, or a strong one in the best fight. Click another unit to switch (U)' },
+      ],
+      (m) => this.setCameraMode(m),
+    );
+    cam.append(camMode.row);
+    this.sync.push(() => camMode.set(this.stage.cameraMode));
     this.stage.onFollowStopped = () => {
       this.refresh();
-      this.showToast('Stopped following. F to follow again');
+      this.saveView();
+      this.showToast('Camera is yours again. F, V or U to hand it back');
     };
     const shadows = segmented<ShadowQuality>(
       [
@@ -529,14 +535,20 @@ export class Controls {
   }
 
   private setFollow(on: boolean): void {
-    this.stage.followFights = on;
+    this.setCameraMode(on ? 'follow' : 'free');
+  }
+
+  private setCameraMode(mode: CameraMode): void {
+    this.stage.cameraMode = mode;
     this.saveView();
     this.refresh();
-    if (on && !this.stage.fights.focus) this.showToast('Following: waiting for a fight');
+    if (mode === 'follow' && !this.stage.fights.focus) this.showToast('Following: waiting for a fight');
+    if (mode === 'director') this.showToast(this.stage.director.shot ? 'Director camera' : 'Director: waiting for a fight');
+    if (mode === 'unit') this.showToast(this.selected !== null ? 'Riding with the selected unit' : 'Unit camera: click a unit to ride with it');
   }
 
   private saveView(): void {
-    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, voices: this.match.voices, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
+    saveViewPrefs({ shadows: this.stage.shadows, follow: this.stage.followFights, camera: this.stage.cameraMode, plans: this.stage.showPlans, fronts: this.stage.showFronts, ticker: this.match.ticker, voices: this.match.voices, smoothTurn: this.stage.rig.smoothTurn, god: this.match.godOpen });
   }
 
   private setSpeed(v: number): void {
@@ -548,6 +560,7 @@ export class Controls {
   private select(e: Entity | null): void {
     this.selected = e;
     this.stage.selected = e;
+    if (this.stage.cameraMode === 'unit') this.stage.unitCam.follow(e);
     this.renderInspect();
   }
 
@@ -664,8 +677,13 @@ export class Controls {
         this.refresh();
       } else if (key === 'f') {
         this.setFollow(!this.stage.followFights);
+      } else if (key === 'v') {
+        this.setCameraMode(this.stage.cameraMode === 'director' ? 'free' : 'director');
+      } else if (key === 'u') {
+        this.setCameraMode(this.stage.cameraMode === 'unit' ? 'free' : 'unit');
       } else if (key === 'escape') {
         if (this.god.tool) this.god.setTool(null);
+        else if (this.stage.cameraMode === 'unit') this.setCameraMode('free');
         else this.select(null);
       } else if (key === 'g') {
         this.god.setOpen(!this.god.open);

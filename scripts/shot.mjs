@@ -28,7 +28,8 @@ or --maps; for those, use the link the sims results give).
   --look WHERE     where the camera looks: x,z or x,z,zoom (ground
                    position; 0,0 is the middle of the map), base2 (the
                    second side's base), or fight (follow the fighting, as
-                   the F key does). Default: the opening view
+                   the F key does), director (the director camera, V)
+                   or unit (the unit camera, U). Default: the opening view
   --zoom Z         camera zoom (1 is the default view; up to 4)
   --size WxH       picture size in pixels (default 1280x800)
   --every TIME     take a series, this far apart in battle time
@@ -118,13 +119,14 @@ async function main() {
           document.head.append(style);
         }
         if (look === 'fight') stage.followFights = true;
+        else if (look === 'director' || look === 'unit') stage.cameraMode = look;
         else if (look && /^base\d+$/.test(look)) {
           const site = game.ctx.field.baseSites[Number(look.slice(4)) - 1];
           if (!site) throw new Error(`No ${look}: the battle has ${game.ctx.field.baseSites.length} bases`);
           rig.jumpTo(site.x, site.z, zoom ?? rig.targetZoom);
         } else if (look) {
           const [x, z, z2] = look.split(',').map(Number);
-          if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error(`--look ${look}: write it as x,z or x,z,zoom, base2 or fight`);
+          if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error(`--look ${look}: write it as x,z or x,z,zoom, base2, fight, director or unit`);
           rig.jumpTo(x, z, z2 ?? zoom ?? rig.targetZoom);
         } else if (zoom) rig.jumpTo(rig.target.x, rig.target.z, zoom);
       },
@@ -137,7 +139,13 @@ async function main() {
       // The camera glides; give it (and the fight-follower) a moment, with the battle paused for a single picture.
       if (n === 1) {
         await page.evaluate(() => (window.app.loop.timeScale = 0));
-        await page.waitForTimeout(opts.look === 'fight' ? 2500 : 1200);
+        // The director needs a little battle time to find a fight, and moves gently.
+        if (opts.look === 'director' || opts.look === 'unit') {
+          await page.evaluate(() => (window.app.loop.timeScale = 0.5));
+          await page.waitForTimeout(4000);
+          await page.evaluate(() => (window.app.loop.timeScale = 0));
+          await page.waitForTimeout(8000);
+        } else await page.waitForTimeout(opts.look === 'fight' ? 2500 : 1200);
       }
       const time = await page.evaluate(() => window.app.game.world.time);
       const name = `${settings.seed.replace(/[^\w.-]+/g, '_')}-${clock(time)}`;
@@ -149,7 +157,8 @@ async function main() {
         await page.evaluate((s) => (window.app.loop.timeScale = s), opts.speed);
         await page.waitForFunction((t) => window.app.game.world.time >= t || window.app.game.outcome !== null, next, { timeout: 0 });
         await page.evaluate(() => (window.app.loop.timeScale = 0));
-        await page.waitForTimeout(300);
+        // A moving camera needs a moment to settle where it was heading.
+        await page.waitForTimeout(opts.look === 'director' || opts.look === 'unit' ? 3000 : 300);
       }
     }
   } finally {

@@ -69,3 +69,30 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           if [ $status -ne 0 ]; then echo "::warning title=Battles changed::The bench battles played out differently from ${{ github.base_ref }} (see the job summary)."; fi
           exit 0
+
+  # Takes the same fixed pictures (the model viewer for every doctrine, and
+  # a few battle moments) on this PR and on the branch it targets, side by
+  # side, and uploads them as the "screenshot-pairs" artifact to look
+  # through. Informational, like the bench comparison.
+  screenshot-pairs:
+    name: Screenshot pairs
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm i --no-save playwright && npx playwright install --with-deps chromium
+      - name: Pairs against ${{ github.base_ref }}
+        run: |
+          npm run pairs -- --base origin/${{ github.base_ref }} | tee pairs.txt
+          { echo "### Screenshot pairs against ${{ github.base_ref }}"; echo; echo '```'; cat pairs.txt; echo '```'; echo; echo "The pictures are in the screenshot-pairs artifact."; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-pairs
+          path: shots-out/pairs

@@ -74,6 +74,22 @@ tighter numbers per map at that many times the cost. The niche report
 the longer half of the battles, which shows a doctrine that wins early
 and fades, or one that only comes good in long battles.
 
+`--mix` (and `--niche`) prints the **army mix over time**: for each
+doctrine, the units it had alive by type in each stretch of the battle
+(0-5 minutes, 5-10 and so on), averaged per side and as a share of its
+army, pooled over every battle it played while it was still in the war.
+It answers questions like "what is Aegis's army made of late on?" without
+a one-off script. Every battle records it, so `--pool` prints it for
+saved runs too.
+
+`--moments` lists each battle's **big moments**, longest battles first:
+super units falling, production buildings lost, sides knocked out, and
+the winners' closest call (their lowest share of the armies' strength),
+each with a link that opens the battle 20 seconds before it (`&at=`).
+`--moments --from sims-results/x.json` lists a saved run's moments
+without playing anything (add `--battle 1v1-7` for just that one), so
+the interesting battles of a big run are easy to find and watch.
+
 `--compare a.json b.json` compares two saved runs without playing anything:
 battle lengths, doctrine win rates (flagging changes bigger than the
 noise), how many of the same battles changed winner, and the units whose
@@ -170,7 +186,7 @@ as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
 `npm run shot -- WHAT` saves screenshots of a battle from the real renderer,
 in headless Chromium (it needs Playwright: `npm i -D playwright && npx
 playwright install chromium`), to `shots-out/`. `--at 12m` fast-forwards
-first, `--look x,z,zoom` (or `base2`, or `fight` to follow the fighting)
+first, `--look x,z,zoom` (or `base2`, `fight` to follow the fighting, `director` or `unit`)
 points the camera, `--every 30s --count 6` takes a series, `--clean` hides
 the HUD and panel, `--plans` shows the Commanders' plans, and `--size`
 sets the picture size. `npm run shot -- --help` lists the rest.
@@ -198,6 +214,26 @@ and rally points, each unit's planned route, targets and line of fire
 to for a clear one), the strength map the Commanders read, and what the
 ground costs each movement class to cross. They stay on across battles
 until switched off.
+
+`npm run flicker` plays a battle in headless Chromium, slowed down so
+every moment is drawn, and watches how every unit, building and effect
+looks: parts shown, how far a unit has faded out, an effect's opacity.
+Anything that goes back and forth more than twice in one second of
+battle is listed as flicker, worst first, and the command fails. The
+default battle is an eight-way free-for-all of the doctrines with the
+most going on (Veil, Cipher, Aegis, Rime, Firestorm, Skyline, Sabre,
+Tidewater); give it a link or seed to watch another, `--at` and
+`--seconds` to pick the stretch. It caught Veil's ghost tanks blinking
+between solid and faint four times a second as they hid between shots;
+they now stay solid until they've been hidden for 0.6 seconds.
+
+`npm run pairs` takes the same fixed set of pictures (the model viewer
+for every doctrine, upright and wrecked, the buildings, and four battle
+moments from fixed camera spots) from the branch a change is based on
+(`--base`, default `origin/main`) and from the working tree, and saves
+each pair side by side in `shots-out/pairs/` with how much of the picture
+changed and an `index.html` to look through. CI does this on every pull
+request and uploads the pairs as the **screenshot-pairs** artifact.
 
 Every battle is saved to
 `sims-results/` (JSON and CSV) with a link that replays it in the browser:
@@ -312,7 +348,28 @@ battle, its exact map via `seed`).
   blasts knock them down too, and a cleared patch is open ground again.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
-  until it's cleared away four minutes later. **Craters** (on by default):
+  until it's cleared away four minutes later. **Wreckage:** a destroyed
+  vehicle's hulk stays on the field two and a half times as long as it
+  used to (a tank's about a minute), then falls apart over 20 seconds: its parts drop off
+  onto the ground, lie there a while and sink away one at a time, small
+  ones first and the bare hull last, while the junk heap grows up round
+  it. Some junk is thrown about as it's destroyed, too. The junk is drawn
+  as heaps of plates, sloped wedges, track lengths, road wheels, girders,
+  gun barrels, drums and mangled lumps, charred and grey, with about half
+  the pieces keeping the darkened colours of the sides whose vehicles died
+  there. A heap is a clump for one wreck and a mound where many fell
+  (neighbouring spots blend into one heap), spilling outward once a spot
+  is full, so the places fought over most turn into scrapyards. It rusts
+  away over minutes, a lone wreck's scattering much sooner than a heap
+  (a lone tank's in about four, a big heap a quarter of an hour or more),
+  so what lasts is the piles from the big fights rather than an even
+  coating; its top pieces sink into the ground as it goes, each at its
+  own pace. **Wreckage** and **Wreckage lasts** (100% and 1×) scale how
+  much junk a wreck leaves (None for none) and how long it lasts; the
+  hulks fall apart the same either way. It's kept in the sim
+  (`game/wreckage.ts`) for doctrines that will feed on it, and the heaps
+  shrink a piece at a time as it's taken. It gets in nobody's way: the
+  scrap ground does that. **Craters** (on by default):
   a super unit blowing up leaves a small crater with a rim of churned
   earth (a shot-down airship, where it hits the ground), so a front that's
   been fought over for an hour is worn down and pocked. On low ground a
@@ -501,12 +558,38 @@ battle, its exact map via `seed`).
   screen instead, and "End battle and set up" goes there right away.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, F follows the fighting, T toggles tilt-shift, G opens the god powers,
+rotate, F follows the fighting, V the director camera, U the unit camera, T toggles tilt-shift, G opens the god powers,
 H opens photo mode, space pauses, 1-4 set speed, Esc cancels.
 
 The **Battle controls** panel (top right) sets speed and camera effects.
-**Follow the fighting** turns the camera into a spectator that glides to
-wherever the biggest fight is (panning by hand turns it off). **Shadows**
+The **camera** buttons pick who moves the camera. **Free** is you.
+**Follow** (F) glides to wherever the biggest fight is. **Director** (V)
+works like a sports broadcast: every second it scores each fight by its
+hits, kills, buildings under fire and super units, and by how even it is
+(an even fight beats a rout). It holds a shot at least 14 seconds and cuts
+only to a fight nearly twice as good, or early for a super unit dying or
+an HQ falling. Each shot centres on the gap between the two sides' fronts
+and looks across it, so one army is on the left and the other on the
+right, zoomed in as close as fits them. On a cut it keeps the angle it had
+if that's near enough, rather than swinging round for every new fight. It
+turns a little either way to put a hill's crest up the screen, so you see
+units climbing it on the left and right, rather than across the screen,
+where it hides what's behind; it comes down low to show the slopes in
+profile, and goes higher where hills, dense forest or buildings would hide
+the fight from low down. Then it stays put: it doesn't turn while a shot
+lasts (unless one army comes right round in front of the other), moves
+only if the fight drifts well off centre, and zooms only if it outgrows
+the picture or shrinks well inside it. It glides between shots, rising
+for far jumps; it never cuts or fades. **Unit** (U) rides with one unit:
+the one you clicked, or a strong one in the director's fight. It looks
+from behind the unit, a little to one side (further round if a hill, trees
+or a building would block the view), toward what it's doing: its target,
+or where it's headed, or just ahead of it. The unit sits in the bottom
+quarter or so of the picture, with what it's doing up the screen ahead.
+When it dies the camera stays on the wreck for 3 seconds, then picks another
+unit nearby; click a unit to ride
+with it instead, Esc to stop. Panning by hand gives the camera back to
+you. **Shadows**
 High / Low / Off trades looks for speed in huge battles; shadows are only
 drawn around the part of the map in view either way. Both are remembered
 in this browser rather than in the battle link. Click any unit or building
@@ -625,6 +708,7 @@ src/
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
+    wreckage.ts      the junk wrecks leave on the ground, rusting away (and taken by doctrines that use it)
     craters.ts       craters where super units blow up
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there
@@ -640,6 +724,7 @@ src/
     dispose.ts       frees a battle's GPU resources (shared model caches are kept)
     cameraRig.ts     isometric orthographic camera and controls
     fightWatch.ts    finds the fighting (from sim events) for the spectator camera
+    director.ts      the director camera (scores and frames fights) and the unit camera
     tiltShift.ts     tilt-shift blur + colour grade passes
     terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips; redraws cells the map changes
     woodsMesh.ts     the dense forest's trees, lying down where they've fallen
