@@ -115,6 +115,8 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (v.identities !== dv.identities) p.set('vnames', v.identities);
   if (v.doctrines.join(',') !== dv.doctrines.join(',')) p.set('vdocs', v.doctrines.join(','));
   if (v.after !== dv.after) p.set('vafter', String(v.after));
+  if (v.tournament) p.set('tourney', '1');
+  if (v.entrants !== dv.entrants) p.set('entrants', String(v.entrants));
   return p;
 }
 
@@ -235,6 +237,9 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   }
   const vafter = p.get('vafter');
   if (vafter !== null && VARIETY_AFTER.includes(Number(vafter))) s.variety.after = Number(vafter);
+  if (p.get('tourney') === '1') s.variety.tournament = true;
+  const entrants = Number(p.get('entrants'));
+  if (p.has('entrants') && Number.isFinite(entrants)) s.variety.entrants = Math.max(2, Math.min(16, Math.round(entrants)));
 }
 
 function round2(v: number): number {

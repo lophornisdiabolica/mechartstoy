@@ -8,6 +8,10 @@ import { outpostsHeldBy } from './game/outposts';
 import { BattleSettings, factionDefs, teamLabels } from './game/settings';
 import { UnitId } from './game/units';
 import { rollBattle, varietyOn } from './game/variety';
+import { Bracket, champion, drawBracket, Match, matchName, matchSettings, nextMatch, recordWinner } from './game/tournament';
+import { DOCTRINES } from './game/doctrines';
+import { fightingStrength } from './game/offensive';
+import { bracketCard } from './ui/bracketCard';
 import { Stage } from './render/stage';
 import { loadViewPrefs, saveViewPrefs } from './ui/viewPrefs';
 import { Controls, MatchControls } from './ui/controls';
@@ -132,6 +136,8 @@ export class App implements MatchControls {
   private readonly perf: PerfOverlay;
   private readonly tickerFeed = new Ticker();
   private readonly hillBar = new HillBar();
+  /** Tournament mode (see tournament.ts): the bracket, and the match being played (null for a battle that isn't one). */
+  private tournament: { bracket: Bracket; match: Match | null } | null = null;
   private readonly history = new BattleHistory();
   private readonly photo: PhotoMode;
   private readonly debug: DebugPanel;
@@ -260,7 +266,43 @@ export class App implements MatchControls {
   private startFromSetup(settings: BattleSettings): void {
     this.settings = settings;
     this.setup.hide();
-    this.startBattle(settings, settings.seed || randomSeed());
+    const seed = settings.seed || randomSeed();
+    if (settings.variety.tournament) {
+      // A fresh bracket, starting with its first match.
+      this.tournament = { bracket: drawBracket(settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`)), 1, settings.variety.entrants ?? 8), match: null };
+      this.startMatch(seed);
+      return;
+    }
+    this.tournament = null;
+    this.startBattle(settings, seed);
+  }
+
+  /** Start the tournament's next match, drawing a new bracket after a final. */
+  private startMatch(seed: string): void {
+    const t = this.tournament!;
+    if (champion(t.bracket)) t.bracket = drawBracket(this.settings.variety.doctrines, new Rng(hashSeed(`bracket:${seed}`)), t.bracket.number + 1, this.settings.variety.entrants ?? 8);
+    const match = nextMatch(t.bracket)!;
+    t.match = match;
+    const roll = matchSettings(this.settings, match, new Rng(hashSeed(`variety:${seed}`)));
+    const label = [`Tournament ${t.bracket.number}`, matchName(t.bracket, match), `${DOCTRINES[match.a].name} v ${DOCTRINES[match.b].name}`, roll.label].filter(Boolean).join(' · ');
+    this.startBattle(roll.settings, seed, label);
+  }
+
+  /**
+   * Who goes through from the match that just ended (0 its first side, 1
+   * its second): the winning side, or (time up, or nobody left) the side
+   * with the stronger army.
+   */
+  private matchWinner(): 0 | 1 {
+    const { game, settings } = this.battle;
+    const winner = game.outcome?.winners[0];
+    if (winner !== undefined) return winner === 1 ? 1 : 0;
+    const strength = settings.factions.map(() => 0);
+    for (const e of game.world.query(Unit, Faction)) {
+      const f = game.world.req(e, Faction).id;
+      if (f >= 0 && f < strength.length) strength[f] += fightingStrength(game.world, e);
+    }
+    return strength[1] > strength[0] ? 1 : 0;
   }
 
   private dropControls(): void {
@@ -400,6 +442,10 @@ export class App implements MatchControls {
     }
     // Same settings, fresh map, and a fresh roll of whatever the setup asked to vary.
     const seed = randomSeed();
+    if (this.tournament && this.settings.variety.tournament) {
+      this.startMatch(seed);
+      return;
+    }
     if (!varietyOn(this.settings.variety)) {
       this.startBattle(this.settings, seed);
       return;
@@ -416,11 +462,18 @@ export class App implements MatchControls {
     this.bannerTime = 0;
     const chart = this.history.render(factions);
     const title = !outcome ? 'Time’s up' : winners.length === 0 ? 'Mutual destruction' : `${listNames(winners.map((f) => f.name))} ${winners.length === 1 ? 'wins' : 'win'}`;
+    // A tournament match: put its winner through, and show the bracket.
+    const t = this.tournament;
+    let card: HTMLElement | null = null;
+    if (t?.match && nextMatch(t.bracket)?.round === t.match.round && nextMatch(t.bracket)?.index === t.match.index) {
+      recordWinner(t.bracket, this.matchWinner());
+      card = bracketCard(t.bracket);
+    }
     this.banner.replaceChildren(
       el('div', { class: 'title' }, title),
       el('div', { class: 'sub' }, outcome ? `${game.ctx.hill && outcome.team !== null && teamHeld(game.ctx, outcome.team) >= game.settings.armies.hillHold ? 'held the hill ' : ''}after ${clock(outcome.time)}` : `after ${clock(game.world.time)}, still undecided`),
       this.summary(),
-      ...(chart ? [chart] : []),
+      ...(card ? [card] : chart ? [chart] : []),
       el('div', { class: 'next' }),
     );
     this.banner.style.setProperty('--accent', winners.length === 0 ? '#e8d27a' : hex(winners[0].primary));

@@ -1325,6 +1325,70 @@ body.photo #debug {
 }
 body.photo #hillbar { display: none; }
 
+/* Tournament bracket on the banner between battles (see bracketCard). */
+#banner .bracket {
+  margin-top: 12px;
+  font-size: 12px;
+  text-align: left;
+}
+#banner .bracket .heading {
+  text-align: center;
+  color: #c9d3de;
+  margin-bottom: 6px;
+}
+#banner .bracket .rounds {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+#banner .bracket .round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 6px;
+}
+#banner .bracket .match {
+  padding: 3px 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.18);
+  min-width: 86px;
+}
+#banner .bracket .match.upcoming {
+  border-left-color: #e8d27a;
+  background: rgba(232, 210, 122, 0.08);
+}
+#banner .bracket .entrant.won {
+  font-weight: 700;
+}
+#banner .bracket .entrant.lost {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+#banner .bracket .entrant.tbd {
+  color: #5d6875;
+}
+#banner .bracket .match.bye .entrant.tbd {
+  font-style: italic;
+}
+/* Sixteen entrants: a tighter bracket so the banner stays on screen. */
+#banner .bracket.big {
+  font-size: 11px;
+}
+#banner .bracket.big .round {
+  gap: 2px;
+}
+#banner .bracket.big .match {
+  padding: 1px 6px;
+}
+@media (max-width: 600px) {
+  #banner .bracket .rounds {
+    gap: 6px;
+  }
+  #banner .bracket .match {
+    min-width: 0;
+    padding: 2px 4px;
+  }
+}
+
 /* The model viewer (?models). */
 .viewer-labels {
   position: fixed;

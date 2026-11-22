@@ -448,6 +448,23 @@ export class SetupScreen {
         'Re-rolled doctrines are drawn from the pool: with repeats, any for any side; without, each once before any comes up twice. A side with a standard name takes the faction that goes with its doctrine (Cobalt Accord for Armour...), and a second side of the same doctrine gets a made-up name and a colour that stands apart from the others and from the map, like Rust Cohort. Hand-named or hand-coloured sides keep theirs.',
       ),
     );
+    const tourney = el('input', { type: 'checkbox', 'aria-label': 'Tournament' });
+    tourney.addEventListener('change', () => {
+      this.settings.variety.tournament = tourney.checked;
+      this.changed();
+    });
+    const tourneyLabel = el('label', { class: 'check' });
+    tourneyLabel.append(tourney, document.createTextNode(' Run a knockout tournament'));
+    row(variety, 'Tournament', tourneyLabel);
+    slider(variety, 'Entrants', 'entrants', 1, (s) => s.variety.entrants, (s, v) => (s.variety.entrants = Math.round(v)), (v) => String(Math.round(v)));
+    variety.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Entrants doctrines from the pool meet 1v1, knockout, under each doctrine’s own name and colour; the bracket shows between battles, and a new one is drawn after the final. If the pool has fewer doctrines than entrants, some are drawn twice, the second as a made-up side of the same doctrine; a field that isn’t 2, 4, 8 or 16 gives some a bye through the first round. The other re-rolls (map style, biome, size) still apply; sides and doctrines come from the bracket. A match that runs past Move on goes to the stronger army.',
+      ),
+    );
+    this.sync.push(() => (tourney.checked = this.settings.variety.tournament));
     const after = dropdown(
       VARIETY_AFTER.map((m) => ({ label: m === 0 ? 'Never (play to the end)' : `After ${m} minutes`, value: m })),
       (v) => {
