@@ -338,7 +338,7 @@ registerModel('bld:hillBeacon', (faction) => {
   const banner = new THREE.Group();
   banner.position.set(0, 6.2, 0);
   banner.add(box(1.9, 1.15, 0.05, primary, 0.97, -0.6, 0));
-  banner.add(box(1.9, 0.14, 0.06, secondary, 0.97, -1.12, 0));
+  banner.add(box(1.84, 0.14, 0.06, secondary, 0.97, -1.12, 0)); // a touch narrower, so its ends don't sit flush with the banner's
   g.add(banner);
   const lamp = glowBox(0.22, 0.22, 0.22, 0xffd070);
   lamp.position.set(0, 6.75, 0);
