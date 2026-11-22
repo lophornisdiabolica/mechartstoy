@@ -93,7 +93,9 @@ export type ToSim =
   | { type: 'command'; battle: number; command: Command }
   | { type: 'settings'; battle: number; settings: BattleSettings }
   /** Send units' planned routes with frames (for the debug overlays), or stop. */
-  | { type: 'routes'; battle: number; on: boolean };
+  | { type: 'routes'; battle: number; on: boolean }
+  /** Send where this unit is headed with each frame (for the unit camera), or stop (null). */
+  | { type: 'watch'; battle: number; entity: number | null };
 
 /** Worker to page. */
 export type FromSim =
@@ -145,10 +147,18 @@ export interface Frame {
   skipped?: true;
   /** When asked for (see SimHost.routes): each moving unit's route, as [entity, goal x, goal z, then x, z of each waypoint left]. */
   routes?: number[][];
+  /** When asked for (see SimHost.watch): the watched unit and where it's headed, [entity, x, z], or [entity] while it's going nowhere. */
+  goal?: number[];
 }
 
 /** Seconds between the routes sent for the debug overlays. */
 const ROUTES_EVERY = 0.25;
+
+/** Where a unit is headed: [entity, x, z], or [entity] while it's going nowhere (see Frame.goal). */
+export function goalOf(world: Game['world'], e: Entity): number[] {
+  const m = world.get(e, Mover);
+  return m && m.targetX !== null && m.targetZ !== null ? [e, m.targetX, m.targetZ] : [e];
+}
 
 /** Every moving unit's route now: entity, where it's headed, then the waypoints it has left (see Frame.routes). */
 export function unitRoutes(world: Game['world']): number[][] {
@@ -258,6 +268,8 @@ export class SimHost {
   /** Send units' routes with frames, for the debug overlays; and when they were last sent. */
   routes = false;
   private routesAt = -Infinity;
+  /** A unit whose goal to send with each frame (the unit camera's), or null. */
+  watch: Entity | null = null;
 
   constructor(seed: number, settings: BattleSettings) {
     this.game = new Game(seed, { settings });
@@ -463,6 +475,7 @@ export class SimHost {
       ...(this.statsDue ? { stats: { sides: structuredClone(this.game.stats.sides), townRazed: this.game.stats.townRazed, townFolkLost: this.game.stats.townFolkLost, townAngered: [...this.game.stats.townAngered] } } : {}),
       ...(this.skipped ? { skipped: true as const } : {}),
       ...(this.routes && world.time - this.routesAt >= ROUTES_EVERY ? { routes: unitRoutes(world) } : {}),
+      ...(this.watch !== null ? { goal: goalOf(world, this.watch) } : {}),
     };
     if (frame.routes) this.routesAt = world.time;
     this.skipped = false;
@@ -529,6 +542,8 @@ export class SimView {
   readonly unborn = new Set<Entity>();
   /** Units' routes, when the worker was asked for them (see Frame.routes). */
   routes: number[][] | null = null;
+  /** The watched unit's goal, when the worker was asked for it (see Frame.goal). */
+  goal: number[] | null = null;
 
   constructor(readonly game: Game) {
     this.refs = new Refs(game);
@@ -602,6 +617,7 @@ export class SimView {
     if (s.wreckage) ctx.wreckage.apply(s.wreckage);
     if (s.smoke) ctx.smoke.apply(s.smoke);
     if (frame.routes) this.routes = frame.routes;
+    if (frame.goal) this.goal = frame.goal;
     if (frame.stats) {
       const stats = this.game.stats;
       frame.stats.sides.forEach((side, f) => Object.assign(stats.sides[f], side));

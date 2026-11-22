@@ -186,7 +186,7 @@ as `1v1-7`. `--count N` draws N seeds of it, `--set` changes settings.
 `npm run shot -- WHAT` saves screenshots of a battle from the real renderer,
 in headless Chromium (it needs Playwright: `npm i -D playwright && npx
 playwright install chromium`), to `shots-out/`. `--at 12m` fast-forwards
-first, `--look x,z,zoom` (or `base2`, or `fight` to follow the fighting)
+first, `--look x,z,zoom` (or `base2`, `fight` to follow the fighting, `director` or `unit`)
 points the camera, `--every 30s --count 6` takes a series, `--clean` hides
 the HUD and panel, `--plans` shows the Commanders' plans, and `--size`
 sets the picture size. `npm run shot -- --help` lists the rest.
@@ -569,12 +569,38 @@ battle, its exact map via `seed`).
   the edge (and the army) the others wait for before going in.
 
 **Controls:** WASD / arrows or right-drag to pan, wheel to zoom, Q / E to
-rotate, F follows the fighting, T toggles tilt-shift, G opens the god powers,
+rotate, F follows the fighting, V the director camera, U the unit camera, T toggles tilt-shift, G opens the god powers,
 H opens photo mode, space pauses, 1-4 set speed, Esc cancels.
 
 The **Battle controls** panel (top right) sets speed and camera effects.
-**Follow the fighting** turns the camera into a spectator that glides to
-wherever the biggest fight is (panning by hand turns it off). **Shadows**
+The **camera** buttons pick who moves the camera. **Free** is you.
+**Follow** (F) glides to wherever the biggest fight is. **Director** (V)
+works like a sports broadcast: every second it scores each fight by its
+hits, kills, buildings under fire and super units, and by how even it is
+(an even fight beats a rout). It holds a shot at least 14 seconds and cuts
+only to a fight nearly twice as good, or early for a super unit dying or
+an HQ falling. Each shot centres on the gap between the two sides' fronts
+and looks across it, so one army is on the left and the other on the
+right, zoomed in as close as fits them. On a cut it keeps the angle it had
+if that's near enough, rather than swinging round for every new fight. It
+turns a little either way to put a hill's crest up the screen, so you see
+units climbing it on the left and right, rather than across the screen,
+where it hides what's behind; it comes down low to show the slopes in
+profile, and goes higher where hills, dense forest or buildings would hide
+the fight from low down. Then it stays put: it doesn't turn while a shot
+lasts (unless one army comes right round in front of the other), moves
+only if the fight drifts well off centre, and zooms only if it outgrows
+the picture or shrinks well inside it. It glides between shots, rising
+for far jumps; it never cuts or fades. **Unit** (U) rides with one unit:
+the one you clicked, or a strong one in the director's fight. It looks
+from behind the unit, a little to one side (further round if a hill, trees
+or a building would block the view), toward what it's doing: its target,
+or where it's headed, or just ahead of it. The unit sits in the bottom
+quarter or so of the picture, with what it's doing up the screen ahead.
+When it dies the camera stays on the wreck for 3 seconds, then picks another
+unit nearby; click a unit to ride
+with it instead, Esc to stop. Panning by hand gives the camera back to
+you. **Shadows**
 High / Low / Off trades looks for speed in huge battles; shadows are only
 drawn around the part of the map in view either way. Both are remembered
 in this browser rather than in the battle link. Click any unit or building
@@ -702,6 +728,7 @@ src/
     dispose.ts       frees a battle's GPU resources (shared model caches are kept)
     cameraRig.ts     isometric orthographic camera and controls
     fightWatch.ts    finds the fighting (from sim events) for the spectator camera
+    director.ts      the director camera (scores and frames fights) and the unit camera
     tiltShift.ts     tilt-shift blur + colour grade passes
     terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips; redraws cells the map changes
     woodsMesh.ts     the dense forest's trees, lying down where they've fallen

@@ -526,6 +526,20 @@ export class Battlefield {
     this.changed(area);
   }
 
+  /**
+   * Take a bridge out of the list altogether while the map is being made
+   * (see dropDryBridges): nothing refers to bridges by index yet, so later
+   * bridges just move down one.
+   */
+  dropBridge(index: number): void {
+    if (!this.bridges[index]) return;
+    this.removeBridge(index);
+    this.bridges.splice(index, 1);
+    for (const cells of [this.bridgeCell, this.wingCell]) {
+      for (let k = 0; k < cells.length; k++) if (cells[k] > index) cells[k]--;
+    }
+  }
+
   /** The index of the bridge whose deck is over a point, or -1. */
   bridgeAt(x: number, z: number): number {
     const [i, j] = this.cellAt(x, z);
@@ -982,6 +996,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
           : { x: cityRng.range(-width * 0.2, width * 0.2), z: cityRng.range(-depth * 0.3, depth * 0.3) };
       const size = citySize(at.x, at.z, config.cityRadius, width, depth, baseSites);
       if (!size) continue;
+      // Levelling would fill in the water under a bridge and lay streets across its ends (a
+      // city placed by hand stays put: see dropDryBridges).
+      if (!first && bridgeNearRect(field, at.x, at.z, size.rx, size.rz, CITY_EASE + 2)) continue;
       const r = Math.sqrt(size.rx * size.rz);
       // Big, flat, dry and central; clear of bridges, which levelling would bury.
       const score = townSpot(at.x, at.z, r) - r * 1.5 + (Math.abs(at.z) / (depth / 2)) * 30 + (Math.abs(at.x) / (width / 2)) * 30;
@@ -1000,7 +1017,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       for (let i = 0; i <= cols; i++) {
         const dx = Math.max(0, Math.abs(field.vertexX(i) - at.x) - city.rx);
         const dz = Math.max(0, Math.abs(field.vertexZ(j) - at.z) - city.rz);
-        const t = 1 - smoothstep(1.5, 8, D.hypot(dx, dz));
+        const t = 1 - smoothstep(1.5, CITY_EASE, D.hypot(dx, dz));
         if (t <= 0) continue;
         const k = j * (cols + 1) + i;
         heights[k] = heights[k] * (1 - t) + height * t;
@@ -1113,7 +1130,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
   });
-  // Levelling towns and outposts may have raised ground by a bridge: cut it back.
+  // Levelling towns and outposts may have filled in the water under a bridge: take it away
+  // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
+  if (dropDryBridges(field) > 0) bridgeLand(field);
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);
@@ -1146,6 +1165,60 @@ function citySize(x: number, z: number, most: number, width: number, depth: numb
   rx = Math.min(rx, rz * 2);
   rz = Math.min(rz, rx * 2);
   return { rx, rz };
+}
+
+/** How far past its edge a city's levelling eases back to the ground. */
+const CITY_EASE = 8;
+/** Least water, along a map bridge, worth keeping the bridge for (see dropDryBridges). */
+const BRIDGE_LEAST_WATER = 2;
+
+/** Whether any bridge comes within `reach` of a rectangle (half-sizes rx, rz) round x, z. */
+function bridgeNearRect(field: Battlefield, x: number, z: number, rx: number, rz: number, reach: number): boolean {
+  return field.bridges.some((b) => {
+    if (b.gone) return false;
+    const len = D.hypot(b.bx - b.ax, b.bz - b.az);
+    const steps = Math.max(1, Math.ceil(len / 0.5));
+    for (let s = 0; s <= steps; s++) {
+      const px = b.ax + ((b.bx - b.ax) * s) / steps;
+      const pz = b.az + ((b.bz - b.az) * s) / steps;
+      const dx = Math.max(0, Math.abs(px - x) - rx);
+      const dz = Math.max(0, Math.abs(pz - z) - rz);
+      if (D.hypot(dx, dz) < reach + b.width / 2) return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * Take away the map's bridges that have less than BRIDGE_LEAST_WATER of
+ * water left under them (levelling for a town or city filled it in): a deck
+ * on dry ground only lies flush with the ground and roads round it. Returns
+ * the number taken away.
+ */
+function dropDryBridges(field: Battlefield): number {
+  let dropped = 0;
+  for (let k = field.bridges.length - 1; k >= 0; k--) {
+    const b = field.bridges[k];
+    if (b.gone || b.builtBy !== undefined) continue;
+    const len = D.hypot(b.bx - b.ax, b.bz - b.az);
+    const nx = -(b.bz - b.az) / len;
+    const nz = (b.bx - b.ax) / len;
+    const step = 0.25;
+    // The longest stretch along the deck with water under some part of its width.
+    let run = 0;
+    let longest = 0;
+    for (let s = 0; s <= len; s += step) {
+      const px = b.ax + ((b.bx - b.ax) * s) / len;
+      const pz = b.az + ((b.bz - b.az) * s) / len;
+      const wet = [-0.4, 0, 0.4].some((f) => field.isWater(px + nx * b.width * f, pz + nz * b.width * f));
+      run = wet ? run + step : 0;
+      longest = Math.max(longest, run);
+    }
+    if (longest >= BRIDGE_LEAST_WATER) continue;
+    field.dropBridge(k);
+    dropped++;
+  }
+  return dropped;
 }
 
 /** Steepest ground a sprawling city puts a lot on. */

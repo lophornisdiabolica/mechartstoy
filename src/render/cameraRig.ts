@@ -9,6 +9,9 @@ const MEDIUM_SPAN = 126;
 const ROTATE_SPEED = 1.4;
 /** Radians of turn per pixel of left-drag orbit. */
 const ORBIT_PER_PIXEL = 0.006;
+/** How quickly a gentle camera eases toward where it's heading, per second, and the fastest it turns, radians a second. */
+const GENTLE_EASE = 2;
+const GENTLE_TURN = 0.8;
 /** Pixels a left press can wander and still count as a click (picking a unit), not an orbit. */
 const CLICK_SLOP = 4;
 
@@ -48,9 +51,19 @@ export class CameraRig {
   smoothTurn = false;
   /** Tilt range a left-drag orbit keeps to (radians above the horizon). */
   orbitTilt = { min: 0.2, max: 1.48 };
+  /**
+   * Move like a film camera (the director and unit cameras): ease turns,
+   * tilts and zooms slowly, and turn no faster than GENTLE_TURN, instead of
+   * snapping round as a player's key presses do.
+   */
+  gentle = false;
+
+  /** The usual tilt: classic isometric. */
+  static readonly ISO_ELEVATION = Math.atan(1 / Math.SQRT2);
 
   private targetAzimuth = this.azimuth;
   private targetZoom = this.zoom;
+  private targetElevation: number | null = null;
   private readonly keys = new Set<string>();
   private drag: { x: number; y: number } | null = null;
   /** A left-drag orbit in progress (free rotation); `moved` once it's gone past a click's wobble. */
@@ -100,9 +113,24 @@ export class CameraRig {
       this.targetAzimuth += turn * ROTATE_SPEED * dt;
     }
 
-    const k = 1 - Math.exp(-dt * 10);
-    this.azimuth += (this.targetAzimuth - this.azimuth) * k;
-    this.zoom += (this.targetZoom - this.zoom) * k;
+    if (this.gentle) {
+      const k = 1 - Math.exp(-dt * GENTLE_EASE);
+      const turn = (this.targetAzimuth - this.azimuth) * k;
+      this.azimuth += Math.max(-GENTLE_TURN * dt, Math.min(GENTLE_TURN * dt, turn));
+      this.zoom += (this.targetZoom - this.zoom) * k;
+      if (this.targetElevation !== null) this.elevation += (this.targetElevation - this.elevation) * k;
+    } else {
+      const k = 1 - Math.exp(-dt * 10);
+      this.azimuth += (this.targetAzimuth - this.azimuth) * k;
+      this.zoom += (this.targetZoom - this.zoom) * k;
+      if (this.targetElevation !== null) {
+        this.elevation += (this.targetElevation - this.elevation) * k;
+        if (Math.abs(this.targetElevation - this.elevation) < 1e-3) {
+          this.elevation = this.targetElevation;
+          this.targetElevation = null;
+        }
+      }
+    }
 
     const dist = 200;
     const ce = Math.cos(this.elevation);
@@ -129,10 +157,42 @@ export class CameraRig {
     this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
   }
 
+  /**
+   * Where a camera that moves by itself (the director, the unit camera)
+   * wants to look: the way to face (the camera sits on this side of the
+   * target), the tilt above the horizon and the zoom. Turns the short way
+   * round. The rig eases there (gently, with `gentle` on).
+   */
+  setView(azimuth: number, elevation: number, zoom: number): void {
+    let a = azimuth;
+    while (a - this.targetAzimuth > Math.PI) a -= Math.PI * 2;
+    while (a - this.targetAzimuth < -Math.PI) a += Math.PI * 2;
+    this.targetAzimuth = a;
+    this.targetElevation = Math.max(this.orbitTilt.min, Math.min(this.orbitTilt.max, elevation));
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+  }
+
+  /** Back to the player's camera: the usual tilt, and (unless turning freely) the nearest usual angle. */
+  release(): void {
+    this.gentle = false;
+    this.targetElevation = CameraRig.ISO_ELEVATION;
+    if (!this.freeRotation && !this.smoothTurn) this.snapRotation();
+  }
+
+  /** The zoom the rig is heading for. */
+  get wantedZoom(): number {
+    return this.targetZoom;
+  }
+
   /** Settle on the nearest of the four usual views (the classic isometric angles), e.g. when leaving free rotation. */
   snapRotation(): void {
     const quarter = Math.PI / 2;
     this.targetAzimuth = Math.PI / 4 + Math.round((this.targetAzimuth - Math.PI / 4) / quarter) * quarter;
+  }
+
+  /** The picture's width over its height. */
+  get shape(): number {
+    return this.aspect;
   }
 
   /** Ground distance from the view's centre to its farthest visible corner, roughly. */
