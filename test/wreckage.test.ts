@@ -10,8 +10,8 @@ describe('wreckage', () => {
     w.add(0, 0, 1.5, 1);
     const one = w.near(0, 0, 3);
     expect(one).toBeCloseTo(1, 3);
-    for (let i = 0; i < 20; i++) w.add(0, 0, 1.5, 1);
-    expect(w.near(0, 0, 30)).toBeCloseTo(21, 1);
+    for (let i = 0; i < 80; i++) w.add(0, 0, 1.5, 1);
+    expect(w.near(0, 0, 30)).toBeCloseTo(81, 0);
     expect(w.at(0, 0)).toBeLessThanOrEqual(MAX_WRECKAGE);
     // Full cells pushed it further out than one wreck reaches.
     expect(w.near(0, 0, 30) - w.near(0, 0, 3)).toBeGreaterThan(1);

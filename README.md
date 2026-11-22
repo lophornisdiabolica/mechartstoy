@@ -297,13 +297,16 @@ battle, its exact map via `seed`).
   turns to scrap, a slog for tracks and hovers and easy for long legs,
   until it's cleared away four minutes later. **Wreckage:** a destroyed
   vehicle's hulk stays on the field two and a half times as long as it
-  used to (a tank's about a minute), then falls apart into the junk round
-  it; some is thrown about as it's destroyed, too. The junk is drawn as
-  heaps of torn plates, girders, wheels and chunks of hull in char, rust
-  and bare steel, a clump for one wreck and a knee-high heap where many
-  fell, spilling outward once a spot is full, so the places fought over
-  most turn into scrapyards. It rusts away over many minutes (a full heap
-  lasts about a quarter of an hour). It's kept in the sim
+  used to (a tank's about a minute), then falls apart: its parts drop off
+  onto the ground and go one by one, small ones first and the bare hull
+  last, while the junk heap grows up round it. Some junk is thrown about
+  as it's destroyed, too. The junk is drawn as heaps of torn plates,
+  girders, wheels and chunks of hull in char, rust and bare steel, a
+  clump for one wreck and a mound about as tall as a tank where a dozen
+  fell (neighbouring spots blend into one heap), spilling outward once a
+  spot is full, so the places fought over most turn into scrapyards. It
+  rusts away over many minutes (a light scattering in a quarter of an
+  hour, a big heap in half an hour or more). It's kept in the sim
   (`game/wreckage.ts`) for doctrines that will feed on it, and the heaps
   shrink a piece at a time as it's taken. It gets in nobody's way: the
   scrap ground does that. **Craters** (on by default):

@@ -3,20 +3,24 @@ import { Game } from '../game/game';
 import { MAX_WRECKAGE, WRECKAGE_CELL } from '../game/wreckage';
 
 /** Pieces of junk per tank-sized wreck of wreckage on a cell. */
-const PIECES_PER = 6;
+const PIECES_PER = 14;
 /** Most pieces drawn on one cell (a full one). */
 const MOST_PER_CELL = Math.ceil(MAX_WRECKAGE * PIECES_PER);
 /** Most pieces drawn at once, of each shape. */
 const MOST = 24000;
 /** How fast the drawn wreckage catches up with the sim's, per second: piling on quickly, rusting away and being eaten slowly enough to watch. */
-const GROW_RATE = 3;
+const GROW_RATE = 1.2;
 const SHRINK_RATE = 1.2;
 /** Seconds between redraws of the pieces (they only change as wreckage comes and goes). */
 const REDRAW = 0.2;
 /** Size of the pieces next to the sizes below: smaller and more of them reads as a heap rather than a few stray bits. */
-const PIECE_SCALE = 0.8;
+const PIECE_SCALE = 1;
 /** How high a full cell's heap rises, world units. */
-const HEAP = 0.55;
+const HEAP = 1.6;
+/** How far a cell's pieces reach from its middle, in cells: past its edge, so neighbouring cells' pieces mingle into one heap. */
+const REACH = 0.7;
+/** Wreckage on a spot, in tank-sized wrecks, at which its heap stands at full height. */
+const FULL_HEAP = 7;
 
 /** Charred metal, burnt paint, rust and a little bare steel: a few flat shades, as the hulks are drawn. */
 const SHADES = [0x2a2623, 0x332e2a, 0x3d3832, 0x4a443d, 0x5b3a26, 0x6e4528, 0x585d61, 0x6b7074].map((c) => new THREE.Color(c));
@@ -41,8 +45,10 @@ function hash(k: number, i: number, salt: number): number {
  * in char, rust and bare steel. Each cell's pieces are always the same ones
  * in the same places (picked from the cell), so a heap grows by adding
  * pieces on top as more wrecks fall apart there, and shrinks a piece at a
- * time as it rusts away or is eaten, never reshuffling. A full cell is a
- * knee-high heap; a much-fought field is a scrapyard.
+ * time as it rusts away or is eaten, never reshuffling. The heap's height
+ * is blended across neighbouring cells, so the cells of one heap make one
+ * mound: a dozen wrecks in one spot stand about as tall as a tank, and a
+ * much-fought field is a scrapyard.
  *
  * Two instanced meshes (boxes and cylinders) draw every piece, so a big
  * scrapyard is two draw calls.
@@ -134,18 +140,13 @@ export class WreckageGround {
       drawn[k] = count;
       if (count === 0) continue;
       const c = wreckage.center(k);
-      // The heap rises toward the middle of the cell, more so the fuller it is.
-      const heap = HEAP * Math.min(1, shown[k] / MAX_WRECKAGE);
       for (let i = 0; i < count; i++) {
         const r = (salt: number) => hash(k, i, salt);
-        // The first pieces lie in a clump in the middle; later ones land further out and on top,
-        // so a heap's footprint and height both grow as it fills. Each piece always lands in the same place.
+        // Pieces cover the cell and a little past it, so a cell's pieces meet its neighbours';
+        // later ones land on top of earlier ones. Each piece always lands in the same place.
         const fill = i / MOST_PER_CELL;
-        const reach = WRECKAGE_CELL * (0.18 + 0.52 * Math.sqrt(fill));
-        const angle = r(1) * Math.PI * 2;
-        const dist = reach * Math.sqrt(r(2));
-        const x = c.x + Math.cos(angle) * dist;
-        const z = c.z + Math.sin(angle) * dist;
+        const x = c.x + (r(1) - 0.5) * 2 * REACH * WRECKAGE_CELL;
+        const z = c.z + (r(2) - 0.5) * 2 * REACH * WRECKAGE_CELL;
         const ground = field.surfaceAt(x, z);
         // Nothing lies on water: pieces of a shoreline heap that would land in it are left out.
         if (ground < field.seaLevel) continue;
@@ -171,8 +172,9 @@ export class WreckageGround {
           const rad = 0.14 + r(8) * 0.16;
           _s.set(rad * 2, rad * (r(9) < 0.5 ? 0.7 : 2.2), rad * 2);
         }
-        // Higher toward the middle of the heap, and the fuller it is.
-        const lift = heap * Math.sqrt(fill) * (1 - dist / (WRECKAGE_CELL * 0.75)) * (0.6 + r(11) * 0.4);
+        // The heap's surface: as high as the wreckage round that spot (smoothed across cells, so the
+        // cells of one heap make one mound), and the later pieces lie on top of the earlier ones.
+        const lift = HEAP * this.depth(x, z) * (0.25 + 0.75 * Math.sqrt(fill)) * (0.7 + r(11) * 0.3);
         _p.set(x, ground + lift + _s.y * 0.3, z);
         _s.multiplyScalar(PIECE_SCALE);
         _m.compose(_p, _q, _s);
@@ -195,6 +197,33 @@ export class WreckageGround {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
+  }
+
+  /** How deep the drawn wreckage is at a point, 0 to 1: the cells' amounts blended across the cells round it. */
+  private depth(x: number, z: number): number {
+    const wreckage = this.game.ctx.wreckage;
+    const shown = this.shown!;
+    const c = wreckage.cellAt(x, z);
+    if (c < 0) return 0;
+    const mid = wreckage.center(c);
+    // Blend the four nearest cell middles.
+    const fx = (x - mid.x) / WRECKAGE_CELL;
+    const fz = (z - mid.z) / WRECKAGE_CELL;
+    const ox = fx < 0 ? -1 : 1;
+    const oz = fz < 0 ? -1 : 1;
+    const ax = Math.abs(fx);
+    const az = Math.abs(fz);
+    const i = c % wreckage.cols;
+    const j = (c - i) / wreckage.cols;
+    const at = (di: number, dj: number) => {
+      const ii = i + di;
+      const jj = j + dj;
+      if (ii < 0 || jj < 0 || ii >= wreckage.cols || jj >= wreckage.rows) return 0;
+      return shown[jj * wreckage.cols + ii];
+    };
+    const m = at(0, 0) * (1 - ax) * (1 - az) + at(ox, 0) * ax * (1 - az) + at(0, oz) * (1 - ax) * az + at(ox, oz) * ax * az;
+    // A thin scattering lies flat; a heap of a dozen wrecks stands near its full height.
+    return Math.sqrt(Math.min(1, m / FULL_HEAP));
   }
 
   dispose(): void {

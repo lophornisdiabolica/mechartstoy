@@ -32,8 +32,12 @@ import { wreckageOf } from '../wreckage';
 import type { UnitDef } from '../units';
 import { blastCrater, craterOf } from '../craters';
 
-/** Seconds a wreck spends sinking into the ground before it's removed. */
-const SINK_TIME = 3;
+/**
+ * Seconds a hulk spends falling apart before it's gone: its parts drop off
+ * and lie on the ground, then go one by one (drawn by the page, see
+ * render/wrecks.ts), while its wreckage comes down round it as they do.
+ */
+export const CRUMBLE_TIME = 4;
 /**
  * How much longer a hulk stays than its unit's wreckTime says. Hulks used
  * to go within half a minute; now they linger long enough for a fight's
@@ -42,7 +46,7 @@ const SINK_TIME = 3;
  */
 export const WRECK_LINGER = 2.5;
 /** Share of a vehicle's wreckage thrown about as it's destroyed; the rest comes down when the hulk falls apart. */
-const BLOWN_OFF = 0.35;
+const BLOWN_OFF = 0.25;
 
 /** How long a unit's hulk stays on the field, seconds (0 for none). */
 export function wreckLife(def: { wreckTime: number }): number {
@@ -104,7 +108,7 @@ export function deathSystem(ctx: SimContext): System {
           const mass = wreckageFor(ctx, unit.def, t.x, t.z);
           const falls = world.has(e, Falling);
           if (mass > 0 && !falls) ctx.wreckage.add(t.x, t.z, unit.def.radius * 1.2, mass * BLOWN_OFF);
-          world.add(e, Wreck, { removeAt: world.time + wreckLife(unit.def), mass: falls ? mass : mass * (1 - BLOWN_OFF) });
+          world.add(e, Wreck, { removeAt: world.time + wreckLife(unit.def), mass: falls ? mass : mass * (1 - BLOWN_OFF), size: unit.def.radius });
           continue;
         }
 
@@ -177,17 +181,16 @@ export function wreckSystem(ctx?: SimContext): System {
           }
           continue;
         }
-        if (g && g.offset > 0 && world.time < wreck.removeAt - SINK_TIME) g.offset = Math.max(0, g.offset - dt * FALL_SPEED);
-        if (world.time >= wreck.removeAt) {
-          // The hulk falls apart into the wreckage round it.
-          if (ctx && wreck.mass) {
+        if (g && g.offset > 0) g.offset = Math.max(0, g.offset - dt * FALL_SPEED);
+        if (world.time >= wreck.removeAt - CRUMBLE_TIME && wreck.mass) {
+          // The hulk falls apart into the wreckage round it: a heap where it stood.
+          if (ctx) {
             const t = world.req(e, Transform);
-            ctx.wreckage.add(t.x, t.z, 0.75, wreck.mass);
+            ctx.wreckage.add(t.x, t.z, Math.max(0.75, (wreck.size ?? 1) * 0.7), wreck.mass);
           }
-          world.destroy(e);
-        } else if (world.time >= wreck.removeAt - SINK_TIME) {
-          if (g) g.offset -= dt * 0.7;
+          wreck.mass = 0;
         }
+        if (world.time >= wreck.removeAt) world.destroy(e);
       }
     },
   };

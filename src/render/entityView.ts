@@ -4,7 +4,8 @@ import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig } from './models';
-import { breakModel, Collapse, stepCollapse } from './wrecks';
+import { breakModel, Collapse, Crumble, startCrumble, stepCollapse, stepCrumble } from './wrecks';
+import { CRUMBLE_TIME } from '../game/systems/death';
 import { SIM_HZ } from '../game/game';
 import type { EventBus } from '../core/events';
 import type { GameEvents } from '../game/context';
@@ -31,6 +32,8 @@ interface ViewEntry {
   roll: number;
   /** A wreck still falling into its broken pose. */
   collapse: Collapse | null;
+  /** A hulk falling apart into its parts before it goes (see startCrumble). */
+  crumble: Crumble | null;
   /** Boats: the model's height above its waterline, and how far it's ducked under a bridge now (see the deck check). */
   top: number;
   duck: number;
@@ -167,7 +170,7 @@ export class EntityView {
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
         const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, top, duck: 0, grounded, strike: null, fade: 0 };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0 };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -219,6 +222,12 @@ export class EntityView {
       }
       if (entry.wrecked) {
         if (entry.collapse && !stepCollapse(obj, entry.collapse, dt)) entry.collapse = null;
+        // Near the end the hulk falls apart, its parts dropping off and going one by one.
+        const wreck = w.get(e, Wreck);
+        if (!entry.crumble && !entry.collapse && wreck && w.time >= wreck.removeAt - CRUMBLE_TIME) {
+          entry.crumble = startCrumble(obj, e, Math.max(0.5, wreck.removeAt - w.time));
+        }
+        if (entry.crumble) stepCrumble(entry.crumble, dt);
         continue;
       }
 
