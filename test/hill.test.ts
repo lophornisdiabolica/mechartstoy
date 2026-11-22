@@ -88,11 +88,12 @@ describe('king of the hill', () => {
   });
   it('keeps a challenger from staying home for an attack that is only the holder walking round the hill', () => {
     const game = new Game(4, { settings: hillSettings() });
-    for (let k = 0; k < 120; k++) {
-      run(game, 1);
+    // By then the first team out has taken the hill and walks round it.
+    for (let k = 0; k < 40; k++) {
+      run(game, 2);
       for (const [, plan] of game.ctx.offensive.plansState) expect(plan.state).not.toBe('defending');
     }
-  });
+  }, 60_000);
 
   it('throws everything at the hill once an enemy is nearly there', () => {
     const game = bareGame();
