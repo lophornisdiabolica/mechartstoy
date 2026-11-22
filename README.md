@@ -348,7 +348,28 @@ battle, its exact map via `seed`).
   blasts knock them down too, and a cleared patch is open ground again.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
-  until it's cleared away four minutes later. **Craters** (on by default):
+  until it's cleared away four minutes later. **Wreckage:** a destroyed
+  vehicle's hulk stays on the field two and a half times as long as it
+  used to (a tank's about a minute), then falls apart over 20 seconds: its parts drop off
+  onto the ground, lie there a while and sink away one at a time, small
+  ones first and the bare hull last, while the junk heap grows up round
+  it. Some junk is thrown about as it's destroyed, too. The junk is drawn
+  as heaps of plates, sloped wedges, track lengths, road wheels, girders,
+  gun barrels, drums and mangled lumps, charred and grey, with about half
+  the pieces keeping the darkened colours of the sides whose vehicles died
+  there. A heap is a clump for one wreck and a mound where many fell
+  (neighbouring spots blend into one heap), spilling outward once a spot
+  is full, so the places fought over most turn into scrapyards. It rusts
+  away over minutes, a lone wreck's scattering much sooner than a heap
+  (a lone tank's in about four, a big heap a quarter of an hour or more),
+  so what lasts is the piles from the big fights rather than an even
+  coating; its top pieces sink into the ground as it goes, each at its
+  own pace. **Wreckage** and **Wreckage lasts** (100% and 1×) scale how
+  much junk a wreck leaves (None for none) and how long it lasts; the
+  hulks fall apart the same either way. It's kept in the sim
+  (`game/wreckage.ts`) for doctrines that will feed on it, and the heaps
+  shrink a piece at a time as it's taken. It gets in nobody's way: the
+  scrap ground does that. **Craters** (on by default):
   a super unit blowing up leaves a small crater with a rim of churned
   earth (a shot-down airship, where it hits the ground), so a front that's
   been fought over for an hour is worn down and pocked. On low ground a
@@ -653,6 +674,7 @@ src/
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     towns.ts         townsfolk: people in the towns, the town engineer who grows each one, and the militia
     scrap.ts         wreckage piling up into scrap, and being cleared
+    wreckage.ts      the junk wrecks leave on the ground, rusting away (and taken by doctrines that use it)
     craters.ts       craters where super units blow up
     caps.ts          unit caps per category, and when super units can be built
     territory.ts     territory (bases and held outposts), healing and squad refills there

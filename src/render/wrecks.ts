@@ -60,6 +60,8 @@ const _m = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
 const _char = (CHARRED as THREE.MeshStandardMaterial).color;
 const _c = new THREE.Color();
+const _v = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 
 function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
@@ -356,4 +358,103 @@ export function stepCollapse(obj: THREE.Object3D, c: Collapse, dt: number): bool
   obj.rotation.x = c.root.x0 + (c.root.x1 - c.root.x0) * k;
   obj.rotation.z = c.root.z0 + (c.root.z1 - c.root.z0) * k;
   return c.elapsed < c.duration;
+}
+
+/** A part of a hulk falling apart: it drops off, lies on the ground a while, then sinks away. */
+interface Piece {
+  mesh: THREE.Object3D;
+  p0: THREE.Vector3;
+  p1: THREE.Vector3;
+  q0: THREE.Quaternion;
+  q1: THREE.Quaternion;
+  /** Seconds into the crumble it drops off, starts sinking, and is gone. */
+  drop: number;
+  sink: number;
+  gone: number;
+  /** How far it sinks to be out of sight, model units. */
+  depth: number;
+}
+
+/** A hulk falling apart into its parts (see startCrumble). */
+export interface Crumble {
+  pieces: Piece[];
+  elapsed: number;
+}
+
+/** Seconds a part takes to drop to the ground once it comes off. */
+const DROP = 0.45;
+/** Seconds a part takes to sink out of sight: it starts slowly and speeds up. */
+const SINK_AWAY = 2.6;
+/** Share of the crumble over which the parts come off; they then lie a while and sink away one by one over the rest. */
+const COME_OFF = 0.2;
+
+/**
+ * Start a hulk falling apart, `window` seconds before it's gone (see
+ * CRUMBLE_TIME in game/systems/death.ts). Every part it still shows comes
+ * loose, small ones first: each drops to the ground beside the hull,
+ * tumbling as it lands, and lies there. Then they sink into the ground one
+ * at a time, spaced out over the rest of the time, until the bare hull
+ * sinks last. The junk heap grows under it as it does (see WreckageGround),
+ * so the hulk turns into the heap rather than vanishing.
+ *
+ * Its parts are moved up to hang straight off the model's root, keeping
+ * where they are, so each can fall on its own.
+ */
+export function startCrumble(obj: THREE.Object3D, id: number, window: number): Crumble {
+  const rng = new Rng(id * 7919 + 17);
+  obj.updateMatrixWorld(true);
+  const scale = Math.max(1e-6, obj.scale.x);
+  const parts: { mesh: THREE.Object3D; size: number; half: number; reach: number }[] = [];
+  obj.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh && !(o as THREE.Sprite).isSprite) return;
+    for (let p: THREE.Object3D | null = o; p && p !== obj; p = p.parent) if (!p.visible) return;
+    _box.setFromObject(o);
+    const s = _box.getSize(_v);
+    parts.push({ mesh: o, size: s.x * s.y * s.z, half: s.y / 2 / scale, reach: Math.max(s.x, s.y, s.z) / scale });
+  });
+  // Small parts come off first; the biggest (the hull) is the last to go.
+  parts.sort((a, b) => a.size - b.size);
+  const n = parts.length;
+  const last = Math.max(0.5, window - 0.1);
+  const off = last * COME_OFF;
+  // Each part sinks in its own slot, so they go well apart rather than in a rush.
+  const slot = (last - off - DROP - SINK_AWAY) / Math.max(1, n);
+  const pieces: Piece[] = parts.map(({ mesh, half, reach }, i) => {
+    obj.attach(mesh);
+    const p0 = mesh.position.clone();
+    const q0 = mesh.quaternion.clone();
+    const hull = i === n - 1;
+    // Out from the middle a little and down to the ground, lying on its side.
+    const spread = hull ? 1 : rng.range(1.05, 1.45);
+    const p1 = new THREE.Vector3(p0.x * spread + rng.range(-0.15, 0.15), Math.min(p0.y, half * 0.7), p0.z * spread + rng.range(-0.15, 0.15));
+    const tip = hull ? 0.15 : 1.1;
+    _q.setFromEuler(new THREE.Euler(rng.range(-tip, tip), rng.range(-0.6, 0.6), rng.range(-tip, tip)));
+    const q1 = q0.clone().premultiply(_q);
+    const k = n > 1 ? i / (n - 1) : 1;
+    const drop = hull ? off : k * off * 0.9 + rng.range(0, off * 0.1);
+    const sink = hull ? last - SINK_AWAY : Math.max(drop + DROP, off + DROP + slot * (i + rng.range(0.1, 0.9)));
+    return { mesh, p0, p1, q0, q1, drop, sink, gone: sink + SINK_AWAY, depth: p1.y + reach * 0.6 + 0.05 };
+  });
+  return { pieces, elapsed: 0 };
+}
+
+/** Move a hulk's parts on as it falls apart. */
+export function stepCrumble(c: Crumble, dt: number): void {
+  c.elapsed += dt;
+  for (const p of c.pieces) {
+    if (c.elapsed >= p.gone) {
+      p.mesh.visible = false;
+      continue;
+    }
+    const t = Math.max(0, Math.min(1, (c.elapsed - p.drop) / DROP));
+    // Falling: slow to start, fast at the end.
+    const k = t * t;
+    p.mesh.position.lerpVectors(p.p0, p.p1, k);
+    p.mesh.quaternion.slerpQuaternions(p.q0, p.q1, k);
+    // Then, in its turn, it settles into the ground and out of sight: gently at first, then faster.
+    if (c.elapsed > p.sink) {
+      const u = Math.min(1, (c.elapsed - p.sink) / SINK_AWAY);
+      p.mesh.position.y -= p.depth * u * u;
+    }
+  }
 }

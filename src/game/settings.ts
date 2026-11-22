@@ -110,6 +110,10 @@ export interface BattleSettings {
     forest: number;
     /** Wrecked vehicles pile up into scrap that's hard going for tracks and hovers (see scrap.ts). */
     scrap: boolean;
+    /** How much junk a wrecked vehicle leaves on the ground, 0 (none) to 2; 1 is the usual (see wreckage.ts). */
+    wreckage: number;
+    /** How long that junk lasts, 0.25 to 3 times the usual. */
+    wreckageLife: number;
     /** Super units leave a small crater where they blow up, so long battles slowly reshape the ground (see craters.ts). */
     craters: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
@@ -252,6 +256,8 @@ export const LIMITS = {
   ramp: { min: 0, max: 1 },
   outposts: { min: 0, max: 12 },
   forest: { min: 0, max: 1 },
+  wreckage: { min: 0, max: 2 },
+  wreckageLife: { min: 0.25, max: 3 },
   outpostBonus: { min: 0, max: 3 },
   outpostHold: { min: 0, max: 1 },
   taskForces: { min: 0, max: 0.8 },
@@ -268,7 +274,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
