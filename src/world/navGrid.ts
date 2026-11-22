@@ -18,6 +18,8 @@ const MAX_EXPANSIONS = 8000;
 const CLEARANCE_MARGIN = 0.1;
 /** Route cost multiplier on a bridge deck's edge cells, for vehicles: they keep to the middle. */
 const DECK_EDGE = 1.6;
+/** How finely offSideClear reads the ground between a deck and the strip beside it. */
+const SIDE_STEP = 0.1;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -254,6 +256,8 @@ export class NavGrid {
   private readonly traffic: Float32Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
+  /** Per cell, which of its 8 steps by a bridge deck have been read point by point (low byte) and are clear (high byte); see sideStep. */
+  private readonly sides: Uint16Array;
   /** The obstacles' blockVersion and this grid's terrainVersion the clearance map was built for. */
   private clearanceBlocks = -1;
   private clearanceTerrain = -1;
@@ -297,6 +301,7 @@ export class NavGrid {
     this.occupied = this.obstacles.for(this.rules.over);
     this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
     this.clearance = new Float32Array(n);
+    this.sides = new Uint16Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
@@ -366,6 +371,7 @@ export class NavGrid {
       for (let i = i0; i <= i1; i++) {
         const k = j * this.cols + i;
         const was = this.terrain[k];
+        this.sides[k] = 0;
         this.computeCell(k);
         if (this.terrain[k] !== was) terrainChanged = true;
       }
@@ -579,6 +585,49 @@ export class NavGrid {
     return (deck[a] === 1 && rail[b] === 1) || (rail[a] === 1 && deck[b] === 1);
   }
 
+  /**
+   * Whether a land unit really can go straight from (ax, az) to (bx, bz) by a
+   * bridge, reading the ground point by point as movement does (see
+   * terrainAllowsAt). The cells only sample their middles, and a deck's edge
+   * runs through cells: a cell whose middle is on the deck can be half deep
+   * water, and a railing cell whose middle is on the bank can start in it.
+   * Lines and routes used to cut over a deck's side there; movement wouldn't
+   * let a walker go, so it stood wedged against the railing for good (and the
+   * dome trucks escorting it parked round it, jamming the bridge).
+   */
+  private offSideClear(ax: number, az: number, bx: number, bz: number): boolean {
+    const steps = Math.max(1, Math.ceil(D.hypot(bx - ax, bz - az) / SIDE_STEP));
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      if (!this.terrainAllowsAt(ax + (bx - ax) * t, az + (bz - az) * t)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Whether a step between these cells runs by a bridge deck, where it's read
+   * point by point (see offSideClear), for a class that can get over railings.
+   * Vehicles that can't already keep to the deck's middle (see DECK_EDGE and
+   * Traffic.keepOn) and only get on and off by the ramps.
+   */
+  private byDeck(a: number, b: number): boolean {
+    if (this.rules.flies || this.railWalls()) return false;
+    const { rail, deck } = this.samples;
+    return deck[a] + rail[a] + deck[b] + rail[b] > 0;
+  }
+
+  /** offSideClear between a cell's middle and its neighbour n's (cell b), worked out once and kept. */
+  private sideStep(a: number, n: number, b: number): boolean {
+    const known = this.sides[a];
+    if (known & (1 << n)) return (known & (256 << n)) !== 0;
+    const cols = this.cols;
+    const p = this.center(a % cols, Math.floor(a / cols));
+    const q = this.center(b % cols, Math.floor(b / cols));
+    const ok = this.offSideClear(p.x, p.z, q.x, q.z);
+    this.sides[a] = known | (1 << n) | (ok ? 256 << n : 0);
+    return ok;
+  }
+
   /** Whether any building stands on a point's cell (whatever this class goes over). */
   builtAt(x: number, z: number): boolean {
     const [i, j] = this.cellOf(x, z);
@@ -728,12 +777,45 @@ export class NavGrid {
     let prev = aj * this.cols + ai;
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
-      const [i, j] = this.cellOf(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      const [i, j] = this.cellOf(x, z);
       if (!this.fits(i, j, radius)) return false;
       const k = j * this.cols + i;
       if (this.cost[k] + this.traffic[k] > maxCost + 1e-6) return false;
       // Not over a bridge's railings, even where it's no dearer than the rest of the way.
       if (walls && k !== prev && this.overRail(prev, k)) return false;
+      // Nor off a deck's side into water too deep to wade.
+      if (this.byDeck(prev, k)) {
+        const back = (s - 1) / steps;
+        if (!this.offSideClear(a.x + (b.x - a.x) * back, a.z + (b.z - a.z) * back, x, z)) return false;
+      }
+      prev = k;
+    }
+    return true;
+  }
+
+  /**
+   * Whether going straight from a to b keeps, wherever it runs by a bridge
+   * deck, to ground this class can stand on (see offSideClear): lineClear's
+   * check on its own, for movement to try before heading somewhere close by
+   * (the next waypoint, a sidestep when stuck).
+   */
+  sideClear(a: Point, b: Point): boolean {
+    const dist = D.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.ceil(dist / (this.cellSize * 0.5));
+    const [ai, aj] = this.cellOf(a.x, a.z);
+    let prev = aj * this.cols + ai;
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      const [i, j] = this.cellOf(x, z);
+      const k = j * this.cols + i;
+      if (this.byDeck(prev, k)) {
+        const back = (s - 1) / steps;
+        if (!this.offSideClear(a.x + (b.x - a.x) * back, a.z + (b.z - a.z) * back, x, z)) return false;
+      }
       prev = k;
     }
     return true;
@@ -855,6 +937,7 @@ export class NavGrid {
         if (di !== 0 && dj !== 0 && (isBlocked(i + di, j) || isBlocked(i, j + dj))) continue;
         if (closed[nk] === id) continue;
         if (walls && this.overRail(k, nk)) continue;
+        if (this.byDeck(k, nk) && !this.sideStep(k, n, nk)) continue;
         const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
@@ -889,12 +972,14 @@ export class NavGrid {
       const t = s / steps;
       const x = a.x + (b.x - a.x) * t;
       const z = a.z + (b.z - a.z) * t;
-      if (walls) {
-        const [i, j] = this.cellOf(x, z);
-        const k = j * this.cols + i;
-        if (prev >= 0 && k !== prev && this.overRail(prev, k)) return Infinity;
-        prev = k;
+      const [i, j] = this.cellOf(x, z);
+      const k = j * this.cols + i;
+      if (walls && prev >= 0 && k !== prev && this.overRail(prev, k)) return Infinity;
+      if (prev >= 0 && this.byDeck(prev, k)) {
+        const back = (s - 1) / steps;
+        if (!this.offSideClear(a.x + (b.x - a.x) * back, a.z + (b.z - a.z) * back, x, z)) return Infinity;
       }
+      prev = k;
       if (s === 0) continue;
       if (!this.fitsAt(x, z, radius)) return Infinity;
       cost += (dist / steps) * this.costAt(x, z);
