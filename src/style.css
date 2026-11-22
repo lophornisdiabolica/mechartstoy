@@ -406,7 +406,7 @@ body {
 
 #setup .field {
   display: grid;
-  grid-template-columns: 96px 1fr 84px;
+  grid-template-columns: 104px 1fr 84px 44px;
   align-items: center;
   gap: 8px;
   margin-top: 6px;
@@ -418,9 +418,112 @@ body {
   white-space: nowrap;
 }
 
-/* Rows without a value readout use the full width. */
-#setup .field > :nth-child(2):last-child {
+/* Rows without a value readout use the full width (up to the die and lock). */
+#setup .field > .wide {
   grid-column: 2 / 4;
+}
+
+/* A setting's die and lock (see rollables.ts): dim until they're doing something. */
+#setup .field .roll {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+#setup .field .roll button {
+  padding: 2px 0;
+  width: 21px;
+  font-size: 12px;
+  line-height: 1.2;
+  background: transparent;
+  border-color: transparent;
+  filter: grayscale(1);
+  opacity: 0.28;
+}
+#setup .field .roll button:hover {
+  opacity: 0.7;
+}
+#setup .field .roll button.none {
+  visibility: hidden;
+}
+#setup .field .roll .die.preset {
+  filter: none;
+  opacity: 0.75;
+  border: 1px dashed rgba(232, 210, 122, 0.7);
+}
+#setup .field .roll button[aria-pressed='true'] {
+  filter: none;
+  opacity: 1;
+  border-color: #e8d27a;
+}
+#setup .field .roll .lock.idle[aria-pressed='true'] {
+  opacity: 0.55;
+}
+
+/* The low and high a die rolls a slider between. */
+#setup .dice-range {
+  margin-top: 2px;
+}
+#setup .dice-range[hidden] {
+  display: none;
+}
+#setup .dice-range .label {
+  color: #e8d27a;
+  font-size: 11px;
+  text-align: right;
+}
+#setup .dice-range .inline {
+  gap: 4px;
+}
+#setup .dice-range input {
+  min-width: 0;
+  flex: 1;
+}
+#setup .dice-range .value {
+  white-space: normal;
+  font-size: 11px;
+  color: #e8d27a;
+}
+
+/* A ? after a setting's name: its explanation, on hover or tap. */
+#setup button.tip {
+  margin-left: 5px;
+  padding: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 13px;
+  vertical-align: 1px;
+  color: #8b98a8;
+  background: transparent;
+  border: 1px solid #4a5563;
+}
+#setup button.tip:hover,
+#setup button.tip:focus {
+  color: #e8d27a;
+  border-color: #e8d27a;
+}
+#setup summary h2 button.tip {
+  text-transform: none;
+}
+#setup .tip-pop {
+  position: fixed;
+  z-index: 40;
+  padding: 8px 10px;
+  background: #1b2129;
+  border: 1px solid #3a4452;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  color: #c9d3de;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+#setup .tip-pop p {
+  margin: 0;
+}
+#setup .tip-pop p + p {
+  margin-top: 6px;
 }
 
 #setup .hint {
@@ -474,11 +577,21 @@ body {
 
 #setup .seg {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
 }
 
 #setup .seg button {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  #setup .seg button {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
 }
 
 #setup input[type='range'] {
@@ -640,7 +753,7 @@ body {
   }
 
   #setup .field {
-    grid-template-columns: 72px 1fr 64px;
+    grid-template-columns: 76px 1fr 60px 40px;
     gap: 6px;
   }
 
