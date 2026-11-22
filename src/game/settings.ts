@@ -15,7 +15,19 @@ import * as D from '../core/dmath';
  * Multipliers are relative to the hand-tuned defaults in units.ts and
  * buildings.ts, so 1 always means "as designed".
  */
-export type BattleMode = 'eternal' | 'conquest';
+/**
+ * - eternal: ruins are rebuilt and the war goes on;
+ * - conquest: no rebuilding, and a side is out once its production is gone;
+ * - hill: king of the hill. Conquest's rules, plus one outpost in the middle
+ *   (the hill): the first team to hold it for `armies.hillHold` seconds in
+ *   all wins (see game/hill.ts).
+ */
+export type BattleMode = 'eternal' | 'conquest' | 'hill';
+/** The modes with escalation settings of their own; the hill escalates like Conquest. */
+export type RampMode = 'eternal' | 'conquest';
+export function rampMode(mode: BattleMode): RampMode {
+  return mode === 'eternal' ? 'eternal' : 'conquest';
+}
 export type MapSize = 'small' | 'medium' | 'large';
 /**
  * Where the bases go:
@@ -162,7 +174,9 @@ export interface BattleSettings {
      */
     evenTeams: number;
     /** How fast the battle escalates, per mode (see RampSettings). */
-    ramp: Record<BattleMode, RampSettings>;
+    ramp: Record<RampMode, RampSettings>;
+    /** King of the hill: seconds a team has to hold the hill, in all, to win. */
+    hillHold: number;
     /** Multiplier on what holding an outpost gives (see outposts.ts); 0 makes them worth nothing but ground. */
     outpostBonus: number;
     /**
@@ -254,6 +268,7 @@ export const LIMITS = {
   flanking: { min: 0, max: 1 },
   evenTeams: { min: 0, max: 1.5 },
   ramp: { min: 0, max: 1 },
+  hillHold: { min: 30, max: 900 },
   outposts: { min: 0, max: 12 },
   forest: { min: 0, max: 1 },
   wreckage: { min: 0, max: 2 },
@@ -289,6 +304,7 @@ export function defaultSettings(): BattleSettings {
       flanking: 0.5,
       evenTeams: 0.85,
       ramp: { conquest: { tide: 0.5, siege: 0.5 }, eternal: { tide: 0, siege: 0 } },
+      hillHold: 300,
       outpostBonus: 1,
       outpostHold: 0,
       taskForces: 0.35,
@@ -327,7 +343,7 @@ export function cloneSettings(s: BattleSettings): BattleSettings {
 
 /** The escalation rates for the settings' mode. */
 export function rampFor(s: BattleSettings): RampSettings {
-  return s.armies.ramp[s.mode];
+  return s.armies.ramp[rampMode(s.mode)];
 }
 
 /**
@@ -440,6 +456,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     seats,
     places,
     outposts: outpostCount(s),
+    hill: s.mode === 'hill',
     outpostKinds: s.map.outpostKinds.length > 0 ? s.map.outpostKinds : ['supply'],
     biome: s.map.biome,
     waterways: !s.map.waterways ? 'off' : s.map.water >= INLETS_FROM ? 'everyBase' : 'joined',

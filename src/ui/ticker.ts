@@ -109,6 +109,12 @@ export class Ticker {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([`The townsfolk${this.direction(e.x, e.z, ' in the ')} take up arms against `, this.side(e.faction)]);
     });
+    events.on('hillClock', (e) => {
+      if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
+      this.say([this.side(e.faction), e.left >= 60 ? ` is a minute from holding the hill` : ` is ${e.left} seconds from holding the hill`]);
+    });
+    events.on('hillAllIn', (e) => this.game === game && e.faction >= 0 && e.faction < this.factions.length && this.say([this.side(e.faction), ' throws everything at the hill']));
+    events.on('hillHeld', (e) => this.game === game && e.faction >= 0 && e.faction < this.factions.length && this.say([this.side(e.faction), ' held the hill']));
     events.on('sideEliminated', (e) => this.game === game && this.say([this.side(e.faction), ' is out of the war']));
     events.on('battleOver', (o) => {
       if (this.game !== game) return;
@@ -129,7 +135,14 @@ export class Ticker {
       const now = !sides.eliminated[f] && offensive.attacking(f, time);
       if (now && !this.attacking[f]) {
         const target = sides.target(f, offensive.attack(f, time));
-        if (target !== null && !this.speak(f, 'attack', { enemy: this.factions[target]?.name })) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
+        const hill = game.ctx.hill ? game.ctx.outposts[game.ctx.hill.outpost] : null;
+        // King of the hill: attacks go for the hill (from whoever holds it), and a team already on it just stays.
+        if (hill) {
+          const holder = hill.owner >= 0 && hill.owner < this.factions.length ? hill.owner : null;
+          if (!sides.allied(hill.owner, f) && !this.speak(f, 'attack', { enemy: holder !== null ? this.factions[holder]?.name : 'the hill', where: 'the hill' })) {
+            this.say([this.side(f), holder !== null ? ' sets out to take the hill from ' : ' sets out to take the hill', ...(holder !== null ? [this.side(holder)] : [])]);
+          }
+        } else if (target !== null && !this.speak(f, 'attack', { enemy: this.factions[target]?.name })) this.say([this.side(f), ' sets out to attack ', this.side(target)]);
       }
       this.attacking[f] = now;
       // The Commander's voice on the rest of its plan: falling back, and staying home to defend.
@@ -153,7 +166,7 @@ export class Ticker {
     const game = this.game!;
     const o = game.ctx.outposts[index];
     if (!o || faction < 0 || faction >= this.factions.length) return;
-    const what = `the ${o.kind.name.toLowerCase()}${this.direction(o.x, o.z, ' in the ')}`;
+    const what = o.kind.id === 'hill' ? 'the hill' : `the ${o.kind.name.toLowerCase()}${this.direction(o.x, o.z, ' in the ')}`;
     const from = previous >= 0 && previous < this.factions.length ? [' from ', this.side(previous)] : [];
     if (this.speak(faction, 'took', { where: what })) return;
     this.say([this.side(faction), ` took ${what}`, ...from]);

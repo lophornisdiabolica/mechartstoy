@@ -7,7 +7,7 @@ import { STYLES } from '../game/commander/advice';
 import { describeBonus } from '../game/outposts';
 import { FactionDef } from '../game/factions';
 import { Game } from '../game/game';
-import { LIMITS, RampSettings } from '../game/settings';
+import { LIMITS, RampSettings, rampMode } from '../game/settings';
 import { RAMP_INTERVAL } from '../game/tide';
 import { Role } from '../game/units';
 import { MoveClass } from '../world/moveClasses';
@@ -247,18 +247,23 @@ export class Controls {
     };
 
     // Battle
-    const conquest = this.game.settings.mode === 'conquest';
+    const mode0 = this.game.settings.mode;
+    const conquest = mode0 === 'conquest';
     const battle = section('Battle');
     battle.append(
       el(
         'p',
         { class: 'hint' },
-        conquest ? 'Conquest: destroy the enemy HQ and every production building to win.' : 'Eternal: ruins are rebuilt and the war never ends.',
+        mode0 === 'hill'
+          ? `King of the hill: hold the hill for ${Math.round(this.game.settings.armies.hillHold / 60 * 10) / 10} minutes in all to win, or knock everyone else out.`
+          : conquest
+            ? 'Conquest: destroy the enemy HQ and every production building to win.'
+            : 'Eternal: ruins are rebuilt and the war never ends.',
       ),
     );
     // Ramps: live, so an Eternal war can be wound up or calmed down while watching.
     const mode = this.game.settings.mode;
-    const ramp = this.game.settings.armies.ramp[mode];
+    const ramp = this.game.settings.armies.ramp[rampMode(mode)];
     battle.append(el('p', { class: 'hint' }, `Ramp, every ${RAMP_INTERVAL / 60} minutes:`));
     const rampSlider = (label: string, key: keyof RampSettings, title: string) => {
       const wrap = el('label', { class: 'slider valued', title });

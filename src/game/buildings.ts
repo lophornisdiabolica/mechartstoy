@@ -548,6 +548,17 @@ export const BUILDING_DEFS = {
     buildTime: 8,
   },
   // Outpost kinds' own buildings (see OUTPOST_KINDS in outposts.ts).
+  hillBeacon: {
+    id: 'hillBeacon',
+    name: 'Hill Beacon',
+    model: 'bld:hillBeacon',
+    hp: 900,
+    armor: 8,
+    radius: 1.5,
+    height: 6.5,
+    rebuildDelay: 40,
+    buildTime: 8,
+  },
   airstrip: {
     id: 'airstrip',
     name: 'Airstrip',
