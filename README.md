@@ -275,6 +275,23 @@ battle, its exact map via `seed`).
   coloured yourself keep theirs. The lock button on a side keeps it in every
   re-roll with its doctrine, name and colour (`lock3=1` in the link), so you
   can watch, say, Tidewater against a different doctrine each battle.
+- **Dice and locks:** the re-roll buttons are presets over the settings
+  further down, and each setting's row ends in a die (🎲) and, for settings
+  a preset rolls, a lock (🔒). A preset lights up the dice of what it rolls
+  (Map size: size and shape; Map style: water, hills, dense forest, towns,
+  town size and city; Biome: the biome). A lock keeps that setting as it is
+  while the preset rolls the rest, so a map style, but always large and wet,
+  is Map style and Map size on with Size and Water locked. A die rolls a
+  setting on its own every battle, whether a preset covers it or not: a
+  choice from all of them, on or off at even odds, or a slider between a
+  low and a high you set under it. So the usual map, but any amount of
+  water, is a die on Water with no preset. Nearly every setting has one, the
+  unit caps and the tide too (`vlock=size,water` and
+  `vdice=water:0.2-0.8,biome` in the link; see `game/rollables.ts`).
+  "Clear dice and locks" takes them all off.
+- **Explanations** of the settings sit behind a ? after each setting's name
+  (or a section's), shown on hover or tap, so the setup screen is mostly the
+  settings themselves.
 - **Tournament** (Between battles, `tourney=1` in the link): pressing Start
   draws a knockout bracket of doctrines from the pool: Entrants of them
   (2 to 16, eight by default, `entrants=` in the link), each doctrine once

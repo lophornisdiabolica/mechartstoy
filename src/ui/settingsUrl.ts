@@ -1,6 +1,7 @@
 import { isStyle } from '../game/commander/advice';
 import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
+import { rollable } from '../game/rollables';
 import { BattleSettings, CITY_MODES, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
@@ -116,6 +117,10 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (v.after !== dv.after) p.set('vafter', String(v.after));
   if (v.tournament) p.set('tourney', '1');
   if (v.entrants !== dv.entrants) p.set('entrants', String(v.entrants));
+  // Settings locked or rolled one by one: vlock=size,water and vdice=water:0.2-0.8,biome.
+  if (v.locks.length) p.set('vlock', v.locks.join(','));
+  const dice = Object.entries(v.dice).map(([id, d]) => (d === true ? id : `${id}:${round2(d[0])}-${round2(d[1])}`));
+  if (dice.length) p.set('vdice', dice.join(','));
   return p;
 }
 
@@ -239,6 +244,23 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (p.get('tourney') === '1') s.variety.tournament = true;
   const entrants = Number(p.get('entrants'));
   if (p.has('entrants') && Number.isFinite(entrants)) s.variety.entrants = Math.max(2, Math.min(16, Math.round(entrants)));
+  const vlock = p.get('vlock');
+  if (vlock) s.variety.locks = vlock.split(',').filter((id) => rollable(id) !== undefined);
+  const vdice = p.get('vdice');
+  if (vdice) {
+    for (const part of vdice.split(',')) {
+      const [id, span] = part.split(':');
+      const r = rollable(id);
+      if (!r) continue;
+      const m = span ? /^(-?[\d.]+)-(-?[\d.]+)$/.exec(span) : null;
+      if (r.kind === 'range' && m) {
+        const { min, max } = LIMITS[r.limit];
+        const lo = Math.max(min, Math.min(max, Number(m[1])));
+        const hi = Math.max(min, Math.min(max, Number(m[2])));
+        s.variety.dice[id] = [Math.min(lo, hi), Math.max(lo, hi)];
+      } else s.variety.dice[id] = true;
+    }
+  }
 }
 
 function round2(v: number): number {
