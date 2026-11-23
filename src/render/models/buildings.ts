@@ -897,3 +897,31 @@ registerModel('bld:dropPod', (faction) => {
   g.add(box(0.06, 0.7, 0.5, DARK, 0.8, 0.5, 0)); // hatch
   return g;
 });
+
+// Hive's Recycler: a great maw in a mound of plating, scrap heaped round it, vats glowing, and an acid spout on top.
+registerModel('bld:recycler', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, 0x4a4238, 0, 0.12, 0));
+  g.add(cylinder(2.3, 2.5, 1.6, 8, 0x3b2a1e, 0, 1.0, 0));
+  g.add(cylinder(1.9, 2.3, 0.9, 8, primary, 0, 2.2, 0));
+  g.add(cylinder(2.0, 2.0, 0.14, 8, secondary, 0, 1.8, 0));
+  // The maw: a dark pit in the front, with teeth round it.
+  g.add(box(0.2, 0.9, 1.6, 0x15100c, 2.35, 0.9, 0));
+  for (let i = 0; i < 5; i++) g.add(box(0.3, 0.12, 0.12, 0x8a8a8a, 2.45, 0.45 + i * 0.22, (i % 2 ? 0.6 : -0.6)));
+  for (const [x, z] of [[-1.6, 1.6], [-1.8, -1.4], [0.6, -2.1]]) {
+    const vat = glowBox(0.6, 0.8, 0.6, 0xc6e03a);
+    vat.position.set(x, 0.65, z);
+    g.add(vat);
+  }
+  // Scrap heaped by the maw.
+  g.add(box(0.8, 0.4, 0.6, 0x5a5650, 2.6, 0.35, 1.5));
+  g.add(box(0.6, 0.3, 0.9, 0x6a5040, 2.8, 0.3, -1.4));
+  const turret = new THREE.Group();
+  turret.position.set(-0.4, 2.65, 0);
+  turret.add(box(0.8, 0.4, 0.8, 0x3b2a1e, 0, 0.15, 0));
+  const spout = barrelPivot('bld:recycler', turret);
+  spout.add(box(0.6, 0.22, 0.22, 0x3b2a1e, 0.25, 0, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:recycler', g, turret, [spout]) });
+});

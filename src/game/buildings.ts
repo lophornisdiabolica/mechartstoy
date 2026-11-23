@@ -1,4 +1,4 @@
-import { JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
+import { EatsDef, JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -73,6 +73,8 @@ export interface BuildingDef {
   low?: boolean;
   /** Aircraft out of ammunition fly to the nearest of these of their side to rearm (see Ammo): airpads and forward helipads. */
   rearms?: boolean;
+  /** A Hive building that chews wreckage round it into units (see hive.ts). */
+  eats?: EatsDef;
 }
 
 /**
@@ -444,6 +446,23 @@ export const BUILDING_DEFS = {
     field: true,
     rebuildDelay: 0,
     buildTime: 0,
+  },
+  /** Hive's signature (see hive.ts): a great maw that chews the wrecks round it into mites, and breeds more besides. */
+  recycler: {
+    id: 'recycler',
+    name: 'Recycler',
+    model: 'bld:recycler',
+    hp: 900,
+    armor: 8,
+    radius: 2.6,
+    height: 3,
+    production: { table: [{ unit: 'mite', weight: 2, count: 6 }, { unit: 'gunMite', weight: 1, count: 2 }], interval: 22 },
+    eats: { radius: 14, rate: 0.5, makes: [{ unit: 'mite', count: 6, cost: 0.6 }, { unit: 'gunMite', count: 2, cost: 0.8 }] },
+    weapon: { name: 'Acid spout', range: 17, minRange: 0, damage: 16, cooldown: 1.4, burst: 3, burstGap: 0.2, projectile: 'acid', speed: 26, splash: 1.6, spread: 0.08, arc: false, muzzleHeight: 3.2, targets: 'both' },
+    sight: 20,
+    turretTurnRate: 2,
+    rebuildDelay: 40,
+    buildTime: 10,
   },
   tower: {
     id: 'tower',

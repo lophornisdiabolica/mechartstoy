@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -389,6 +389,27 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     // Its runners mark targets for the uplinks and the Lance Platform.
     spotters: { beaconRunner: 14 },
   },
+  hive: {
+    id: 'hive',
+    name: 'Hive',
+    blurb: 'A swarm grown from wreckage. No rifle squads: its barracks breed packs of mites, knee-high biting bugs that climb over walls and buildings, and its fabricators crawl to the front and chew the wrecks there, the heaps and then the scrap buried under old battlefields, into more mites and little gun mites. So a long, bloody fight feeds it, and killing its fabricators starves it. Acid spitters take the place of flak, Ravager beetles are its heavies, and its Recycler eats whatever is wrecked near the base. Super unit: the Hive Mother, a towering brood mother that eats as she goes and sheds mites off her back.',
+    caps: { infantry: 1.2, vehicle: 1.3 },
+    production: {
+      barracks: { table: [{ unit: 'mite', weight: 1, count: 8 }], interval: 15 },
+      factory: {
+        table: [
+          { unit: 'fabricator', weight: 2, count: 1 },
+          { unit: 'ravager', weight: 2.4, count: 1 },
+          { unit: 'acidSpitter', weight: 2, count: 1 },
+          { unit: 'gunMite', weight: 1.5, count: 3 },
+          { unit: 'scout', weight: 0.6, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'hiveMother', weight: 1, count: 1 }] },
+    },
+    signature: 'recycler',
+    waves: [{ unit: 'mite', weight: 3, count: 10 }, { unit: 'gunMite', weight: 2, count: 3 }, { unit: 'fabricator', weight: 1, count: 1 }, { unit: 'ravager', weight: 1, count: 1 }],
+  },
 };
 
 /**
@@ -406,7 +427,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

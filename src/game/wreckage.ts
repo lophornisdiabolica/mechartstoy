@@ -43,6 +43,19 @@ const HEAPED = 8;
 const GONE = 0.03;
 /** Seconds between rusting steps. */
 const RUST_EVERY = 3;
+/**
+ * Buried salvage (for the scrap doctrines: Hive's fabricators): this share
+ * of the wreckage that rusts away goes into a second pool per cell, under
+ * the ground, which fades far more slowly, over most of a battle. So a
+ * scrap doctrine can still pick up a boost on ground where an old push
+ * stalled, after the visible heaps have gone. It isn't drawn, and the
+ * Wreckage settings don't change it.
+ */
+const BURY = 0.6;
+/** Seconds buried salvage takes to fade to about a third. */
+const BURIED_RUST = 1200;
+/** Most buried salvage a cell holds. */
+const MAX_BURIED = 6;
 
 export class WreckageField {
   readonly cols: number;
@@ -50,6 +63,10 @@ export class WreckageField {
   private readonly minX: number;
   private readonly minZ: number;
   readonly mass: Float32Array;
+  /** Buried salvage per cell (see BURY), sim only. */
+  readonly buried: Float32Array;
+  private buriedCells: number[] = [];
+  private buriedListed: Uint8Array;
   private active: number[] = [];
   private readonly listed: Uint8Array;
   private sinceRust = 0;
@@ -65,6 +82,8 @@ export class WreckageField {
     const n = this.cols * this.rows;
     this.mass = new Float32Array(n);
     this.listed = new Uint8Array(n);
+    this.buried = new Float32Array(n);
+    this.buriedListed = new Uint8Array(n);
   }
 
   /** Cells with wreckage on them. */
@@ -156,6 +175,30 @@ export class WreckageField {
     return taken;
   }
 
+  /**
+   * Take up to `amount` of salvage from within `radius` of a point: the
+   * visible wreckage first, nearest first, then what's buried. Returns how
+   * much was taken.
+   */
+  salvage(x: number, z: number, radius: number, amount: number): number {
+    let taken = this.take(x, z, radius, amount);
+    if (taken >= amount || this.buriedCells.length === 0) return taken;
+    this.cells(x, z, radius, (k) => {
+      if (taken >= amount || this.buried[k] <= 0) return;
+      const bite = Math.min(this.buried[k], amount - taken);
+      this.buried[k] -= bite;
+      taken += bite;
+    });
+    return taken;
+  }
+
+  /** Salvage within `radius` of a point, visible and buried. */
+  salvageNear(x: number, z: number, radius: number): number {
+    let sum = 0;
+    this.cells(x, z, radius, (k) => (sum += this.mass[k] + this.buried[k]));
+    return sum;
+  }
+
   /** Rust everything a little. */
   rust(dt: number): void {
     this.sinceRust += dt;
@@ -168,7 +211,9 @@ export class WreckageField {
     for (let n = 0; n < this.active.length; n++) {
       const k = this.active[n];
       const heaped = Math.min(1, round[n] / HEAPED);
+      const before = this.mass[k];
       this.mass[k] *= D.exp(-spell / (RUST * this.life * (LONE + (1 - LONE) * heaped)));
+      this.bury(k, (before - this.mass[k]) * BURY);
       if (this.mass[k] >= GONE) next.push(k);
       else {
         this.mass[k] = 0;
@@ -176,7 +221,30 @@ export class WreckageField {
       }
     }
     this.active = next;
+    // Buried salvage fades much more slowly.
+    if (this.buriedCells.length > 0) {
+      const fade = D.exp(-spell / BURIED_RUST);
+      const kept: number[] = [];
+      for (const k of this.buriedCells) {
+        this.buried[k] *= fade;
+        if (this.buried[k] >= GONE) kept.push(k);
+        else {
+          this.buried[k] = 0;
+          this.buriedListed[k] = 0;
+        }
+      }
+      this.buriedCells = kept;
+    }
     this.version++;
+  }
+
+  private bury(k: number, amount: number): void {
+    if (amount <= 0) return;
+    this.buried[k] = Math.min(MAX_BURIED, this.buried[k] + amount);
+    if (!this.buriedListed[k]) {
+      this.buriedListed[k] = 1;
+      this.buriedCells.push(k);
+    }
   }
 
   /** Wreckage on a cell and the eight round it. */

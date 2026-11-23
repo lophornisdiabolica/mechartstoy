@@ -104,6 +104,8 @@ export type GameEvents = {
    * targeting laser paints the spot.
    */
   strikeCalled: { x: number; y: number; z: number; radius: number; delay: number; fromX: number; fromY: number; fromZ: number; faction: number };
+  /** A Hive fabricator chewing wreckage (see hive.ts). */
+  chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */
   dropPod: { x: number; y: number; z: number; landed: boolean };
 };

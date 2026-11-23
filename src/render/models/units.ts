@@ -1725,3 +1725,169 @@ registerModel('lancePlatform', (faction) => {
   guns.turret.position.y -= body.position.y;
   return setRig(root, { turret, ...spiderLegs(body, 2, 3.0, 1.1, 2.4, 0.32), ...mounted('lancePlatform', root, turret, [lance]), mounts: [guns] });
 });
+
+// Hive: bugs and crawlers grown from scrap.
+const CHITIN = 0x3b2a1e;
+const ACID = 0xc6e03a;
+
+// A mite: a knee-high biting bug on six legs. It lunges in head first to bite.
+registerModel('mite', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.25;
+  root.add(body);
+  body.add(box(0.34, 0.16, 0.26, primary, -0.08, 0.02, 0)); // abdomen
+  const head = new THREE.Group();
+  head.position.set(0.16, 0, 0);
+  head.add(box(0.14, 0.12, 0.16, CHITIN, 0.04, 0, 0));
+  for (const side of [-1, 1]) head.add(box(0.12, 0.03, 0.03, METAL, 0.16, -0.03, side * 0.05)); // mandibles
+  body.add(head);
+  return setRig(root, {
+    ...spiderLegs(body, 3, 0.36, 0.1, 0.25, 0.035),
+    ...mounted('mite', root, null),
+    strike(k) {
+      head.position.x = 0.16 + Math.sin(Math.PI * k) * 0.12;
+    },
+  });
+});
+
+// A gun mite: a little spider mech with a needle gun on its back.
+registerModel('gunMite', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.45;
+  root.add(body);
+  body.add(box(0.6, 0.22, 0.48, primary, 0, 0, 0));
+  body.add(box(0.3, 0.08, 0.36, secondary, -0.12, 0.14, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.15, 0.12, 0);
+  turret.add(box(0.24, 0.14, 0.24, CHITIN, 0, 0.06, 0));
+  const gun = barrelPivot('gunMite', turret);
+  gun.add(box(0.36, 0.05, 0.05, DARK, 0.15, 0, 0));
+  body.add(turret);
+  return setRig(root, { turret, ...spiderLegs(body, 3, 0.6, 0.22, 0.45, 0.07), ...mounted('gunMite', root, turret, [gun]) });
+});
+
+// A fabricator: a squat tracked crawler with a hopper on its back and a cutting arm, chewing scrap into mites.
+registerModel('fabricator', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.2, 0.42, 0.42, 0.62));
+  root.add(box(2.0, 0.5, 1.3, primary, 0, 0.62, 0));
+  // The hopper the scrap goes into, and the vats that grow the mites.
+  root.add(box(0.9, 0.5, 1.0, CHITIN, -0.45, 1.1, 0));
+  root.add(box(0.95, 0.06, 1.05, secondary, -0.45, 1.36, 0));
+  for (const side of [-1, 1]) {
+    const vat = glowBox(0.3, 0.32, 0.22, ACID);
+    vat.position.set(-0.45, 0.98, side * 0.62);
+    root.add(vat);
+  }
+  // Grinding mandibles at the front.
+  for (const side of [-1, 1]) {
+    const jaw = box(0.5, 0.12, 0.14, METAL, 1.15, 0.5, side * 0.32);
+    jaw.rotation.y = side * 0.35;
+    root.add(jaw);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(0.3, 1.0, 0);
+  turret.add(box(0.5, 0.3, 0.5, METAL, 0, 0.1, 0));
+  const arm = new THREE.Group();
+  arm.position.set(0.2, 0.15, 0);
+  arm.add(box(1.1, 0.12, 0.12, METAL, 0.55, 0, 0));
+  arm.add(box(0.3, 0.05, 0.36, BLADE, 1.15, 0, 0)); // the cutter
+  turret.add(arm);
+  root.add(turret);
+  return setRig(root, {
+    turret,
+    ...mounted('fabricator', root, turret),
+    strike(k) {
+      arm.rotation.z = -Math.sin(Math.PI * k) * 0.6;
+    },
+  });
+});
+
+// An acid spitter: a bloated bug on six legs, its acid sac glowing, spitting from its raised head.
+registerModel('acidSpitter', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.8;
+  root.add(body);
+  body.add(box(0.8, 0.35, 0.7, primary, 0.05, 0, 0));
+  const sac = glowBox(0.7, 0.55, 0.62, ACID);
+  sac.position.set(-0.5, 0.2, 0);
+  body.add(sac);
+  body.add(box(0.4, 0.08, 0.74, secondary, 0.05, 0.2, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.45, 0.15, 0);
+  turret.add(box(0.36, 0.28, 0.36, CHITIN, 0.05, 0.05, 0));
+  const spout = barrelPivot('acidSpitter', turret);
+  spout.add(box(0.32, 0.12, 0.12, CHITIN, 0.14, 0, 0));
+  turret.add(spout);
+  body.add(turret);
+  return setRig(root, { turret, ...spiderLegs(body, 3, 1.0, 0.32, 0.8, 0.09), ...mounted('acidSpitter', root, turret, [spout]) });
+});
+
+// A ravager: a great armoured beetle with crushing pincers.
+registerModel('ravager', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.9;
+  root.add(body);
+  body.add(box(1.8, 0.6, 1.5, CHITIN, -0.1, 0, 0));
+  body.add(box(1.6, 0.25, 1.6, primary, -0.15, 0.4, 0)); // the carapace
+  body.add(box(0.12, 0.27, 1.62, secondary, -0.15, 0.4, 0)); // its seam
+  const turret = new THREE.Group();
+  turret.position.set(0.9, 0.05, 0);
+  turret.add(box(0.5, 0.45, 0.8, primary, 0, 0, 0));
+  const pincers = [-1, 1].map((side) => {
+    const p = new THREE.Group();
+    p.position.set(0.2, -0.05, side * 0.32);
+    p.add(box(0.8, 0.14, 0.14, METAL, 0.4, 0, 0));
+    p.add(box(0.3, 0.12, 0.12, METAL, 0.8, 0, -side * 0.1));
+    turret.add(p);
+    return { p, side };
+  });
+  body.add(turret);
+  return setRig(root, {
+    turret,
+    ...spiderLegs(body, 3, 1.6, 0.6, 0.9, 0.14),
+    ...mounted('ravager', root, turret),
+    // The pincers open wide and snap shut.
+    strike(k) {
+      const open = Math.sin(Math.PI * k);
+      for (const { p, side } of pincers) p.rotation.y = side * (0.5 * open - 0.1);
+    },
+  });
+});
+
+// Hive's super unit: a towering brood mother on eight legs, her egg-sacs glowing, spraying acid from her head.
+registerModel('hiveMother', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  body.add(box(2.2, 1.0, 2.0, primary, 0.4, 0, 0)); // thorax
+  body.add(box(2.6, 1.6, 2.4, CHITIN, -1.6, 0.4, 0)); // abdomen
+  body.add(box(2.0, 0.2, 2.5, secondary, -1.6, 1.25, 0));
+  for (const [x, z] of [[-1.0, 0.7], [-2.1, -0.6], [-1.5, 0], [-2.3, 0.8], [-0.9, -0.8]]) {
+    const egg = glowBox(0.45, 0.4, 0.45, ACID);
+    egg.position.set(x, 1.45, z);
+    body.add(egg);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(1.8, 0.3, 0);
+  turret.add(box(0.9, 0.8, 1.1, CHITIN, 0.1, 0, 0));
+  for (const side of [-1, 1]) turret.add(box(0.8, 0.16, 0.16, METAL, 0.7, -0.35, side * 0.35)); // mandibles
+  const spout = barrelPivot('hiveMother', turret);
+  spout.add(box(0.5, 0.26, 0.26, CHITIN, 0.25, 0, 0));
+  const drip = glowBox(0.08, 0.16, 0.16, ACID);
+  drip.position.set(0.52, 0, 0);
+  spout.add(drip);
+  body.add(turret);
+  return setRig(root, { turret, ...spiderLegs(body, 4, 4.4, 1.3, 2.6, 0.32), ...mounted('hiveMother', root, turret, [spout]) });
+});

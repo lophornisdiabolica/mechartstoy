@@ -84,6 +84,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   shieldDown: true,
   repair: true,
   strikeCalled: true,
+  chewed: true,
   dropPod: true,
 };
 

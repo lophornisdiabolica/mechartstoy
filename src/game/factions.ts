@@ -32,6 +32,7 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 11, name: 'Magenta Directive', primary: 0xa83c82, secondary: 0x5f9e92 },
   { id: 12, name: 'Obsidian Choir', primary: 0x3a2f4a, secondary: 0xb9a6e0 },
   { id: 13, name: 'Olive Ascendancy', primary: 0x7b8a3c, secondary: 0xeee6c8 },
+  { id: 14, name: 'Chartreuse Collective', primary: 0xa8b832, secondary: 0x3b2a1e },
 ];
 
 /** Most sides a battle can have. */
