@@ -538,7 +538,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     production: {
       factory: {
         table: [
-          { unit: 'coilTank', weight: 3, count: 1 },
+          { unit: 'coilTank', weight: 2, count: 1 },
           { unit: 'magnetCrane', weight: 2, count: 1 },
           { unit: 'tank', weight: 1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },

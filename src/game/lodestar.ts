@@ -10,7 +10,8 @@ import * as D from '../core/dmath';
  *
  * Its magnet cranes fling wrecks (WeaponDef.flings): each throw takes that
  * much of the wreckage lying round the crane (see WreckageField.take), and a
- * crane with no wrecks in reach can't throw (it has a machine gun for that).
+ * crane with no wrecks in reach can't throw (it has a machine gun for that),
+ * and the more wreckage there is in reach, the harder it throws (scrapHeft).
  * And now and then a crane with a heap of wrecks in reach drags it together
  * into a scrap wall (UnitDef.walls) a little way ahead of itself: low cover
  * for its own side that crumbles after a while.
@@ -18,6 +19,20 @@ import * as D from '../core/dmath';
 
 /** How far round itself a crane reaches for wrecks to throw or drag. */
 export const SCRAP_REACH = 12;
+/** Wreckage in reach (tank-sized wrecks are about 1.5) at which a throw hits its hardest. */
+const HEAP_FULL = 8;
+/** What a throw's damage is multiplied by with next to nothing in reach, and with a full heap. */
+const HEFT_LEAST = 0.5;
+const HEFT_MOST = 1.25;
+
+/**
+ * How hard a throw hits for the wreckage lying in reach (WeaponDef.flings):
+ * scraps early on, whole hulks once the field's littered, so Lodestar hits
+ * harder the longer a fight goes on.
+ */
+export function scrapHeft(heap: number): number {
+  return HEFT_LEAST + (HEFT_MOST - HEFT_LEAST) * Math.min(1, heap / HEAP_FULL);
+}
 /** Salvage a scrap wall takes, in tank-sized wrecks. */
 const WALL_COST = 1;
 /** How far ahead of the crane it drags the wall together. */

@@ -10,7 +10,7 @@ import { Health } from '../components';
 import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
-import { SCRAP_REACH } from '../lodestar';
+import { SCRAP_REACH, scrapHeft } from '../lodestar';
 import { strike } from './melee';
 import { domeOver } from '../shields';
 import { hazeSpread } from '../smoke';
@@ -329,15 +329,19 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       if (armed.blocked) return;
     }
     // A magnet crane throws wrecks, and with none in reach it can't (see lodestar.ts).
+    // The bigger the heap round it, the heavier what it throws.
+    let heft = 1;
     if (armed.weapon.flings !== undefined) {
       const t = world.req(e, Transform);
+      heft = scrapHeft(ctx.wreckage.massNear(t.x, t.z, SCRAP_REACH));
       if (ctx.wreckage.take(t.x, t.z, SCRAP_REACH, armed.weapon.flings) < armed.weapon.flings * 0.5) {
         armed.cooldown = 1;
         return;
       }
     }
     // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
-    const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+    const round = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+    const w = heft === 1 ? round : { ...round, damage: round.damage * heft };
     armed.burstLeft = w.burst - 1;
     volley(world, ctx, e, armed, target, mount, w);
     armed.firedAt = world.time;
