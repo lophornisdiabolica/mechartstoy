@@ -546,7 +546,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'scrapyard',
     waves: [rifleSquad(4, 3), { unit: 'coilTank', weight: 3, count: 1 }, { unit: 'magnetCrane', weight: 1.5, count: 1 }],
-  },  leviathan: {
+  },
+
+  leviathan: {
     id: 'leviathan',
     name: 'Leviathan',
     blurb: 'One giant creature and its cult: a silly boss. No tanks at all: its barracks and factory turn out cultists with old rifles and zealots who run at vehicles with satchel charges. Its whole hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-biting with every meal. Its shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
