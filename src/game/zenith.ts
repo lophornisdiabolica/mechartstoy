@@ -72,7 +72,7 @@ export function strikeDanger(ctx: SimContext, faction: number, x: number, z: num
 export function escapeFrom(s: PendingStrike, x: number, z: number): { x: number; z: number } {
   let dx = x - s.x;
   let dz = z - s.z;
-  const d = Math.hypot(dx, dz);
+  const d = D.hypot(dx, dz);
   if (d < 0.2) {
     // Right under it: any way out will do (the same way each time for the same spot).
     dx = D.cos(x * 7.1 + z * 3.3);
