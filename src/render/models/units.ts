@@ -2173,3 +2173,22 @@ registerModel('bronzeColossus', (faction) => {
     },
   });
 });
+
+// A war kite: a red box kite in the side's trim, with an archer hanging in a sling under it.
+registerModel('warKite', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(0.9, 0.5, 0.06, primary, 0, 0.7, 0.45)); // the box kite's sails
+  root.add(box(0.9, 0.5, 0.06, primary, 0, 0.7, -0.45));
+  root.add(box(0.06, 0.06, 1.0, WOOD, 0.4, 0.7, 0)); // spars
+  root.add(box(0.06, 0.06, 1.0, WOOD, -0.4, 0.7, 0));
+  root.add(box(1.2, 0.04, 0.04, secondary, -0.9, 0.7, 0)); // tail
+  root.add(box(0.02, 0.5, 0.02, 0x3a2f2a, 0, 0.25, 0)); // the sling line
+  const turret = new THREE.Group();
+  turret.position.set(0, 0, 0);
+  turret.add(box(0.14, 0.24, 0.16, SKIN, 0, -0.05, 0)); // the archer
+  const bow = barrelPivot('warKite', turret);
+  bow.add(box(0.05, 0.05, 0.3, WOOD, 0.12, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('warKite', root, turret, [bow]) });
+});

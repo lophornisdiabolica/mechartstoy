@@ -434,9 +434,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'antiquity',
     name: 'Antiquity',
     blurb: 'An ancient army, Roman and Chinese, against tanks: a silly underdog. Legionaries lock big shields in front, and bullets from in front mostly glance off (shells lobbed over the top don\'t); crossbowmen loose quick volleys, even at aircraft. Ballistae put bolts through armour, trebuchets lob stones a long way, hwachas fire racks of fire arrows, chariots and war elephants charge. Everything is cheap and there\'s lots of it. Super unit: the Bronze Colossus, a giant automaton with a great sword.',
-    caps: { infantry: 1.8, vehicle: 1.7 },
+    caps: { infantry: 1.2, vehicle: 1.4 },
     production: {
-      barracks: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }], interval: 13 },
+      barracks: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }], interval: 16 },
       hq: { table: [{ unit: 'legionary', weight: 1, count: 4 }, { unit: 'crossbowman', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }] },
       factory: {
@@ -446,6 +446,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'chariot', weight: 2, count: 2 },
           { unit: 'warElephant', weight: 1.6, count: 1 },
           { unit: 'hwacha', weight: 1.2, count: 1 },
+          { unit: 'warKite', weight: 0.6, count: 1 },
         ],
         interval: 14,
       },

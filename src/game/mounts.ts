@@ -159,6 +159,7 @@ export const MOUNTS: Record<string, Mount> = {
   warElephant: { turret: [0, 0, 0], muzzles: [[1.85, 1.35, 0.22]], hull: true },
   'warElephant#bows': { turret: [-0.1, 2.6, 0], muzzles: [[0.165, 0.1, 0.17]] },
   bronzeColossus: { turret: [0, 2.6, 0], muzzles: [[2.4, 0.1, 0.95]] },
+  warKite: { turret: [0, 0, 0], pivot: [0, 0.02, 0], muzzles: [[0.145, 0, 0.15]], elev: [-1.4, 0.4] },
   'bld:castrum': { turret: [2.75, 2.2, 0], pivot: [0, 0.3, 0], muzzles: [[0.6, 0, 0]], elev: [-0.4, 0.6] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
