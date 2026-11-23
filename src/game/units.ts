@@ -2571,7 +2571,7 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 3,
-    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, roots: 3 }),
+    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, roots: 2 }),
     wreckTime: 14,
     siege: false,
   },
