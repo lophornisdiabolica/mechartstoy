@@ -189,3 +189,23 @@ describe('Aegis and Rime bases', () => {
     expect(game.ctx.frost.hostileAt(game.ctx, t.x + 6, t.z, 0)).toBe(true);
   }, 30000);
 });
+
+describe('Aegis: dome trucks spread out', () => {
+  it('two dome trucks follow two different tanks, each keeping right behind its own', () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    const a = standing(game, UNIT_DEFS.tank, 0, base.x, base.z - 5);
+    const b = standing(game, UNIT_DEFS.tank, 0, base.x, base.z + 5);
+    const t1 = spawnUnit(game.world, game.ctx, UNIT_DEFS.domeTruck, 0, base.x - 6, base.z);
+    const t2 = spawnUnit(game.world, game.ctx, UNIT_DEFS.domeTruck, 0, base.x - 7, base.z + 1);
+    run(game, 12);
+    const leads = [game.world.req(t1, Ai).escort, game.world.req(t2, Ai).escort];
+    expect(new Set(leads)).toEqual(new Set([a, b]));
+    for (const truck of [t1, t2]) {
+      const lead = game.world.req(truck, Ai).escort!;
+      const lt = game.world.req(lead, Transform);
+      const tt = game.world.req(truck, Transform);
+      expect(Math.hypot(lt.x - tt.x, lt.z - tt.z)).toBeLessThan(4);
+    }
+  });
+});

@@ -223,12 +223,15 @@ export function aiSystem(ctx: SimContext): System {
 
         // Support units tag along a little behind the nearest frontline ally.
         if (role === 'support' && !post) {
-          if (lookAround) ai.escort = nearestFrontline(world, ctx, e, faction);
+          const escorts = def?.escorts;
+          if (lookAround) ai.escort = nearestFrontline(world, ctx, e, faction, escorts?.alone ?? false);
           const lead = ai.escort !== null && world.isAlive(ai.escort) ? ai.escort : null;
           if (lead !== null) {
             const lt = world.req(lead, Transform);
-            const bx = lt.x - D.cos(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetX * 0.3;
-            const bz = lt.z + D.sin(lt.heading) * SUPPORT_TRAIL + ai.rallyOffsetZ * 0.3;
+            const trail = escorts?.trail ?? SUPPORT_TRAIL;
+            const slack = escorts?.trail !== undefined ? 0.1 : 0.3;
+            const bx = lt.x - D.cos(lt.heading) * trail + ai.rallyOffsetX * slack;
+            const bz = lt.z + D.sin(lt.heading) * trail + ai.rallyOffsetZ * slack;
             moveTo(mover, t, bx, bz, lt.x + D.cos(lt.heading) * 10, lt.z - D.sin(lt.heading) * 10);
             continue;
           }
@@ -502,18 +505,44 @@ function isFrontline(world: World, e: Entity): boolean {
   return world.get(e, Unit)?.def.role === 'frontline' && !world.has(e, Guard);
 }
 
-/** The closest allied frontline unit within ESCORT_RANGE, if any. */
-function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: number): Entity | null {
+/**
+ * The closest allied frontline unit within ESCORT_RANGE, if any. `alone`:
+ * the closest one no other unit of `e`'s kind is following (UnitDef.escorts),
+ * or failing that the closest one anyway.
+ */
+function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: number, alone = false): Entity | null {
   const t = world.req(e, Transform);
+  let taken: Set<Entity> | null = null;
+  if (alone) {
+    const kind = world.req(e, Unit).def.id;
+    const seen = new Set<Entity>();
+    ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE * 2, (other) => {
+      if (other === e || world.get(other, Unit)?.def.id !== kind) return;
+      const lead = world.get(other, Ai)?.escort;
+      if (lead !== null && lead !== undefined) seen.add(lead);
+    });
+    taken = seen;
+  }
   let best: Entity | null = null;
+  let fallback: Entity | null = null;
   let bestD2 = ESCORT_RANGE * ESCORT_RANGE;
+  let fallbackD2 = bestD2;
   ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE, (other, d2) => {
-    if (other === e || d2 >= bestD2 || !isFrontline(world, other)) return;
+    if (other === e || d2 >= ESCORT_RANGE * ESCORT_RANGE || !isFrontline(world, other)) return;
     if (!ctx.sides.allied(faction, world.req(other, Faction).id)) return;
-    best = other;
-    bestD2 = d2;
+    if (taken?.has(other)) {
+      if (d2 < fallbackD2) {
+        fallback = other;
+        fallbackD2 = d2;
+      }
+      return;
+    }
+    if (d2 < bestD2) {
+      best = other;
+      bestD2 = d2;
+    }
   });
-  return best;
+  return best ?? fallback;
 }
 
 /** Whether an entity is within `range` of an outpost's post. */

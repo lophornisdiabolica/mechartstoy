@@ -187,6 +187,14 @@ export interface UnitDef {
   /** How it gets around (see moveClasses.ts). */
   move: MoveClass;
   role: Role;
+  /**
+   * Support units only: how it tags along behind a frontline ally (see
+   * systems/ai.ts). `alone`: it picks an ally no other unit of its own kind
+   * is already following, so a few of them spread over the army instead of
+   * bunching behind the same one. `trail`: how far behind it keeps (default
+   * SUPPORT_TRAIL).
+   */
+  escorts?: { alone?: boolean; trail?: number };
   model: string;
   hp: number;
   /**
@@ -1487,7 +1495,8 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 4,
     weapon: weapon({ name: 'Pintle gun', range: 11, damage: 5, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }),
-    // Big enough to cover the tanks it trails behind.
+    // Each dome truck keeps right behind a tank of its own, so the domes cover the army rather than each other.
+    escorts: { alone: true, trail: 0.5 },
     shield: { radius: 6, hp: 260, regen: 22, rest: 3, downTime: 10 },
     wreckTime: 15,
     siege: false,
