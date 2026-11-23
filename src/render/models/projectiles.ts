@@ -25,7 +25,7 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   // Zenith's strike: a column of light coming straight down, its foot at the projectile.
   orbital: () => {
     const root = new THREE.Group();
-    const core = glowBox(0.35, 16, 0.35, 0xfff2c8);
+    const core = glowBox(0.35, 16.4, 0.35, 0xfff2c8);
     core.position.y = 8;
     const glow = glowBox(0.9, 16, 0.9, 0xffb860);
     glow.position.y = 8;

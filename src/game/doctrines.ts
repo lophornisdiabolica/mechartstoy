@@ -368,9 +368,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'zenith',
     name: 'Zenith',
     blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
-    caps: { infantry: 0.9, vehicle: 1.4 },
+    caps: { infantry: 0.7, vehicle: 1.8 },
     production: {
-      barracks: { table: [rifleSquad(4, 3)], interval: 17 },
+      barracks: { table: [rifleSquad(4, 3)], interval: 20 },
       factory: {
         table: [
           { unit: 'tank', weight: 3, count: 1 },
@@ -379,6 +379,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'flakTank', weight: 0.9, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
+        interval: 14,
       },
       mechbay: { table: [{ unit: 'lancePlatform', weight: 1, count: 1 }] },
     },
