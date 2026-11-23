@@ -22,6 +22,16 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   // Rime's cryo spray: a pale puff of freezing mist.
   frost: () => projectile(0.4, 0.3, 0xdff6ff),
   hack: () => projectile(1.2, 0.09, 0x6ab8aa),
+  // Zenith's strike: a column of light coming straight down, its foot at the projectile.
+  orbital: () => {
+    const root = new THREE.Group();
+    const core = glowBox(0.35, 16, 0.35, 0xfff2c8);
+    core.position.y = 8;
+    const glow = glowBox(0.9, 16, 0.9, 0xffb860);
+    glow.position.y = 8;
+    root.add(glow, core);
+    return root;
+  },
 };
 
 for (const kind of Object.keys(looks) as ProjectileKind[]) {

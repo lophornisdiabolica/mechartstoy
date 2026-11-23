@@ -1646,3 +1646,82 @@ registerModel('eclipse', (faction) => {
   });
   return setRig(root, { turret, ...walker(legs, body, 1.6, 0.3), ...mounted('eclipse', root, turret) });
 });
+
+// Zenith: drops and orbital strikes.
+const BEACON = 0xffd27a;
+
+// A fast little tracked scout with a tall beacon mast, its lamp lit, and a pintle gun.
+registerModel('beaconRunner', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(1.4, 0.26, 0.3, 0.36));
+  root.add(box(1.25, 0.28, 0.66, primary, 0, 0.42, 0));
+  root.add(box(0.36, 0.12, 0.7, secondary, 0.5, 0.36, 0));
+  // The beacon mast, with a steady lamp on top.
+  root.add(box(0.07, 1.5, 0.07, METAL, 0.1, 1.3, 0.2));
+  const lamp = glowBox(0.16, 0.16, 0.16, BEACON);
+  lamp.position.set(0.1, 2.1, 0.2);
+  root.add(lamp);
+  const turret = new THREE.Group();
+  turret.position.set(-0.35, 0.72, 0);
+  turret.add(box(0.22, 0.14, 0.22, METAL, 0, 0.04, 0));
+  turret.add(box(0.4, 0.05, 0.05, DARK, 0.25, 0.12, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('beaconRunner', root, turret) });
+});
+
+// A tracked truck with a tall mast on its bed, and a targeting laser on top that paints where the strike will land.
+registerModel('uplinkTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.0, 0.34, 0.36, 0.5));
+  root.add(box(0.7, 0.55, 0.95, primary, 0.6, 0.72, 0)); // cab
+  root.add(box(0.2, 0.22, 0.9, GLASS, 0.96, 0.82, 0));
+  root.add(box(1.2, 0.2, 1.0, METAL, -0.35, 0.5, 0)); // bed
+  const turret = new THREE.Group();
+  turret.position.set(-0.55, 0.75, 0);
+  turret.add(box(0.5, 0.2, 0.5, secondary, 0, 0.1, 0));
+  turret.add(box(0.14, 1.6, 0.14, METAL, 0, 0.95, 0)); // mast
+  turret.add(box(0.04, 1.3, 0.3, primary, -0.09, 0.9, 0)); // fin down the mast
+  const laser = barrelPivot('uplinkTruck', turret);
+  laser.add(box(0.55, 0.16, 0.16, DARK, 0.15, 0, 0));
+  const lens = glowBox(0.06, 0.1, 0.1, 0xff6a3a);
+  lens.position.set(0.44, 0, 0);
+  laser.add(lens);
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('uplinkTruck', root, turret, [laser]) });
+});
+
+// Zenith's super unit: a slow four-legged platform with a long lance it points at the sky, and point guns on its back.
+registerModel('lancePlatform', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.4;
+  root.add(body);
+  body.add(box(3.2, 0.9, 2.4, primary, 0, 0, 0));
+  body.add(box(2.6, 0.25, 2.0, secondary, -0.2, 0.55, 0));
+  for (const side of [-1, 1]) {
+    const l = glowBox(0.14, 0.14, 0.14, BEACON);
+    l.position.set(1.62, 0.1, side * 0.8);
+    body.add(l);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.6, 0);
+  turret.add(cylinder(0.9, 1.1, 0.7, 8, METAL, 0, 0.35, 0));
+  turret.add(box(1.2, 0.6, 1.0, secondary, 0.1, 0.95, 0));
+  const lance = barrelPivot('lancePlatform', turret);
+  lance.add(box(3.0, 0.26, 0.26, DARK, 1.5, 0, 0));
+  for (const x of [0.8, 1.6, 2.4]) lance.add(box(0.12, 0.42, 0.42, METAL, x, 0, 0)); // focusing rings
+  const tip = glowBox(0.14, 0.2, 0.2, 0xfff2c8);
+  tip.position.set(3.05, 0, 0);
+  lance.add(tip);
+  body.add(turret);
+  const guns = ownMount(root, 'lancePlatform#guns', (t) => {
+    t.add(box(0.4, 0.25, 0.6, METAL, 0, 0, 0));
+    for (const side of [-1, 1]) t.add(box(0.45, 0.07, 0.07, DARK, 0.3, 0.1, side * 0.3));
+  });
+  body.add(guns.turret);
+  guns.turret.position.y -= body.position.y;
+  return setRig(root, { turret, ...spiderLegs(body, 2, 3.0, 1.1, 2.4, 0.32), ...mounted('lancePlatform', root, turret, [lance]), mounts: [guns] });
+});

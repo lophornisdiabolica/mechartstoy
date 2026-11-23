@@ -10,6 +10,8 @@ import { UnitDef, UnitId } from '../units';
 import { MoveClass } from '../../world/moveClasses';
 import { adviceFactor, STYLES } from '../commander/advice';
 import * as D from '../../core/dmath';
+import { doctrineOf } from '../doctrines';
+import { dropSite, launchPod } from '../zenith';
 
 /**
  * The nearest spot to (x, z) with room for a unit of this radius and
@@ -156,6 +158,20 @@ export function productionSystem(ctx: SimContext): System {
         const room = (def: UnitDef) => (isBoat(def) ? berthFree(ctx, boats, faction) : canBuild(ctx, counts, faction, def));
         if (!room(first) && !(standIn && room(standIn))) continue;
 
+        // Zenith's squads come down by pod near the front instead (see zenith.ts).
+        const building = world.req(e, Building).def;
+        if (faction >= 0 && doctrineOf(ctx, faction).drops?.includes(building.id as never)) {
+          const site = dropSite(world, ctx, faction);
+          if (site) {
+            const lineUp = squadLineUp(entry);
+            const squad = newSquad(ctx);
+            if (launchPod(world, ctx, faction, site.x, site.z, lineUp, squad)) {
+              recordSquad(ctx, squad, faction, lineUp);
+              for (const id of lineUp) counts[faction][ctx.units[id].category] += capCost(ctx.units[id]);
+              continue;
+            }
+          }
+        }
         // Units roll out of the front door.
         const t = world.req(e, Transform);
         const r = world.req(e, Building).def.radius + 1.2;

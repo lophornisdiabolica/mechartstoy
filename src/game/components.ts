@@ -543,3 +543,23 @@ export interface Wreck {
   size?: number;
 }
 export const Wreck = defineComponent<Wreck>('Wreck');
+
+/**
+ * A drop pod (Zenith; see zenith.ts): a little shelter that comes down from
+ * orbit by a beacon and lets its squad out one at a time, then crumbles.
+ * Shooting it down cuts the squad short.
+ */
+export interface DropPod {
+  /** Who's still aboard, in the order they come out. */
+  aboard: UnitId[];
+  squad: number;
+  /** When it lands (it falls until then), and when the next one comes out. */
+  landAt: number;
+  nextAt: number;
+  /** Where it falls from, and to. */
+  fromY: number;
+  groundY: number;
+  /** When it crumbles, once it's empty. */
+  crumbleAt: number;
+}
+export const DropPod = defineComponent<DropPod>('DropPod');

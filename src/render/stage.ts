@@ -20,6 +20,7 @@ import { FireGround } from './fireGround';
 import { FrostGround } from './frostGround';
 import { WreckageGround } from './wreckageGround';
 import { SmokeClouds } from './smokeClouds';
+import { StrikeMarks } from './strikeMarks';
 import { Domes } from './domes';
 import { JamMarks } from './jamMarks';
 import { DEBUG_LAYERS, DebugLayer, DebugOverlay } from './debugOverlay';
@@ -103,6 +104,7 @@ export class Stage {
   /** Heaps of junk where wrecks fell apart (see WreckageGround). */
   wreckage!: WreckageGround;
   private smokeClouds!: SmokeClouds;
+  private strikeMarks!: StrikeMarks;
   private domes!: Domes;
   private jamMarks!: JamMarks;
   /** Where a god power will land (see GodPanel). */
@@ -273,6 +275,7 @@ export class Stage {
       this.frostGround.dispose();
       this.wreckage.dispose();
       this.smokeClouds.dispose();
+      this.strikeMarks.dispose();
       this.domes.dispose();
       this.jamMarks.dispose();
       this.debugOverlay.dispose();
@@ -322,6 +325,8 @@ export class Stage {
     battle.add(this.wreckage.root);
     this.smokeClouds = new SmokeClouds(game);
     battle.add(this.smokeClouds.root);
+    this.strikeMarks = new StrikeMarks(game);
+    battle.add(this.strikeMarks.root);
     this.domes = new Domes(game);
     battle.add(this.domes.root);
     this.jamMarks = new JamMarks(game);
@@ -533,6 +538,7 @@ export class Stage {
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
     this.smokeClouds.update(simSeconds);
+    this.strikeMarks.update(simSeconds);
     this.domes.update(simSeconds);
     this.jamMarks.update(simSeconds);
     p?.lap('fire, frost, smoke, domes');

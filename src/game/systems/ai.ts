@@ -10,6 +10,7 @@ import { MOVE_RULES } from '../../world/moveClasses';
 import { threatKindOf } from '../commander/threats';
 import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
+import { escapeFrom, strikeDanger } from '../zenith';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -84,6 +85,18 @@ export function aiSystem(ctx: SimContext): System {
           else if (wait) moveTo(mover, t, wait.x + ai.rallyOffsetX * 0.3, wait.z + ai.rallyOffsetZ * 0.3, face.x, face.z);
           else moveTo(mover, t, home.x + ai.rallyOffsetX * 0.5, home.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
           continue;
+        }
+        // Under an enemy's orbital strike ring: get out from under it, whatever else is going on (see zenith.ts).
+        if (ctx.strikes.list.length > 0 && !MOVE_RULES[mover.move].flies) {
+          const strike = strikeDanger(ctx, faction, t.x, t.z, world.time);
+          if (strike) {
+            const out = escapeFrom(strike, t.x, t.z);
+            mover.targetX = out.x;
+            mover.targetZ = out.z;
+            mover.faceX = out.x;
+            mover.faceZ = out.z;
+            continue;
+          }
         }
         // Out of ammunition: home to the airpad, set down, and wait to be loaded again (see Ammo).
         const ammo = world.get(e, Ammo);

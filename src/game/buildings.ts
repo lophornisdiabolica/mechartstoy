@@ -415,6 +415,36 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
+  // Zenith: its drop control calls down extra squads by pod, and turns out beacon runners.
+  dropControl: {
+    id: 'dropControl',
+    name: 'Drop Control',
+    model: 'bld:dropControl',
+    hp: 750,
+    armor: 7,
+    radius: 2.6,
+    height: 3.2,
+    production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'beaconRunner', weight: 1, count: 1 }], interval: 38 },
+    // A targeting laser on top of the drop tube calls strikes down on whatever comes at the base.
+    weapon: { name: 'Base uplink', range: 30, minRange: 4, damage: 170, cooldown: 6, burst: 1, burstGap: 0, projectile: 'orbital', speed: 1, splash: 4.5, spread: 0.03, arc: false, muzzleHeight: 4.2, targets: 'ground', orbital: { delay: 2.4 } },
+    sight: 30,
+    turretTurnRate: 1.5,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  /** A Zenith drop pod (see zenith.ts): it lands by a beacon, lets its squad out and crumbles. */
+  dropPod: {
+    id: 'dropPod',
+    name: 'Drop Pod',
+    model: 'bld:dropPod',
+    hp: 220,
+    armor: 6,
+    radius: 0.9,
+    height: 1.8,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 0,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

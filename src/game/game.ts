@@ -47,6 +47,7 @@ import { FrostField, frostSystem } from './frost';
 import { WreckageField } from './wreckage';
 import { SmokeField, smokeSystem } from './smoke';
 import { hackSystem } from './hacking';
+import { dropPodSystem, Strikes } from './zenith';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -145,6 +146,7 @@ export class Game {
       frost: new FrostField(this.field),
       wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
+      strikes: new Strikes(),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
@@ -163,7 +165,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       trafficSystem(ctx),

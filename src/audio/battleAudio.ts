@@ -276,6 +276,9 @@ export class BattleAudio {
       case 'frost':
         this.activity.add(STIR.flame);
         return this.cue('hiss', 'gunfire', e.x, e.z, 1);
+      case 'orbital':
+        // The uplink locking on: the strike's own bang comes when it lands.
+        return this.cue('zap', 'cannons', e.x, e.z, 0.5);
     }
   }
 

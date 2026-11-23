@@ -83,6 +83,8 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   shatter: true,
   shieldDown: true,
   repair: true,
+  strikeCalled: true,
+  dropPod: true,
 };
 
 /** Page to worker. */

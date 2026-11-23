@@ -47,6 +47,9 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
   }
 }
 
+/** Share of an orbital strike's delay it waits overhead before the beam comes down. */
+const ORBITAL_HOLD = 0.9;
+
 /** Flies projectiles along their fixed path and applies damage on arrival. */
 export function projectileSystem(ctx: SimContext): System {
   return {
@@ -60,6 +63,11 @@ export function projectileSystem(ctx: SimContext): System {
         t.x = p.sx + (p.ex - p.sx) * k;
         t.z = p.sz + (p.ez - p.sz) * k;
         t.y = p.sy + (p.ey - p.sy) * k + p.arcHeight * 4 * k * (1 - k);
+        // An orbital strike waits high overhead while its ring closes, then comes straight down (see zenith.ts).
+        if (p.kind === 'orbital') {
+          const down = Math.max(0, (k - ORBITAL_HOLD) / (1 - ORBITAL_HOLD));
+          t.y = p.sy + (p.ey - p.sy) * down;
+        }
         t.heading = D.atan2(-(p.ez - p.sz), p.ex - p.sx);
         if (k < 1) continue;
 

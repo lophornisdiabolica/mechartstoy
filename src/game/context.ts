@@ -14,6 +14,7 @@ import type { Domes } from './shields';
 import type { FrostField } from './frost';
 import type { WreckageField } from './wreckage';
 import type { SmokeField } from './smoke';
+import type { Strikes } from './zenith';
 import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
@@ -97,6 +98,14 @@ export type GameEvents = {
   shieldDown: { entity: Entity; faction: number; x: number; y: number; z: number; radius: number; by: Hit | null };
   /** A super unit blew a crater in the ground (see craters.ts). */
   crater: { x: number; z: number; radius: number };
+  /**
+   * An orbital strike was called (Zenith; see zenith.ts): where it will
+   * land and how wide, in how many seconds, and from where the caller's
+   * targeting laser paints the spot.
+   */
+  strikeCalled: { x: number; y: number; z: number; radius: number; delay: number; fromX: number; fromY: number; fromZ: number; faction: number };
+  /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */
+  dropPod: { x: number; y: number; z: number; landed: boolean };
 };
 
 /** How a conquest battle ended. */
@@ -172,6 +181,8 @@ export interface SimContext {
   wreckage: WreckageField;
   /** Drifting smoke (see smoke.ts). */
   smoke: SmokeField;
+  /** Orbital strikes on their way down (see zenith.ts). */
+  strikes: Strikes;
   /** Energy domes up this tick (see shields.ts). */
   domes: Domes;
   /** The towns' people (see towns.ts). */

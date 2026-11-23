@@ -131,6 +131,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['A {unit} out there. Shades, go quietly.', 'Slip round to that {unit}.'],
     lost: ['The {unit} is gone. Into the smoke with it.', 'We lost the {unit}. Stay unseen.'],
   },
+  zenith: {
+    attack: ['Beacons forward. We drop on {enemy}.', 'Uplinks hot. Bring it down on {enemy}.'],
+    regroup: ['Pull back to the beacons and reform.', 'Hold the drops. Regroup.'],
+    defend: ['They\'re at the base. Drop everything on it.', 'Paint the attackers. Strikes on the base perimeter.'],
+    took: ['{where} secured. It takes drops now.', 'Beacon planted at {where}.'],
+    hunt: ['Paint that {unit} for orbit.', 'Mark the {unit}. Runners, go.'],
+    lost: ['The {unit} is down. Keep the beacons lit.', 'We lost the {unit}. Drops continue.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */
