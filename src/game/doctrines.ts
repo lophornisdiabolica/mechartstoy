@@ -482,7 +482,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'toyBox',
     waves: [{ unit: 'tinSoldier', weight: 3, count: 6 }, { unit: 'clockworkTank', weight: 2, count: 1 }, { unit: 'tinRobot', weight: 1, count: 1 }],
-  },  mirage: {
+  },
+
+  mirage: {
     id: 'mirage',
     name: 'Mirage',
     blurb: 'Holograms. Projector trucks throw up hologram tanks now and then: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Prism tanks do the real work with focused beams, and its mirror array throws up more holograms round the base. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
