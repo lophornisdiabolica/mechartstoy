@@ -58,7 +58,7 @@ function frontBlock(world: World, ctx: SimContext, target: Entity, p: Projectile
   // The way back along the shot, against the way the target faces.
   const bx = p.sx - p.ex;
   const bz = p.sz - p.ez;
-  const len = Math.hypot(bx, bz);
+  const len = D.hypot(bx, bz);
   if (len < 0.01) return 1;
   const fx = D.cos(tt.heading);
   const fz = -D.sin(tt.heading);
