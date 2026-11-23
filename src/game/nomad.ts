@@ -63,7 +63,7 @@ export function campSpot(ctx: SimContext, faction: number, slot: number): { x: n
   if (pic && pic.armyX !== null && pic.armyZ !== null) {
     const ax = pic.armyX - home.x;
     const az = pic.armyZ - home.z;
-    const ad = Math.hypot(ax, az);
+    const ad = D.hypot(ax, az);
     if (ad > 1) {
       dirX = ax / ad;
       dirZ = az / ad;
@@ -72,7 +72,7 @@ export function campSpot(ctx: SimContext, faction: number, slot: number): { x: n
   }
   if (dirX === 0 && dirZ === 0) {
     // No army out yet: face the middle of the map.
-    const md = Math.hypot(home.x, home.z) || 1;
+    const md = D.hypot(home.x, home.z) || 1;
     dirX = -home.x / md;
     dirZ = -home.z / md;
   }
