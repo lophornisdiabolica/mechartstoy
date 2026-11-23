@@ -512,6 +512,22 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
+  /** Tin Soldiers' signature: a giant toy box that turns out more soldiers, with a jack-in-the-box cannon on its lid. */
+  toyBox: {
+    id: 'toyBox',
+    name: 'Toy Box',
+    model: 'bld:toyBox',
+    hp: 950,
+    armor: 7,
+    radius: 2.6,
+    height: 2.6,
+    production: { table: [{ unit: 'tinSoldier', weight: 2, count: 6 }, { unit: 'clockworkTank', weight: 1, count: 1 }], interval: 22 },
+    weapon: { name: 'Jack-in-the-box cannon', range: 18, minRange: 0, damage: 30, cooldown: 2.4, burst: 1, burstGap: 0, projectile: 'shell', speed: 40, splash: 1.2, spread: 0.04, arc: false, muzzleHeight: 3.4, targets: 'ground' },
+    sight: 20,
+    turretTurnRate: 2,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

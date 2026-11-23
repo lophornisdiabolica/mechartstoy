@@ -210,6 +210,8 @@ export class Effects {
     events.on('camp', (e) => this.dust(e.x, e.y, e.z, 3, 12));
     // A shot glancing off a shield wall: a spark of struck bronze.
     events.on('blocked', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.18, size: 0.25, endSize: 0.6, color: 0xffd890, endColor: 0x000000 }));
+    // A toy tipped over: a little puff of dust where it lands.
+    events.on('toppled', (e) => this.dust(e.x, e.y, e.z, 0.5, 4));
     // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
     events.on('chewed', (e) => {
       for (let i = 0; i < 3; i++) {

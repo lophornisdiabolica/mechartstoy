@@ -570,3 +570,13 @@ export interface Nomad {
   packAt: number | null;
 }
 export const Nomad = defineComponent<Nomad>('Nomad');
+
+/** A Tin Soldiers toy's clockwork (see windup.ts): run left, when it's done winding back up, when it's back on its feet, its health last tick, and which side it fell on. */
+export interface WindUp {
+  left: number;
+  rewindUntil: number;
+  downUntil: number;
+  hp: number;
+  side: number;
+}
+export const WindUp = defineComponent<WindUp>('WindUp');
