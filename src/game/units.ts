@@ -2635,7 +2635,7 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Great vines', range: 14, damage: 50, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 4 }),
+    weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 4 }),
     mounts: [{ weapon: weapon({ name: 'Seed burst', range: 24, minRange: 6, damage: 40, cooldown: 6, projectile: 'seed', speed: 16, splash: 2.2, spread: 0.12, arc: true, muzzleHeight: 5, plants: 2.6 }), mount: 'worldTree#seeds', turnRate: 2 }],
     wreckTime: 45,
     siege: true,
