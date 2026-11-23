@@ -488,7 +488,7 @@ export const BUILDING_DEFS = {
     armor: 12,
     radius: 2.4,
     height: 2.6,
-    production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'outrider', weight: 2, count: 2 }, { unit: 'tank', weight: 1, count: 1 }], interval: 24 },
+    production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'outrider', weight: 2, count: 2 }, { unit: 'tank', weight: 1, count: 1 }], interval: 26 },
     weapon: { name: 'Twin machine guns', range: 13, minRange: 0, damage: 6, cooldown: 1, burst: 5, burstGap: 0.08, projectile: 'bullet', speed: 60, splash: 0, spread: 0.07, arc: false, muzzleHeight: 3, targets: 'both' },
     sight: 18,
     turretTurnRate: 2,
