@@ -243,7 +243,8 @@ export function smokeSystem(ctx: SimContext): System {
         if (!stealth) continue;
         const t = world.req(e, Transform);
         const veiled = world.req(e, Veiled);
-        if (world.time - firedAt(world, e) < stealth.after) veiled.hidden = false;
+        if (stealth.haze && ctx.smoke.ownAt(ctx, t.x, t.z, world.req(e, Faction).id)) veiled.hidden = true;
+        else if (world.time - firedAt(world, e) < stealth.after) veiled.hidden = false;
         else if (stealth.still && D.hypot(t.x - t.px, t.z - t.pz) > STILL * dt * 30) veiled.hidden = false;
         else veiled.hidden = !stealth.cover || inCover(world, ctx, e, t.x, t.z);
       }

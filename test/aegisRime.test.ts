@@ -209,3 +209,20 @@ describe('Aegis: dome trucks spread out', () => {
     }
   });
 });
+
+describe('Rime: freezer trucks help the shard tanks', () => {
+  it("a freezer truck lobs its frost at what a shard tank near it is shooting, not the nearest enemy", () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    standing(game, UNIT_DEFS.freezerTruck, 0, base.x, base.z);
+    const shard = standing(game, UNIT_DEFS.shardTank, 0, base.x + 4, base.z + 8);
+    dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 11, base.z);
+    const far = dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 9, base.z + 14);
+    game.world.req(shard, Armed).target = far;
+    game.world.req(shard, Armed).nextTargetAt = Infinity;
+    // Its first canister goes on the shard tank's target; once that's deep in frost it'll help with another.
+    run(game, 4.5);
+    expect(game.ctx.frost.at(base.x + 9, base.z + 14)).toBeGreaterThan(1);
+    expect(game.ctx.frost.at(base.x + 11, base.z)).toBe(0);
+  });
+});

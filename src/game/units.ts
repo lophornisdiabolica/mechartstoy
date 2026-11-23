@@ -84,6 +84,13 @@ export interface WeaponDef {
   /** Times its damage against anything standing on its enemies' frost (Rime's shard guns: frozen things shatter). */
   shatter?: number;
   /**
+   * Picks its target from what its side's shatter guns (WeaponDef.shatter)
+   * within this radius are shooting at, where the ground under it isn't
+   * already deep in frost (Rime's freezer trucks: the slow and the shatter
+   * land on the same thing). See systems/targeting.ts.
+   */
+  assists?: number;
+  /**
    * Hacks what it hits (Cipher; see hacking.ts): an enemy vehicle it lands
    * on turns to the shooter's side for this many seconds, stops where it is
    * and fights whatever is near it, its old friends included. Such a weapon
@@ -95,6 +102,12 @@ export interface WeaponDef {
    * it go wild, except its own side's.
    */
   smoke?: number;
+  /**
+   * Smoke only: lobs its canisters onto its own side's frontline units as
+   * they close on the enemy, harmless screens this wide (radius) for them to
+   * come on through, before shooting at the enemy (see systems/weapons.ts).
+   */
+  screens?: number;
   /**
    * Calls a strike down from orbit instead of firing a shot (Zenith; see
    * zenith.ts): a warning ring marks where it will land for `delay`
@@ -227,9 +240,10 @@ export interface UnitDef {
   /**
    * Fades from sight once it has gone `after` seconds without firing (Veil;
    * see smoke.ts): if `still`, only while it isn't moving; if `cover`, only
-   * while it's in a forest, by a building or in its own side's haze.
+   * while it's in a forest, by a building or in its own side's haze; if
+   * `haze`, in its own side's haze it stays out of sight even as it fires.
    */
-  stealth?: { after: number; still?: boolean; cover?: boolean };
+  stealth?: { after: number; still?: boolean; cover?: boolean; haze?: boolean };
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -1581,8 +1595,9 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.5,
-    // Lobs canisters of coolant that burst into a wide white patch: the shard tanks' work is done on it.
-    weapon: weapon({ name: 'Frost mortar', range: 19, minRange: 4, damage: 14, cooldown: 4.2, projectile: 'frost', speed: 16, splash: 2.4, spread: 0.08, arc: true, muzzleHeight: 1.2, frost: 6 }),
+    // Lobs canisters of coolant that burst into a wide white patch: the shard tanks' work is done on it,
+    // so it freezes what they're shooting at.
+    weapon: weapon({ name: 'Frost mortar', range: 19, minRange: 4, damage: 14, cooldown: 3.4, projectile: 'frost', speed: 16, splash: 3.2, spread: 0.08, arc: true, muzzleHeight: 1.2, frost: 6, assists: 22 }),
     wreckTime: 15,
     siege: false,
   },
@@ -1602,7 +1617,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Shard cannon', range: 15, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.7, spread: 0.05, muzzleHeight: 1, shatter: 1.8, frost: 1.2 }),
+    weapon: weapon({ name: 'Shard cannon', range: 15, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.7, spread: 0.05, muzzleHeight: 1, shatter: 1.8, frost: 0.5 }),
     wreckTime: 25,
     siege: false,
   },
@@ -1835,8 +1850,9 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.5,
-    // Lobs smoke canisters onto the enemy: their shots out of the haze go wild, and Veil's into it don't.
-    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7 }),
+    // Lobs smoke canisters onto its own tanks as they close on the enemy, a screen they come on through:
+    // shots into the haze go wild, Veil's own don't, and ghost tanks in it stay out of sight even as they fire.
+    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7, screens: 4.5 }),
     wreckTime: 15,
     siege: false,
   },
@@ -1858,7 +1874,7 @@ export const UNIT_DEFS = {
     turretTurnRate: 2,
     weapon: weapon({ name: 'Cannon', range: 15, damage: 45, cooldown: 3, projectile: 'shell', speed: 40, splash: 0.8, spread: 0.05, muzzleHeight: 1, pierce: 0.2 }),
     // Gone from sight a few seconds after its last shot.
-    stealth: { after: 3 },
+    stealth: { after: 3, haze: true },
     wreckTime: 25,
     siege: false,
   },
