@@ -1926,7 +1926,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 2,
     // A targeting laser paints the ground, and a few seconds later a beam comes down from orbit.
-    weapon: weapon({ name: 'Orbital uplink', range: 24, minRange: 5, damage: 150, cooldown: 8, projectile: 'orbital', speed: 1, splash: 4.2, spread: 0.04, muzzleHeight: 2.6, orbital: { delay: 2.4 } }),
+    weapon: weapon({ name: 'Orbital uplink', range: 24, minRange: 5, damage: 105, cooldown: 8, projectile: 'orbital', speed: 1, splash: 3.6, spread: 0.04, muzzleHeight: 2.6, orbital: { delay: 2.4 } }),
     wreckTime: 15,
     siege: false,
   },
@@ -1938,7 +1938,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'artillery',
     model: 'lancePlatform',
-    hp: 1100,
+    hp: 1250,
     armor: 18,
     speed: 1.1,
     turnRate: 0.8,
@@ -1947,7 +1947,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 0.9,
     // Heavy strikes on anything its beacon runners can see.
-    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 190, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
+    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 230, cooldown: 5.5, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
     mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
     siege: true,
