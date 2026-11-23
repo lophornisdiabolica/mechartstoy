@@ -31,6 +31,7 @@ import { buildProps } from './propsMesh';
 import { RoadTops } from './roadTops';
 import { buildTerrain } from './terrainMesh';
 import { buildWoods } from './woodsMesh';
+import { farAt, SHADOW_LAYER } from './plantLod';
 import { GodCursor } from './godCursor';
 import { GodEffects } from './godEffects';
 import './models/god';
@@ -49,6 +50,7 @@ const _up2 = new THREE.Vector3();
 const _snap = new THREE.Vector3();
 const _vp = new THREE.Matrix4();
 const _pixel = new Uint8Array(4);
+const _size = new THREE.Vector2();
 
 /**
  * Shadow detail. Shadows are drawn only around what the camera can see;
@@ -147,6 +149,12 @@ export class Stage {
   /** Stops the dense forest's trees following the battle being replaced (see buildWoods). */
   private stopWoods: (() => void) | undefined;
   private stopProps: (() => void) | undefined;
+  /** Tell the woods and the scenery whether to draw their plants' far shapes (see PlantMesh). */
+  private setPlantsFar: ((far: boolean) => void) | null = null;
+  /** Whether the plants are drawn with their far shapes now. */
+  private plantsAreFar = false;
+  /** Zoomed out, trees and cacti are drawn with fewer sides (see PlantMesh); false keeps them as designed. */
+  plantLod = true;
   private readonly composer: EffectComposer;
   private readonly sun: THREE.DirectionalLight;
 
@@ -182,6 +190,8 @@ export class Stage {
     // are drawn from back faces (three's default), so lit faces don't shadow themselves.
     this.sun.shadow.bias = 0;
     this.sun.shadow.normalBias = 0;
+    // Trees and cacti cast their shadows from simpler stand-ins drawn only into the shadow map (see PlantMesh).
+    this.sun.shadow.camera.layers.enable(SHADOW_LAYER);
     this.scene.add(this.sun, this.sun.target, this.godCursor.root);
     // Infantry sprites are lit like flat ground (see batcher.ts): scaled so this usual light shows them as painted.
     const lit = this.sky.color.clone().multiplyScalar(this.sky.intensity).add(this.sun.color.clone().multiplyScalar(this.sun.intensity * SUN_OFFSET.clone().normalize().y));
@@ -285,6 +295,11 @@ export class Stage {
     this.stopWoods = woods.userData.dispose;
     const props = buildProps(field, game.props, visualRng);
     this.stopProps = props.userData.dispose;
+    this.plantsAreFar = false;
+    this.setPlantsFar = (far) => {
+      woods.userData.setFar(far);
+      props.userData.setFar(far);
+    };
     battle.add(terrain, props, woods);
     const roadTops = terrain.userData.roadTops as RoadTops;
     this.entities = new EntityView(game.world, (x, z) => field.surfaceAt(x, z), (x, z) => field.deckAt(x, z), (x, z) => roadTops.at(x, z), game.events);
@@ -501,6 +516,7 @@ export class Stage {
     this.rig.update(frameSeconds);
     this.shakeCamera();
     this.fitShadow();
+    this.pickPlantDetail();
     p?.lap('cameras');
     this.entities.cull = this.cullView();
     this.entities.sync(alpha, simSeconds);
@@ -539,6 +555,17 @@ export class Stage {
       p.modelsDrawn += this.entities.drawnCount;
       p.models += this.entities.count;
     }
+  }
+
+  /** Near or far shapes for the plants, by how big a world unit is on screen now. */
+  private pickPlantDetail(): void {
+    if (!this.setPlantsFar) return;
+    const cam = this.rig.camera;
+    const px = (this.renderer.getDrawingBufferSize(_size).y * cam.zoom) / Math.max(1e-6, cam.top - cam.bottom);
+    const far = this.plantLod && farAt(px, this.plantsAreFar);
+    if (far === this.plantsAreFar) return;
+    this.plantsAreFar = far;
+    this.setPlantsFar(far);
   }
 
   /** What the camera sees now, for EntityView to leave out models off screen (see EntityView.cull). */

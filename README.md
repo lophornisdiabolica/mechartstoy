@@ -198,6 +198,15 @@ read-back), and "GPU done" is how long after the frame began the GPU had
 finished it. **Copy** puts the readout and the last check on the
 clipboard.
 
+What keeps the drawing cheap: the dense forest and the roads are drawn in
+map squares, so squares off screen or out of the shadow's reach are
+skipped; trees and cacti switch to shapes with fewer sides when zoomed out
+(`src/render/plantLod.ts`) and cast their shadows from plainer stand-ins
+drawn only into the shadow map (they sit on a layer the screen's camera
+doesn't see); a city's streets are merged into a mesh or two per square
+instead of one per street; and models with no moving parts that haven't
+moved (a city's houses) aren't re-posed each frame.
+
 `npm run fps` does the same headlessly on fixed scenes (the bench battles
 at 5, 10 and 25 minutes, the whole map or close on a fight): page time by
 part, GPU time by pass, frame time, draw calls; `--compare a.json b.json`
@@ -826,9 +835,10 @@ src/
     tiltShift.ts     tilt-shift blur + colour grade passes (the last also writes the screen)
     renderProfile.ts page and GPU time per part of a frame, for P and npm run fps
     upload.ts        send only the used part of instance buffers to the GPU
-    terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips; redraws cells the map changes
-    woodsMesh.ts     the dense forest's trees, lying down where they've fallen
-    propsMesh.ts     instanced scenery
+    terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips (merged per map square); redraws cells the map changes
+    woodsMesh.ts     the dense forest's trees, lying down where they've fallen, in map squares
+    propsMesh.ts     instanced scenery, and the trees' near, far and shadow shapes
+    plantLod.ts      near and far tree shapes by zoom, and their shadow stand-ins
     models.ts        model registry and rig (turret / animation hooks)
     models/          unit, building and projectile models
     entityView.ts    mirrors ECS entities into the scene each frame (posed models, drawn through the batcher)

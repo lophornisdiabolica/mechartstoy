@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { markRange } from './upload';
 import { RoadTops } from './roadTops';
-import { disposeTree } from './dispose';
 import { Rng } from '../core/rng';
 import { Battlefield, Bridge, RAMP_FLARE, Road } from '../world/battlefield';
 import { BIOMES } from '../world/biomes';
@@ -126,23 +125,68 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   }
   const roads = new THREE.Group();
   roads.name = 'roads';
-  /** Each road's strip, by its index in field.roads (null where nothing of it is drawn). */
-  const roadMeshes: (THREE.Group | null)[] = [];
+  // Roads are drawn merged, a map square at a time: a city has hundreds of streets, and a mesh
+  // each was hundreds of draw calls. Squares off screen are skipped.
+  const kerbMaterial = roadMaterial(-2, false);
+  const pavingMaterial = roadMaterial(-4, true);
+  /** Each road's strip and the square it's drawn in, by its index in field.roads (null where nothing of it is drawn). */
+  const roadStrips: ({ kerb: Layer; paving: Layer; tile: number } | null)[] = [];
+  const roadTiles = new Map<number, { roads: Set<number>; meshes: THREE.Mesh[] }>();
+  const dirtyTiles = new Set<number>();
   /** How high the roads are drawn, for units standing on them and rings lying over them. */
   const tops = new RoadTops();
-  const drawRoad = (k: number) => {
-    const old = roadMeshes[k];
-    if (old) {
-      roads.remove(old);
-      disposeTree(old);
+  const tileOf = (r: Road) => {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const p of r.points) {
+      x0 = Math.min(x0, p.x);
+      x1 = Math.max(x1, p.x);
+      z0 = Math.min(z0, p.z);
+      z1 = Math.max(z1, p.z);
     }
-    roadMeshes[k] = buildRoad(field, field.roads[k]);
-    if (roadMeshes[k]) {
-      roads.add(roadMeshes[k]);
-      tops.add(k, roadMeshes[k]);
-    } else tops.remove(k);
+    return Math.floor(((z0 + z1) / 2 - field.bounds.minZ) / ROAD_TILE) * 1000 + Math.floor(((x0 + x1) / 2 - field.bounds.minX) / ROAD_TILE);
+  };
+  const forget = (k: number) => {
+    const old = roadStrips[k];
+    if (!old) return;
+    roadTiles.get(old.tile)?.roads.delete(k);
+    dirtyTiles.add(old.tile);
+    roadStrips[k] = null;
+  };
+  const drawRoad = (k: number) => {
+    forget(k);
+    const strip = buildRoad(field, field.roads[k]);
+    if (!strip) {
+      tops.remove(k);
+      return;
+    }
+    const tile = tileOf(field.roads[k]);
+    roadStrips[k] = { ...strip, tile };
+    let t = roadTiles.get(tile);
+    if (!t) roadTiles.set(tile, (t = { roads: new Set(), meshes: [] }));
+    t.roads.add(k);
+    dirtyTiles.add(tile);
+    tops.addTriangles(k, [strip.kerb.positions, strip.paving.positions]);
+  };
+  /** Merge again each square whose roads changed. */
+  const drawTiles = () => {
+    for (const key of dirtyTiles) {
+      const t = roadTiles.get(key);
+      if (!t) continue;
+      for (const m of t.meshes) {
+        roads.remove(m);
+        m.geometry.dispose();
+      }
+      const list = [...t.roads].sort((a, b) => a - b).map((k) => roadStrips[k]!);
+      t.meshes = [];
+      if (list.length > 0) {
+        t.meshes.push(layerMesh(mergeLayers(list.map((r) => r.kerb)), kerbMaterial, 1), layerMesh(mergeLayers(list.map((r) => r.paving)), pavingMaterial, 2));
+        roads.add(...t.meshes);
+      } else roadTiles.delete(key);
+    }
+    dirtyTiles.clear();
   };
   field.roads.forEach((_, k) => drawRoad(k));
+  drawTiles();
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
 
   let drawnBridges = field.bridges.length;
@@ -169,22 +213,24 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       const x1 = field.bounds.minX + (area.i1 + 3) * cellSize + r.width;
       const z0 = field.bounds.minZ + (area.j0 - 2) * cellSize - r.width;
       const z1 = field.bounds.minZ + (area.j1 + 3) * cellSize + r.width;
-      const touched = k >= roadMeshes.length || r.points.some((p, q) => {
+      const touched = k >= roadStrips.length || r.points.some((p, q) => {
         const o = r.points[Math.max(0, q - 1)];
         return Math.max(o.x, p.x) >= x0 && Math.min(o.x, p.x) <= x1 && Math.max(o.z, p.z) >= z0 && Math.min(o.z, p.z) <= z1;
       });
       if (touched) drawRoad(k);
     });
-    while (roadMeshes.length > field.roads.length) {
-      tops.remove(roadMeshes.length - 1);
-      const gone = roadMeshes.pop();
-      if (gone) {
-        roads.remove(gone);
-        disposeTree(gone);
-      }
+    while (roadStrips.length > field.roads.length) {
+      tops.remove(roadStrips.length - 1);
+      forget(roadStrips.length - 1);
+      roadStrips.pop();
     }
+    drawTiles();
   });
-  group.userData.dispose = stop;
+  group.userData.dispose = () => {
+    stop();
+    kerbMaterial.dispose();
+    pavingMaterial.dispose();
+  };
   group.userData.roadTops = tops;
   return group;
 }
@@ -232,6 +278,8 @@ const ROAD_COLOR = 0x77736b;
 const ROAD_EDGE = 0x8f8a7e;
 /** How far across the road the strip samples the ground (it follows the ground's facets at these points). */
 const ROAD_ACROSS = [-1, -0.6, -0.2, 0.2, 0.6, 1];
+/** Roads are merged into one mesh per square this wide (by the middle of each road), so off-screen squares are skipped. */
+const ROAD_TILE = 32;
 /** How far out past each edge the road's embankment reaches at the least, and how far under the ground its foot is. */
 const SKIRT_OUT = 0.3;
 const SKIRT_DOWN = 0.12;
@@ -261,7 +309,7 @@ const LIFT_GRADE = 0.3;
  * rather than the cells under it. Gaps where it crosses water (a bridge
  * deck is road enough). Null if nothing's left to draw.
  */
-function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
+function buildRoad(field: Battlefield, road: Road): { kerb: Layer; paving: Layer } | null {
   // Points every half unit along the line.
   const at: { x: number; z: number; w: number }[] = [];
   const widthAt = (k: number) => road.widths?.[k] ?? road.width;
@@ -447,10 +495,7 @@ function buildRoad(field: Battlefield, road: Road): THREE.Group | null {
     }
   }
   if (kerb.positions.length === 0) return null;
-  const group = new THREE.Group();
-  group.name = 'road';
-  group.add(layerMesh(kerb, -2, 1), layerMesh(paving, -4, 2));
-  return group;
+  return { kerb, paving };
 }
 
 /** One layer of a road's strip (see buildRoad). */
@@ -460,20 +505,28 @@ interface Layer {
   normals: number[];
 }
 
+/** Several roads' layers as one. */
+function mergeLayers(layers: Layer[]): Layer {
+  return { positions: layers.flatMap((l) => l.positions), colors: layers.flatMap((l) => l.colors), normals: layers.flatMap((l) => l.normals) };
+}
+
 /**
- * A layer as a mesh. Kerbs are drawn after the ground and write no depth, and
- * pavings after them, so any road's paving covers any road's kerb wherever
- * they overlap, even where the two strips sit at slightly different heights.
+ * The material for one layer of the roads' strips (see buildRoad). Kerbs
+ * are drawn after the ground and write no depth, and pavings after them, so
+ * any road's paving covers any road's kerb wherever they overlap, even where
+ * the two strips sit at slightly different heights.
  */
-function layerMesh(layer: Layer, offset: number, order: number): THREE.Mesh {
+function roadMaterial(offset: number, depthWrite: boolean): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset, depthWrite });
+}
+
+/** A layer as a mesh, drawn in `order` (kerbs 1, pavings 2: see roadMaterial). */
+function layerMesh(layer: Layer, material: THREE.Material, order: number): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(layer.positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(layer.colors, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(layer.normals, 3));
-  const mesh = new THREE.Mesh(
-    geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset, depthWrite: order > 1 }),
-  );
+  const mesh = new THREE.Mesh(geo, material);
   mesh.renderOrder = order;
   mesh.receiveShadow = true;
   return mesh;

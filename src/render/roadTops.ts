@@ -45,6 +45,18 @@ export class RoadTops {
         for (const p of v) out.push(p.x, p.y, p.z);
       }
     });
+    this.index(id, out);
+  }
+
+  /** Index a road's triangles under `id` (replacing any it had), given as lists of corners (x, y, z, three to a triangle). */
+  addTriangles(id: number, positions: ArrayLike<number>[]): void {
+    this.remove(id);
+    const out: number[] = [];
+    for (const list of positions) for (let k = 0; k < list.length; k++) out.push(list[k]);
+    this.index(id, out);
+  }
+
+  private index(id: number, out: number[]): void {
     if (out.length === 0) return;
     const tris = Float32Array.from(out);
     this.tris.set(id, tris);

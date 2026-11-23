@@ -46,6 +46,13 @@ interface ViewEntry {
   /** The frame it was last posed and drawn in (see batch): a model left out since has stale part matrices. */
   posed: number;
   /**
+   * Whether its parts only ever move with the whole model (no rig: a town's
+   * houses and the like), and where the whole model stood when its part
+   * matrices were last worked out (see batch).
+   */
+  rigless: boolean;
+  pose: Float64Array;
+  /**
    * How far it has faded out (0 solid, 1 a ghost): stealthed units (see
    * game/smoke.ts) fade out slowly and back in quickly, so one that hides
    * for a moment between shots only dims a little instead of blinking.
@@ -245,7 +252,7 @@ export class EntityView {
         const bounds = new THREE.Box3().setFromObject(obj);
         const top = naval ? bounds.max.y : 0;
         const radius = 1 + 1.25 * Math.max(bounds.min.length(), bounds.max.length());
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1 };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN) };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -380,8 +387,9 @@ export class EntityView {
         _sphere.radius = entry.radius * (1 + 2 * cull.shadow);
         if (!cull.frustum.intersectsSphere(_sphere)) continue;
       }
-      // Pose it part by part (root itself never moves, so this is what root.updateMatrixWorld would do for it).
-      entry.obj.updateMatrixWorld();
+      // Pose it part by part (root itself never moves, so this is what root.updateMatrixWorld would do for it),
+      // unless it's a model with no moving parts standing just where it stood last time (most of a city).
+      if (!(entry.rigless && !entry.wrecked && samePose(entry))) entry.obj.updateMatrixWorld();
       entry.posed = this.frameNo;
       drawn++;
       // Solid for the first fifth of the fade, then a step fainter each fifth after.
@@ -449,4 +457,24 @@ export class EntityView {
       }
     });
   }
+}
+
+/** Numbers in a ViewEntry's pose: position, rotation and scale. */
+const POSE_SIZE = 9;
+
+/** Whether the model is where it was when its part matrices were last worked out; if not, notes where it is now. */
+function samePose(entry: ViewEntry): boolean {
+  const { position: p, rotation: r, scale: k } = entry.obj;
+  const q = entry.pose;
+  if (q[0] === p.x && q[1] === p.y && q[2] === p.z && q[3] === r.x && q[4] === r.y && q[5] === r.z && q[6] === k.x && q[7] === k.y && q[8] === k.z) return true;
+  q[0] = p.x;
+  q[1] = p.y;
+  q[2] = p.z;
+  q[3] = r.x;
+  q[4] = r.y;
+  q[5] = r.z;
+  q[6] = k.x;
+  q[7] = k.y;
+  q[8] = k.z;
+  return false;
 }

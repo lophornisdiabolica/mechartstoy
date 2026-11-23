@@ -173,6 +173,8 @@ export class PerfOverlay {
     const programs = this.stage.renderer.info.programs?.length ?? 0;
     const compiled = Math.max(0, programs - this.programs);
     this.programs = programs;
+    // The cost check's own switching isn't a hitch: turning shadows off and on rebuilds every shader.
+    if (this.checking) return;
     // The cost check's deliberate GPU waits aren't hitches.
     const parts = [...this.profile.thisFrame()].filter(([k]) => k !== GPU_WAIT);
     const total = parts.reduce((s, [, v]) => s + v, 0);
