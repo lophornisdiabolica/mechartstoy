@@ -437,6 +437,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     caps: { infantry: 1.8, vehicle: 1.7 },
     production: {
       barracks: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }], interval: 13 },
+      hq: { table: [{ unit: 'legionary', weight: 1, count: 4 }, { unit: 'crossbowman', weight: 1, count: 4 }] },
+      barracksBlock: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }] },
       factory: {
         table: [
           { unit: 'ballista', weight: 2, count: 2 },
