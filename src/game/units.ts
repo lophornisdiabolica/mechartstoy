@@ -272,6 +272,12 @@ export interface UnitDef {
   projects?: ProjectsDef;
   /** A Lodestar crane (see lodestar.ts): every this many seconds it drags the wrecks in reach into a scrap wall ahead of itself. */
   walls?: number;
+  /**
+   * Leviathan (see leviathan.ts): it eats the wrecks within `radius` (times
+   * its size) at `rate` a second, growing `perWreck` in size for each
+   * tank-sized wreck, from `from` up to `most` times its model's size.
+   */
+  grows?: { radius: number; rate: number; perWreck: number; from: number; most: number };
 }
 
 /** What a Mirage projector throws up (see mirage.ts). */
@@ -2711,6 +2717,72 @@ export const UNIT_DEFS = {
     walls: 25,
     wreckTime: 45,
     siege: true,
+  },
+  // Leviathan (silly): one giant creature that grows by eating wrecks, and its cult (see leviathan.ts).
+  leviathan: {
+    id: 'leviathan',
+    name: 'Leviathan',
+    class: 'mech',
+    category: 'super',
+    move: 'amphibious',
+    role: 'frontline',
+    model: 'leviathan',
+    hp: 2600,
+    armor: 14,
+    speed: 1.7,
+    turnRate: 0.9,
+    radius: 2.2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.4,
+    weapon: weapon({ name: 'Jaws', range: 1.6, damage: 90, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2.4, pierce: 0.4, melee: { style: 'thrust', lunge: 1.6, knock: 2.4, sweep: 1.8, sweepMost: 6, charge: 1.4 } }),
+    grows: { radius: 9, rate: 0.6, perWreck: 0.07, from: 0.65, most: 1.8 },
+    wreckTime: 60,
+    siege: true,
+  },
+  // A cultist in a hooded robe with an old rifle.
+  cultist: {
+    id: 'cultist',
+    name: 'Cultist',
+    class: 'infantry',
+    category: 'infantry',
+    capCost: 0.5,
+    move: 'foot',
+    role: 'frontline',
+    model: 'cultist',
+    hp: 22,
+    armor: 0,
+    speed: 1.7,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 13,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ name: 'Old rifle', range: 10, damage: 6, cooldown: 1.8, burst: 2, burstGap: 0.2, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 0.8, targets: 'both' }),
+    wreckTime: 0,
+    siege: false,
+  },
+  // A zealot with a burning torch and a satchel charge: it runs at vehicles.
+  zealot: {
+    id: 'zealot',
+    name: 'Zealot',
+    class: 'infantry',
+    category: 'infantry',
+    capCost: 0.5,
+    move: 'foot',
+    role: 'frontline',
+    model: 'zealot',
+    hp: 26,
+    armor: 0,
+    speed: 2,
+    turnRate: 6,
+    radius: 0.3,
+    sight: 13,
+    turret: false,
+    turretTurnRate: 6,
+    weapon: weapon({ name: 'Satchel charge', range: 0.6, damage: 30, cooldown: 2.5, projectile: 'shell', speed: 1, muzzleHeight: 0.8, pierce: 0.5, melee: { style: 'thrust', lunge: 0.8, knock: 0.5, charge: 1.5 } }),
+    wreckTime: 0,
+    siege: false,
   },
 } satisfies Record<string, UnitDef>;
 

@@ -298,6 +298,8 @@ export class EntityView {
       // Construction sites rise out of the ground.
       const construction = w.get(e, Construction);
       const scale = w.req(e, Renderable).scale;
+      // (Only the Leviathan changes size as it goes; see game/leviathan.ts.)
+      obj.scale.x = obj.scale.z = scale;
       obj.scale.y = construction ? scale * Math.max(0.04, construction.elapsed / construction.duration) : scale;
 
       if (!entry.wrecked && w.has(e, Wreck)) {

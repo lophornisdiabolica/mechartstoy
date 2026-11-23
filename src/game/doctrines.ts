@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'verdant' | 'lodestar' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'verdant' | 'lodestar' | 'leviathan' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -546,7 +546,22 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'scrapyard',
     waves: [rifleSquad(4, 3), { unit: 'coilTank', weight: 3, count: 1 }, { unit: 'magnetCrane', weight: 1.5, count: 1 }],
+  },  leviathan: {
+    id: 'leviathan',
+    name: 'Leviathan',
+    blurb: 'One giant creature and its cult: a silly boss. No tanks at all: its barracks and factory turn out cultists with old rifles and zealots who run at vehicles with satchel charges. Its whole hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-biting with every meal. Its shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
+    caps: { infantry: 2.2, vehicle: 1 },
+    production: {
+      barracks: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 12 },
+      hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
+      barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
+      factory: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 14 },
+      mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
+    },
+    signature: 'shrine',
+    waves: [{ unit: 'cultist', weight: 3, count: 6 }, { unit: 'zealot', weight: 2, count: 4 }],
   },
+
 
 
 
@@ -570,7 +585,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage', 'verdant', 'lodestar'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage', 'verdant', 'lodestar', 'leviathan'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];
