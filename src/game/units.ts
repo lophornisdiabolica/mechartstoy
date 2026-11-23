@@ -2544,7 +2544,7 @@ export const UNIT_DEFS = {
     sight: 22,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Mirror lance', range: 20, damage: 85, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.8, pierce: 0.5 }),
+    weapon: weapon({ name: 'Mirror lance', range: 20, damage: 72, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.8, pierce: 0.5 }),
     projects: { units: ['holoPrism', 'holoPrism', 'holoTank'], count: 3, every: 12 },
     wreckTime: 40,
     siege: true,
