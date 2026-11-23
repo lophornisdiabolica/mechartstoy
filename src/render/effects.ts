@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
 import { GameEvents } from '../game/context';
@@ -122,8 +123,7 @@ class ParticlePool {
       this.mesh.setColorAt(i, this.tmp);
     }
     this.mesh.count = this.count;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    uploadInstances(this.mesh);
   }
 
   private swapRemove(i: number): void {

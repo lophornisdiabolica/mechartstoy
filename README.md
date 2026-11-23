@@ -13,6 +13,7 @@ npm test         # unit tests (headless, no browser needed)
 npm run build    # typecheck + production build into dist/
 npm run sims     # balance runs: play many battles headlessly, print stats
 npm run bench    # sim speed on fixed battles, with a fingerprint of the result
+npm run fps      # drawing speed on fixed scenes: page and GPU time per part of each frame
 npm run map -- "seed=abc&biome=desert"   # the map a battle would get, as a PNG
 npm run shot -- 1v1-7 --at 12m           # a screenshot from the real renderer
 npm run sounds   # every sound as a WAV plus a spectrogram PNG, with a loudness/frequency report
@@ -176,6 +177,44 @@ targets) and puts the comparison in the **Same battles as main** job's
 summary, with a warning when the battles changed, which is expected for a
 balance change and a bug in a speed-up. In the browser, **P** shows the
 same numbers live, with draw calls, triangles and meshes.
+
+The drawing has its own numbers. **P** also shows where each frame's
+time goes on the page, part by part (`units` posing and batching the
+models, `wreckage`, `effects`, `sim snapshot` reading the worker's state,
+`draw: scene`, `draw: shadows` and `draw: post` handing the frame to
+three.js, the HUD and audio), and GPU milliseconds per pass (scene,
+shadows, post) where the browser has GPU timers (Chrome and Edge do; see
+`src/render/renderProfile.ts`), with draw calls split into the shadow
+pass and the rest, triangles, and how many models were drawn of how many
+there are (models off screen aren't; see `EntityView.cull`). Frames whose
+page work runs past 25 ms go in a **hitch log** with the parts that took
+the time (and to the console). The **Cost check** button turns shadows,
+the tilt-shift blur, multisampling, half the pixels, and
+each layer (terrain, woods and props, wreckage, units, effects) off in
+turn for a moment on whatever's on screen, and reports what each saved
+in page and GPU time on this machine. Where the browser has no GPU
+timers, each frame waits for the GPU during the check (a one-pixel
+read-back), and "GPU done" is how long after the frame began the GPU had
+finished it. **Copy** puts the readout and the last check on the
+clipboard.
+
+What keeps the drawing cheap: the dense forest and the roads are drawn in
+map squares, so squares off screen or out of the shadow's reach are
+skipped; trees and cacti switch to shapes with fewer sides when zoomed out
+(`src/render/plantLod.ts`) and cast their shadows from plainer stand-ins
+drawn only into the shadow map (they sit on a layer the screen's camera
+doesn't see); a city's streets are merged into a mesh or two per square
+instead of one per street; and models with no moving parts that haven't
+moved (a city's houses) aren't re-posed each frame.
+
+`npm run fps` does the same headlessly on fixed scenes (the bench battles
+at 5, 10 and 25 minutes, the whole map or close on a fight): page time by
+part, GPU time by pass, frame time, draw calls; `--compare a.json b.json`
+diffs two runs, `--cost` adds the cost check, `--cpu-profile` saves a
+profile for Chrome DevTools' Performance tab, and `--paused` measures a
+frozen moment. Headless Chromium draws in software, so its page times are
+real but its frame times aren't: on a machine with a GPU, `--headed` (or
+`--channel chrome`) gives real frame and GPU times.
 
 `npm run leaks` checks that a long battle settles down instead of piling
 up memory: it plays an Eternal battle headlessly for 90 minutes and
@@ -655,7 +694,9 @@ unit nearby; click a unit to ride
 with it instead, Esc to stop. Panning by hand gives the camera back to
 you. **Shadows**
 High / Low / Off trades looks for speed in huge battles; shadows are only
-drawn around the part of the map in view either way. Both are remembered
+drawn around the part of the map in view either way. **Resolution**
+Full / ¾ / ½ draws the battle with fewer pixels and scales it up, for big
+or high-DPI screens and slower GPUs. These are remembered
 in this browser rather than in the battle link. Click any unit or building
 to inspect it.
 
@@ -791,10 +832,13 @@ src/
     cameraRig.ts     isometric orthographic camera and controls
     fightWatch.ts    finds the fighting (from sim events) for the spectator camera
     director.ts      the director camera (scores and frames fights) and the unit camera
-    tiltShift.ts     tilt-shift blur + colour grade passes
-    terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips; redraws cells the map changes
-    woodsMesh.ts     the dense forest's trees, lying down where they've fallen
-    propsMesh.ts     instanced scenery
+    tiltShift.ts     tilt-shift blur + colour grade passes (the last also writes the screen)
+    renderProfile.ts page and GPU time per part of a frame, for P and npm run fps
+    upload.ts        send only the used part of instance buffers to the GPU
+    terrainMesh.ts   low-poly ground, soil skirt, water, bridges and road strips (merged per map square); redraws cells the map changes
+    woodsMesh.ts     the dense forest's trees, lying down where they've fallen, in map squares
+    propsMesh.ts     instanced scenery, and the trees' near, far and shadow shapes
+    plantLod.ts      near and far tree shapes by zoom, and their shadow stand-ins
     models.ts        model registry and rig (turret / animation hooks)
     models/          unit, building and projectile models
     entityView.ts    mirrors ECS entities into the scene each frame (posed models, drawn through the batcher)
@@ -810,7 +854,7 @@ src/
     godPanel.ts      the god powers tab: orders, drops, blessings, airstrikes, quakes, land, forest, bridges, walls
     setupScreen.ts   pre-battle settings screen
     mapPreview.ts    the setup screen's map, for placing bases, towns and outposts by hand
-    perfOverlay.ts   render and sim stats readout (P)
+    perfOverlay.ts   render and sim stats readout, hitch log and cost check (P)
     ticker.ts        the battle ticker's feed
     voices.ts        Commander voices: each doctrine's lines for the ticker
     hillBar.ts       king of the hill's scoreboard: each team's time left on the hill

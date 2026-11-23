@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markRange, uploadInstances } from './upload';
 
 /**
  * Draws many small models with few draw calls. Models are still built as
@@ -186,8 +187,7 @@ export class Batcher {
         for (let i = list.length - 1; i >= 0; i--) {
           const b = list[i];
           b.mesh.count = b.count;
-          b.mesh.instanceMatrix.needsUpdate = b.count > 0;
-          if (b.mesh.instanceColor) b.mesh.instanceColor.needsUpdate = b.count > 0;
+          uploadInstances(b.mesh, b.count);
           b.idle = b.count > 0 ? 0 : b.idle + 1;
           if (b.idle > IDLE_FRAMES) {
             this.root.remove(b.mesh);
@@ -202,8 +202,8 @@ export class Batcher {
     for (const sprites of [this.sprites, this.ghostSprites]) {
       for (const [source, b] of sprites) {
         b.mesh.count = b.count;
-        b.mesh.instanceMatrix.needsUpdate = b.count > 0;
-        b.offsets.needsUpdate = b.count > 0;
+        uploadInstances(b.mesh, b.count);
+        if (b.count > 0) markRange(b.offsets, 0, b.count * 2);
         b.idle = b.count > 0 ? 0 : b.idle + 1;
         if (b.idle > IDLE_FRAMES) {
           this.root.remove(b.mesh);

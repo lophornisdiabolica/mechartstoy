@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { SMOKE_CELL, THICK } from '../game/smoke';
 import { Game } from '../game/game';
 
@@ -104,8 +105,7 @@ export class SmokeClouds {
     }
     this.live = next;
     this.puffs.count = q;
-    this.puffs.instanceMatrix.needsUpdate = true;
-    if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
+    uploadInstances(this.puffs);
   }
 
   dispose(): void {

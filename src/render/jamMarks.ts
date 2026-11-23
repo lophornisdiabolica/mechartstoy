@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { Armed, Arsenal, Collider, Transform } from '../game/components';
 import { Game } from '../game/game';
 
@@ -72,8 +73,7 @@ export class JamMarks {
       n++;
     }
     this.rings.count = n;
-    this.rings.instanceMatrix.needsUpdate = true;
-    if (this.rings.instanceColor) this.rings.instanceColor.needsUpdate = true;
+    uploadInstances(this.rings);
   }
 
   dispose(): void {

@@ -2,29 +2,37 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { Prop, PropKind } from '../world/props';
+import { PlantMesh } from './plantLod';
 
 interface PropStyle {
   geometry: THREE.BufferGeometry;
+  /** For trees and cacti: simpler shapes for far off and for its shadow (see PlantMesh). */
+  far?: THREE.BufferGeometry;
+  shadow?: THREE.BufferGeometry;
   color: number;
   /** Raise the instance so the geometry's base sits on the ground. */
   baseOffset: number;
 }
 
-export function treeGeometry(): THREE.BufferGeometry {
-  const canopy = ensureNonIndexed(new THREE.ConeGeometry(0.7, 1.8, 6));
+/**
+ * How finely a plant is drawn: 'near' as it was designed, 'far' with fewer
+ * sides for when it's small on screen (see PlantLod), 'shadow' for the shape
+ * it casts into the shadow map. The three line up, so swapping between them
+ * changes the facets and nothing else. Hidden faces (cap ends inside other
+ * parts or under the ground) are left off the simpler two, except where a
+ * shadow needs them: shadows are drawn from the faces turned away from the
+ * sun, and for a cone that's its base.
+ */
+export type Detail = 'near' | 'far' | 'shadow';
+
+export function treeGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  // (A cone's shadow comes from its base, the face turned away from the sun: only the far shape goes without.)
+  const canopy = ensureNonIndexed(new THREE.ConeGeometry(0.7, 1.8, near ? 6 : 5, 1, detail === 'far'));
   canopy.translate(0, 1.2, 0);
-  const trunk = ensureNonIndexed(new THREE.CylinderGeometry(0.12, 0.15, 0.5, 5));
+  const trunk = ensureNonIndexed(new THREE.CylinderGeometry(0.12, 0.15, 0.5, near ? 5 : 3, 1, !near));
   trunk.translate(0, 0.25, 0);
   // Bake canopy/trunk colours into vertex colours so one instanced mesh can draw both.
-  const paint = (g: THREE.BufferGeometry, hex: number) => {
-    const c = new THREE.Color(hex);
-    const n = g.getAttribute('position').count;
-    const arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
-    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    g.deleteAttribute('uv');
-    return g;
-  };
   // Scaled down so trees sit at a believable size next to the units.
   return mergeNonIndexed([paint(canopy, 0xffffff), paint(trunk, 0x6b4a32)]).scale(0.65, 0.65, 0.65);
 }
@@ -42,16 +50,21 @@ function paint(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
 }
 
 /** A conifer: stacked cones on a short trunk. `snow` caps each tier white. Coloured here, so its instance colour is white. */
-export function pineGeometry(snow: boolean): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [paint(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 5).translate(0, 0.25, 0), 0x5b4030)];
+export function pineGeometry(snow: boolean, detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  const sides = near ? 7 : 5;
+  const parts: THREE.BufferGeometry[] = [paint(new THREE.CylinderGeometry(0.1, 0.13, 0.5, near ? 5 : 3, 1, !near).translate(0, 0.25, 0), 0x5b4030)];
   const tiers = [
     [0.75, 1.0, 0.75],
     [0.58, 0.85, 1.25],
     [0.4, 0.7, 1.7],
   ];
   for (const [r, h, y] of tiers) {
-    parts.push(paint(new THREE.ConeGeometry(r, h, 7).translate(0, y, 0), snow ? 0x3a5e4a : 0x335f3a));
-    if (snow) parts.push(paint(new THREE.ConeGeometry(r * 0.55, h * 0.45, 7).translate(0, y + h * 0.29, 0), 0xf4f8fa));
+    // A tier's underside only shows from below the tree, which no camera gets to; but its shadow
+    // comes from that underside (the side turned away from the sun), so the shadow shape keeps it.
+    parts.push(paint(new THREE.ConeGeometry(r, h, sides, 1, detail === 'far').translate(0, y, 0), snow ? 0x3a5e4a : 0x335f3a));
+    // Snow caps sit inside their tier's outline, so they cast nothing of their own.
+    if (snow && detail !== 'shadow') parts.push(paint(new THREE.ConeGeometry(r * 0.55, h * 0.45, sides, 1, !near).translate(0, y + h * 0.29, 0), 0xf4f8fa));
   }
   return mergeNonIndexed(parts).scale(0.7, 0.7, 0.7);
 }
@@ -59,10 +72,28 @@ export function pineGeometry(snow: boolean): THREE.BufferGeometry {
 /**
  * A saguaro-ish cactus: a ribbed column with two arms, each a short
  * horizontal branch out of the trunk, a rounded elbow, and an upright limb.
- * Coloured by its instance colour.
+ * Coloured by its instance colour. Far off, the arms are plain bent
+ * columns; its shadow is just the four columns' outlines.
  */
-export function cactusGeometry(): THREE.BufferGeometry {
+export function cactusGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
   const green = 0xffffff;
+  if (detail !== 'near') {
+    const far = detail === 'far';
+    const sides = far ? 4 : 3;
+    /** An arm, as a branch out of the trunk and one column for the elbow, limb and its rounded top. */
+    const arm = (dir: number, y: number, reach: number, rise: number, r: number) => {
+      const bottom = y - r * 0.5;
+      const top = y + rise + r * 0.6;
+      return [
+        paint(new THREE.CylinderGeometry(r, r * 1.1, reach, sides, 1, true).rotateZ(Math.PI / 2).translate((dir * reach) / 2, y, 0), green),
+        paint(new THREE.CylinderGeometry(r * 0.95, r, top - bottom, sides, 1, !far).translate(dir * reach, (top + bottom) / 2, 0), green),
+      ];
+    };
+    const parts = [paint(new THREE.CylinderGeometry(0.16, 0.19, 1.34, far ? 5 : 4, 1, true).translate(0, 0.67, 0), green)];
+    if (far) parts.push(paint(new THREE.SphereGeometry(0.16, 5, 2, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 1.34, 0), green));
+    else parts.push(paint(new THREE.ConeGeometry(0.16, 0.16, 4, 1, true).translate(0, 1.42, 0), green));
+    return mergeNonIndexed([...parts, ...arm(1, 0.72, 0.38, 0.5, 0.1), ...arm(-1, 0.95, 0.33, 0.38, 0.09)]).scale(0.8, 0.8, 0.8);
+  }
   /** An arm on side `dir` (1 right, -1 left): out of the trunk at `y`, turning up at `reach` from its middle. */
   const arm = (dir: number, y: number, reach: number, rise: number, r: number) => [
     // The branch, from inside the trunk out to the elbow.
@@ -133,16 +164,18 @@ const UPROOT_DROP = 0.3;
  * Scenery is drawn with one InstancedMesh per prop kind, so hundreds cost a
  * couple of draw calls. When the ground under a prop moves, rocks go with it
  * (sinking into a crater or under the water); plants follow ground that rises
- * but are gone once the ground drops away from them or floods. Stops listening
- * when `dispose` (on the returned group's userData) is called.
+ * but are gone once the ground drops away from them or floods. Trees and
+ * cacti have simpler shapes for zoomed out and for their shadows (see
+ * PlantMesh): call `userData.setFar` each frame. Stops listening when
+ * `dispose` (on the returned group's userData) is called.
  */
 export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.Group {
   // Geometry is built only for the kinds this map has.
   const styles: Record<PropKind, () => PropStyle> = {
-    tree: () => ({ geometry: treeGeometry(), color: 0x4f7a3c, baseOffset: -0.05 }),
-    pine: () => ({ geometry: pineGeometry(false), color: 0xffffff, baseOffset: -0.05 }),
-    snowPine: () => ({ geometry: pineGeometry(true), color: 0xffffff, baseOffset: -0.05 }),
-    cactus: () => ({ geometry: cactusGeometry(), color: 0x5f8a4a, baseOffset: -0.05 }),
+    tree: () => ({ geometry: treeGeometry(), far: treeGeometry('far'), shadow: treeGeometry('shadow'), color: 0x4f7a3c, baseOffset: -0.05 }),
+    pine: () => ({ geometry: pineGeometry(false), far: pineGeometry(false, 'far'), shadow: pineGeometry(false, 'shadow'), color: 0xffffff, baseOffset: -0.05 }),
+    snowPine: () => ({ geometry: pineGeometry(true), far: pineGeometry(true, 'far'), shadow: pineGeometry(true, 'shadow'), color: 0xffffff, baseOffset: -0.05 }),
+    cactus: () => ({ geometry: cactusGeometry(), far: cactusGeometry('far'), shadow: cactusGeometry('shadow'), color: 0x5f8a4a, baseOffset: -0.05 }),
     shrub: () => ({ geometry: shrubGeometry(), color: 0x8a8a52, baseOffset: 0 }),
     deadTree: () => ({ geometry: deadTreeGeometry(), color: 0x7a6250, baseOffset: -0.05 }),
     rock: () => ({ geometry: rockGeometry(), color: 0x8d877c, baseOffset: 0.1 }),
@@ -165,6 +198,13 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
   }
   /** The drawn props by map cell, so a change to some cells finds its props quickly. */
   const byCell = new Map<number, Drawn[]>();
+  /** The kinds drawn with near and far shapes (see PlantMesh), for setFar. */
+  const plants: PlantMesh[] = [];
+  const bounds = (mesh: THREE.InstancedMesh) => {
+    const lod = plants.find((p) => p.mesh === mesh);
+    if (lod) lod.computeBounds();
+    else mesh.computeBoundingSphere();
+  };
   const { cols } = field.config;
   const place = (d: Drawn) => {
     if (d.down === null) {
@@ -184,7 +224,9 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     if (list.length === 0) continue;
     const style = styles[kind]();
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
-    const mesh = new THREE.InstancedMesh(style.geometry, material, list.length);
+    const lod = style.far && style.shadow ? new PlantMesh({ near: style.geometry, far: style.far, shadow: style.shadow }, material, list.length) : null;
+    if (lod) plants.push(lod);
+    const mesh = lod?.mesh ?? new THREE.InstancedMesh(style.geometry, material, list.length);
     const base = new THREE.Color(style.color);
     list.forEach((p, i) => {
       const d: Drawn = { prop: p, mesh, instance: i, offset: style.baseOffset, y: p.y, root: p.y, gone: false, down: null };
@@ -196,9 +238,14 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
       if (!cell) byCell.set(key, (cell = []));
       cell.push(d);
     });
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+    if (lod) {
+      lod.computeBounds();
+      group.add(...lod.objects);
+    } else {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
   }
 
   const stop = field.onChange((area) => {
@@ -221,7 +268,7 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     }
     for (const mesh of moved) {
       mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
+      bounds(mesh);
     }
   });
   // Small trees a big dense-forest tree falls across go down with it, the way it fell. (Driving
@@ -251,6 +298,9 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
   };
   for (let k = 0; k < field.woods.trees.length; k++) knock(k);
   const stopFell = field.woods.onFell(knock);
+  group.userData.setFar = (far: boolean) => {
+    for (const p of plants) p.setFar(far);
+  };
   group.userData.dispose = () => {
     stop();
     stopFell();

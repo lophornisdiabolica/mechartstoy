@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { Game } from '../game/game';
 import { Faction, Transform, Wreck } from '../game/components';
 import { MAX_WRECKAGE, WRECKAGE_CELL } from '../game/wreckage';
@@ -350,8 +351,7 @@ export class WreckageGround {
     for (const shape of SHAPES) {
       const m = this.meshes[shape];
       m.count = counts[shape];
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      uploadInstances(m);
     }
   }
 

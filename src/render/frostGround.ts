@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { uploadInstances } from './upload';
 import { FROST_CELL, FROZEN } from '../game/frost';
 import { Game } from '../game/game';
 
@@ -125,8 +126,7 @@ export class FrostGround {
     }
     this.live = next;
     this.plates.count = q;
-    this.plates.instanceMatrix.needsUpdate = true;
-    if (this.plates.instanceColor) this.plates.instanceColor.needsUpdate = true;
+    uploadInstances(this.plates);
   }
 
   dispose(): void {

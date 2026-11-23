@@ -3,7 +3,7 @@ import { Entity, World } from '../core/ecs';
 import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
-import { createModel, getRig } from './models';
+import { createModel, getRig, modelKeys } from './models';
 import { breakModel, Collapse, Crumble, startCrumble, stepCollapse, stepCrumble } from './wrecks';
 import { CRUMBLE_TIME } from '../game/systems/death';
 import { SIM_HZ } from '../game/game';
@@ -41,6 +41,17 @@ interface ViewEntry {
   grounded: boolean;
   /** A melee blow under way (see the 'struck' event): seconds into it, how it swings, and how far the body jabs forward. */
   strike: { t: number; style: MeleeDef['style']; jab: number } | null;
+  /** How far from its origin the model reaches, world units, with room for swinging and breaking parts (see the culling in batch). */
+  radius: number;
+  /** The frame it was last posed and drawn in (see batch): a model left out since has stale part matrices. */
+  posed: number;
+  /**
+   * Whether its parts only ever move with the whole model (no rig: a town's
+   * houses and the like), and where the whole model stood when its part
+   * matrices were last worked out (see batch).
+   */
+  rigless: boolean;
+  pose: Float64Array;
   /**
    * How far it has faded out (0 solid, 1 a ghost): stealthed units (see
    * game/smoke.ts) fade out slowly and back in quickly, so one that hides
@@ -71,6 +82,7 @@ const FADE_IN = 0.25;
 const STRIKE_TIME = 0.35;
 
 const _ahead = new THREE.Vector3();
+const _sphere = new THREE.Sphere();
 /** Where round a boat to look for a deck overhead (scaled by its size), and the gap it keeps under one. */
 const DUCK_RING: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
 const DUCK_GAP = 0.2;
@@ -107,6 +119,17 @@ export class EntityView {
   private readonly owners = new WeakMap<THREE.Object3D, Entity>();
   /** Entities not to draw (yet): with the sim in its worker, ones born after the moment being drawn (see SimView.unborn). */
   hidden: ReadonlySet<Entity> | null = null;
+  /**
+   * What the camera sees, set by the Stage each frame: models outside it
+   * are still moved and animated, but not posed part by part or drawn.
+   * `shadow` is how far a model's shadow reaches past it for each unit of
+   * its height (from the sun's angle), so one just off screen whose shadow
+   * falls on screen still gets drawn. Null draws everything.
+   */
+  cull: { frustum: THREE.Frustum; shadow: number } | null = null;
+  /** Models drawn in the last frame (for the stats readout). */
+  drawnCount = 0;
+  private frameNo = 0;
 
   /** `surface` is the ground height at a world point, which wrecks lie along. */
   /** `deck` is the height of a bridge deck over a world point, or null: tall boats duck under them. */
@@ -139,6 +162,54 @@ export class EntityView {
   dispose(): void {
     this.stopStruck?.();
     this.batcher.dispose();
+  }
+
+  /**
+   * Compile, now, the shaders any model can need, so the first of a kind
+   * to appear mid-battle (a super unit, a stealthed trooper fading out)
+   * doesn't stall the frame it shows up in while its shader compiles: every
+   * model, solid and as a ghost, batched once into a throwaway batcher that
+   * sits in `scene` just long enough for the renderer to compile it.
+   */
+  warmShaders(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    const b = new Batcher();
+    const sprites: THREE.Sprite[] = [];
+    b.begin();
+    let ghosted = false;
+    for (const key of modelKeys()) {
+      let obj: THREE.Object3D;
+      try {
+        obj = createModel(key, 0);
+      } catch {
+        continue;
+      }
+      obj.updateMatrixWorld(true);
+      obj.traverse((o) => {
+        if ((o as THREE.Sprite).isSprite) {
+          const s = o as THREE.Sprite;
+          sprites.push(s);
+          b.addSprite(s);
+          b.addSprite(s, true);
+        } else if ((o as THREE.Mesh).isMesh) {
+          const m = o as THREE.Mesh;
+          b.addMesh(m);
+          if (!ghosted) for (const g of GHOSTS) b.addMesh(m, g);
+          ghosted = true;
+        }
+      });
+    }
+    b.end();
+    scene.add(b.root);
+    const done = renderer.compileAsync(scene, camera);
+    scene.remove(b.root);
+    const free = () => {
+      b.dispose();
+      for (const s of sprites) {
+        s.material.map?.dispose();
+        s.material.dispose();
+      }
+    };
+    done.then(free, free);
   }
 
   /** Draw calls the entities take (before shadows), for the stats readout. */
@@ -178,8 +249,10 @@ export class EntityView {
         const move = w.get(e, Unit)?.def.move;
         const naval = move === 'naval';
         const grounded = move !== undefined && move !== 'naval' && move !== 'air';
-        const top = naval ? new THREE.Box3().setFromObject(obj).max.y : 0;
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0 };
+        const bounds = new THREE.Box3().setFromObject(obj);
+        const top = naval ? bounds.max.y : 0;
+        const radius = 1 + 1.25 * Math.max(bounds.min.length(), bounds.max.length());
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN) };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -300,10 +373,25 @@ export class EntityView {
 
   /** Copy every visible part into the batches. */
   private batch(): void {
-    this.root.updateMatrixWorld();
     const b = this.batcher;
+    const cull = this.cull;
     b.begin();
+    let drawn = 0;
+    this.frameNo++;
     for (const entry of this.entries.values()) {
+      // Hidden (not born yet in the moment drawn): nothing of it shows.
+      if (!entry.obj.visible) continue;
+      if (cull) {
+        // Its reach, plus as far as the shadow of something that tall falls.
+        _sphere.center.copy(entry.obj.position);
+        _sphere.radius = entry.radius * (1 + 2 * cull.shadow);
+        if (!cull.frustum.intersectsSphere(_sphere)) continue;
+      }
+      // Pose it part by part (root itself never moves, so this is what root.updateMatrixWorld would do for it),
+      // unless it's a model with no moving parts standing just where it stood last time (most of a city).
+      if (!(entry.rigless && !entry.wrecked && samePose(entry))) entry.obj.updateMatrixWorld();
+      entry.posed = this.frameNo;
+      drawn++;
       // Solid for the first fifth of the fade, then a step fainter each fifth after.
       const step = Math.floor(entry.fade * 5) - 1;
       const ghost = step < 0 ? undefined : GHOSTS[Math.min(step, GHOSTS.length - 1)];
@@ -311,6 +399,7 @@ export class EntityView {
       // A stealthed trooper is drawn faint and see-through, once it's halfway faded.
       for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.fade >= 0.5);
     }
+    this.drawnCount = drawn;
     b.end();
   }
 
@@ -341,11 +430,15 @@ export class EntityView {
     return this.entries.get(e)?.obj;
   }
 
-  /** Which entity a raycast hit belongs to (walks up to the model's root). */
+  /**
+   * Which entity a raycast hit belongs to (walks up to the model's root):
+   * only one drawn in the last frame, since one left out off screen is
+   * still posed where it was last drawn.
+   */
   entityForObject(hit: THREE.Object3D): Entity | null {
     for (let o: THREE.Object3D | null = hit; o; o = o.parent) {
       const e = this.owners.get(o);
-      if (e !== undefined) return e;
+      if (e !== undefined) return this.entries.get(e)?.posed === this.frameNo ? e : null;
     }
     return null;
   }
@@ -364,4 +457,24 @@ export class EntityView {
       }
     });
   }
+}
+
+/** Numbers in a ViewEntry's pose: position, rotation and scale. */
+const POSE_SIZE = 9;
+
+/** Whether the model is where it was when its part matrices were last worked out; if not, notes where it is now. */
+function samePose(entry: ViewEntry): boolean {
+  const { position: p, rotation: r, scale: k } = entry.obj;
+  const q = entry.pose;
+  if (q[0] === p.x && q[1] === p.y && q[2] === p.z && q[3] === r.x && q[4] === r.y && q[5] === r.z && q[6] === k.x && q[7] === k.y && q[8] === k.z) return true;
+  q[0] = p.x;
+  q[1] = p.y;
+  q[2] = p.z;
+  q[3] = r.x;
+  q[4] = r.y;
+  q[5] = r.z;
+  q[6] = k.x;
+  q[7] = k.y;
+  q[8] = k.z;
+  return false;
 }

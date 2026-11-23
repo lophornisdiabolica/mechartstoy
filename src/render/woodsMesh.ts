@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { TREE_HEIGHT } from '../world/woods';
-import { cactusGeometry, pineGeometry, treeGeometry } from './propsMesh';
+import { cactusGeometry, Detail, pineGeometry, treeGeometry } from './propsMesh';
+import { PlantMesh, PlantShapes } from './plantLod';
 
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
 const GEOMETRY_HEIGHT = 1.4;
@@ -10,6 +12,10 @@ const GEOMETRY_HEIGHT = 1.4;
 const SINK_DEPTH = 0.35;
 /** Height of the cactus geometry at scale 1. */
 const CACTUS_HEIGHT = 1.2;
+/** The forest is drawn in squares this wide, so the squares off screen (or out of the shadow's reach) are skipped. */
+const TILE = 32;
+/** How far a tree in a square can reach past where the square's trees stood when its bounds were worked out (one falling over). */
+const TILE_SLACK = 4;
 
 /** One drawn plant: which tree it belongs to, where it stands from the tree's foot, and its size against the tree's. */
 interface Plant {
@@ -26,7 +32,10 @@ interface Plant {
  * as a thick clump of extra-large cacti instead (looks only: the clump
  * stands, blocks and falls as the one tree it is). A tree that's knocked
  * down is laid on its side where it fell, pointing away from what felled it.
- * Stops listening when `dispose` (on the returned group's userData) is called.
+ * The forest is split into squares (see TILE) and drawn with simpler shapes
+ * when zoomed out and in the shadow map (see PlantMesh): call
+ * `userData.setFar` each frame. Stops listening when `dispose` (on the
+ * returned group's userData) is called.
  */
 export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const group = new THREE.Group();
@@ -34,7 +43,11 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const trees = field.woods.trees;
   const biome = field.config.biome;
   const desert = biome === 'desert';
-  const geometry = desert ? cactusGeometry() : biome === 'snow' ? pineGeometry(true) : biome === 'forest' || biome === 'temperate' ? pineGeometry(false) : treeGeometry();
+  const shape = (d: Detail) => (desert ? cactusGeometry(d) : biome === 'snow' ? pineGeometry(true, d) : biome === 'forest' || biome === 'temperate' ? pineGeometry(false, d) : treeGeometry(d));
+  const shapes: PlantShapes = { near: shape('near'), far: shape('far'), shadow: shape('shadow') };
+  /** Every square's mesh, for setFar. */
+  const meshes: PlantMesh[] = [];
+  let far = false;
   const tint = desert ? 0x5f8a4a : biome === 'snow' || biome === 'forest' || biome === 'temperate' ? 0xc8d2c0 : 0x3f6a34;
   const heightAtScale1 = desert ? CACTUS_HEIGHT : GEOMETRY_HEIGHT;
   const slim = desert ? 0.7 : 1;
@@ -45,6 +58,8 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const fallen = new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
   /** Per tree: the mesh its plants are in, and their instances there. */
   const drawn = new Map<number, { mesh: THREE.InstancedMesh; plants: Plant[]; instances: number[] }>();
+  const { minX, minZ } = field.bounds;
+  const tileOf = (k: number) => Math.floor((trees[k].z - minZ) / TILE) * 1000 + Math.floor((trees[k].x - minX) / TILE);
 
   const place = (mesh: THREE.InstancedMesh, p: Plant, i: number) => {
     const t = trees[p.tree];
@@ -78,11 +93,23 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
     mesh.setMatrixAt(i, dummy.matrix);
   };
 
-  /** Draw some trees as one more instanced mesh (all of them at first; then each batch planted mid-battle). */
+  /** Draw some trees as more instanced meshes, a square at a time (all of them at first; then each batch planted mid-battle). */
   const addChunk = (indices: number[]) => {
+    const tiles = new Map<number, number[]>();
+    for (const k of indices) {
+      const key = tileOf(k);
+      let list = tiles.get(key);
+      if (!list) tiles.set(key, (list = []));
+      list.push(k);
+    }
+    for (const list of tiles.values()) addTile(list);
+  };
+  const addTile = (indices: number[]) => {
     if (indices.length === 0) return;
     const plants = desert ? cactusClumps(indices, rng) : indices.map((k) => ({ tree: k, dx: 0, dz: 0, scale: 1, spin: rng.range(0, Math.PI * 2) }));
-    const mesh = new THREE.InstancedMesh(geometry, material, plants.length);
+    const lod = new PlantMesh(shapes, material, plants.length);
+    lod.setFar(far);
+    const mesh = lod.mesh;
     plants.forEach((p, i) => {
       place(mesh, p, i);
       mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : fallen);
@@ -91,21 +118,24 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       entry.plants.push(p);
       entry.instances.push(i);
     });
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
     // Its bounds are worked out once; trees planted later live in meshes of their own.
-    mesh.computeBoundingSphere();
-    group.add(mesh);
+    lod.computeBounds(TILE_SLACK);
+    meshes.push(lod);
+    group.add(...lod.objects);
   };
   const redraw = (k: number, colour: boolean) => {
     const entry = drawn.get(k);
     if (!entry) return;
+    // Just this tree's instances go up to the GPU, not the whole forest's.
     entry.plants.forEach((p, n) => {
-      place(entry.mesh, p, entry.instances[n]);
-      if (colour) entry.mesh.setColorAt(entry.instances[n], fallen);
+      const i = entry.instances[n];
+      place(entry.mesh, p, i);
+      markRange(entry.mesh.instanceMatrix, i * 16, 16);
+      if (colour && entry.mesh.instanceColor) {
+        entry.mesh.setColorAt(i, fallen);
+        markRange(entry.mesh.instanceColor, i * 3, 3);
+      }
     });
-    entry.mesh.instanceMatrix.needsUpdate = true;
-    if (colour && entry.mesh.instanceColor) entry.mesh.instanceColor.needsUpdate = true;
   };
   addChunk(trees.map((_, k) => k));
 
@@ -131,6 +161,11 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       }
     }
   });
+  group.userData.setFar = (on: boolean) => {
+    if (on === far) return;
+    far = on;
+    for (const m of meshes) m.setFar(on);
+  };
   group.userData.dispose = () => {
     stopFell();
     stopTrod();

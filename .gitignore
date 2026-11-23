@@ -5,6 +5,7 @@ dist
 sims-results
 maps-out
 bench-results
+fps-results
 shots-out
 sounds-out
 .pairs-base

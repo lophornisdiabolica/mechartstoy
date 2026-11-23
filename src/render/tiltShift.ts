@@ -5,8 +5,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
  * Tilt-shift: a horizontal band of the screen stays sharp and blur ramps up
  * above and below it, which the eye reads as a macro photo of a miniature.
  * Implemented as two separable blur passes (horizontal then vertical) whose
- * radius depends on distance from the focus band, followed by a grade pass
- * that boosts saturation and adds a soft vignette.
+ * radius depends on distance from the focus band; the vertical one also
+ * grades (more saturation, a soft vignette) and writes the screen.
  */
 export interface TiltShiftSettings {
   enabled: boolean;
@@ -32,24 +32,8 @@ export const DEFAULT_TILT_SHIFT: TiltShiftSettings = {
   vignette: 0.35,
 };
 
-const blurShader = {
-  uniforms: {
-    tDiffuse: { value: null as THREE.Texture | null },
-    direction: { value: new THREE.Vector2(1, 0) },
-    resolution: { value: new THREE.Vector2(1, 1) },
-    focus: { value: 0.5 },
-    band: { value: 0.1 },
-    falloff: { value: 0.3 },
-    maxBlur: { value: 6 },
-  },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */ `
+/** The blur, shared by both passes: a 13-tap gaussian whose radius grows with distance from the sharp band. */
+const BLUR = /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform vec2 direction;
     uniform vec2 resolution;
@@ -59,14 +43,11 @@ const blurShader = {
     uniform float maxBlur;
     varying vec2 vUv;
 
-    void main() {
+    vec4 tiltBlur() {
       float d = abs(vUv.y - focus);
       float amount = smoothstep(band, band + falloff, d);
       float radius = amount * maxBlur * (resolution.y / 1080.0);
-      if (radius < 0.25) {
-        gl_FragColor = texture2D(tDiffuse, vUv);
-        return;
-      }
+      if (radius < 0.25) return texture2D(tDiffuse, vUv);
       // 13-tap gaussian, taps spread to cover the radius.
       vec2 stepUv = direction / resolution * (radius / 6.0);
       vec4 sum = vec4(0.0);
@@ -77,31 +58,63 @@ const blurShader = {
         sum += texture2D(tDiffuse, vUv + stepUv * x) * w;
         total += w;
       }
-      gl_FragColor = sum / total;
+      return sum / total;
+    }
+`;
+
+const blurUniforms = () => ({
+  tDiffuse: { value: null as THREE.Texture | null },
+  direction: { value: new THREE.Vector2(1, 0) },
+  resolution: { value: new THREE.Vector2(1, 1) },
+  focus: { value: 0.5 },
+  band: { value: 0.1 },
+  falloff: { value: 0.3 },
+  maxBlur: { value: 6 },
+});
+
+const vertexShader = /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+/** The first, horizontal blur pass. */
+const blurShader = {
+  uniforms: blurUniforms(),
+  vertexShader,
+  fragmentShader: /* glsl */ `
+    ${BLUR}
+    void main() {
+      gl_FragColor = tiltBlur();
     }
   `,
 };
 
-const gradeShader = {
-  uniforms: {
-    tDiffuse: { value: null as THREE.Texture | null },
-    saturation: { value: 1.2 },
-    vignette: { value: 0.3 },
-  },
-  vertexShader: blurShader.vertexShader,
+/**
+ * The last pass, straight to the screen: the vertical blur, then the grade
+ * (more saturation, a soft vignette), then the conversion to the screen's
+ * colours that three's OutputPass would otherwise do in a pass of its own.
+ * One full-screen pass instead of three. With tilt-shift off, maxBlur is 0
+ * and the blur is a single read.
+ */
+const finalShader = {
+  uniforms: { ...blurUniforms(), saturation: { value: 1.2 }, vignette: { value: 0.3 } },
+  vertexShader,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
+    ${BLUR}
     uniform float saturation;
     uniform float vignette;
-    varying vec2 vUv;
 
     void main() {
-      vec4 c = texture2D(tDiffuse, vUv);
+      vec4 c = tiltBlur();
       float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
       c.rgb = mix(vec3(luma), c.rgb, saturation);
       vec2 p = vUv - 0.5;
       c.rgb *= 1.0 - vignette * smoothstep(0.35, 0.85, length(p * vec2(1.2, 1.0)));
       gl_FragColor = c;
+      #include <colorspace_fragment>
     }
   `,
 };
@@ -109,30 +122,31 @@ const gradeShader = {
 export class TiltShift {
   readonly passes: ShaderPass[];
   private readonly horizontal = new ShaderPass(blurShader);
-  private readonly vertical = new ShaderPass(blurShader);
-  private readonly grade = new ShaderPass(gradeShader);
+  /** Vertical blur, grade and output in one (see finalShader). */
+  private readonly final = new ShaderPass(finalShader);
 
   constructor(readonly settings: TiltShiftSettings = { ...DEFAULT_TILT_SHIFT }) {
-    this.vertical.uniforms.direction.value = new THREE.Vector2(0, 1);
-    this.passes = [this.horizontal, this.vertical, this.grade];
+    this.final.uniforms.direction.value = new THREE.Vector2(0, 1);
+    this.passes = [this.horizontal, this.final];
     this.apply();
   }
 
   setSize(width: number, height: number): void {
-    for (const pass of [this.horizontal, this.vertical]) pass.uniforms.resolution.value.set(width, height);
+    for (const pass of this.passes) pass.uniforms.resolution.value.set(width, height);
   }
 
   /** Push settings into the shaders. Call after changing `settings`. */
   apply(): void {
     const s = this.settings;
-    for (const pass of [this.horizontal, this.vertical]) {
-      pass.enabled = s.enabled;
+    this.horizontal.enabled = s.enabled;
+    for (const pass of this.passes) {
       pass.uniforms.focus.value = s.focus;
       pass.uniforms.band.value = s.band;
       pass.uniforms.falloff.value = s.falloff;
-      pass.uniforms.maxBlur.value = s.maxBlur;
+      // Off, the last pass still grades and outputs, without blurring.
+      pass.uniforms.maxBlur.value = s.enabled ? s.maxBlur : 0;
     }
-    this.grade.uniforms.saturation.value = s.saturation;
-    this.grade.uniforms.vignette.value = s.vignette;
+    this.final.uniforms.saturation.value = s.saturation;
+    this.final.uniforms.vignette.value = s.vignette;
   }
 }
