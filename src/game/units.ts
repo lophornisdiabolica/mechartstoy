@@ -2662,7 +2662,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 1.6,
-    weapon: weapon({ name: 'Scrap fling', range: 20, minRange: 4, damage: 60, cooldown: 4, projectile: 'scrap', speed: 18, splash: 1.6, spread: 0.08, arc: true, muzzleHeight: 3, pierce: 0.3, flings: 0.2 }),
+    weapon: weapon({ name: 'Scrap fling', range: 20, minRange: 4, damage: 50, cooldown: 4, projectile: 'scrap', speed: 18, splash: 1.6, spread: 0.08, arc: true, muzzleHeight: 3, pierce: 0.3, flings: 0.2 }),
     mounts: [{ weapon: weapon({ name: 'Machine gun', range: 11, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }), mount: 'magnetCrane#mg', turnRate: 4 }],
     walls: 22,
     wreckTime: 18,
