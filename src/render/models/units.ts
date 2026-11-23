@@ -2441,3 +2441,128 @@ registerModel('fataMorgana', (faction) => {
   });
   return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('fataMorgana', root, turret, [lance]) });
 });
+
+// Verdant: a living army of plant-mechs.
+const BARK = 0x5a4030;
+const LEAF = 0x4a8a3a;
+
+// A strangler: a bulb body on two root legs, with a coil of vine on top that it lashes out.
+registerModel('strangler', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.9;
+  root.add(body);
+  body.add(box(0.8, 0.6, 0.8, primary, 0, 0.2, 0));
+  body.add(box(0.6, 0.12, 0.84, secondary, 0, 0.52, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.4, 0);
+  turret.add(box(0.4, 0.3, 0.4, LEAF, 0, 0.15, 0));
+  const vine = barrelPivot('strangler', turret);
+  vine.add(box(0.7, 0.1, 0.1, LEAF, 0.3, 0, 0));
+  vine.add(box(0.14, 0.2, 0.2, 0xc04a6a, 0.7, 0, 0)); // a flower at its tip
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.5, 0.5, 0.14, BARK, BARK);
+    leg.hip.position.set(0, -0.05, side * 0.22);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 0.6, 0.45), ...mounted('strangler', root, turret, [vine]) });
+});
+
+// A seed mortar: a big seed bulb on a wheeled cart, its mouth tilted up.
+registerModel('seedMortar', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.5, 0.5], 0.45, 0.4));
+  root.add(box(1.6, 0.25, 0.9, BARK, 0, 0.5, 0));
+  root.add(box(0.5, 0.2, 0.92, secondary, -0.5, 0.7, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.15, 0.62, 0);
+  turret.add(box(0.7, 0.5, 0.7, primary, 0, 0.25, 0));
+  const mouth = barrelPivot('seedMortar', turret);
+  mouth.add(box(0.5, 0.36, 0.36, LEAF, 0.2, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('seedMortar', root, turret, [mouth]) });
+});
+
+// A treant: a walking tree-mech, a bark trunk with a leafy crown and club arms, and a thorn spitter in its crown.
+registerModel('treant', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.2;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(0.8, 1.2, 0.9, BARK, 0, 0.6, 0));
+  turret.add(box(0.82, 0.16, 0.92, primary, 0, 0.4, 0)); // a band in the side's colour
+  turret.add(box(1.3, 0.7, 1.4, LEAF, -0.1, 1.5, 0)); // crown
+  turret.add(box(0.3, 0.2, 0.3, secondary, 0.3, 1.9, 0.3));
+  const arms = [-1, 1].map((side) => {
+    const arm = new THREE.Group();
+    arm.position.set(0, 1.0, side * 0.6);
+    arm.add(box(0.25, 0.9, 0.25, BARK, 0, -0.35, 0));
+    arm.add(box(0.4, 0.4, 0.4, BARK, 0.1, -0.85, 0)); // club
+    turret.add(arm);
+    return arm;
+  });
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.6, 0.6, 0.3, BARK, BARK);
+    leg.hip.position.set(0, 0, side * 0.25);
+    body.add(leg.hip);
+    return leg;
+  });
+  const thorns = ownMount(root, 'treant#thorns', (t) => {
+    t.add(box(0.2, 0.16, 0.2, LEAF, 0, 0, 0));
+    t.add(box(0.36, 0.06, 0.06, BARK, 0.17, 0.02, 0));
+  });
+  body.add(thorns.turret);
+  thorns.turret.position.y -= body.position.y;
+  return setRig(root, {
+    turret,
+    ...walker(legs, body, 0.6, 0.4),
+    ...mounted('treant', root, turret),
+    mounts: [thorns],
+    strike(k) {
+      for (const arm of arms) arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
+    },
+  });
+});
+
+// Verdant's super unit: the Worldtree, a giant walking tree with a vast crown, vines hanging from it, and seed pods.
+registerModel('worldTree', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.6, 2.6, 1.6, BARK, 0, 1.3, 0));
+  turret.add(box(1.62, 0.3, 1.62, primary, 0, 0.6, 0));
+  turret.add(box(3.4, 1.4, 3.4, LEAF, 0, 3.2, 0)); // crown
+  turret.add(box(2.4, 0.8, 2.4, 0x3e7a30, 0, 4.2, 0));
+  for (const [x, z] of [[1.0, 1.0], [-1.1, 0.6], [0.4, -1.2]]) {
+    const pod = glowBox(0.3, 0.4, 0.3, 0xc8e070);
+    pod.position.set(x, 2.3, z);
+    turret.add(pod);
+  }
+  turret.add(box(0.2, 0.3, 0.6, secondary, 0.81, 1.8, 0));
+  const vines = barrelPivot('worldTree', turret);
+  vines.add(box(1.4, 0.2, 0.2, LEAF, 0.6, 0, 0));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.3, 1.3, 0.55, BARK, BARK);
+    leg.hip.position.set(0, 0, side * 0.55);
+    body.add(leg.hip);
+    return leg;
+  });
+  const seeds = ownMount(root, 'worldTree#seeds', (t) => {
+    t.add(box(0.5, 0.4, 0.5, LEAF, 0, 0.0, 0));
+    t.add(box(0.4, 0.28, 0.3, 0xc8e070, 0.35, 0.04, 0));
+  });
+  turret.add(seeds.turret);
+  seeds.turret.position.y -= body.position.y;
+  return setRig(root, { turret, ...walker(legs, body, 1.1, 0.35), ...mounted('worldTree', root, turret, [vines]), mounts: [seeds] });
+});

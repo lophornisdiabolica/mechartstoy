@@ -85,6 +85,8 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   repair: true,
   strikeCalled: true,
   chewed: true,
+  rooted: true,
+  grove: true,
   fizzle: true,
   toppled: true,
   blocked: true,

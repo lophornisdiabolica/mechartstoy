@@ -546,6 +546,22 @@ export const BUILDING_DEFS = {
     rebuildDelay: 40,
     buildTime: 10,
   },
+  /** Verdant's signature: a great glasshouse that grows treants and stranglers, with a vine turret that holds attackers. */
+  glasshouse: {
+    id: 'glasshouse',
+    name: 'Glasshouse',
+    model: 'bld:glasshouse',
+    hp: 900,
+    armor: 7,
+    radius: 2.8,
+    height: 3,
+    production: { table: [{ unit: 'strangler', weight: 2, count: 2 }, { unit: 'treant', weight: 1, count: 1 }], interval: 34 },
+    weapon: { name: 'Vine lash', range: 18, minRange: 0, damage: 24, cooldown: 1.8, burst: 1, burstGap: 0, projectile: 'vine', speed: 40, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3, targets: 'ground', pierce: 0.3, roots: 3 },
+    sight: 20,
+    turretTurnRate: 2,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

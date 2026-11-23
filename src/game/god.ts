@@ -507,8 +507,11 @@ function heave(ctx: SimContext, q: Quake, step: number, phase: number): void {
   if (moved) field.changed({ i0: Math.max(0, i0 - 2), j0: Math.max(0, j0 - 2), i1: Math.min(cols - 1, i1 + 1), j1: Math.min(rows - 1, j1 + 1) });
 }
 
-/** Grow dense forest in a brush: every open, dry, gentle cell gets trees (not on roads, bridges or under buildings). */
-function plantForest(world: World, ctx: SimContext, x: number, z: number, radius: number, rng: Rng): boolean {
+/**
+ * Grow dense forest in a brush: every open, dry, gentle cell gets trees (not on roads, bridges or under buildings).
+ * Verdant's seed pods use it too (see verdant.ts), with `announce` off: they draw their own.
+ */
+export function plantForest(world: World, ctx: SimContext, x: number, z: number, radius: number, rng: Rng, announce = true): boolean {
   const field = ctx.field;
   if (!field.contains(x, z)) return false;
   const { cols, cellSize } = field.config;
@@ -541,7 +544,7 @@ function plantForest(world: World, ctx: SimContext, x: number, z: number, radius
   }
   if (cells.length === 0) return false;
   field.setGround(cells, 'thicket');
-  ctx.events.emit('power', { kind: 'grow', x, z, radius, faction: GOD });
+  if (announce) ctx.events.emit('power', { kind: 'grow', x, z, radius, faction: GOD });
   return true;
 }
 

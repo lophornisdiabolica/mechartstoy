@@ -1049,3 +1049,25 @@ registerModel('bld:mirrorArray', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:mirrorArray', g, turret, [lens]) });
 });
+
+// Verdant's glasshouse: a long glass-roofed hall full of green, a vine turret on its ridge.
+registerModel('bld:glasshouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(6.0, 0.2, 5.0, 0x7a6a50, 0, 0.1, 0));
+  g.add(box(5.0, 1.4, 3.6, primary, 0, 0.9, 0));
+  g.add(box(5.1, 0.14, 3.7, secondary, 0, 1.67, 0));
+  g.add(box(4.8, 0.9, 3.4, 0xa8d8e0, 0, 2.18, 0)); // the glass
+  for (const x of [-1.8, -0.6, 0.6, 1.8]) {
+    const plant = glowBox(0.6, 0.5, 0.6, 0x6ab84a);
+    plant.position.set(x, 2.0, 0);
+    g.add(plant);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(0, 2.63, 0);
+  turret.add(box(0.5, 0.3, 0.5, 0x5a4030, 0, 0.15, 0));
+  const vine = barrelPivot('bld:glasshouse', turret);
+  vine.add(box(0.8, 0.12, 0.12, 0x4a8a3a, 0.35, 0, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:glasshouse', g, turret, [vine]) });
+});

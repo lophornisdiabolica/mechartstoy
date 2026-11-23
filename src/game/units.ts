@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine';
 
 export interface WeaponDef {
   name: string;
@@ -54,6 +54,10 @@ export interface WeaponDef {
   targets: WeaponTargets;
   /** Share of the target's armour this weapon's direct hits ignore (0 to 1; see damageThrough). */
   pierce?: number;
+  /** Verdant's vines (see verdant.ts): a direct hit holds a ground vehicle or walker where it is for this many seconds. */
+  roots?: number;
+  /** Verdant's seed pods (see verdant.ts): a thicket this wide springs up where it lands (a side plants one every so often). */
+  plants?: number;
   /**
    * A second round for armoured targets: fired instead of this weapon's
    * volley at anything with at least `heavyAt` armour (guard towers' armour-
@@ -2547,6 +2551,93 @@ export const UNIT_DEFS = {
     weapon: weapon({ name: 'Mirror lance', range: 20, damage: 72, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.8, pierce: 0.5 }),
     projects: { units: ['holoPrism', 'holoPrism', 'holoTank'], count: 3, every: 12 },
     wreckTime: 40,
+    siege: true,
+  },
+  // Verdant: a living army (see verdant.ts).
+  // A strangler: a plant-mech on root legs that lashes vines, holding vehicles where they are.
+  strangler: {
+    id: 'strangler',
+    name: 'Strangler',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'walker',
+    role: 'frontline',
+    model: 'strangler',
+    hp: 170,
+    armor: 4,
+    speed: 2.5,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 3,
+    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, roots: 3 }),
+    wreckTime: 14,
+    siege: false,
+  },
+  // A seed mortar: a bulb on wheels that lobs seed pods. Where one bursts, a small thicket springs up.
+  seedMortar: {
+    id: 'seedMortar',
+    name: 'Seed Mortar',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
+    model: 'seedMortar',
+    hp: 120,
+    armor: 3,
+    speed: 2.2,
+    turnRate: 1.6,
+    radius: 0.9,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 1.4,
+    weapon: weapon({ name: 'Seed pod', range: 26, minRange: 6, damage: 34, cooldown: 5, projectile: 'seed', speed: 16, splash: 2, spread: 0.1, arc: true, muzzleHeight: 1.2, plants: 2.6 }),
+    wreckTime: 14,
+    siege: true,
+  },
+  // A treant: a walking tree-mech with club arms, slow and very tough.
+  treant: {
+    id: 'treant',
+    name: 'Treant',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'walker',
+    role: 'frontline',
+    model: 'treant',
+    hp: 480,
+    armor: 9,
+    speed: 1.9,
+    turnRate: 1.6,
+    radius: 1.2,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Club arms', range: 1.4, damage: 60, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2, pierce: 0.4, melee: { style: 'swing', lunge: 1, knock: 1.6, sweep: 1.4, sweepMost: 4, charge: 1.4 } }),
+    mounts: [{ weapon: weapon({ name: 'Thorn spitter', range: 12, damage: 6, cooldown: 1.2, burst: 3, burstGap: 0.12, projectile: 'vine', speed: 40, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'treant#thorns', turnRate: 4 }],
+    wreckTime: 25,
+    siege: false,
+  },
+  // Super unit: the Worldtree, a giant walking tree. It lashes vines and seeds thickets round itself as it goes.
+  worldTree: {
+    id: 'worldTree',
+    name: 'Worldtree',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'worldTree',
+    hp: 1700,
+    armor: 15,
+    speed: 1.3,
+    turnRate: 0.8,
+    radius: 2,
+    sight: 20,
+    turret: true,
+    turretTurnRate: 1.2,
+    weapon: weapon({ name: 'Great vines', range: 14, damage: 50, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 4 }),
+    mounts: [{ weapon: weapon({ name: 'Seed burst', range: 24, minRange: 6, damage: 40, cooldown: 6, projectile: 'seed', speed: 16, splash: 2.2, spread: 0.12, arc: true, muzzleHeight: 5, plants: 2.6 }), mount: 'worldTree#seeds', turnRate: 2 }],
+    wreckTime: 45,
     siege: true,
   },
 } satisfies Record<string, UnitDef>;

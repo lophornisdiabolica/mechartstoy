@@ -586,3 +586,9 @@ export interface Decoy {
   until: number;
 }
 export const Decoy = defineComponent<Decoy>('Decoy');
+
+/** Held where it is by Verdant's vines (see verdant.ts), until this time. */
+export interface Rooted {
+  until: number;
+}
+export const Rooted = defineComponent<Rooted>('Rooted');

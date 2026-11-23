@@ -52,6 +52,7 @@ import { hiveSystem } from './hive';
 import { nomadSystem } from './nomad';
 import { toppleSystem, windUpSystem } from './windup';
 import { mirageSystem } from './mirage';
+import { Groves, rootSystem } from './verdant';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -152,6 +153,7 @@ export class Game {
       smoke: new SmokeField(this.field),
       strikes: new Strikes(),
       camps: [],
+      groves: new Groves(),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
@@ -174,6 +176,7 @@ export class Game {
       targetingSystem(ctx),
       aiSystem(ctx),
       windUpSystem(ctx),
+      rootSystem(),
       trafficSystem(ctx),
       dashSystem(ctx),
       movementSystem(ctx),
