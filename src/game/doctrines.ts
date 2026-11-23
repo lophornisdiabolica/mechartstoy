@@ -84,7 +84,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   raiders: {
     id: 'raiders',
     name: 'Raiders',
-    blurb: 'Fast trucks. Machine-gun trucks and scout buggies in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
+    blurb: 'Fast trucks. Machine-gun trucks for infantry and scout buggies with recoilless rifles for armour, in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
     caps: { infantry: 0.8, vehicle: 1.8 },
     production: {
       factory: {
