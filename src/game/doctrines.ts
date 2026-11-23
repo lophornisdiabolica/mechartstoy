@@ -458,9 +458,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'tin',
     name: 'Tin Soldiers',
     blurb: 'Clockwork toys at war: a silly one. Every toy runs down after a while and stops where it is to wind its key back up, and a hard enough knock tips it over onto its side for a few seconds. Tin soldiers with cork rifles, clockwork tanks, toy cannons and sparking tin robots; its toy box turns out more soldiers. Super unit: the Clockwork Giant, with a huge key turning in its back.',
-    caps: { infantry: 1.3, vehicle: 1.5 },
+    caps: { infantry: 1.05, vehicle: 1.4 },
     production: {
-      barracks: { table: [{ unit: 'tinSoldier', weight: 1, count: 6 }], interval: 15 },
+      barracks: { table: [{ unit: 'tinSoldier', weight: 1, count: 6 }], interval: 18 },
       hq: { table: [{ unit: 'tinSoldier', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'tinSoldier', weight: 1, count: 6 }] },
       factory: {
