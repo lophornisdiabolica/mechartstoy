@@ -22,7 +22,7 @@ export const SCRAP_REACH = 12;
 /** Wreckage in reach (tank-sized wrecks are about 1.5) at which a throw hits its hardest. */
 const HEAP_FULL = 8;
 /** What a throw's damage is multiplied by with next to nothing in reach, and with a full heap. */
-const HEFT_LEAST = 0.5;
+const HEFT_LEAST = 0.7;
 const HEFT_MOST = 1.25;
 
 /**
