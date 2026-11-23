@@ -580,3 +580,9 @@ export interface WindUp {
   side: number;
 }
 export const WindUp = defineComponent<WindUp>('WindUp');
+
+/** A Mirage hologram (see mirage.ts): when it fizzles out. */
+export interface Decoy {
+  until: number;
+}
+export const Decoy = defineComponent<Decoy>('Decoy');

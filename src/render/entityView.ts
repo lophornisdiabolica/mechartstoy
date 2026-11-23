@@ -52,6 +52,8 @@ interface ViewEntry {
    */
   rigless: boolean;
   pose: Float64Array;
+  /** A Mirage hologram (see game/mirage.ts): always drawn see-through. */
+  holo: boolean;
   /**
    * How far it has faded out (0 solid, 1 a ghost): stealthed units (see
    * game/smoke.ts) fade out slowly and back in quickly, so one that hides
@@ -252,7 +254,7 @@ export class EntityView {
         const bounds = new THREE.Box3().setFromObject(obj);
         const top = naval ? bounds.max.y : 0;
         const radius = 1 + 1.25 * Math.max(bounds.min.length(), bounds.max.length());
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN) };
+        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN), holo: w.get(e, Unit)?.def.decoy !== undefined };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -394,7 +396,7 @@ export class EntityView {
       drawn++;
       // Solid for the first fifth of the fade, then a step fainter each fifth after.
       const step = Math.floor(entry.fade * 5) - 1;
-      const ghost = step < 0 ? undefined : GHOSTS[Math.min(step, GHOSTS.length - 1)];
+      const ghost = entry.holo ? GHOSTS[1] : step < 0 ? undefined : GHOSTS[Math.min(step, GHOSTS.length - 1)];
       for (const m of entry.meshes) if (shown(m, entry.obj)) b.addMesh(m, ghost);
       // A stealthed trooper is drawn faint and see-through, once it's halfway faded.
       for (const s of entry.sprites) if (shown(s, entry.obj)) b.addSprite(s, entry.fade >= 0.5);

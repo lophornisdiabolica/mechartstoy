@@ -2360,3 +2360,84 @@ registerModel('clockworkGiant', (faction) => {
     ...mounted('clockworkGiant', root, turret, [barrel]),
   });
 });
+
+// Mirage: holograms (drawn see-through; see entityView) and the real things they copy.
+const PRISM = 0xbfe8ff;
+
+// A prism tank: a low sleek hull, and a crystal prism on the turret that focuses the beam.
+registerModel('prismTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.0, 0.38, 0.4, 0.66));
+  root.add(box(1.9, 0.4, 1.2, primary, 0, 0.62, 0));
+  root.add(box(0.5, 0.3, 1.24, secondary, 0.75, 0.55, 0)); // the glacis
+  const turret = new THREE.Group();
+  turret.position.set(-0.1, 0.82, 0);
+  turret.add(box(0.8, 0.26, 0.8, primary, 0, 0.13, 0));
+  const lens = barrelPivot('prismTank', turret);
+  const crystal = glowBox(0.5, 0.36, 0.36, PRISM);
+  crystal.rotation.x = Math.PI / 4;
+  crystal.position.x = 0.04;
+  lens.add(crystal);
+  lens.add(box(0.5, 0.1, 0.1, METAL, 0.45, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('prismTank', root, turret, [lens]) });
+});
+
+// A projector truck: a truck with a tall mast and a projector dish, and a machine gun on the cab.
+registerModel('projectorTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.6, 0.6], 0.46, 0.44));
+  root.add(box(2.0, 0.3, 0.95, METAL, 0, 0.55, 0));
+  root.add(box(0.65, 0.6, 0.9, primary, 0.65, 0.98, 0)); // cab
+  root.add(box(0.06, 0.24, 0.7, GLASS, 0.99, 1.08, 0));
+  root.add(box(1.1, 0.3, 0.95, secondary, -0.45, 0.85, 0)); // bed
+  root.add(box(0.12, 1.4, 0.12, METAL, -0.5, 1.7, 0)); // mast
+  const dish = box(0.08, 0.7, 0.7, PRISM, -0.4, 2.45, 0);
+  root.add(dish);
+  const emitter = glowBox(0.12, 0.18, 0.18, PRISM);
+  emitter.position.set(-0.3, 2.45, 0);
+  root.add(emitter);
+  const turret = new THREE.Group();
+  turret.position.set(0.6, 1.3, 0);
+  turret.add(box(0.22, 0.14, 0.22, DARK, 0, 0.05, 0));
+  const gun = barrelPivot('projectorTruck', turret);
+  gun.add(box(0.5, 0.06, 0.06, DARK, 0.22, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('projectorTruck', root, turret, [gun]) });
+});
+
+// Mirage's super unit: a tall walker crowned with a ring of mirrors round a crystal, with a mirror lance.
+registerModel('fataMorgana', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.4;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.4, 1.0, 1.6, primary, 0, 0.5, 0));
+  turret.add(box(1.0, 0.16, 1.2, secondary, 0, 1.08, 0));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const mirror = box(0.06, 0.8, 0.5, PRISM, Math.cos(a) * 0.75, 1.6, Math.sin(a) * 0.75);
+    mirror.rotation.y = -a;
+    turret.add(mirror);
+  }
+  const core = glowBox(0.4, 0.6, 0.4, PRISM);
+  core.position.set(0, 1.55, 0);
+  turret.add(core);
+  const lance = barrelPivot('fataMorgana', turret);
+  lance.add(box(1.8, 0.18, 0.18, METAL, 0.9, 0, 0));
+  const tip = glowBox(0.2, 0.24, 0.24, PRISM);
+  tip.position.set(1.85, 0, 0);
+  lance.add(tip);
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.25, 1.25, 0.36, METAL, DARK);
+    leg.hip.position.set(0, 0, side * 0.5);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('fataMorgana', root, turret, [lance]) });
+});

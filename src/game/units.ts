@@ -260,6 +260,17 @@ export interface UnitDef {
    * and a hit taking `topple` of its health in one go can tip it over.
    */
   windUp?: { run: number; rewind: number; topple?: number };
+  /** A Mirage hologram (see mirage.ts): its shots do no harm, and it fizzles out after about `lasts` seconds. */
+  decoy?: { lasts: number };
+  /** A Mirage projector (see mirage.ts): every `every` seconds it throws up `count` holograms, taking turns through `units`. */
+  projects?: ProjectsDef;
+}
+
+/** What a Mirage projector throws up (see mirage.ts). */
+export interface ProjectsDef {
+  units: string[];
+  count: number;
+  every: number;
 }
 
 /** What a fabricator eats and makes (see hive.ts). */
@@ -2424,6 +2435,117 @@ export const UNIT_DEFS = {
     turretTurnRate: 1.2,
     weapon: weapon({ name: 'Chest cannon', range: 18, damage: 50, cooldown: 2.6, burst: 2, burstGap: 0.4, projectile: 'shell', speed: 40, splash: 1.8, spread: 0.05, muzzleHeight: 3.2, pierce: 0.4 }),
     windUp: { run: 25, rewind: 5 },
+    wreckTime: 40,
+    siege: true,
+  },
+  // Mirage: holograms that draw fire and fizzle (see mirage.ts).
+  // Its main tank: a crystal prism on the turret that focuses a beam.
+  prismTank: {
+    id: 'prismTank',
+    name: 'Prism Tank',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'prismTank',
+    hp: 200,
+    armor: 6,
+    speed: 2.8,
+    turnRate: 1.7,
+    radius: 1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Prism beam', range: 16, damage: 40, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.1, pierce: 0.4 }),
+    wreckTime: 18,
+    siege: false,
+  },
+  // Holograms: they move and shoot like the real thing, but their shots do no harm, and they fizzle out.
+  holoPrism: {
+    id: 'holoPrism',
+    name: 'Prism Tank (hologram)',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'prismTank',
+    hp: 70,
+    armor: 0,
+    speed: 2.8,
+    turnRate: 1.7,
+    radius: 1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Prism beam', range: 16, damage: 0, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.1, pierce: 0.4 }),
+    decoy: { lasts: 22 },
+    wreckTime: 0,
+    siege: false,
+  },
+  holoTank: {
+    id: 'holoTank',
+    name: 'Battle Tank (hologram)',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'tank',
+    hp: 70,
+    armor: 0,
+    speed: 2.6,
+    turnRate: 1.6,
+    radius: 1.1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 1.8,
+    weapon: weapon({ name: 'Cannon', range: 15, damage: 0, cooldown: 3, projectile: 'shell', speed: 40, spread: 0.04, muzzleHeight: 1.1 }),
+    decoy: { lasts: 22 },
+    wreckTime: 0,
+    siege: false,
+  },
+  // A truck with a projector dish on a mast: it throws up a couple of hologram tanks every so often.
+  projectorTruck: {
+    id: 'projectorTruck',
+    name: 'Projector Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'support',
+    model: 'projectorTruck',
+    hp: 150,
+    armor: 3,
+    speed: 2.8,
+    turnRate: 1.8,
+    radius: 1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 3,
+    weapon: weapon({ name: 'Machine gun', range: 11, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1.6, targets: 'both' }),
+    projects: { units: ['holoPrism', 'holoTank'], count: 2, every: 11 },
+    wreckTime: 15,
+    siege: false,
+  },
+  // Super unit: the Fata Morgana, a tall walker crowned with mirrors, that throws up a whole column of holograms round itself.
+  fataMorgana: {
+    id: 'fataMorgana',
+    name: 'Fata Morgana',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'fataMorgana',
+    hp: 1300,
+    armor: 15,
+    speed: 1.5,
+    turnRate: 0.9,
+    radius: 1.8,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.2,
+    weapon: weapon({ name: 'Mirror lance', range: 20, damage: 85, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.8, pierce: 0.5 }),
+    projects: { units: ['holoPrism', 'holoPrism', 'holoTank'], count: 3, every: 12 },
     wreckTime: 40,
     siege: true,
   },

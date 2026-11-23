@@ -1020,3 +1020,32 @@ registerModel('bld:toyBox', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:toyBox', g, turret, [barrel]) });
 });
+
+// Mirage's mirror array: a crystal spire in a ring of angled mirrors on posts, with a prism emitter on top.
+registerModel('bld:mirrorArray', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const PRISM = 0xbfe8ff;
+  const g = new THREE.Group();
+  g.add(cylinder(2.7, 2.8, 0.3, 8, 0x8a8a90, 0, 0.15, 0));
+  g.add(cylinder(0.8, 1.2, 3.0, 6, primary, 0, 1.8, 0));
+  g.add(cylinder(1.25, 1.25, 0.16, 6, secondary, 0, 0.6, 0));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    g.add(box(0.12, 1.2, 0.12, 0x707070, Math.cos(a) * 2.2, 0.9, Math.sin(a) * 2.2));
+    const mirror = box(0.06, 0.9, 0.8, PRISM, Math.cos(a) * 2.25, 1.8, Math.sin(a) * 2.25);
+    mirror.rotation.y = -a;
+    mirror.rotation.z = 0.3;
+    g.add(mirror);
+  }
+  const turret = new THREE.Group();
+  turret.position.set(0, 3.3, 0);
+  turret.add(box(0.5, 0.2, 0.5, 0x2a2a2a, 0, 0.1, 0));
+  const lens = barrelPivot('bld:mirrorArray', turret);
+  const crystal = glowBox(0.5, 0.36, 0.36, PRISM);
+  crystal.rotation.x = Math.PI / 4;
+  crystal.position.x = 0.04;
+  lens.add(crystal);
+  lens.add(box(0.4, 0.1, 0.1, 0x8a8a8a, 0.4, 0, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:mirrorArray', g, turret, [lens]) });
+});

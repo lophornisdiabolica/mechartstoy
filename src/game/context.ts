@@ -111,6 +111,8 @@ export type GameEvents = {
   blocked: { x: number; y: number; z: number };
   /** A clockwork toy tipped over by a hit (see windup.ts). */
   toppled: { x: number; y: number; z: number };
+  /** A Mirage hologram flickering up or fizzling out (see mirage.ts). */
+  fizzle: { x: number; y: number; z: number; radius: number };
   /** A Hive fabricator chewing wreckage (see hive.ts). */
   chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */

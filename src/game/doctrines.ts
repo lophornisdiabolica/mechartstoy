@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -482,7 +482,28 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'toyBox',
     waves: [{ unit: 'tinSoldier', weight: 3, count: 6 }, { unit: 'clockworkTank', weight: 2, count: 1 }, { unit: 'tinRobot', weight: 1, count: 1 }],
+  },  mirage: {
+    id: 'mirage',
+    name: 'Mirage',
+    blurb: 'Holograms. Projector trucks throw up hologram tanks now and then: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Prism tanks do the real work with focused beams, and its mirror array throws up more holograms round the base. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
+    caps: { infantry: 0.9, vehicle: 1.4 },
+    production: {
+      factory: {
+        table: [
+          { unit: 'prismTank', weight: 3, count: 1 },
+          { unit: 'tank', weight: 1.4, count: 1 },
+          { unit: 'projectorTruck', weight: 2, count: 1 },
+          { unit: 'rocketTruck', weight: 1, count: 1 },
+          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'scout', weight: 0.6, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'fataMorgana', weight: 1, count: 1 }] },
+    },
+    signature: 'mirrorArray',
+    waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 3, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }, { unit: 'tank', weight: 1, count: 1 }],
   },
+
 
 
 
@@ -503,7 +524,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

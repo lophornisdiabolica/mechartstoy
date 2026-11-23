@@ -1,4 +1,4 @@
-import { EatsDef, JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
+import { EatsDef, ProjectsDef, JamDef, ShieldDef, UnitId, WeaponDef, WeaponMountDef } from './units';
 
 /**
  * Building definitions. Like units, these are data: adding a building type is
@@ -77,6 +77,8 @@ export interface BuildingDef {
   eats?: EatsDef;
   /** Nomad's crawler yard (see nomad.ts): the crawler it turns out now and then. */
   yard?: UnitId;
+  /** A Mirage projector (see mirage.ts). */
+  projects?: ProjectsDef;
 }
 
 /**
@@ -524,6 +526,22 @@ export const BUILDING_DEFS = {
     production: { table: [{ unit: 'tinSoldier', weight: 2, count: 6 }, { unit: 'clockworkTank', weight: 1, count: 1 }], interval: 22 },
     weapon: { name: 'Jack-in-the-box cannon', range: 18, minRange: 0, damage: 30, cooldown: 2.4, burst: 1, burstGap: 0, projectile: 'shell', speed: 40, splash: 1.2, spread: 0.04, arc: false, muzzleHeight: 3.4, targets: 'ground' },
     sight: 20,
+    turretTurnRate: 2,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  /** Mirage's signature (see mirage.ts): a ring of mirrors round a crystal spire that throws up hologram tanks, and beams attackers. */
+  mirrorArray: {
+    id: 'mirrorArray',
+    name: 'Mirror Array',
+    model: 'bld:mirrorArray',
+    hp: 850,
+    armor: 7,
+    radius: 2.6,
+    height: 4,
+    projects: { units: ['holoPrism', 'holoTank'], count: 3, every: 18 },
+    weapon: { name: 'Prism beam', range: 20, minRange: 0, damage: 40, cooldown: 2.4, burst: 1, burstGap: 0, projectile: 'beam', speed: 90, splash: 0, spread: 0.03, arc: false, muzzleHeight: 4, targets: 'ground', pierce: 0.4 },
+    sight: 22,
     turretTurnRate: 2,
     rebuildDelay: 40,
     buildTime: 10,
