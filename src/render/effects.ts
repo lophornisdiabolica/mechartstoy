@@ -208,6 +208,8 @@ export class Effects {
     });
     // A Nomad crawler unfolding into a camp, or packing up: dust kicked up all round it.
     events.on('camp', (e) => this.dust(e.x, e.y, e.z, 3, 12));
+    // A shot glancing off a shield wall: a spark of struck bronze.
+    events.on('blocked', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.18, size: 0.25, endSize: 0.6, color: 0xffd890, endColor: 0x000000 }));
     // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
     events.on('chewed', (e) => {
       for (let i = 0; i < 3; i++) {
@@ -372,6 +374,8 @@ export class Effects {
       this.flashes.spawn({ x, y, z, life: 0.12, size: 0.35, color: 0x6ab8aa, endColor: 0x000000 });
       return;
     }
+    // Bowstrings and throwing arms don't flash.
+    if (kind === 'arrow' || kind === 'stone') return;
     if (kind === 'beam' || kind === 'frost') {
       this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
       return;
@@ -458,6 +462,15 @@ export class Effects {
         this.flashes.spawn({ x: x + rand(-0.4, 0.4) * splash, y: y + 0.1, z: z + rand(-0.4, 0.4) * splash, vy: rand(1, 2), life: rand(0.3, 0.6), size: 0.25 + splash * 0.2, endSize: 0.1, color: 0xffa040, endColor: 0x401000 });
       }
       this.smoke.spawn({ x, y: y + 0.3, z, vy: 1, life: 1.2, size: 0.2, endSize: 0.6, color: 0x3a3430, endColor: 0x8a8580, drag: 0.5 });
+      return;
+    }
+    // An arrow just sticks: a puff of dust. A stone thumps down in a cloud of earth.
+    if (kind === 'arrow') {
+      this.smoke.spawn({ x, y, z, vy: 0.4, life: 0.4, size: 0.08, endSize: 0.2, color: 0xa89c88 });
+      return;
+    }
+    if (kind === 'stone') {
+      this.dust(x, y, z, Math.max(0.8, splash * 0.7), 8);
       return;
     }
     if (kind === 'bullet') {

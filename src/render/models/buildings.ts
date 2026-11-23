@@ -971,3 +971,30 @@ registerModel('bld:crawlerCamp', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:crawlerCamp', g, turret, [guns]) });
 });
+
+// Antiquity's castrum: a square palisade fort with corner towers, a gate, standards, and a ballista on the gatehouse.
+registerModel('bld:castrum', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const WOOD = 0x8a6440;
+  const g = new THREE.Group();
+  g.add(box(6.7, 0.2, 6.7, 0x9a8a68, 0, 0.1, 0));
+  for (const side of [-1, 1]) {
+    g.add(box(5.4, 1.6, 0.3, WOOD, 0, 0.9, side * 2.7));
+    g.add(box(0.3, 1.64, 5.4, WOOD, -side * 2.7, 0.9, 0));
+  }
+  for (const x of [-2.7, 2.7]) for (const z of [-2.7, 2.7]) g.add(box(0.8, 2.4, 0.8, WOOD, x, 1.25, z)); // corner towers
+  g.add(box(1.0, 2.0, 1.8, 0x7a5638, 2.75, 1.1, 0)); // gatehouse
+  g.add(box(1.4, 1.2, 2.0, primary, -0.6, 0.7, 0)); // the commander's tent
+  g.add(box(1.5, 0.12, 2.1, secondary, -0.6, 1.36, 0));
+  g.add(box(0.06, 1.6, 0.06, BRONZE_POLE, -1.6, 1.8, 1.2));
+  g.add(box(0.04, 0.5, 0.4, primary, -1.6, 2.4, 1.42));
+  const turret = new THREE.Group();
+  turret.position.set(2.75, 2.2, 0);
+  turret.add(box(0.2, 0.2, 0.2, WOOD, 0, 0.1, 0));
+  const bow = barrelPivot('bld:castrum', turret);
+  bow.add(box(0.8, 0.08, 0.08, WOOD, 0.2, 0, 0));
+  bow.add(box(0.06, 0.06, 0.8, WOOD, 0.45, 0, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:castrum', g, turret, [bow]) });
+});
+const BRONZE_POLE = 0xc08a3a;

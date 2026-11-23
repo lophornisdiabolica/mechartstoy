@@ -107,6 +107,8 @@ export type GameEvents = {
   strikeCalled: { x: number; y: number; z: number; radius: number; delay: number; fromX: number; fromY: number; fromZ: number; faction: number };
   /** A Nomad crawler setting up camp (`up`) or packing up (see nomad.ts). */
   camp: { x: number; y: number; z: number; up: boolean };
+  /** A shot glancing off a front shield (see UnitDef.frontShield). */
+  blocked: { x: number; y: number; z: number };
   /** A Hive fabricator chewing wreckage (see hive.ts). */
   chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */

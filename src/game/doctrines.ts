@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -430,7 +430,29 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'crawlerYard',
     waves: [rifleSquad(4, 3), { unit: 'outrider', weight: 3, count: 2 }, { unit: 'tank', weight: 2, count: 1 }, { unit: 'rocketTruck', weight: 1, count: 1 }],
+  },  antiquity: {
+    id: 'antiquity',
+    name: 'Antiquity',
+    blurb: 'An ancient army, Roman and Chinese, against tanks: a silly underdog. Legionaries lock big shields in front, and bullets from in front mostly glance off (shells lobbed over the top don\'t); crossbowmen loose quick volleys, even at aircraft. Ballistae put bolts through armour, trebuchets lob stones a long way, hwachas fire racks of fire arrows, chariots and war elephants charge. Everything is cheap and there\'s lots of it. Super unit: the Bronze Colossus, a giant automaton with a great sword.',
+    caps: { infantry: 1.8, vehicle: 1.7 },
+    production: {
+      barracks: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 5 }], interval: 13 },
+      factory: {
+        table: [
+          { unit: 'ballista', weight: 2, count: 2 },
+          { unit: 'trebuchet', weight: 1.4, count: 1 },
+          { unit: 'chariot', weight: 2, count: 2 },
+          { unit: 'warElephant', weight: 1.6, count: 1 },
+          { unit: 'hwacha', weight: 1.2, count: 1 },
+        ],
+        interval: 14,
+      },
+      mechbay: { table: [{ unit: 'bronzeColossus', weight: 1, count: 1 }] },
+    },
+    signature: 'castrum',
+    waves: [{ unit: 'legionary', weight: 3, count: 6 }, { unit: 'crossbowman', weight: 2, count: 5 }, { unit: 'chariot', weight: 2, count: 2 }, { unit: 'warElephant', weight: 1, count: 1 }],
   },
+
 
 };
 
@@ -449,7 +471,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];
