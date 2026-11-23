@@ -79,11 +79,19 @@ export class Shortcuts {
   private spots: { version: number; list: Shortcut[] } | null = null;
   /** Per side: the place chosen (or none) and when to look again. */
   private picks: ({ pick: ShortcutPick | null; until: number } | undefined)[] = [];
+  /** When a side last looked (see pick). */
+  private lookedAt = -1;
 
   /** The place a side's engineers should bridge now, if any (see the notes at the top). */
   pick(world: World, ctx: SimContext, side: number, enemy: number): ShortcutPick | null {
     const was = this.picks[side];
-    if (was && world.time < was.until && (!was.pick || !ctx.field.nearBridge(was.pick.spot.x, was.pick.spot.z, BRIDGED))) return was.pick;
+    const bridged = was?.pick ? ctx.field.nearBridge(was.pick.spot.x, was.pick.spot.z, BRIDGED) : false;
+    if (was && world.time < was.until && !bridged) return was.pick;
+    // One side looks per Commander refresh: a look is several route searches over the whole map,
+    // and every side looking in the same tick (they all start together) stalled the sim for a
+    // third of a second. The rest wait their turn, a refresh or a few later, and stay spread out.
+    if (this.lookedAt === world.time) return bridged ? null : (was?.pick ?? null);
+    this.lookedAt = world.time;
     const pick = this.choose(world, ctx, side, enemy, was?.pick ?? null);
     this.picks[side] = { pick, until: world.time + REPLAN };
     return pick;
