@@ -49,6 +49,7 @@ import { SmokeField, smokeSystem } from './smoke';
 import { hackSystem } from './hacking';
 import { dropPodSystem, Strikes } from './zenith';
 import { hiveSystem } from './hive';
+import { nomadSystem } from './nomad';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -148,6 +149,7 @@ export class Game {
       wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
       strikes: new Strikes(),
+      camps: [],
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       traffic: new Traffic(nav),
     };
@@ -166,7 +168,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       trafficSystem(ctx),

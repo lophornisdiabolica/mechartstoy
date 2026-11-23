@@ -26,6 +26,8 @@ export const HEAL_RATE = 0.015;
 export const REFILL_INTERVAL = 8;
 /** How far round a held outpost its territory reaches. */
 export const OUTPOST_TERRITORY = 16;
+/** How far round a Nomad camp its territory reaches. */
+export const CAMP_TERRITORY = 12;
 /** Base territory as a multiple of the base pad's radius. */
 const BASE_TERRITORY = 1.25;
 /** Seconds between territory checks. */
@@ -55,6 +57,10 @@ export function inTerritory(ctx: SimContext, faction: number, x: number, z: numb
   for (const o of ctx.outposts) {
     if (o.owner < 0 || !sides.allied(o.owner, faction)) continue;
     if (D.sq(x - o.x) + D.sq(z - o.z) <= D.sq(OUTPOST_TERRITORY)) return true;
+  }
+  // Nomad camps (see nomad.ts).
+  for (const c of ctx.camps) {
+    if (sides.allied(c.faction, faction) && D.sq(x - c.x) + D.sq(z - c.z) <= D.sq(CAMP_TERRITORY)) return true;
   }
   return false;
 }

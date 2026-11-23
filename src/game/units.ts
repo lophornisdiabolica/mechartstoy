@@ -246,6 +246,8 @@ export interface UnitDef {
   desperate?: number;
   /** A Hive fabricator: it chews wreckage round it into more units (see hive.ts). */
   eats?: EatsDef;
+  /** A Nomad crawler (see nomad.ts): it sets up as this building, taking `time` seconds to unfold or pack up. */
+  deploys?: { into: string; time: number };
 }
 
 /** What a fabricator eats and makes (see hive.ts). */
@@ -2032,6 +2034,76 @@ export const UNIT_DEFS = {
     carries: { squad: [{ unit: 'mite', count: 4 }], every: 22 },
     eats: { radius: 10, rate: 0.6, makes: [{ unit: 'mite', count: 4, cost: 0.6 }, { unit: 'gunMite', count: 2, cost: 0.8 }] },
     wreckTime: 40,
+    siege: true,
+  },
+  // Nomad: a base that walks (see nomad.ts).
+  // A huge, slow tracked factory rig: it drives out behind the army and sets up camp there.
+  crawler: {
+    id: 'crawler',
+    name: 'Crawler',
+    class: 'vehicle',
+    category: 'vehicle',
+    // Its numbers are kept by the crawler yard, not the cap (see nomad.ts).
+    capCost: 0,
+    move: 'tracked',
+    role: 'support',
+    model: 'crawler',
+    hp: 800,
+    armor: 12,
+    speed: 1.4,
+    turnRate: 0.7,
+    radius: 2,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Twin machine guns', range: 13, damage: 6, cooldown: 1, burst: 5, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }),
+    deploys: { into: 'crawlerCamp', time: 15 },
+    wreckTime: 40,
+    siege: false,
+  },
+  // A fast raiding motorbike with a gunner riding pillion.
+  outrider: {
+    id: 'outrider',
+    name: 'Outrider',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.5,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'outrider',
+    hp: 70,
+    armor: 1,
+    speed: 5.4,
+    turnRate: 3.8,
+    radius: 0.5,
+    sight: 20,
+    turret: true,
+    turretTurnRate: 6,
+    weapon: weapon({ name: 'Pillion machine gun', range: 10, damage: 5, cooldown: 1, burst: 4, burstGap: 0.09, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.0 }),
+    wreckTime: 10,
+    siege: false,
+  },
+  // Super unit: the Ark, a land-ship on six tracks with a battery of cannons, carrying a squad that it drops off at the fight.
+  ark: {
+    id: 'ark',
+    name: 'Ark',
+    class: 'vehicle',
+    category: 'super',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'ark',
+    hp: 1700,
+    armor: 18,
+    speed: 1.3,
+    turnRate: 0.6,
+    radius: 2.6,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1,
+    weapon: weapon({ name: 'Twin heavy cannon', range: 20, damage: 75, cooldown: 3.2, burst: 2, burstGap: 0.35, projectile: 'shell', speed: 42, splash: 1.6, spread: 0.04, muzzleHeight: 3.1, pierce: 0.4 }),
+    mounts: [{ weapon: weapon({ name: 'Deck guns', range: 13, damage: 6, cooldown: 1, burst: 5, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'ark#guns', turnRate: 4 }],
+    carries: { squad: [{ unit: 'trooper', count: 4 }, { unit: 'atTrooper', count: 1 }], every: 25 },
+    wreckTime: 45,
     siege: true,
   },
 } satisfies Record<string, UnitDef>;

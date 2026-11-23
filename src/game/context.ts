@@ -15,6 +15,7 @@ import type { FrostField } from './frost';
 import type { WreckageField } from './wreckage';
 import type { SmokeField } from './smoke';
 import type { Strikes } from './zenith';
+import type { Camp } from './nomad';
 import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
@@ -104,6 +105,8 @@ export type GameEvents = {
    * targeting laser paints the spot.
    */
   strikeCalled: { x: number; y: number; z: number; radius: number; delay: number; fromX: number; fromY: number; fromZ: number; faction: number };
+  /** A Nomad crawler setting up camp (`up`) or packing up (see nomad.ts). */
+  camp: { x: number; y: number; z: number; up: boolean };
   /** A Hive fabricator chewing wreckage (see hive.ts). */
   chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */
@@ -185,6 +188,8 @@ export interface SimContext {
   smoke: SmokeField;
   /** Orbital strikes on their way down (see zenith.ts). */
   strikes: Strikes;
+  /** Nomad camps set up, for territory (see nomad.ts). */
+  camps: Camp[];
   /** Energy domes up this tick (see shields.ts). */
   domes: Domes;
   /** The towns' people (see towns.ts). */

@@ -75,6 +75,8 @@ export interface BuildingDef {
   rearms?: boolean;
   /** A Hive building that chews wreckage round it into units (see hive.ts). */
   eats?: EatsDef;
+  /** Nomad's crawler yard (see nomad.ts): the crawler it turns out now and then. */
+  yard?: UnitId;
 }
 
 /**
@@ -463,6 +465,36 @@ export const BUILDING_DEFS = {
     turretTurnRate: 2,
     rebuildDelay: 40,
     buildTime: 10,
+  },
+  /** Nomad's signature (see nomad.ts): a great shed that turns out crawlers, up to three at a time. */
+  crawlerYard: {
+    id: 'crawlerYard',
+    name: 'Crawler Yard',
+    model: 'bld:crawlerYard',
+    hp: 1000,
+    armor: 9,
+    radius: 3,
+    height: 3.6,
+    yard: 'crawler',
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
+  /** A Nomad crawler set up (see nomad.ts): a field factory with territory round it. It packs up again as a crawler. */
+  crawlerCamp: {
+    id: 'crawlerCamp',
+    name: 'Crawler Camp',
+    model: 'bld:crawlerCamp',
+    hp: 800,
+    armor: 12,
+    radius: 2.4,
+    height: 2.6,
+    production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'outrider', weight: 2, count: 2 }, { unit: 'tank', weight: 1, count: 1 }], interval: 24 },
+    weapon: { name: 'Twin machine guns', range: 13, minRange: 0, damage: 6, cooldown: 1, burst: 5, burstGap: 0.08, projectile: 'bullet', speed: 60, splash: 0, spread: 0.07, arc: false, muzzleHeight: 3, targets: 'both' },
+    sight: 18,
+    turretTurnRate: 2,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 15,
   },
   tower: {
     id: 'tower',
