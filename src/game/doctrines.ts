@@ -555,7 +555,8 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       barracks: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 12 },
       hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
-      factory: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 14 },
+      // The odd stolen scout copter is all it has in the air.
+      factory: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
       mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
     },
     signature: 'shrine',
