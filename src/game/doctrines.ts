@@ -393,7 +393,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'hive',
     name: 'Hive',
     blurb: 'A swarm grown from wreckage. No rifle squads: its barracks breed packs of mites, knee-high biting bugs that climb over walls and buildings, and its fabricators crawl to the front and chew the wrecks there, the heaps and then the scrap buried under old battlefields, into more mites and little gun mites. So a long, bloody fight feeds it, and killing its fabricators starves it. Acid spitters take the place of flak, Ravager beetles are its heavies, and its Recycler eats whatever is wrecked near the base. Super unit: the Hive Mother, a towering brood mother that eats as she goes and sheds mites off her back.',
-    caps: { infantry: 1.0, vehicle: 1.3 },
+    caps: { infantry: 0.9, vehicle: 1.2 },
     production: {
       barracks: { table: [{ unit: 'mite', weight: 1, count: 4 }], interval: 21 },
       hq: { table: [{ unit: 'mite', weight: 1, count: 3 }] },
