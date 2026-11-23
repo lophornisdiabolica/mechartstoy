@@ -525,7 +525,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'glasshouse',
     waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'treant', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
-  },  lodestar: {
+  },
+
+  lodestar: {
     id: 'lodestar',
     name: 'Lodestar',
     blurb: 'Magnets and scrap. Magnet cranes fling the wrecks lying round them in long lobs, and can\'t throw with none in reach, so the longer a fight goes on the harder they hit; now and then a crane drags a heap of wrecks together into a scrap wall ahead of itself, low cover that crumbles after a while. Coil tanks put slugs through armour, and its scrapyard flings wrecks at attackers. Super unit: the Lodestone, a giant walker with a great magnet that hurls whole wrecks.',
