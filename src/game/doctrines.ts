@@ -353,7 +353,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 15 },
       // Shades rather than the default trooper squads, so all its infantry hide.
       hq: { table: [shadeSquad(2, 1)] },
-      barracksBlock: { table: [shadeSquad(3, 1), shadeSquad(2, 1)] },
+      barracksBlock: { table: [shadeSquad(2, 1)] },
       factory: {
         table: [
           { unit: 'ghostTank', weight: 3, count: 1 },
@@ -538,7 +538,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     production: {
       factory: {
         table: [
-          { unit: 'coilTank', weight: 2, count: 1 },
+          { unit: 'coilTank', weight: 2.5, count: 1 },
           { unit: 'magnetCrane', weight: 2, count: 1 },
           { unit: 'tank', weight: 1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
