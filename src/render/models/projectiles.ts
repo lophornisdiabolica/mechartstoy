@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ProjectileKind } from '../../game/units';
-import { glowBox, registerModel, setRig } from '../models';
+import { box, glowBox, registerModel, setRig } from '../models';
 
 /** Projectiles are built along +z and oriented along their velocity by the rig. */
 function projectile(length: number, width: number, color: number): THREE.Object3D {
@@ -28,6 +28,12 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   // Verdant's seed pods and vine lashes.
   seed: () => projectile(0.3, 0.3, 0x7ab04a),
   vine: () => projectile(1.2, 0.06, 0x4a8a2a),
+  // Lodestar's flung wrecks: a dark tumbling chunk of hull.
+  scrap: () => {
+    const root = new THREE.Group();
+    root.add(box(0.5, 0.35, 0.6, 0x4a4640));
+    return setRig(root, { faceVelocity: true });
+  },
   // Hive's acid: a fat, sickly glob.
   acid: () => projectile(0.35, 0.26, 0xc6e03a),
   // Zenith's strike: a column of light coming straight down, its foot at the projectile.

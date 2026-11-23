@@ -10,6 +10,7 @@ import { Health } from '../components';
 import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
+import { SCRAP_REACH } from '../lodestar';
 import { strike } from './melee';
 import { domeOver } from '../shields';
 import { hazeSpread } from '../smoke';
@@ -249,6 +250,14 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, armed.shot, ctx);
       armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
       if (armed.blocked) return;
+    }
+    // A magnet crane throws wrecks, and with none in reach it can't (see lodestar.ts).
+    if (armed.weapon.flings !== undefined) {
+      const t = world.req(e, Transform);
+      if (ctx.wreckage.take(t.x, t.z, SCRAP_REACH, armed.weapon.flings) < armed.weapon.flings * 0.5) {
+        armed.cooldown = 1;
+        return;
+      }
     }
     // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
     const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);

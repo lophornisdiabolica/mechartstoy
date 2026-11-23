@@ -228,6 +228,14 @@ export class Effects {
         this.debris.spawn({ x: e.x, y: e.y + 0.3, z: e.z, vx: Math.cos(a) * sp, vy: rand(2, 4), vz: Math.sin(a) * sp, life: rand(0.8, 1.3), size: rand(0.08, 0.14), endSize: 0.05, color: 0x5a9a3a, gravity: 5 });
       }
     });
+    // Wrecks dragged into a scrap wall: a trail of scrap skidding from the crane's heap to the wall, and dust where it piles up.
+    events.on('scrapWall', (e) => {
+      this.dust(e.x, e.y, e.z, 1.4, 8);
+      for (let i = 0; i < 8; i++) {
+        const k = i / 8;
+        this.debris.spawn({ x: e.fromX + (e.x - e.fromX) * k, y: e.y + 0.3, z: e.fromZ + (e.z - e.fromZ) * k, vx: (e.x - e.fromX) * 0.4, vy: rand(1, 2), vz: (e.z - e.fromZ) * 0.4, life: rand(0.4, 0.7), size: rand(0.1, 0.2), endSize: 0.06, color: 0x5a5650, gravity: 10 });
+      }
+    });
     // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
     events.on('chewed', (e) => {
       for (let i = 0; i < 3; i++) {
@@ -394,7 +402,7 @@ export class Effects {
       return;
     }
     // Bowstrings and throwing arms don't flash.
-    if (kind === 'arrow' || kind === 'stone' || kind === 'seed' || kind === 'vine') return;
+    if (kind === 'arrow' || kind === 'stone' || kind === 'seed' || kind === 'vine' || kind === 'scrap') return;
     if (kind === 'beam' || kind === 'frost') {
       this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
       return;
@@ -497,6 +505,11 @@ export class Effects {
     }
     if (kind === 'vine' || kind === 'seed') {
       this.debris.spawn({ x, y, z, vy: 1.5, life: 0.5, size: 0.12, endSize: 0.05, color: 0x5a9a3a, gravity: 6 });
+      return;
+    }
+    if (kind === 'scrap') {
+      this.dust(x, y, z, Math.max(0.8, splash * 0.7), 8);
+      for (let i = 0; i < 6; i++) this.debris.spawn({ x, y: y + 0.2, z, vx: rand(-2, 2), vy: rand(2, 4), vz: rand(-2, 2), life: rand(0.6, 1), size: rand(0.1, 0.2), endSize: 0.06, color: 0x5a5650, gravity: 14 });
       return;
     }
     if (kind === 'stone') {

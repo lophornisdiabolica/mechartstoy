@@ -1071,3 +1071,35 @@ registerModel('bld:glasshouse', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:glasshouse', g, turret, [vine]) });
 });
+
+// Lodestar's scrapyard: heaps of scrap inside a fence, a shed, and a magnet gantry that flings wrecks.
+registerModel('bld:scrapyard', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(6.0, 0.2, 5.6, 0x6a6458, 0, 0.1, 0));
+  g.add(box(2.6, 1.8, 2.4, primary, -1.4, 1.1, -1.2)); // shed
+  g.add(box(2.7, 0.16, 2.5, secondary, -1.4, 2.08, -1.2));
+  for (const [x, z, w, h] of [[1.6, 1.6, 1.4, 0.7], [-1.6, 1.6, 1.2, 0.5], [1.8, -1.4, 1.0, 0.6]]) g.add(box(w, h, w, 0x5a5650, x, 0.2 + h / 2, z)); // scrap heaps
+  const turret = new THREE.Group();
+  turret.position.set(0.6, 2.6, 0.2);
+  turret.add(box(0.3, 2.4, 0.3, 0x707070, 0, -1.2, 0)); // the gantry post
+  turret.add(box(0.6, 0.3, 0.6, 0x707070, 0, 0.15, 0));
+  const jib = barrelPivot('bld:scrapyard', turret);
+  jib.add(box(1.8, 0.16, 0.16, primary, 0.8, 0, 0));
+  jib.add(cylinder(0.3, 0.3, 0.14, 10, 0xb83a32, 1.6, -0.3, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:scrapyard', g, turret, [jib]) });
+});
+
+// A scrap wall: wrecked hulls and plates dragged together into a low, ragged line.
+registerModel('bld:scrapWall', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(0.9, 0.9, 0.7, 0x4a4640, -0.9, 0.45, 0));
+  g.add(box(1.0, 1.1, 0.8, 0x5a5650, 0.05, 0.55, 0.05));
+  g.add(box(0.8, 0.8, 0.75, 0x524c44, 0.95, 0.4, -0.05));
+  const plate = box(1.4, 0.08, 0.6, primary, 0.2, 1.15, 0);
+  plate.rotation.z = 0.15;
+  g.add(plate);
+  return g;
+});

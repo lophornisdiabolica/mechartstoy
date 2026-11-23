@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine' | 'scrap';
 
 export interface WeaponDef {
   name: string;
@@ -58,6 +58,8 @@ export interface WeaponDef {
   roots?: number;
   /** Verdant's seed pods (see verdant.ts): a thicket this wide springs up where it lands (a side plants one every so often). */
   plants?: number;
+  /** Lodestar's magnet cranes (see lodestar.ts): each throw takes this much of the wreckage in reach, and with none there it can't throw. */
+  flings?: number;
   /**
    * A second round for armoured targets: fired instead of this weapon's
    * volley at anything with at least `heavyAt` armour (guard towers' armour-
@@ -268,6 +270,8 @@ export interface UnitDef {
   decoy?: { lasts: number };
   /** A Mirage projector (see mirage.ts): every `every` seconds it throws up `count` holograms, taking turns through `units`. */
   projects?: ProjectsDef;
+  /** A Lodestar crane (see lodestar.ts): every this many seconds it drags the wrecks in reach into a scrap wall ahead of itself. */
+  walls?: number;
 }
 
 /** What a Mirage projector throws up (see mirage.ts). */
@@ -2637,6 +2641,74 @@ export const UNIT_DEFS = {
     turretTurnRate: 1.2,
     weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 2 }),
     mounts: [{ weapon: weapon({ name: 'Seed burst', range: 24, minRange: 6, damage: 40, cooldown: 6, projectile: 'seed', speed: 16, splash: 2.2, spread: 0.12, arc: true, muzzleHeight: 5, plants: 2.6 }), mount: 'worldTree#seeds', turnRate: 2 }],
+    wreckTime: 45,
+    siege: true,
+  },
+  // Lodestar: magnets and scrap (see lodestar.ts).
+  // A magnet crane: it flings the wrecks lying round it, and drags heaps of them into scrap walls.
+  magnetCrane: {
+    id: 'magnetCrane',
+    name: 'Magnet Crane',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
+    model: 'magnetCrane',
+    hp: 190,
+    armor: 5,
+    speed: 2.2,
+    turnRate: 1.4,
+    radius: 1.1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 1.6,
+    weapon: weapon({ name: 'Scrap fling', range: 20, minRange: 4, damage: 60, cooldown: 4, projectile: 'scrap', speed: 18, splash: 1.6, spread: 0.08, arc: true, muzzleHeight: 3, pierce: 0.3, flings: 0.2 }),
+    mounts: [{ weapon: weapon({ name: 'Machine gun', range: 11, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }), mount: 'magnetCrane#mg', turnRate: 4 }],
+    walls: 22,
+    wreckTime: 18,
+    siege: false,
+  },
+  // A coil tank: a magnetic coilgun that puts a slug straight through armour.
+  coilTank: {
+    id: 'coilTank',
+    name: 'Coil Tank',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'frontline',
+    model: 'coilTank',
+    hp: 220,
+    armor: 7,
+    speed: 2.5,
+    turnRate: 1.6,
+    radius: 1.1,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 1.8,
+    weapon: weapon({ name: 'Coilgun', range: 17, damage: 44, cooldown: 3, projectile: 'shell', speed: 80, spread: 0.03, muzzleHeight: 1.1, pierce: 0.6 }),
+    wreckTime: 20,
+    siege: false,
+  },
+  // Super unit: the Lodestone, a giant walker with a great magnet that rips up whole wrecks and hurls them.
+  lodestone: {
+    id: 'lodestone',
+    name: 'Lodestone',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'frontline',
+    model: 'lodestone',
+    hp: 1500,
+    armor: 16,
+    speed: 1.4,
+    turnRate: 0.9,
+    radius: 1.9,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.2,
+    weapon: weapon({ name: 'Wreck hurl', range: 24, minRange: 5, damage: 120, cooldown: 3.6, projectile: 'scrap', speed: 18, splash: 2.8, spread: 0.07, arc: true, muzzleHeight: 4.5, pierce: 0.4 }),
+    mounts: [{ weapon: weapon({ name: 'Coilguns', range: 16, damage: 30, cooldown: 2, burst: 2, burstGap: 0.2, projectile: 'shell', speed: 80, spread: 0.04, muzzleHeight: 2.8, pierce: 0.5 }), mount: 'lodestone#coils', turnRate: 2.5 }],
+    walls: 25,
     wreckTime: 45,
     siege: true,
   },
