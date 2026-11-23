@@ -3,7 +3,7 @@ import { Entity, World } from '../core/ecs';
 import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
-import { createModel, getRig } from './models';
+import { createModel, getRig, modelKeys } from './models';
 import { breakModel, Collapse, Crumble, startCrumble, stepCollapse, stepCrumble } from './wrecks';
 import { CRUMBLE_TIME } from '../game/systems/death';
 import { SIM_HZ } from '../game/game';
@@ -155,6 +155,54 @@ export class EntityView {
   dispose(): void {
     this.stopStruck?.();
     this.batcher.dispose();
+  }
+
+  /**
+   * Compile, now, the shaders any model can need, so the first of a kind
+   * to appear mid-battle (a super unit, a stealthed trooper fading out)
+   * doesn't stall the frame it shows up in while its shader compiles: every
+   * model, solid and as a ghost, batched once into a throwaway batcher that
+   * sits in `scene` just long enough for the renderer to compile it.
+   */
+  warmShaders(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    const b = new Batcher();
+    const sprites: THREE.Sprite[] = [];
+    b.begin();
+    let ghosted = false;
+    for (const key of modelKeys()) {
+      let obj: THREE.Object3D;
+      try {
+        obj = createModel(key, 0);
+      } catch {
+        continue;
+      }
+      obj.updateMatrixWorld(true);
+      obj.traverse((o) => {
+        if ((o as THREE.Sprite).isSprite) {
+          const s = o as THREE.Sprite;
+          sprites.push(s);
+          b.addSprite(s);
+          b.addSprite(s, true);
+        } else if ((o as THREE.Mesh).isMesh) {
+          const m = o as THREE.Mesh;
+          b.addMesh(m);
+          if (!ghosted) for (const g of GHOSTS) b.addMesh(m, g);
+          ghosted = true;
+        }
+      });
+    }
+    b.end();
+    scene.add(b.root);
+    const done = renderer.compileAsync(scene, camera);
+    scene.remove(b.root);
+    const free = () => {
+      b.dispose();
+      for (const s of sprites) {
+        s.material.map?.dispose();
+        s.material.dispose();
+      }
+    };
+    done.then(free, free);
   }
 
   /** Draw calls the entities take (before shadows), for the stats readout. */

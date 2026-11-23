@@ -77,6 +77,8 @@ export class PerfOverlay {
   /** Things watching the profile besides the readout (measure, the cost check). */
   private watchers = 0;
   private readonly hitches: string[] = [];
+  /** Shader programs the renderer had at the last frame (see noteHitch). */
+  private programs = 0;
   private checking = false;
 
   private audioMs = 0;
@@ -167,11 +169,16 @@ export class PerfOverlay {
 
   /** Log the frame just finished if its page work ran long, with the parts that took the time. */
   private noteHitch(): void {
+    // Shaders compiled this frame: the commonest cause of a one-off stall (something drawn for the first time).
+    const programs = this.stage.renderer.info.programs?.length ?? 0;
+    const compiled = Math.max(0, programs - this.programs);
+    this.programs = programs;
     // The cost check's deliberate GPU waits aren't hitches.
     const parts = [...this.profile.thisFrame()].filter(([k]) => k !== GPU_WAIT);
     const total = parts.reduce((s, [, v]) => s + v, 0);
     if (total < HITCH_MS) return;
-    const top = parts.sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
+    let top = parts.sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
+    if (compiled > 0) top += `; ${compiled} new shader${compiled > 1 ? 's' : ''}`;
     const t = this.game?.world.time ?? 0;
     const clock = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     this.hitches.unshift(`${clock} ${total.toFixed(0)} ms (${top})`);
@@ -263,9 +270,20 @@ export class PerfOverlay {
       objects.forEach((o) => o && (o.visible = false));
       return () => objects.forEach((o, i) => o && (o.visible = was[i]));
     };
-    const steps: CostStep[] = [
+    const steps: CostStep[] = [];
+    // Shadows are checked against what they're set to: High is checked against Low as well as off.
+    if (stage.shadows === 'high') {
+      steps.push({
+        label: 'shadows high to low',
+        off: () => {
+          stage.shadows = 'low';
+          return () => (stage.shadows = 'high');
+        },
+      });
+    }
+    steps.push(
       {
-        label: 'shadows',
+        label: `shadows (${stage.shadows})`,
         off: () => {
           const was = stage.shadows;
           stage.shadows = 'off';
@@ -305,7 +323,7 @@ export class PerfOverlay {
       { label: 'wreckage heaps', off: hide(stage.layer('wreckage')) },
       { label: 'units and buildings', off: hide(stage.layer('batches')) },
       { label: 'effects and smoke', off: hide(stage.layer('effects'), stage.layer('smoke-clouds')) },
-    ];
+    );
     const ms = (v: number) => v.toFixed(1);
     const lines: string[] = [];
     const show = (extra = '') => (this.report.textContent = [...lines, extra].filter(Boolean).join('\n'));
@@ -392,7 +410,7 @@ export class PerfOverlay {
       `page ${ms(s.pageMs)} ms/frame: ${top(s.page, 5)}`,
       s.gpu ? `GPU ${ms(s.gpuMs!)} ms/frame: ${top(s.gpu, 4)}` : 'GPU timers: not available in this browser',
       `draw calls ${Math.round(s.calls)} (shadows ${Math.round(s.shadowCalls)}) · triangles ${Math.round(s.triangles / 1000)}k · models drawn ${Math.round(s.modelsDrawn)} of ${Math.round(s.models)}`,
-      `entity batches ${this.stage.entities?.batches ?? 0} · wreckage pieces ${this.stage.wreckage?.pieces ?? 0} · pixels ${this.stage.pixels()}`,
+      `entity batches ${this.stage.entities?.batches ?? 0} · wreckage pieces ${this.stage.wreckage?.pieces ?? 0} · pixels ${this.stage.pixels()} · shadow map ${this.stage.shadowMapSize || 'off'}`,
     ];
     const w = this.game?.world;
     if (w) {

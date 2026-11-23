@@ -60,7 +60,17 @@ export type CameraMode = 'free' | 'follow' | 'director' | 'unit';
 
 export type ShadowQuality = 'high' | 'low' | 'off';
 
-const SHADOW_MAP: Record<Exclude<ShadowQuality, 'off'>, number> = { high: 4096, low: 2048 };
+/** Low shadows' map size, and the most High's grows to. */
+const SHADOW_LOW = 2048;
+const SHADOW_MOST = 4096;
+/**
+ * High shadows' map is sized to the screen: this many shadow texels per
+ * drawn pixel across its wider side (rounded up to a multiple of 256), at
+ * least Low's and at most SHADOW_MOST. The map covers a little more than
+ * the view, at a slant, so 1.5 keeps a texel under a pixel; a 1920-wide
+ * screen gets 2880 rather than 4096, half the pixels to fill.
+ */
+const SHADOW_PER_PIXEL = 1.5;
 
 /** Where the sun sits relative to the point it lights. */
 const SUN_OFFSET = new THREE.Vector3(-60, 90, 40);
@@ -163,7 +173,7 @@ export class Stage {
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.position.copy(SUN_OFFSET);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(SHADOW_MAP.high, SHADOW_MAP.high);
+    this.sun.shadow.mapSize.set(SHADOW_MOST, SHADOW_MOST);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 300;
     // No bias at all. The depth bias is a fraction of the shadow camera's depth (300 units),
@@ -317,6 +327,7 @@ export class Stage {
     this.unitCam = new UnitCam(game);
     this.mapHalf = Math.max(field.width, field.depth) * 0.6;
     this.rig.setBounds(field.bounds);
+    this.entities.warmShaders(this.renderer, this.scene, this.rig.camera);
   }
 
   get cameraMode(): CameraMode {
@@ -426,11 +437,25 @@ export class Stage {
     this.shadowQuality = q;
     // Materials pick up the change in light setup by recompiling on the next frame.
     this.sun.castShadow = q !== 'off';
-    if (q !== 'off' && this.sun.shadow.mapSize.x !== SHADOW_MAP[q]) {
-      this.sun.shadow.mapSize.set(SHADOW_MAP[q], SHADOW_MAP[q]);
-      this.sun.shadow.map?.dispose();
-      this.sun.shadow.map = null;
-    }
+    this.sizeShadowMap();
+  }
+
+  /** The shadow map's size for the shadow quality and the size of the screen (see SHADOW_PER_PIXEL). */
+  private sizeShadowMap(): void {
+    const q = this.shadowQuality;
+    if (q === 'off') return;
+    const drawn = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const fit = Math.ceil((Math.max(drawn.x, drawn.y) * SHADOW_PER_PIXEL) / 256) * 256;
+    const size = q === 'low' ? SHADOW_LOW : Math.max(SHADOW_LOW, Math.min(SHADOW_MOST, fit));
+    if (this.sun.shadow.mapSize.x === size) return;
+    this.sun.shadow.mapSize.set(size, size);
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
+  }
+
+  /** The shadow map's size now, in texels across (0 with shadows off). */
+  get shadowMapSize(): number {
+    return this.shadowQuality === 'off' ? 0 : this.sun.shadow.mapSize.x;
   }
 
   /**
@@ -613,6 +638,7 @@ export class Stage {
     const h = this.container.clientHeight;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.scale);
     this.renderer.setSize(w, h);
+    this.sizeShadowMap();
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
     const pr = this.renderer.getPixelRatio();
