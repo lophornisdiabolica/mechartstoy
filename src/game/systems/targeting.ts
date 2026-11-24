@@ -114,6 +114,7 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
     if (!ctx.sides.hostile(faction, otherFaction)) return;
     if (builder && world.get(other, Unit)?.def.builds === true && (crossing || engineers.onCrossing(other))) return;
     if (!canHit(world, armed, other)) return;
+    if (armed.weapon.unitsOnly && body.building) return;
     // A hack weapon only goes for what it can turn (see hacking.ts).
     if (armed.weapon.hack && !hackable(world, other)) return;
     const d = Math.sqrt(d2);

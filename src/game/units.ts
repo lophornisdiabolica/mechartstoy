@@ -54,6 +54,8 @@ export interface WeaponDef {
   targets: WeaponTargets;
   /** Share of the target's armour this weapon's direct hits ignore (0 to 1; see damageThrough). */
   pierce?: number;
+  /** Only ever aims at units, never buildings (a base's defences, there to meet attackers, not to shell the neighbours). */
+  unitsOnly?: boolean;
   /** Verdant's vines (see verdant.ts): a direct hit holds a ground vehicle or walker where it is for this many seconds. */
   roots?: number;
   /** Verdant's seed pods (see verdant.ts): a thicket this wide springs up where it lands (a side plants one every so often). */

@@ -431,9 +431,9 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.2,
     production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'tank', weight: 2.5, count: 1 }, { unit: 'beaconRunner', weight: 0.7, count: 1 }], interval: 28 },
-    // A targeting laser on top of the drop tube calls strikes down on whatever comes at the base.
-    weapon: { name: 'Base uplink', range: 30, minRange: 4, damage: 170, cooldown: 6, burst: 1, burstGap: 0, projectile: 'orbital', speed: 1, splash: 4.5, spread: 0.03, arc: false, muzzleHeight: 4.2, targets: 'ground', orbital: { delay: 2.4 } },
-    sight: 30,
+    // A targeting laser on top of the drop tube calls strikes down on whatever comes at the base: units only, and not far.
+    weapon: { name: 'Base uplink', range: 24, minRange: 4, damage: 170, cooldown: 6, burst: 1, burstGap: 0, projectile: 'orbital', speed: 1, splash: 4.5, spread: 0.03, arc: false, muzzleHeight: 4.2, targets: 'ground', orbital: { delay: 2.4 }, unitsOnly: true },
+    sight: 24,
     turretTurnRate: 1.5,
     rebuildDelay: 40,
     buildTime: 10,
