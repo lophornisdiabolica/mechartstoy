@@ -1022,10 +1022,9 @@ const IDLE_WEAPON = 0.05;
 function weaponNames(unit: string): string[] {
   const def = (UNIT_DEFS as Record<string, UnitDef>)[unit];
   if (!def) return [];
-  const names = [def.weapon.name];
-  if (def.weapon.heavy) names.push(def.weapon.heavy.name);
-  for (const m of def.mounts ?? []) names.push(m.weapon.name);
-  return [...new Set(names)];
+  // Weapons that do no damage by design (hacking) aren't counted.
+  const all = [def.weapon, ...(def.weapon.heavy ? [def.weapon.heavy] : []), ...(def.mounts ?? []).map((m) => m.weapon)];
+  return [...new Set(all.filter((w) => w.damage > 0).map((w) => w.name))];
 }
 
 /**

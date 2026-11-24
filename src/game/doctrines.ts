@@ -350,7 +350,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'veil',
     name: 'Veil',
     blurb: 'Haze and stealth. Smoke trucks lob canisters that leave a thin haze: shots into it or out of it go wild, except Veil\'s own. Its only infantry are shades, AT troopers that vanish while they hold their fire in a forest, by a building or in Veil\'s haze, even on the move, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth. It flies strike jets rather than scout copters. Its smoke stacks keep a haze over the base. Super unit: the Eclipse, a walker breathing out haze over the army round it.',
-    caps: { infantry: 1, vehicle: 1 },
+    caps: { infantry: 0.95, vehicle: 0.95 },
     production: {
       barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 15 },
       // Shades rather than the default trooper squads, so all its infantry hide.
@@ -399,9 +399,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'hive',
     name: 'Hive',
     blurb: 'A swarm grown from wreckage. No rifle squads: its barracks breed packs of mites, knee-high biting bugs that climb over walls and buildings, and its fabricators crawl to the front and chew the wrecks there, the heaps and then the scrap buried under old battlefields, into more mites and little gun mites. So a long, bloody fight feeds it, and killing its fabricators starves it. Acid spitters take the place of flak, Ravager beetles are its heavies, and its Recycler eats whatever is wrecked near the base and turns out fabricators. Super unit: the Hive Mother, a towering brood mother that eats as she goes and sheds mites off her back.',
-    caps: { infantry: 0.9, vehicle: 1.2 },
+    caps: { infantry: 0.9, vehicle: 1.12 },
     production: {
-      barracks: { table: [{ unit: 'mite', weight: 1, count: 4 }], interval: 21 },
+      barracks: { table: [{ unit: 'mite', weight: 1, count: 4 }], interval: 23 },
       hq: { table: [{ unit: 'mite', weight: 1, count: 3 }] },
       barracksBlock: { table: [{ unit: 'mite', weight: 1, count: 4 }] },
       factory: {
@@ -494,7 +494,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'mirage',
     name: 'Mirage',
     blurb: 'Holograms. Projector trucks throw up hologram prism tanks: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Projectors only project in a fight, out in front toward the enemy. Prism tanks do the real work with their cannons, and its mirror array throws up more holograms by its own units in a fight. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
-    caps: { infantry: 0.9, vehicle: 1.4 },
+    caps: { infantry: 0.9, vehicle: 1.32 },
     production: {
       factory: {
         table: [
