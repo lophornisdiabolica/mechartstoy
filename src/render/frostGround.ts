@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { uploadInstances } from './upload';
-import { FROST_CELL, FROZEN } from '../game/frost';
+import { FROST_CELL, FROZEN, FrostField } from '../game/frost';
 import { Game } from '../game/game';
 
 /** Most frosted cells drawn at once. */
@@ -21,11 +21,28 @@ const THICK = 0.08;
  * The plates' shades, thinnest to thickest frost, and the frost each takes
  * over at: a few flat steps rather than a gradient.
  */
-const SHADES: [number, THREE.Color][] = [
+export const FROST_SHADES: [number, THREE.Color][] = [
   [0, new THREE.Color(0xb8d8ea)],
   [1.5, new THREE.Color(0xd2e8f4)],
   [3.5, new THREE.Color(0xeef8ff)],
 ];
+/** Verdant's tangle (see game/verdant.ts): dark mats of vine, darker and denser as it thickens. */
+export const TANGLE_SHADES: [number, THREE.Color][] = [
+  [0, new THREE.Color(0x5e8a3a)],
+  [1.5, new THREE.Color(0x4a7430)],
+  [3.5, new THREE.Color(0x365a26)],
+];
+
+/** What a ground of plates draws: which field, in which shades, how see-through. */
+export interface PatchLook {
+  name: string;
+  field: (game: Game) => FrostField;
+  shades: [number, THREE.Color][];
+  opacity: number;
+}
+
+export const FROST_LOOK: PatchLook = { name: 'frost-ground', field: (g) => g.ctx.frost, shades: FROST_SHADES, opacity: OPACITY };
+export const TANGLE_LOOK: PatchLook = { name: 'tangle-ground', field: (g) => g.ctx.tangle, shades: TANGLE_SHADES, opacity: 0.8 };
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -44,7 +61,7 @@ const _p = new THREE.Vector3();
  *
  * What's drawn eases toward the sim's frost rather than jumping with it,
  * so an aura's edge, freezing and thawing a little every tick, doesn't
- * flicker.
+ * flicker. Verdant's tangle is drawn the same way in dark greens (TANGLE_LOOK).
  */
 export class FrostGround {
   readonly root = new THREE.Group();
@@ -55,11 +72,14 @@ export class FrostGround {
   private live: number[] = [];
   private listed: Uint8Array | null = null;
 
-  constructor(private readonly game: Game) {
-    this.root.name = 'frost-ground';
+  constructor(
+    private readonly game: Game,
+    private readonly look: PatchLook = FROST_LOOK,
+  ) {
+    this.root.name = look.name;
     // A thin six-sided slab, flat sides across the rows (along x), points along them (z): one cell wide, as tall as the lattice needs.
     const plate = new THREE.CylinderGeometry(FROST_CELL / Math.sqrt(3), FROST_CELL / Math.sqrt(3), THICK, 6).translate(0, THICK / 2, 0);
-    const material = new THREE.MeshLambertMaterial({ flatShading: true, transparent: true, opacity: OPACITY, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const material = new THREE.MeshLambertMaterial({ flatShading: true, transparent: true, opacity: look.opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     this.plates = new THREE.InstancedMesh(plate, material, MOST);
     this.plates.count = 0;
     this.plates.frustumCulled = false;
@@ -70,7 +90,7 @@ export class FrostGround {
   }
 
   update(seconds: number): void {
-    const frost = this.game.ctx.frost;
+    const frost = this.look.field(this.game);
     if (frost.count === 0 && this.live.length === 0) return;
     const n = frost.cols * frost.rows;
     if (!this.shown || this.shown.length !== n) {
@@ -119,8 +139,9 @@ export class FrostGround {
       _s.set(size, 1, size * (2 / Math.sqrt(3)));
       _m.compose(_p, _q, _s);
       this.plates.setMatrixAt(q, _m);
-      let shade = SHADES[0][1];
-      for (const [from, colour] of SHADES) if (amount >= from) shade = colour;
+      const shades = this.look.shades;
+      let shade = shades[0][1];
+      for (const [from, colour] of shades) if (amount >= from) shade = colour;
       this.plates.setColorAt(q, shade);
       q++;
     }

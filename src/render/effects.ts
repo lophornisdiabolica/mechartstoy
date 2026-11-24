@@ -212,13 +212,6 @@ export class Effects {
     events.on('blocked', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.18, size: 0.25, endSize: 0.6, color: 0xffd890, endColor: 0x000000 }));
     // A toy tipped over: a little puff of dust where it lands.
     events.on('toppled', (e) => this.dust(e.x, e.y, e.z, 0.5, 4));
-    // Vines wrapping round something: green tendrils whipping up round it.
-    events.on('rooted', (e) => {
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        this.debris.spawn({ x: e.x + Math.cos(a) * e.radius, y: e.y + 0.1, z: e.z + Math.sin(a) * e.radius, vx: -Math.cos(a) * 0.6, vy: rand(1.5, 2.5), vz: -Math.sin(a) * 0.6, life: rand(0.5, 0.8), size: 0.1, endSize: 0.05, color: 0x4a7a2a, gravity: 6 });
-      }
-    });
     // A seed pod sprouting: leaves and earth thrown up as the thicket springs up.
     events.on('grove', (e) => {
       this.dust(e.x, e.y, e.z, e.radius, 8);

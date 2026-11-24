@@ -17,7 +17,7 @@ import { Markers } from './markers';
 import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
 import { FireGround } from './fireGround';
-import { FrostGround } from './frostGround';
+import { FrostGround, TANGLE_LOOK } from './frostGround';
 import { WreckageGround } from './wreckageGround';
 import { SmokeClouds } from './smokeClouds';
 import { StrikeMarks } from './strikeMarks';
@@ -101,6 +101,7 @@ export class Stage {
   frontLines!: FrontLines;
   private fireGround!: FireGround;
   private frostGround!: FrostGround;
+  private tangleGround!: FrostGround;
   /** Heaps of junk where wrecks fell apart (see WreckageGround). */
   wreckage!: WreckageGround;
   private smokeClouds!: SmokeClouds;
@@ -273,6 +274,7 @@ export class Stage {
       this.frontLines.dispose();
       this.fireGround.dispose();
       this.frostGround.dispose();
+      this.tangleGround.dispose();
       this.wreckage.dispose();
       this.smokeClouds.dispose();
       this.strikeMarks.dispose();
@@ -321,6 +323,8 @@ export class Stage {
     battle.add(this.fireGround.root);
     this.frostGround = new FrostGround(game);
     battle.add(this.frostGround.root);
+    this.tangleGround = new FrostGround(game, TANGLE_LOOK);
+    battle.add(this.tangleGround.root);
     this.wreckage = new WreckageGround(game);
     battle.add(this.wreckage.root);
     this.smokeClouds = new SmokeClouds(game);
@@ -537,6 +541,7 @@ export class Stage {
     p?.lap('overlays');
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
+    this.tangleGround.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.strikeMarks.update(simSeconds);
     this.domes.update(simSeconds);

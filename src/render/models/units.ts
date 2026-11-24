@@ -2450,11 +2450,12 @@ registerModel('fataMorgana', (faction) => {
   return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('fataMorgana', root, turret, [lance]) });
 });
 
-// Verdant: a living army of plant-mechs.
-const BARK = 0x5a4030;
-const LEAF = 0x4a8a3a;
+// Verdant: biotech walkers, grown hulls on machine legs. Hulls in the side's own colours, so two Verdant sides
+// tell apart; only the small glowing bio-sacs and vine tips are Verdant's own.
+const SAC = 0x7fe0a8;
+const VINE = 0x3e6a2c;
 
-// A strangler: a bulb body on two root legs, with a coil of vine on top that it lashes out.
+// A strangler: a grown bulb hull on two machine legs, with a coil of vine on top that it lashes out.
 registerModel('strangler', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -2463,15 +2464,20 @@ registerModel('strangler', (faction) => {
   root.add(body);
   body.add(box(0.8, 0.6, 0.8, primary, 0, 0.2, 0));
   body.add(box(0.6, 0.12, 0.84, secondary, 0, 0.52, 0));
+  for (const side of [-1, 1]) {
+    const sac = glowBox(0.16, 0.2, 0.08, SAC);
+    sac.position.set(-0.1, 0.18, side * 0.42);
+    body.add(sac);
+  }
   const turret = new THREE.Group();
   turret.position.set(0, 0.4, 0);
-  turret.add(box(0.4, 0.3, 0.4, LEAF, 0, 0.15, 0));
+  turret.add(box(0.4, 0.3, 0.4, METAL, 0, 0.15, 0));
   const vine = barrelPivot('strangler', turret);
-  vine.add(box(0.7, 0.1, 0.1, LEAF, 0.3, 0, 0));
-  vine.add(box(0.14, 0.2, 0.2, 0xc04a6a, 0.7, 0, 0)); // a flower at its tip
+  vine.add(box(0.7, 0.1, 0.1, VINE, 0.3, 0, 0));
+  vine.add(box(0.14, 0.2, 0.2, secondary, 0.7, 0, 0)); // the lash's barbed tip
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.5, 0.5, 0.14, BARK, BARK);
+    const leg = makeLeg(0.5, 0.5, 0.14, METAL, DARK);
     leg.hip.position.set(0, -0.05, side * 0.22);
     body.add(leg.hip);
     return leg;
@@ -2479,67 +2485,79 @@ registerModel('strangler', (faction) => {
   return setRig(root, { turret, ...walker(legs, body, 0.6, 0.45), ...mounted('strangler', root, turret, [vine]) });
 });
 
-// A seed mortar: a big seed bulb on a wheeled cart, its mouth tilted up.
+// A seed mortar: a grown seed bulb on a wheeled cart, its mouth tilted up.
 registerModel('seedMortar', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   root.add(...wheels([-0.5, 0.5], 0.45, 0.4));
-  root.add(box(1.6, 0.25, 0.9, BARK, 0, 0.5, 0));
+  root.add(box(1.6, 0.25, 0.9, METAL, 0, 0.5, 0));
   root.add(box(0.5, 0.2, 0.92, secondary, -0.5, 0.7, 0));
   const turret = new THREE.Group();
   turret.position.set(0.15, 0.62, 0);
   turret.add(box(0.7, 0.5, 0.7, primary, 0, 0.25, 0));
   const mouth = barrelPivot('seedMortar', turret);
-  mouth.add(box(0.5, 0.36, 0.36, LEAF, 0.2, 0, 0));
+  mouth.add(box(0.5, 0.36, 0.36, VINE, 0.2, 0, 0));
+  const sac = glowBox(0.12, 0.2, 0.2, SAC);
+  sac.position.set(0.46, 0, 0);
+  mouth.add(sac);
   root.add(turret);
   return setRig(root, { turret, ...mounted('seedMortar', root, turret, [mouth]) });
 });
 
-// A treant: a walking tree-mech, a bark trunk with a leafy crown and club arms, and a thorn spitter in its crown.
-registerModel('treant', (faction) => {
+// A graft walker: a heavy biotech walker, a grown armoured torso on machine legs, ribbed down its back, with
+// glowing bio-sacs on its flanks, two claw arms, and a spine launcher on its back.
+registerModel('graftWalker', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   const body = new THREE.Group();
   body.position.y = 1.2;
   root.add(body);
   const turret = new THREE.Group();
-  turret.add(box(0.8, 1.2, 0.9, BARK, 0, 0.6, 0));
-  turret.add(box(0.82, 0.16, 0.92, primary, 0, 0.4, 0)); // a band in the side's colour
-  turret.add(box(1.3, 0.7, 1.4, LEAF, -0.1, 1.5, 0)); // crown
-  turret.add(box(0.3, 0.2, 0.3, secondary, 0.3, 1.9, 0.3));
+  turret.add(box(0.9, 0.9, 1.0, primary, 0, 0.5, 0)); // torso
+  turret.add(box(1.04, 0.18, 1.1, secondary, -0.04, 1.0, 0)); // carapace
+  for (const x of [-0.3, 0, 0.3]) turret.add(box(0.12, 0.14, 0.5, DARK, x - 0.05, 1.15, 0)); // ribs down its back
+  turret.add(box(0.3, 0.3, 0.6, primary, 0.5, 0.75, 0)); // head
+  turret.add(box(0.06, 0.08, 0.4, DARK, 0.66, 0.8, 0)); // visor slit
+  for (const side of [-1, 1]) {
+    const sac = glowBox(0.3, 0.3, 0.1, SAC);
+    sac.position.set(-0.15, 0.45, side * 0.52);
+    turret.add(sac);
+  }
   const arms = [-1, 1].map((side) => {
     const arm = new THREE.Group();
-    arm.position.set(0, 1.0, side * 0.6);
-    arm.add(box(0.25, 0.9, 0.25, BARK, 0, -0.35, 0));
-    arm.add(box(0.4, 0.4, 0.4, BARK, 0.1, -0.85, 0)); // club
+    arm.position.set(0.1, 0.85, side * 0.66);
+    arm.add(box(0.2, 0.7, 0.2, METAL, 0, -0.3, 0));
+    arm.add(box(0.36, 0.3, 0.3, primary, 0.1, -0.75, 0)); // fist
+    for (const z of [-0.09, 0.09]) arm.add(box(0.26, 0.06, 0.06, DARK, 0.32, -0.82, z)); // claws
     turret.add(arm);
     return arm;
   });
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.6, 0.6, 0.3, BARK, BARK);
-    leg.hip.position.set(0, 0, side * 0.25);
+    const leg = makeLeg(0.6, 0.6, 0.26, METAL, DARK);
+    leg.hip.position.set(0, 0, side * 0.28);
     body.add(leg.hip);
     return leg;
   });
-  const thorns = ownMount(root, 'treant#thorns', (t) => {
-    t.add(box(0.2, 0.16, 0.2, LEAF, 0, 0, 0));
-    t.add(box(0.36, 0.06, 0.06, BARK, 0.17, 0.02, 0));
+  const spines = ownMount(root, 'graftWalker#spines', (t) => {
+    t.add(box(0.26, 0.18, 0.26, DARK, 0, 0, 0));
+    t.add(box(0.38, 0.07, 0.07, VINE, 0.18, 0.03, 0));
   });
-  body.add(thorns.turret);
-  thorns.turret.position.y -= body.position.y;
+  body.add(spines.turret);
+  spines.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
     ...walker(legs, body, 0.6, 0.4),
-    ...mounted('treant', root, turret),
-    mounts: [thorns],
+    ...mounted('graftWalker', root, turret),
+    mounts: [spines],
     strike(k) {
       for (const arm of arms) arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
     },
   });
 });
 
-// Verdant's super unit: the Worldtree, a giant walking tree with a vast crown, vines hanging from it, and seed pods.
+// Verdant's super unit: the Worldtree, a towering biotech walker, a grown hull carrying a canopy of
+// leaf-panels, vines hanging from it, and seed pods.
 registerModel('worldTree', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -2547,28 +2565,34 @@ registerModel('worldTree', (faction) => {
   body.position.y = 2.6;
   root.add(body);
   const turret = new THREE.Group();
-  turret.add(box(1.6, 2.6, 1.6, BARK, 0, 1.3, 0));
-  turret.add(box(1.62, 0.3, 1.62, primary, 0, 0.6, 0));
-  turret.add(box(3.4, 1.4, 3.4, LEAF, 0, 3.2, 0)); // crown
-  turret.add(box(2.4, 0.8, 2.4, 0x3e7a30, 0, 4.2, 0));
+  turret.add(box(1.6, 2.6, 1.6, primary, 0, 1.3, 0)); // the trunk-hull
+  turret.add(box(1.62, 0.3, 1.62, secondary, 0, 0.6, 0));
+  for (const y of [1.4, 2.1]) turret.add(box(1.64, 0.12, 1.64, DARK, 0, y, 0)); // ribs
+  // The canopy: tilted leaf-panels round a mast, in the side's colours, not a tree's crown.
+  turret.add(box(0.3, 1.2, 0.3, METAL, 0, 3.1, 0));
+  for (const [x, z, c] of [[1.0, 0, secondary], [-1.0, 0, secondary], [0, 1.0, primary], [0, -1.0, primary]] as const) {
+    const panel = box(1.5, 0.12, 1.1, c, x, 3.4, z);
+    panel.rotation.set(z * 0.25, 0, -x * 0.25);
+    turret.add(panel);
+  }
   for (const [x, z] of [[1.0, 1.0], [-1.1, 0.6], [0.4, -1.2]]) {
-    const pod = glowBox(0.3, 0.4, 0.3, 0xc8e070);
+    const pod = glowBox(0.3, 0.4, 0.3, SAC);
     pod.position.set(x, 2.3, z);
     turret.add(pod);
   }
   turret.add(box(0.2, 0.3, 0.6, secondary, 0.81, 1.8, 0));
   const vines = barrelPivot('worldTree', turret);
-  vines.add(box(1.4, 0.2, 0.2, LEAF, 0.6, 0, 0));
+  vines.add(box(1.4, 0.2, 0.2, VINE, 0.6, 0, 0));
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(1.3, 1.3, 0.55, BARK, BARK);
+    const leg = makeLeg(1.3, 1.3, 0.55, METAL, DARK);
     leg.hip.position.set(0, 0, side * 0.55);
     body.add(leg.hip);
     return leg;
   });
   const seeds = ownMount(root, 'worldTree#seeds', (t) => {
-    t.add(box(0.5, 0.4, 0.5, LEAF, 0, 0.0, 0));
-    t.add(box(0.4, 0.28, 0.3, 0xc8e070, 0.35, 0.04, 0));
+    t.add(box(0.5, 0.4, 0.5, METAL, 0, 0.0, 0));
+    t.add(box(0.4, 0.28, 0.3, SAC, 0.35, 0.04, 0));
   });
   turret.add(seeds.turret);
   seeds.turret.position.y -= body.position.y;

@@ -177,8 +177,8 @@ export const MOUNTS: Record<string, Mount> = {
   // Verdant.
   strangler: { turret: [0, 1.3, 0], pivot: [0.1, 0.18, 0], muzzles: [[0.77, 0, 0]], elev: [-0.4, 0.8] },
   seedMortar: { turret: [0.15, 0.62, 0], pivot: [0.2, 0.3, 0], muzzles: [[0.45, 0, 0]], elev: [0, 1.1], rest: 0.6 },
-  treant: { turret: [0, 1.2, 0], muzzles: [[0.3, 0.15, 0.6]] },
-  'treant#thorns': { turret: [0.35, 2.85, 0], muzzles: [[0.35, 0.02, 0]] },
+  graftWalker: { turret: [0, 1.2, 0], muzzles: [[0.55, 0.03, 0.57]] },
+  'graftWalker#spines': { turret: [-0.2, 2.47, 0], muzzles: [[0.37, 0.03, 0]] },
   worldTree: { turret: [0, 2.6, 0], pivot: [0.9, 1.8, 0], muzzles: [[1.3, 0, 0]], elev: [-0.4, 0.6] },
   'worldTree#seeds': { turret: [0.8, 4.4, 1.0], muzzles: [[0.55, 0.05, 0]] },
   'bld:glasshouse': { turret: [0, 2.63, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },

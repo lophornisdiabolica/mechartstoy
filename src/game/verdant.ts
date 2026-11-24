@@ -1,19 +1,24 @@
-import { System, World, Entity } from '../core/ecs';
-import { Mover, Rooted, Transform, Unit } from './components';
+import { World } from '../core/ecs';
 import { SimContext } from './context';
 import { plantForest } from './god';
-import { MOVE_RULES } from '../world/moveClasses';
+import { FROZEN, PatchRules } from './frost';
 
 /*
  * Verdant: a living army.
  *
- * Vines (WeaponDef.roots): a strangler's lash wraps round a vehicle or
- * walker it hits and holds it where it is for a few seconds (it can still
- * shoot). Seed pods (WeaponDef.plants): where one bursts a small thicket
+ * Tangle (WeaponDef.tangle): vines leave a small patch of ground grown over
+ * where they land, kept like frost (see frost.ts) on its own field: enemies
+ * wading through it slow right down, more than on frost, but nothing
+ * shatters, and it withers in a few seconds (fire burns it away). Seed pods (WeaponDef.plants): where one bursts a small thicket
  * springs up, a few trees that block shots like any wood until tanks crush
  * them. Each side plants at most one thicket every PLANT_GAP seconds, and
  * no more than MOST_GROVES in a battle, so the map doesn't fill with trees.
  */
+
+/** How Verdant's tangle behaves: a patch holds a little less than frost, drags harder, and withers quicker. */
+export const TANGLE_RULES: PatchRules = { holds: FROZEN, most: 8, fades: 0.6, pace: 0.3, deep: 3 };
+/** How wide a patch a vine lays where it lands. */
+export const TANGLE_RADIUS = 1.1;
 
 /** Seconds between a side's thickets. */
 const PLANT_GAP = 14;
@@ -26,23 +31,6 @@ export class Groves {
   count = new Map<number, number>();
 }
 
-/** A vine hit: hold a ground vehicle or walker where it is for a while. */
-export function root(world: World, ctx: SimContext, e: Entity, seconds: number): void {
-  const def = world.get(e, Unit)?.def;
-  if (!def || def.class === 'infantry' || def.category === 'super') return;
-  const m = world.get(e, Mover);
-  if (!m || MOVE_RULES[m.move].flies || m.move === 'naval') return;
-  const r = world.get(e, Rooted);
-  const until = world.time + seconds;
-  if (r) {
-    r.until = Math.max(r.until, until);
-    return;
-  }
-  world.add(e, Rooted, { until });
-  const t = world.req(e, Transform);
-  ctx.events.emit('rooted', { x: t.x, y: t.y, z: t.z, radius: def.radius });
-}
-
 /** A seed pod bursting: a little thicket springs up, if the side has one to spare. */
 export function plantGrove(world: World, ctx: SimContext, faction: number, x: number, z: number, radius: number): void {
   if (world.time - (ctx.groves.last.get(faction) ?? -Infinity) < PLANT_GAP) return;
@@ -52,22 +40,4 @@ export function plantGrove(world: World, ctx: SimContext, faction: number, x: nu
   ctx.groves.last.set(faction, world.time);
   ctx.groves.count.set(faction, count + 1);
   ctx.events.emit('grove', { x, y: ctx.field.heightAt(x, z), z, radius });
-}
-
-/** Rooted units stay where they are. Runs after the AI, before movement. */
-export function rootSystem(): System {
-  return {
-    name: 'roots',
-    update(world) {
-      for (const e of world.query(Rooted, Mover)) {
-        if (world.time >= world.req(e, Rooted).until) {
-          world.remove(e, Rooted);
-          continue;
-        }
-        const m = world.req(e, Mover);
-        m.targetX = null;
-        m.targetZ = null;
-      }
-    },
-  };
 }

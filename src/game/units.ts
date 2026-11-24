@@ -56,8 +56,8 @@ export interface WeaponDef {
   pierce?: number;
   /** Only ever aims at units, never buildings (a base's defences, there to meet attackers, not to shell the neighbours). */
   unitsOnly?: boolean;
-  /** Verdant's vines (see verdant.ts): a direct hit holds a ground vehicle or walker where it is for this many seconds. */
-  roots?: number;
+  /** Verdant's vines (see verdant.ts): lays this much tangle where it lands, ground grown over with vines that drags at enemies. */
+  tangle?: number;
   /** Verdant's seed pods (see verdant.ts): a thicket this wide springs up where it lands (a side plants one every so often). */
   plants?: number;
   /** Lodestar's magnet cranes (see lodestar.ts): each throw takes this much of the wreckage in reach, and with none there it can't throw. */
@@ -2595,7 +2595,7 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 3,
-    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, roots: 2 }),
+    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, tangle: 5 }),
     wreckTime: 14,
     siege: false,
   },
@@ -2620,15 +2620,15 @@ export const UNIT_DEFS = {
     wreckTime: 14,
     siege: true,
   },
-  // A treant: a walking tree-mech with club arms, slow and very tough.
-  treant: {
-    id: 'treant',
-    name: 'Treant',
+  // A graft walker: a heavy biotech walker with claw arms, slow and very tough, and a spine launcher on its back.
+  graftWalker: {
+    id: 'graftWalker',
+    name: 'Graft Walker',
     class: 'mech',
     category: 'vehicle',
     move: 'walker',
     role: 'frontline',
-    model: 'treant',
+    model: 'graftWalker',
     hp: 400,
     armor: 9,
     speed: 1.9,
@@ -2637,12 +2637,12 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Club arms', range: 1.4, damage: 50, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2, pierce: 0.4, melee: { style: 'swing', lunge: 1, knock: 1.6, sweep: 1.4, sweepMost: 4, charge: 1.4 } }),
-    mounts: [{ weapon: weapon({ name: 'Thorn spitter', range: 12, damage: 6, cooldown: 1.2, burst: 3, burstGap: 0.12, projectile: 'vine', speed: 40, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'treant#thorns', turnRate: 4 }],
+    weapon: weapon({ name: 'Claw arms', range: 1.4, damage: 50, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2, pierce: 0.4, melee: { style: 'swing', lunge: 1, knock: 1.6, sweep: 1.4, sweepMost: 4, charge: 1.4 } }),
+    mounts: [{ weapon: weapon({ name: 'Spine launcher', range: 12, damage: 6, cooldown: 1.2, burst: 3, burstGap: 0.12, projectile: 'vine', speed: 40, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'graftWalker#spines', turnRate: 4 }],
     wreckTime: 25,
     siege: false,
   },
-  // Super unit: the Worldtree, a giant walking tree. It lashes vines and seeds thickets round itself as it goes.
+  // Super unit: the Worldtree, a towering biotech walker. It lashes vines and seeds thickets round itself as it goes.
   worldTree: {
     id: 'worldTree',
     name: 'Worldtree',
@@ -2659,7 +2659,7 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 2 }),
+    weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, tangle: 5 }),
     mounts: [{ weapon: weapon({ name: 'Seed burst', range: 24, minRange: 6, damage: 40, cooldown: 6, projectile: 'seed', speed: 16, splash: 2.2, spread: 0.12, arc: true, muzzleHeight: 5, plants: 2.6 }), mount: 'worldTree#seeds', turnRate: 2 }],
     wreckTime: 45,
     siege: true,

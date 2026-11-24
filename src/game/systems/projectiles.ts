@@ -6,7 +6,7 @@ import * as D from '../../core/dmath';
 import { heatPerShot } from '../fire';
 import { hitDome } from '../shields';
 import { hack } from '../hacking';
-import { plantGrove, root } from '../verdant';
+import { plantGrove, TANGLE_RADIUS } from '../verdant';
 
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
@@ -117,10 +117,11 @@ export function projectileSystem(ctx: SimContext): System {
             // A hack turns what it lands on rather than hurting it (see hacking.ts).
             if (w.hack) hack(world, ctx, p.target, p.faction, w.hack);
             else applyDamage(world, ctx, p.target, (shattered ? w.damage * w.shatter! : w.damage) * frontBlock(world, ctx, p.target, p, tt), by, w.pierce ?? 0);
-            if (w.roots) root(world, ctx, p.target, w.roots);
             hit.add(p.target);
           }
         }
+        // Vines leave a small patch of tangle where they land (see verdant.ts), on land.
+        if (w.tangle && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) ctx.tangle.add(p.ex, p.ez, TANGLE_RADIUS, w.tangle, p.faction);
         // Seed pods grow a thicket where they land (see verdant.ts).
         if (w.plants && p.faction >= 0 && !ctx.field.isWater(p.ex, p.ez)) plantGrove(world, ctx, p.faction, p.ex, p.ez, w.plants);
         // Splash hurts anything not on the shooter's team, including the civilian town. It reaches
