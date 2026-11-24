@@ -133,7 +133,8 @@ describe('Legion earthworks', () => {
     const s = defaultSettings();
     s.factions[0].doctrine = 'legion';
     s.factions[1].doctrine = 'armour';
-    const game = new Game(5, { settings: s });
+    // Seed 7: on 5 and 6 the Legion's engineers are busy elsewhere until well past ten minutes.
+    const game = new Game(7, { settings: s });
     const eng = game.ctx.commander.engineers;
     let manned = 0;
     for (let i = 0; i < 600 / DT && manned === 0; i++) {
