@@ -222,7 +222,8 @@ export class Effects {
     });
     events.on('hacked', (e) => this.hacked(e.x, e.y, e.z, e.back));
     events.on('shieldHit', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.25, size: 0.4, endSize: 1.4, color: 0xc8f0ff, endColor: 0x000000 }));
-    events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
+    events.on('unitDestroyed', (e) => (e.def.decoy ? this.fizzle(e.x, e.y, e.z, e.def.radius) : this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime)));
+    events.on('fizzle', (e) => this.fizzle(e.x, e.y, e.z, e.radius));
     events.on('buildingDamaged', (e) => {
       this.burners.push({ entity: e.entity, x: e.x, y: e.y + e.def.radius * 0.8, z: e.z, size: e.def.radius * 0.7, until: Infinity, nextPuff: 0 });
     });
@@ -411,6 +412,13 @@ export class Effects {
       const a = rand(0, Math.PI * 2);
       const sp = rand(1, 2.5);
       this.flashes.spawn({ x: x + Math.cos(a) * 0.6, y: y + rand(0.3, 1.6), z: z + Math.sin(a) * 0.6, vx: Math.cos(a) * sp, vy: rand(0.5, 2), vz: Math.sin(a) * sp, life: rand(0.25, 0.5), size: 0.12, endSize: 0.03, color, endColor: 0x103830, drag: 2 });
+    }
+  }
+
+  /** A hologram coming up or breaking up: a soft column of pale motes drifting up, no blast. */
+  private fizzle(x: number, y: number, z: number, radius: number): void {
+    for (let i = 0; i < 8; i++) {
+      this.flashes.spawn({ x: x + rand(-radius, radius), y: y + rand(0.2, radius * 1.5), z: z + rand(-radius, radius), vy: rand(0.6, 1.4), life: rand(0.5, 0.9), size: 0.14, endSize: 0.03, color: 0xbfe8ff, endColor: 0x203040, drag: 1 });
     }
   }
 

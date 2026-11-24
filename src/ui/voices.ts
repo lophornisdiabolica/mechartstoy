@@ -171,6 +171,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['Knock over that {unit}.', 'March on the {unit}.'],
     lost: ['The {unit} is broken. Put it back in the box.', 'We lost the {unit}. Its spring went.'],
   },
+  mirage: {
+    attack: ['Show {enemy} an army. Some of it is even real.', 'Projectors on. Advance on {enemy}.'],
+    regroup: ['Pull back behind the mirrors.', 'Let the holograms cover us. Fall back.'],
+    defend: ['They are at the array. Show them a garrison.', 'Fill the base with ghosts.'],
+    took: ['{where} is ours. Or looks it.', 'We took {where}. Truly.'],
+    hunt: ['That {unit} is real. Beam it.', 'Find the {unit} among the ghosts.'],
+    lost: ['The {unit} is gone. It was real, that one.', 'We lost the {unit}. Project another.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */
