@@ -212,6 +212,22 @@ export class Effects {
     events.on('blocked', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.18, size: 0.25, endSize: 0.6, color: 0xffd890, endColor: 0x000000 }));
     // A toy tipped over: a little puff of dust where it lands.
     events.on('toppled', (e) => this.dust(e.x, e.y, e.z, 0.5, 4));
+    // Vines wrapping round something: green tendrils whipping up round it.
+    events.on('rooted', (e) => {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        this.debris.spawn({ x: e.x + Math.cos(a) * e.radius, y: e.y + 0.1, z: e.z + Math.sin(a) * e.radius, vx: -Math.cos(a) * 0.6, vy: rand(1.5, 2.5), vz: -Math.sin(a) * 0.6, life: rand(0.5, 0.8), size: 0.1, endSize: 0.05, color: 0x4a7a2a, gravity: 6 });
+      }
+    });
+    // A seed pod sprouting: leaves and earth thrown up as the thicket springs up.
+    events.on('grove', (e) => {
+      this.dust(e.x, e.y, e.z, e.radius, 8);
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = rand(0.5, 2);
+        this.debris.spawn({ x: e.x, y: e.y + 0.3, z: e.z, vx: Math.cos(a) * sp, vy: rand(2, 4), vz: Math.sin(a) * sp, life: rand(0.8, 1.3), size: rand(0.08, 0.14), endSize: 0.05, color: 0x5a9a3a, gravity: 5 });
+      }
+    });
     // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
     events.on('chewed', (e) => {
       for (let i = 0; i < 3; i++) {
@@ -378,7 +394,7 @@ export class Effects {
       return;
     }
     // Bowstrings and throwing arms don't flash.
-    if (kind === 'arrow' || kind === 'stone') return;
+    if (kind === 'arrow' || kind === 'stone' || kind === 'seed' || kind === 'vine') return;
     if (kind === 'beam' || kind === 'frost') {
       this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
       return;
@@ -477,6 +493,10 @@ export class Effects {
     // An arrow just sticks: a puff of dust. A stone thumps down in a cloud of earth.
     if (kind === 'arrow') {
       this.smoke.spawn({ x, y, z, vy: 0.4, life: 0.4, size: 0.08, endSize: 0.2, color: 0xa89c88 });
+      return;
+    }
+    if (kind === 'vine' || kind === 'seed') {
+      this.debris.spawn({ x, y, z, vy: 1.5, life: 0.5, size: 0.12, endSize: 0.05, color: 0x5a9a3a, gravity: 6 });
       return;
     }
     if (kind === 'stone') {

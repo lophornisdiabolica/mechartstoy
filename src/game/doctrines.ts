@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'verdant' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -506,6 +506,28 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 3, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }, { unit: 'tank', weight: 1, count: 1 }],
   },
 
+  verdant: {
+    id: 'verdant',
+    name: 'Verdant',
+    blurb: 'A living army. Stranglers, plant-mechs on root legs, lash vines that wrap round vehicles and walkers and hold them where they are for a few seconds. Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Treants are walking tree-mechs with club arms, and its glasshouse grows more of both. Super unit: the Worldtree, a giant walking tree that lashes vines and seeds thickets as it goes.',
+    caps: { infantry: 0.9, vehicle: 1.3 },
+    production: {
+      factory: {
+        table: [
+          { unit: 'strangler', weight: 3, count: 1 },
+          { unit: 'treant', weight: 1.5, count: 1 },
+          { unit: 'seedMortar', weight: 1.6, count: 1 },
+          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'scout', weight: 0.6, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'worldTree', weight: 1, count: 1 }] },
+    },
+    signature: 'glasshouse',
+    waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'treant', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
+  },
+
+
 
 
 
@@ -526,7 +548,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage', 'verdant'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

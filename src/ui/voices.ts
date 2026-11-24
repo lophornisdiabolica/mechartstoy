@@ -179,6 +179,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['That {unit} is real. Beam it.', 'Find the {unit} among the ghosts.'],
     lost: ['The {unit} is gone. It was real, that one.', 'We lost the {unit}. Project another.'],
   },
+  verdant: {
+    attack: ['Grow toward {enemy}.', 'Roots and vines. Take {enemy}.'],
+    regroup: ['Draw back into the thickets.', 'Back to the glasshouse.'],
+    defend: ['They trample the glasshouse. Bind them.', 'Vines on the attackers. Hold them fast.'],
+    took: ['{where} is ours. Plant it.', 'We have taken root at {where}.'],
+    hunt: ['Bind that {unit}.', 'Strangle the {unit}.'],
+    lost: ['The {unit} is felled.', 'We lost the {unit}. It will grow back.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */

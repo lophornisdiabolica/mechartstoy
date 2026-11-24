@@ -67,6 +67,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   antiquity: ['Legion', 'Dynasty', 'Senate', 'Empire'],
   tin: ['Toybox', 'Clockwork', 'Regiment', 'Nursery'],
   mirage: ['Court', 'Reflection', 'Prism', 'Illusion'],
+  verdant: ['Wardens', 'Grove', 'Thicket', 'Bough'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

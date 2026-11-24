@@ -16,6 +16,7 @@ import type { WreckageField } from './wreckage';
 import type { SmokeField } from './smoke';
 import type { Strikes } from './zenith';
 import type { Camp } from './nomad';
+import type { Groves } from './verdant';
 import type { Towns } from './towns';
 import { Lanes } from './lanes';
 import { Offensive } from './offensive';
@@ -113,6 +114,10 @@ export type GameEvents = {
   toppled: { x: number; y: number; z: number };
   /** A Mirage hologram flickering up or fizzling out (see mirage.ts). */
   fizzle: { x: number; y: number; z: number; radius: number };
+  /** Verdant's vines wrapping round something (see verdant.ts). */
+  rooted: { x: number; y: number; z: number; radius: number };
+  /** A Verdant seed pod sprouting into a thicket (see verdant.ts). */
+  grove: { x: number; y: number; z: number; radius: number };
   /** A Hive fabricator chewing wreckage (see hive.ts). */
   chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */
@@ -196,6 +201,8 @@ export interface SimContext {
   strikes: Strikes;
   /** Nomad camps set up, for territory (see nomad.ts). */
   camps: Camp[];
+  /** Verdant's thickets so far (see verdant.ts). */
+  groves: Groves;
   /** Energy domes up this tick (see shields.ts). */
   domes: Domes;
   /** The towns' people (see towns.ts). */

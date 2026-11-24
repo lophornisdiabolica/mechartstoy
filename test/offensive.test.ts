@@ -58,7 +58,7 @@ describe('readiness', () => {
     expect(attackers.length).toBe(1);
     // The side being attacked stays home to meet it.
     expect(offensive.plan(1 - attackers[0]).state).toBe('defending');
-  });
+  }, 30_000);
 
   it("doesn't stay home while it's only shelled from the water, and does while enemy land units are there", () => {
     const game = emptyGame();

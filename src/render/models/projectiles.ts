@@ -25,6 +25,9 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   // Antiquity's arrows and bolts, and a trebuchet's stone.
   arrow: () => projectile(0.7, 0.04, 0xb08a5a),
   stone: () => projectile(0.4, 0.4, 0x8a8478),
+  // Verdant's seed pods and vine lashes.
+  seed: () => projectile(0.3, 0.3, 0x7ab04a),
+  vine: () => projectile(1.2, 0.06, 0x4a8a2a),
   // Hive's acid: a fat, sickly glob.
   acid: () => projectile(0.35, 0.26, 0xc6e03a),
   // Zenith's strike: a column of light coming straight down, its foot at the projectile.
