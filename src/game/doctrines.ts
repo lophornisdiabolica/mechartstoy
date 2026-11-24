@@ -406,7 +406,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       barracksBlock: { table: [{ unit: 'mite', weight: 1, count: 4 }] },
       factory: {
         table: [
-          { unit: 'fabricator', weight: 2, count: 1 },
+          { unit: 'fabricator', weight: 1, count: 1 },
           { unit: 'ravager', weight: 2.4, count: 1 },
           { unit: 'acidSpitter', weight: 2, count: 1 },
           { unit: 'gunMite', weight: 1.5, count: 3 },

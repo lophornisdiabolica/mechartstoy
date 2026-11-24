@@ -35,7 +35,7 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
     return setRig(root, { faceVelocity: true });
   },
   // Hive's acid: a fat, sickly glob.
-  acid: () => projectile(0.35, 0.26, 0x9cb02a),
+  acid: () => projectile(0.35, 0.26, 0xbcc232),
   // The Leviathan's spines: long, pale and sharp.
   spine: () => projectile(0.8, 0.07, 0xd8cfb8),
   // Zenith's strike: nothing to draw while it waits; its beam is drawn coming down with its ring (see strikeMarks.ts).

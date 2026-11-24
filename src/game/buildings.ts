@@ -463,7 +463,7 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3,
     // It trains fabricators, so every Hive side has some chewing at the front, whatever its factory rolls.
-    production: { table: [{ unit: 'fabricator', weight: 1, count: 1 }], interval: 35 },
+    production: { table: [{ unit: 'fabricator', weight: 1, count: 1 }], interval: 55 },
     eats: { radius: 14, rate: 0.5, makes: [{ unit: 'mite', count: 4, cost: 0.6 }, { unit: 'gunMite', count: 2, cost: 0.8 }] },
     weapon: { name: 'Acid spout', range: 17, minRange: 0, damage: 16, cooldown: 1.4, burst: 3, burstGap: 0.2, projectile: 'acid', speed: 26, splash: 1.6, spread: 0.08, arc: false, muzzleHeight: 3.2, targets: 'both' },
     sight: 20,
