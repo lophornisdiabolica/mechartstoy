@@ -493,13 +493,12 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   mirage: {
     id: 'mirage',
     name: 'Mirage',
-    blurb: 'Holograms. Projector trucks throw up hologram tanks now and then: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Prism tanks do the real work with focused beams, and its mirror array throws up more holograms round the base. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
+    blurb: 'Holograms. Projector trucks throw up hologram prism tanks: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Projectors only project in a fight, out in front toward the enemy. Prism tanks do the real work with their cannons, and its mirror array throws up more holograms by its own units in a fight. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
     caps: { infantry: 0.9, vehicle: 1.4 },
     production: {
       factory: {
         table: [
-          { unit: 'prismTank', weight: 3, count: 1 },
-          { unit: 'tank', weight: 1.4, count: 1 },
+          { unit: 'prismTank', weight: 4.2, count: 1 },
           { unit: 'projectorTruck', weight: 2, count: 1 },
           { unit: 'rocketTruck', weight: 1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
@@ -509,7 +508,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'fataMorgana', weight: 1, count: 1 }] },
     },
     signature: 'mirrorArray',
-    waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 3, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }, { unit: 'tank', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 4, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }],
   },
 
   verdant: {
