@@ -189,3 +189,40 @@ describe('Aegis and Rime bases', () => {
     expect(game.ctx.frost.hostileAt(game.ctx, t.x + 6, t.z, 0)).toBe(true);
   }, 30000);
 });
+
+describe('Aegis: dome trucks spread out', () => {
+  it('two dome trucks follow two different tanks, each keeping right behind its own', () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    const a = standing(game, UNIT_DEFS.tank, 0, base.x, base.z - 5);
+    const b = standing(game, UNIT_DEFS.tank, 0, base.x, base.z + 5);
+    const t1 = spawnUnit(game.world, game.ctx, UNIT_DEFS.domeTruck, 0, base.x - 6, base.z);
+    const t2 = spawnUnit(game.world, game.ctx, UNIT_DEFS.domeTruck, 0, base.x - 7, base.z + 1);
+    run(game, 12);
+    const leads = [game.world.req(t1, Ai).escort, game.world.req(t2, Ai).escort];
+    expect(new Set(leads)).toEqual(new Set([a, b]));
+    for (const truck of [t1, t2]) {
+      const lead = game.world.req(truck, Ai).escort!;
+      const lt = game.world.req(lead, Transform);
+      const tt = game.world.req(truck, Transform);
+      expect(Math.hypot(lt.x - tt.x, lt.z - tt.z)).toBeLessThan(4);
+    }
+  });
+});
+
+describe('Rime: freezer trucks help the shard tanks', () => {
+  it("a freezer truck lobs its frost at what a shard tank near it is shooting, not the nearest enemy", () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    standing(game, UNIT_DEFS.freezerTruck, 0, base.x, base.z);
+    const shard = standing(game, UNIT_DEFS.shardTank, 0, base.x + 4, base.z + 8);
+    dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 11, base.z);
+    const far = dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 9, base.z + 14);
+    game.world.req(shard, Armed).target = far;
+    game.world.req(shard, Armed).nextTargetAt = Infinity;
+    // Its first canister goes on the shard tank's target; once that's deep in frost it'll help with another.
+    run(game, 4.5);
+    expect(game.ctx.frost.at(base.x + 9, base.z + 14)).toBeGreaterThan(1);
+    expect(game.ctx.frost.at(base.x + 11, base.z)).toBe(0);
+  });
+});

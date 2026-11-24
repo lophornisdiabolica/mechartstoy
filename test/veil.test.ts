@@ -135,3 +135,39 @@ describe('Veil base', () => {
     expect(game.ctx.smoke.count).toBeGreaterThan(0);
   }, 30000);
 });
+
+describe('Veil: smoke screens', () => {
+  it('a smoke truck lays its haze on its own tank closing on the enemy, not on the enemy', () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    standing(game, UNIT_DEFS.smokeTruck, 2, base.x, base.z);
+    standing(game, { ...UNIT_DEFS.ghostTank, hp: 100000 }, 2, base.x + 12, base.z);
+    dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 26, base.z);
+    let own = 0;
+    let theirs = 0;
+    for (let i = 0; i < 8 / DT; i++) {
+      game.step(DT);
+      own = Math.max(own, game.ctx.smoke.at(base.x + 13, base.z));
+      theirs = Math.max(theirs, game.ctx.smoke.at(base.x + 26, base.z));
+    }
+    expect(own).toBeGreaterThan(THICK);
+    expect(theirs).toBeLessThan(THICK);
+  });
+
+  it('a ghost tank in its own haze stays out of sight even as it fires', () => {
+    const game = emptyGame();
+    const base = game.field.baseSites[0];
+    const ghost = standing(game, UNIT_DEFS.ghostTank, 2, base.x, base.z);
+    dummy(game, { ...UNIT_DEFS.tank, hp: 100000 }, 1, base.x + 12, base.z);
+    game.ctx.smoke.add(base.x, base.z, 3, 10, 2);
+    let fired = false;
+    let shown = false;
+    for (let i = 0; i < 6 / DT; i++) {
+      game.step(DT);
+      if (game.world.req(ghost, Armed).firedAt > 0.5) fired = true;
+      if (fired && !game.world.req(ghost, Veiled).hidden) shown = true;
+    }
+    expect(fired).toBe(true);
+    expect(shown).toBe(false);
+  });
+});

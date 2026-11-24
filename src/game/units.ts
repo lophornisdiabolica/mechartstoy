@@ -84,6 +84,13 @@ export interface WeaponDef {
   /** Times its damage against anything standing on its enemies' frost (Rime's shard guns: frozen things shatter). */
   shatter?: number;
   /**
+   * Picks its target from what its side's shatter guns (WeaponDef.shatter)
+   * within this radius are shooting at, where the ground under it isn't
+   * already deep in frost (Rime's freezer trucks: the slow and the shatter
+   * land on the same thing). See systems/targeting.ts.
+   */
+  assists?: number;
+  /**
    * Hacks what it hits (Cipher; see hacking.ts): an enemy vehicle it lands
    * on turns to the shooter's side for this many seconds, stops where it is
    * and fights whatever is near it, its old friends included. Such a weapon
@@ -95,6 +102,12 @@ export interface WeaponDef {
    * it go wild, except its own side's.
    */
   smoke?: number;
+  /**
+   * Smoke only: lobs its canisters onto its own side's frontline units as
+   * they close on the enemy, harmless screens this wide (radius) for them to
+   * come on through, before shooting at the enemy (see systems/weapons.ts).
+   */
+  screens?: number;
   /**
    * Calls a strike down from orbit instead of firing a shot (Zenith; see
    * zenith.ts): a warning ring marks where it will land for `delay`
@@ -187,6 +200,14 @@ export interface UnitDef {
   /** How it gets around (see moveClasses.ts). */
   move: MoveClass;
   role: Role;
+  /**
+   * Support units only: how it tags along behind a frontline ally (see
+   * systems/ai.ts). `alone`: it picks an ally no other unit of its own kind
+   * is already following, so a few of them spread over the army instead of
+   * bunching behind the same one. `trail`: how far behind it keeps (default
+   * SUPPORT_TRAIL).
+   */
+  escorts?: { alone?: boolean; trail?: number };
   model: string;
   hp: number;
   /**
@@ -219,9 +240,10 @@ export interface UnitDef {
   /**
    * Fades from sight once it has gone `after` seconds without firing (Veil;
    * see smoke.ts): if `still`, only while it isn't moving; if `cover`, only
-   * while it's in a forest, by a building or in its own side's haze.
+   * while it's in a forest, by a building or in its own side's haze; if
+   * `haze`, in its own side's haze it stays out of sight even as it fires.
    */
-  stealth?: { after: number; still?: boolean; cover?: boolean };
+  stealth?: { after: number; still?: boolean; cover?: boolean; haze?: boolean };
   /** Seconds a wreck stays on the field (0 = removed immediately). */
   wreckTime: number;
   /** Siege units shell buildings in sight before bothering with units. */
@@ -615,22 +637,8 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 6,
-    weapon: {
-      name: 'Light machine gun',
-      range: 9,
-      minRange: 0,
-      damage: 4,
-      cooldown: 1,
-      burst: 4,
-      burstGap: 0.08,
-      projectile: 'bullet',
-      speed: 60,
-      splash: 0,
-      spread: 0.08,
-      arc: false,
-      muzzleHeight: 0.8,
-      targets: 'ground',
-    },
+    // One heavy recoilless round rather than a machine gun: it hits and runs, and it dents armour and buildings.
+    weapon: weapon({ name: 'Recoilless rifle', range: 11, damage: 26, cooldown: 3.4, projectile: 'shell', speed: 45, splash: 0.4, spread: 0.05, muzzleHeight: 0.8, pierce: 0.3, targets: 'ground' }),
     wreckTime: 12,
     siege: false,
   },
@@ -1487,7 +1495,8 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 4,
     weapon: weapon({ name: 'Pintle gun', range: 11, damage: 5, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, splash: 0.2, spread: 0.07, muzzleHeight: 1.3, targets: 'both' }),
-    // Big enough to cover the tanks it trails behind.
+    // Each dome truck keeps right behind a tank of its own, so the domes cover the army rather than each other.
+    escorts: { alone: true, trail: 0.5 },
     shield: { radius: 6, hp: 260, regen: 22, rest: 3, downTime: 10 },
     wreckTime: 15,
     siege: false,
@@ -1572,8 +1581,9 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.5,
-    // Lobs canisters of coolant that burst into a wide white patch: the shard tanks' work is done on it.
-    weapon: weapon({ name: 'Frost mortar', range: 19, minRange: 4, damage: 14, cooldown: 4.2, projectile: 'frost', speed: 16, splash: 2.4, spread: 0.08, arc: true, muzzleHeight: 1.2, frost: 6 }),
+    // Lobs canisters of coolant that burst into a wide white patch: the shard tanks' work is done on it,
+    // so it freezes what they're shooting at.
+    weapon: weapon({ name: 'Frost mortar', range: 19, minRange: 4, damage: 14, cooldown: 3.4, projectile: 'frost', speed: 16, splash: 3.2, spread: 0.08, arc: true, muzzleHeight: 1.2, frost: 6, assists: 22 }),
     wreckTime: 15,
     siege: false,
   },
@@ -1593,7 +1603,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Shard cannon', range: 15, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.7, spread: 0.05, muzzleHeight: 1, shatter: 1.8, frost: 1.2 }),
+    weapon: weapon({ name: 'Shard cannon', range: 15, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.7, spread: 0.05, muzzleHeight: 1, shatter: 1.8, frost: 0.5 }),
     wreckTime: 25,
     siege: false,
   },
@@ -1826,8 +1836,9 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2.5,
-    // Lobs smoke canisters onto the enemy: their shots out of the haze go wild, and Veil's into it don't.
-    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7 }),
+    // Lobs smoke canisters onto its own tanks as they close on the enemy, a screen they come on through:
+    // shots into the haze go wild, Veil's own don't, and ghost tanks in it stay out of sight even as they fire.
+    weapon: weapon({ name: 'Smoke mortar', range: 20, minRange: 4, damage: 10, cooldown: 3.5, projectile: 'artillery', speed: 16, splash: 2.6, spread: 0.08, arc: true, muzzleHeight: 1.2, smoke: 7, screens: 3.2 }),
     wreckTime: 15,
     siege: false,
   },
@@ -1849,7 +1860,7 @@ export const UNIT_DEFS = {
     turretTurnRate: 2,
     weapon: weapon({ name: 'Cannon', range: 15, damage: 45, cooldown: 3, projectile: 'shell', speed: 40, splash: 0.8, spread: 0.05, muzzleHeight: 1, pierce: 0.2 }),
     // Gone from sight a few seconds after its last shot.
-    stealth: { after: 3 },
+    stealth: { after: 3, haze: true },
     wreckTime: 25,
     siege: false,
   },
@@ -1915,7 +1926,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 2,
     // A targeting laser paints the ground, and a few seconds later a beam comes down from orbit.
-    weapon: weapon({ name: 'Orbital uplink', range: 24, minRange: 5, damage: 150, cooldown: 8, projectile: 'orbital', speed: 1, splash: 4.2, spread: 0.04, muzzleHeight: 2.6, orbital: { delay: 2.4 } }),
+    weapon: weapon({ name: 'Orbital uplink', range: 24, minRange: 5, damage: 120, cooldown: 8, projectile: 'orbital', speed: 1, splash: 3.6, spread: 0.04, muzzleHeight: 2.6, orbital: { delay: 2.4 } }),
     wreckTime: 15,
     siege: false,
   },
@@ -1927,7 +1938,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'artillery',
     model: 'lancePlatform',
-    hp: 1100,
+    hp: 1250,
     armor: 18,
     speed: 1.1,
     turnRate: 0.8,
@@ -1936,7 +1947,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 0.9,
     // Heavy strikes on anything its beacon runners can see.
-    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 190, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
+    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 230, cooldown: 5.5, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
     mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
     siege: true,
@@ -2116,7 +2127,8 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 6,
-    weapon: weapon({ name: 'Pillion machine gun', range: 10, damage: 5, cooldown: 1, burst: 4, burstGap: 0.09, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1.0 }),
+    // Its pillion rider fires one rocket at a time, like an AT trooper: hit and run.
+    weapon: weapon({ name: 'Pillion rocket', range: 11, damage: 34, cooldown: 4, projectile: 'missile', speed: 24, splash: 0.5, spread: 0.06, muzzleHeight: 1.0, targets: 'ground' }),
     wreckTime: 10,
     siege: false,
   },
@@ -2154,7 +2166,7 @@ export const UNIT_DEFS = {
     move: 'foot',
     role: 'frontline',
     model: 'legionary',
-    hp: 30,
+    hp: 36,
     armor: 1,
     speed: 1.5,
     turnRate: 5,
@@ -2177,7 +2189,7 @@ export const UNIT_DEFS = {
     move: 'foot',
     role: 'frontline',
     model: 'crossbowman',
-    hp: 18,
+    hp: 20,
     armor: 0,
     speed: 1.6,
     turnRate: 6,
@@ -2207,7 +2219,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 1.4,
-    weapon: weapon({ name: 'Bolt thrower', range: 19, damage: 30, cooldown: 3.2, projectile: 'arrow', speed: 34, spread: 0.03, muzzleHeight: 0.9, pierce: 0.6 }),
+    weapon: weapon({ name: 'Bolt thrower', range: 19, damage: 28, cooldown: 3.2, projectile: 'arrow', speed: 34, spread: 0.03, muzzleHeight: 0.9, pierce: 0.6 }),
     wreckTime: 12,
     siege: false,
   },
@@ -2329,7 +2341,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'frontline',
     model: 'bronzeColossus',
-    hp: 1400,
+    hp: 1100,
     armor: 14,
     speed: 1.6,
     turnRate: 0.9,
@@ -2337,7 +2349,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 1.4,
-    weapon: weapon({ name: 'Great sword', range: 2.4, damage: 85, cooldown: 2.6, projectile: 'shell', speed: 1, muzzleHeight: 3.4, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 2.4, sweep: 2.4, sweepMost: 6, charge: 1.3 } }),
+    weapon: weapon({ name: 'Great sword', range: 2.4, damage: 72, cooldown: 2.6, projectile: 'shell', speed: 1, muzzleHeight: 3.4, pierce: 0.4, melee: { style: 'swing', lunge: 1.2, knock: 2.4, sweep: 2.4, sweepMost: 6, charge: 1.3 } }),
     wreckTime: 40,
     siege: true,
   },
@@ -2351,7 +2363,7 @@ export const UNIT_DEFS = {
     move: 'foot',
     role: 'frontline',
     model: 'tinSoldier',
-    hp: 26,
+    hp: 30,
     armor: 1,
     speed: 1.5,
     turnRate: 5,
@@ -2439,7 +2451,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'frontline',
     model: 'clockworkGiant',
-    hp: 1300,
+    hp: 1000,
     armor: 15,
     speed: 1.6,
     turnRate: 1,
@@ -2447,7 +2459,7 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Chest cannon', range: 18, damage: 50, cooldown: 2.6, burst: 2, burstGap: 0.4, projectile: 'shell', speed: 40, splash: 1.8, spread: 0.05, muzzleHeight: 3.2, pierce: 0.4 }),
+    weapon: weapon({ name: 'Chest cannon', range: 18, damage: 42, cooldown: 2.6, burst: 2, burstGap: 0.4, projectile: 'shell', speed: 40, splash: 1.8, spread: 0.05, muzzleHeight: 3.2, pierce: 0.4 }),
     windUp: { run: 25, rewind: 5 },
     wreckTime: 40,
     siege: true,
@@ -2493,7 +2505,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 2,
     weapon: weapon({ name: 'Prism beam', range: 16, damage: 0, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.1, pierce: 0.4 }),
-    decoy: { lasts: 22 },
+    decoy: { lasts: 20 },
     wreckTime: 0,
     siege: false,
   },
@@ -2515,7 +2527,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 1.8,
     weapon: weapon({ name: 'Cannon', range: 15, damage: 0, cooldown: 3, projectile: 'shell', speed: 40, spread: 0.04, muzzleHeight: 1.1 }),
-    decoy: { lasts: 22 },
+    decoy: { lasts: 20 },
     wreckTime: 0,
     siege: false,
   },
@@ -2537,7 +2549,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 3,
     weapon: weapon({ name: 'Machine gun', range: 11, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1.6, targets: 'both' }),
-    projects: { units: ['holoPrism', 'holoTank'], count: 2, every: 11 },
+    projects: { units: ['holoPrism', 'holoTank'], count: 2, every: 15 },
     wreckTime: 15,
     siege: false,
   },

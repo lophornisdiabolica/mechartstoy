@@ -10,7 +10,7 @@ import { Health } from '../components';
 import type { WeaponDef } from '../units';
 import { MOVE_RULES } from '../../world/moveClasses';
 import * as D from '../../core/dmath';
-import { SCRAP_REACH } from '../lodestar';
+import { SCRAP_REACH, scrapHeft } from '../lodestar';
 import { strike } from './melee';
 import { domeOver } from '../shields';
 import { hazeSpread } from '../smoke';
@@ -62,14 +62,14 @@ const FIRE_ROOM = 0.5;
  * One shot, from the mount's next muzzle (see mounts.ts): barrels take
  * turns, so a twin-gunned tank fires left, right, left.
  */
-function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon): void {
-  const tt = world.req(target, Transform);
+function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon, at?: Spot): void {
+  const tt = at ? { x: at.x, y: ctx.field.surfaceAt(at.x, at.z), z: at.z } : world.req(target, Transform);
   const faction = world.req(e, Faction).id;
   const index = armed.shot++;
   const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, index, ctx);
   const { x: sx, y: sy, z: sz } = muzzle;
 
-  const targetRadius = world.get(target, Collider)?.radius ?? 0.5;
+  const targetRadius = at ? 0.5 : (world.get(target, Collider)?.radius ?? 0.5);
   const dist = D.hypot(tt.x - sx, tt.z - sz);
   // Miss distance grows with range; sqrt keeps the scatter evenly spread over the disc. Through another side's haze it goes wild (see smoke.ts).
   const missR = (w.spread + hazeSpread(ctx, sx, sz, tt.x, tt.z, faction)) * dist * Math.sqrt(ctx.rng.next());
@@ -77,7 +77,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   let ex = tt.x + D.cos(missA) * missR;
   let ez = tt.z + D.sin(missA) * missR;
   let ey: number;
-  let struck: Entity | null = target;
+  let struck: Entity | null = at ? null : target;
   let dome: Entity | undefined;
   if (w.orbital) {
     // From orbit (see zenith.ts): a ring marks the spot, and the beam comes down there a few seconds later.
@@ -86,7 +86,7 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
     return;
   } else if (w.arc || w.projectile === 'flame') {
     // Lobbed, or flame (which licks round corners a little): lands at the impact point, on the ground or at an aircraft's height.
-    const tm = world.get(target, Mover);
+    const tm = at ? undefined : world.get(target, Mover);
     ey = (tm && MOVE_RULES[tm.move].flies ? tt.y : ctx.field.surfaceAt(ex, ez)) + Math.min(1.5, targetRadius * 0.6);
     // Lobbed missiles come down on an enemy dome's skin, not under it (shells and flame fall through: see shields.ts).
     if (w.projectile === 'missile' && ctx.domes.list.length > 0) {
@@ -141,11 +141,11 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
  * A trigger pull's or a burst's next shot, and with a mount whose barrels
  * fire together, one from each of the others too, out of the same burst.
  */
-function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon): void {
-  fire(world, ctx, e, armed, target, mount, w);
+function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon, at?: Spot): void {
+  fire(world, ctx, e, armed, target, mount, w, at);
   if (mount?.salvo !== 'together') return;
   for (let k = 1; k < mount.muzzles.length && armed.burstLeft > 0; k++) {
-    fire(world, ctx, e, armed, target, mount, w);
+    fire(world, ctx, e, armed, target, mount, w, at);
     armed.burstLeft--;
   }
 }
@@ -153,6 +153,75 @@ function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: 
 /** Move `from` toward `to` by at most `step`. */
 function approach(from: number, to: number, step: number): number {
   return from < to ? Math.min(to, from + step) : Math.max(to, from - step);
+}
+
+interface Spot {
+  x: number;
+  z: number;
+}
+
+/** How long before it's ready to fire a screening weapon starts aiming for a screen. */
+const SCREEN_LOOK = 0.8;
+/** How close to the enemy a frontline ally has to be for a screen to go down on it. */
+const SCREEN_NEAR = 22;
+/** How far out in front of that ally, towards the enemy, the canister is aimed. */
+const SCREEN_AHEAD = 2.5;
+
+/**
+ * Where a screening weapon's canister should land (WeaponDef.screens): just
+ * in front of the frontline ally, within its reach, that's closest to an
+ * enemy unit, if one's within SCREEN_NEAR of it and it isn't already in
+ * its side's haze. Null if none is (and it shoots at enemies as usual).
+ */
+function screenSpot(world: World, ctx: SimContext, e: Entity): Spot | null {
+  const t = world.req(e, Transform);
+  const armed = world.req(e, Armed);
+  const faction = world.req(e, Faction).id;
+  const reach = armed.weapon.range;
+  let best: { x: number; z: number; fx: number; fz: number; d: number } | null = null;
+  ctx.grid.forEachNear(t.x, t.z, reach, (other) => {
+    if (other === e || world.get(other, Unit)?.def.role !== 'frontline') return;
+    const f = world.get(other, Faction);
+    if (!f || !ctx.sides.allied(faction, f.id)) return;
+    const ot = world.req(other, Transform);
+    const from = D.hypot(ot.x - t.x, ot.z - t.z);
+    if (from > reach || from < armed.weapon.minRange + SCREEN_AHEAD) return;
+    if (ctx.smoke.ownAt(ctx, ot.x, ot.z, faction)) return;
+    let foe: { x: number; z: number; d: number } | null = null;
+    ctx.grid.forEachNear(ot.x, ot.z, SCREEN_NEAR, (o) => {
+      const of = world.get(o, Faction);
+      if (!of || !world.has(o, Unit) || !ctx.sides.hostile(faction, of.id)) return;
+      const tt = world.req(o, Transform);
+      const d = D.hypot(tt.x - ot.x, tt.z - ot.z);
+      if (d < SCREEN_NEAR && (!foe || d < foe.d)) foe = { x: tt.x, z: tt.z, d };
+    });
+    const near = foe as { x: number; z: number; d: number } | null;
+    if (near && (!best || near.d < best.d)) best = { x: ot.x, z: ot.z, fx: near.x, fz: near.z, d: near.d };
+  });
+  const b = best as { x: number; z: number; fx: number; fz: number; d: number } | null;
+  if (!b) return null;
+  const ahead = Math.min(SCREEN_AHEAD, b.d * 0.5) / (b.d || 1);
+  return { x: b.x + (b.fx - b.x) * ahead, z: b.z + (b.fz - b.z) * ahead };
+}
+
+const screenRounds = new Map<WeaponDef, WeaponDef>();
+/** A screening weapon's canister for its own side: harmless, and a wider cloud. */
+function screenRound(w: WeaponDef): WeaponDef {
+  let round = screenRounds.get(w);
+  if (!round) screenRounds.set(w, (round = { ...w, damage: 0, splash: w.screens ?? w.splash }));
+  return round;
+}
+
+/** A screening weapon turning to, and lobbing a canister at, a spot by its own side's tanks (see screenSpot). */
+function lobScreen(world: World, ctx: SimContext, e: Entity, armed: Armed, mount: Mount | undefined, at: Spot, dt: number): void {
+  const t = world.req(e, Transform);
+  const desired = D.atan2(-(at.z - t.z), at.x - t.x);
+  armed.aim = armed.turret ? turnToward(armed.aim, desired, armed.turnRate * dt) : t.heading;
+  if (armed.cooldown > 0 || Math.abs(wrapAngle(desired - armed.aim)) >= AIM_TOLERANCE) return;
+  fire(world, ctx, e, armed, e, mount, screenRound(armed.weapon), at);
+  armed.firedAt = world.time;
+  armed.firedOn = null;
+  armed.cooldown = armed.weapon.cooldown;
 }
 
 /** How closely a melee weapon must face its target to strike, radians: a blow lands on what it's up against. */
@@ -188,6 +257,14 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
   armed.cooldown -= dt * reloadPace(world, armed);
 
   const mount = mountFor(world, e, armed);
+  // A smoke truck about to fire lobs its canister onto its own side's tanks closing on the enemy, if any are (WeaponDef.screens).
+  if (main && armed.weapon.screens && armed.cooldown <= SCREEN_LOOK && armed.burstLeft === 0) {
+    const screen = screenSpot(world, ctx, e);
+    if (screen) {
+      lobScreen(world, ctx, e, armed, mount, screen, dt);
+      return;
+    }
+  }
   const target = armed.target !== null && world.has(armed.target, Targetable) ? armed.target : null;
   if (target === null) {
     armed.burstLeft = 0;
@@ -252,15 +329,19 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       if (armed.blocked) return;
     }
     // A magnet crane throws wrecks, and with none in reach it can't (see lodestar.ts).
+    // The bigger the heap round it, the heavier what it throws.
+    let heft = 1;
     if (armed.weapon.flings !== undefined) {
       const t = world.req(e, Transform);
+      heft = scrapHeft(ctx.wreckage.massNear(t.x, t.z, SCRAP_REACH));
       if (ctx.wreckage.take(t.x, t.z, SCRAP_REACH, armed.weapon.flings) < armed.weapon.flings * 0.5) {
         armed.cooldown = 1;
         return;
       }
     }
     // A heavy round for armour (guard towers' AP shells): one shot on its own, slower cooldown.
-    const w = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+    const round = volleyWeapon(armed.weapon, world.get(target, Health)?.armor ?? 0);
+    const w = heft === 1 ? round : { ...round, damage: round.damage * heft };
     armed.burstLeft = w.burst - 1;
     volley(world, ctx, e, armed, target, mount, w);
     armed.firedAt = world.time;

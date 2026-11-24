@@ -84,7 +84,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   raiders: {
     id: 'raiders',
     name: 'Raiders',
-    blurb: 'Fast trucks. Machine-gun trucks and scout buggies in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
+    blurb: 'Fast trucks. Machine-gun trucks for infantry and scout buggies with recoilless rifles for armour, in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
     caps: { infantry: 0.8, vehicle: 1.8 },
     production: {
       factory: {
@@ -351,6 +351,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     caps: { infantry: 1, vehicle: 1 },
     production: {
       barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 15 },
+      // Shades rather than the default trooper squads, so all its infantry hide.
+      hq: { table: [shadeSquad(2, 1)] },
+      barracksBlock: { table: [shadeSquad(2, 1)] },
       factory: {
         table: [
           { unit: 'ghostTank', weight: 3, count: 1 },
@@ -535,7 +538,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     production: {
       factory: {
         table: [
-          { unit: 'coilTank', weight: 3, count: 1 },
+          { unit: 'coilTank', weight: 2.5, count: 1 },
           { unit: 'magnetCrane', weight: 2, count: 1 },
           { unit: 'tank', weight: 1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },

@@ -248,10 +248,40 @@ function retarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spotti
     armed.target = null;
     return;
   }
-  armed.target = findTarget(world, ctx, e, armed, spotting);
+  armed.target = (armed.weapon.assists ? assisting(world, ctx, e, armed) : null) ?? findTarget(world, ctx, e, armed, spotting);
   const spot = main && armed.blocked && armed.target !== null ? firingSpot(world, ctx, e, armed, armed.target) : null;
   armed.spotX = spot?.x ?? null;
   armed.spotZ = spot?.z ?? null;
+}
+
+/** Frost under a target at which an assisting weapon leaves it be and helps with another: it's frozen for a good while yet. */
+const FROSTED = 3;
+
+/**
+ * For a weapon that assists (WeaponDef.assists): the closest thing its
+ * side's shatter guns nearby are shooting at, within its reach, that isn't
+ * already deep in frost. Null if there's none (it picks as usual).
+ */
+function assisting(world: World, ctx: SimContext, e: Entity, armed: Armed): Entity | null {
+  const t = world.req(e, Transform);
+  const faction = world.req(e, Faction).id;
+  let best: Entity | null = null;
+  let bestD = Infinity;
+  ctx.grid.forEachNear(t.x, t.z, armed.weapon.assists ?? 0, (other) => {
+    if (other === e) return;
+    const f = world.get(other, Faction);
+    const gun = world.get(other, Armed);
+    if (!f || !gun?.weapon.shatter || !ctx.sides.allied(faction, f.id)) return;
+    const target = gun.target;
+    if (target === null || target === best || !world.has(target, Targetable) || !canHit(world, armed, target)) return;
+    const d = distanceToTarget(world, e, target);
+    if (d >= bestD || d > armed.weapon.range || d < armed.weapon.minRange) return;
+    const tt = world.req(target, Transform);
+    if (ctx.frost.at(tt.x, tt.z) >= FROSTED) return;
+    best = target;
+    bestD = d;
+  });
+  return best;
 }
 
 /** Edge-to-edge distance from an entity to its target, so big buildings count as in range sooner. */

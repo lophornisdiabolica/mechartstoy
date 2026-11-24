@@ -192,6 +192,13 @@ export class WreckageField {
     return taken;
   }
 
+  /** Wreckage lying within `radius` of a point (not what's buried). */
+  massNear(x: number, z: number, radius: number): number {
+    let sum = 0;
+    this.cells(x, z, radius, (k) => (sum += this.mass[k]));
+    return sum;
+  }
+
   /** Salvage within `radius` of a point, visible and buried. */
   salvageNear(x: number, z: number, radius: number): number {
     let sum = 0;
