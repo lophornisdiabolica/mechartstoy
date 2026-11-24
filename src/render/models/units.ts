@@ -1891,3 +1891,73 @@ registerModel('hiveMother', (faction) => {
   body.add(turret);
   return setRig(root, { turret, ...spiderLegs(body, 4, 4.4, 1.3, 2.6, 0.32), ...mounted('hiveMother', root, turret, [spout]) });
 });
+
+// Nomad: a base that walks.
+// A crawler: a huge tracked rig with a factory hall on its back, a crane folded along it, and a gun turret on the cab.
+registerModel('crawler', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(4.2, 0.8, 0.8, 1.5));
+  root.add(box(4.0, 0.6, 2.8, METAL, 0, 1.0, 0)); // chassis
+  root.add(box(2.6, 1.3, 2.6, primary, -0.6, 1.95, 0)); // the factory hall
+  root.add(box(2.7, 0.14, 2.7, secondary, -0.6, 2.65, 0));
+  root.add(box(0.06, 0.9, 1.4, DARK, -1.93, 1.75, 0)); // its doors at the back
+  root.add(box(3.4, 0.14, 0.14, METAL, -0.4, 2.85, 0.9)); // the crane, folded along the roof
+  root.add(box(0.1, 0.5, 0.1, METAL, 1.2, 2.6, 0.9));
+  root.add(box(1.1, 0.8, 2.4, primary, 1.45, 1.7, 0)); // cab
+  root.add(box(0.06, 0.3, 1.8, GLASS, 2.01, 1.85, 0));
+  const turret = new THREE.Group();
+  turret.position.set(1.45, 2.1, 0);
+  turret.add(box(0.6, 0.3, 0.6, DARK, 0, 0.15, 0));
+  const guns = barrelPivot('crawler', turret);
+  for (const side of [-1, 1]) guns.add(box(0.6, 0.07, 0.07, DARK, 0.3, 0, side * 0.12));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('crawler', root, turret, [guns]) });
+});
+
+// An outrider: a motorbike with a gunner riding pillion behind the driver.
+registerModel('outrider', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const x of [-0.42, 0.42]) root.add(box(0.5, 0.5, 0.14, DARK, x, 0.25, 0)); // wheels
+  root.add(box(0.95, 0.2, 0.22, primary, 0, 0.5, 0));
+  root.add(box(0.28, 0.13, 0.26, secondary, 0.3, 0.665, 0)); // tank
+  root.add(box(0.15, 0.4, 0.19, DARK, 0.06, 0.79, 0.01)); // driver
+  root.add(box(0.11, 0.11, 0.13, 0xd9b38c, 0.06, 1.045, 0.01));
+  const turret = new THREE.Group();
+  turret.position.set(-0.25, 0.8, 0);
+  turret.add(box(0.17, 0.33, 0.21, DARK, 0, -0.005, 0)); // the gunner
+  const gun = barrelPivot('outrider', turret);
+  gun.add(box(0.5, 0.06, 0.06, DARK, 0.2, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('outrider', root, turret, [gun]) });
+});
+
+// Nomad's super unit: the Ark, a land-ship on six tracks with a bridge tower, a twin cannon turret and deck guns.
+registerModel('ark', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const x of [-1.7, 1.7]) {
+    const pair = tracks(2.6, 0.9, 0.9, 1.9);
+    for (const t of pair) t.position.x += x;
+    root.add(...pair);
+  }
+  root.add(box(6.0, 1.0, 4.0, primary, 0, 1.4, 0)); // the hull
+  root.add(box(6.1, 0.16, 4.1, secondary, 0, 1.95, 0));
+  root.add(box(1.0, 0.7, 4.2, METAL, 2.7, 1.2, 0)); // the prow
+  root.add(box(1.6, 1.8, 2.0, primary, -1.8, 2.9, 0)); // bridge tower
+  root.add(box(0.06, 0.3, 1.6, GLASS, -0.99, 3.45, 0));
+  root.add(box(0.12, 1.2, 0.12, METAL, -2.2, 4.4, 0)); // mast
+  const turret = new THREE.Group();
+  turret.position.set(0.9, 2.1, 0);
+  turret.add(box(1.6, 0.7, 1.5, primary, 0, 0.35, 0));
+  turret.add(box(0.8, 0.12, 1.2, secondary, -0.3, 0.76, 0));
+  const barrels = barrelPivot('ark', turret);
+  for (const side of [-1, 1]) barrels.add(box(1.8, 0.18, 0.18, DARK, 0.9, 0, side * 0.35));
+  root.add(turret);
+  const guns = ownMount(root, 'ark#guns', (t) => {
+    t.add(box(0.3, 0.2, 0.3, DARK, 0, 0.1, 0));
+    for (const side of [-1, 1]) t.add(box(0.45, 0.06, 0.06, DARK, 0.25, 0.14, side * 0.08));
+  });
+  return setRig(root, { turret, ...mounted('ark', root, turret, [barrels]), mounts: [guns] });
+});

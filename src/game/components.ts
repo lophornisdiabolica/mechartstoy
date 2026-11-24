@@ -563,3 +563,10 @@ export interface DropPod {
   crumbleAt: number;
 }
 export const DropPod = defineComponent<DropPod>('DropPod');
+
+/** A Nomad crawler or its camp (see nomad.ts): which of its side's slots it holds, so each keeps its own place in the line, and when a packing camp is done. */
+export interface Nomad {
+  slot: number;
+  packAt: number | null;
+}
+export const Nomad = defineComponent<Nomad>('Nomad');

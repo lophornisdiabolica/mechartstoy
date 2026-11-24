@@ -147,6 +147,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['A {unit}. Strip it.', 'Find the {unit}. Eat it.'],
     lost: ['The {unit} is gone. More will hatch.', 'We lost the {unit}. Chew its wreck.'],
   },
+  nomad: {
+    attack: ['Roll out. The camps follow us to {enemy}.', 'Outriders first. On to {enemy}.'],
+    regroup: ['Fall back to the camps.', 'Back to the crawlers. Regroup.'],
+    defend: ['They\'re at the HQ. Turn the column round.', 'The base is hit. Everyone home.'],
+    took: ['{where} is ours. Bring the crawlers up.', 'Took {where}. We camp there tonight.'],
+    hunt: ['Outriders, run down that {unit}.', 'Chase the {unit} down.'],
+    lost: ['The {unit} is gone. Keep moving.', 'We lost the {unit}. The column rolls on.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */

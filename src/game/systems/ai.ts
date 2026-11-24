@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, Health, Mover, Targetable, Transform, Unit } from '../components';
+import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, Health, Mover, Nomad, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
@@ -11,6 +11,7 @@ import { threatKindOf } from '../commander/threats';
 import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
+import { campSpot } from '../nomad';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -84,6 +85,13 @@ export function aiSystem(ctx: SimContext): System {
           if (job) moveTo(mover, t, job.standX, job.standZ, job.x, job.z);
           else if (wait) moveTo(mover, t, wait.x + ai.rallyOffsetX * 0.3, wait.z + ai.rallyOffsetZ * 0.3, face.x, face.z);
           else moveTo(mover, t, home.x + ai.rallyOffsetX * 0.5, home.z + ai.rallyOffsetZ * 0.5, face.x, face.z);
+          continue;
+        }
+        // Nomad's crawlers drive to where they'll set up camp (see nomad.ts).
+        if (def?.deploys) {
+          const nomad = world.get(e, Nomad);
+          const spot = nomad ? campSpot(ctx, faction, nomad.slot) : null;
+          if (spot) moveTo(mover, t, spot.x, spot.z, spot.x + spot.dirX * 10, spot.z + spot.dirZ * 10);
           continue;
         }
         // Under an enemy's orbital strike ring: get out from under it, whatever else is going on (see zenith.ts).

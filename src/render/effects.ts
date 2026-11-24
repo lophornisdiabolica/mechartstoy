@@ -206,6 +206,8 @@ export class Effects {
         this.shocks.spawn({ x: e.x, y: e.y + 0.1, z: e.z, life: 0.4, size: 0.5, endSize: 3.2, color: 0xb0a080, endColor: 0x000000 });
       } else this.dust(e.x, e.y, e.z, 1, 6);
     });
+    // A Nomad crawler unfolding into a camp, or packing up: dust kicked up all round it.
+    events.on('camp', (e) => this.dust(e.x, e.y, e.z, 3, 12));
     // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
     events.on('chewed', (e) => {
       for (let i = 0; i < 3; i++) {

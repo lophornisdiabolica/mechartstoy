@@ -153,6 +153,8 @@ export class Commander {
       // Engineers aren't part of the army (see engineers.ts).
       if (def.builds) continue;
       const t = world.req(e, Transform);
+      // Nor are Nomad's crawlers, which set up behind it (see nomad.ts).
+      if (def.deploys) continue;
       sumX[f] += t.x;
       sumZ[f] += t.z;
       count[f]++;

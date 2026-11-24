@@ -925,3 +925,49 @@ registerModel('bld:recycler', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:recycler', g, turret, [spout]) });
 });
+
+// Nomad's crawler yard: a long shed with a gantry over its open end, where the crawlers come out.
+registerModel('bld:crawlerYard', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(6.4, 0.25, 5.6, 0x8a8478, 0, 0.12, 0));
+  g.add(box(4.6, 3.0, 4.6, 0x8e8a80, -0.6, 1.75, 0));
+  g.add(box(4.7, 0.3, 4.7, primary, -0.6, 3.4, 0));
+  g.add(box(0.08, 2.6, 3.2, 0x2a2a2a, 1.72, 1.55, 0)); // the open end
+  for (const z of [-2.0, 2.0]) g.add(box(0.3, 3.8, 0.3, 0x707070, 2.4, 2.0, z)); // gantry legs
+  g.add(box(0.4, 0.4, 4.4, secondary, 2.4, 3.9, 0));
+  return g;
+});
+
+// A crawler set up as a camp: the rig on its jacks, the factory hall opened out with awnings, the crane raised, and pennants round it marking its ground.
+registerModel('bld:crawlerCamp', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.0, 0.6, 2.8, 0x707070, 0, 0.75, 0)); // chassis, lowered
+  for (const x of [-1.7, 1.7]) for (const z of [-1.7, 1.7]) g.add(box(0.3, 0.6, 0.3, 0x444444, x, 0.3, z)); // jacks
+  g.add(box(2.6, 1.3, 2.6, primary, -0.6, 1.7, 0));
+  g.add(box(2.7, 0.14, 2.7, secondary, -0.6, 2.4, 0));
+  // Awnings folded out from the hall's sides.
+  for (const side of [-1, 1]) {
+    const awning = box(2.4, 0.06, 1.4, secondary, -0.6, 2.0, side * 1.95);
+    awning.rotation.x = side * 0.3;
+    g.add(awning);
+  }
+  // The crane, raised.
+  const crane = box(0.14, 2.6, 0.14, 0x707070, -1.6, 3.6, 0.9);
+  crane.rotation.z = 0.5;
+  g.add(crane);
+  g.add(box(1.1, 0.8, 2.4, primary, 1.45, 1.45, 0)); // cab
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    g.add(box(0.06, 1.0, 0.06, 0x444444, Math.cos(a) * 3.6, 0.5, Math.sin(a) * 3.6));
+    g.add(box(0.03, 0.22, 0.32, primary, Math.cos(a) * 3.6, 0.88, Math.sin(a) * 3.6 + 0.16));
+  }
+  const turret = new THREE.Group();
+  turret.position.set(1.45, 1.85, 0);
+  turret.add(box(0.6, 0.3, 0.6, 0x2a2a2a, 0, 0.15, 0));
+  const guns = barrelPivot('bld:crawlerCamp', turret);
+  for (const side of [-1, 1]) guns.add(box(0.6, 0.07, 0.07, 0x2a2a2a, 0.3, 0, side * 0.12));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:crawlerCamp', g, turret, [guns]) });
+});
