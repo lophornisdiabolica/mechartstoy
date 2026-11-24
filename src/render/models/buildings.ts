@@ -910,7 +910,7 @@ registerModel('bld:recycler', (faction) => {
   g.add(box(0.2, 0.9, 1.6, 0x15100c, 2.35, 0.9, 0));
   for (let i = 0; i < 5; i++) g.add(box(0.3, 0.12, 0.12, 0x8a8a8a, 2.45, 0.45 + i * 0.22, (i % 2 ? 0.6 : -0.6)));
   for (const [x, z] of [[-1.6, 1.6], [-1.8, -1.4], [0.6, -2.1]]) {
-    const vat = glowBox(0.6, 0.8, 0.6, 0x9cb02a);
+    const vat = glowBox(0.6, 0.8, 0.6, 0xbcc232);
     vat.position.set(x, 0.65, z);
     g.add(vat);
   }
@@ -1051,7 +1051,8 @@ registerModel('bld:mirrorArray', (faction) => {
 });
 
 /** A greenhouse's panes: see-through, so the plants inside show. */
-const greenhouseGlass = markShared(new THREE.MeshStandardMaterial({ color: 0xc4ecf0, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.1, depthWrite: false }));
+// Lambert (no shine), so each pane is one flat tint like everything else in the game, not a glossy gradient.
+const greenhouseGlass = markShared(new THREE.MeshLambertMaterial({ color: 0xc4ecf0, transparent: true, opacity: 0.4, depthWrite: false }));
 
 /** A pane of greenhouse glass. */
 function pane(geometry: THREE.BufferGeometry): THREE.Mesh {

@@ -1802,7 +1802,7 @@ registerModel('lancePlatform', (faction) => {
 
 // Hive: bugs and crawlers grown from scrap.
 const CHITIN = 0x3b2a1e;
-const ACID = 0x9cb02a;
+const ACID = 0xbcc232;
 /** The Hive Mother's size, as a share of how she was first drawn (see mounts.ts and her UnitDef radius, scaled to match). */
 const HIVE_MOTHER_SIZE = 0.72;
 
@@ -2523,7 +2523,7 @@ registerModel('fataMorgana', (faction) => {
 
 // Verdant: biotech walkers, grown hulls on machine legs. Hulls in the side's own colours, so two Verdant sides
 // tell apart; only the small glowing bio-sacs and vine tips are Verdant's own.
-const SAC = 0x7fe0a8;
+const SAC = 0x5fae86;
 const VINE = 0x3e6a2c;
 
 // A strangler: a grown bulb hull on two machine legs, with a coil of vine on top that it lashes out.
