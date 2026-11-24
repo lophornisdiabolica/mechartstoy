@@ -276,6 +276,9 @@ export class BattleAudio {
       case 'frost':
         this.activity.add(STIR.flame);
         return this.cue('hiss', 'gunfire', e.x, e.z, 1);
+      case 'acid':
+        this.activity.add(STIR.flame);
+        return this.cue('hiss', 'gunfire', e.x, e.z, 0.8);
       case 'orbital':
         // The uplink locking on: the strike's own bang comes when it lands.
         return this.cue('zap', 'cannons', e.x, e.z, 0.5);
@@ -283,7 +286,7 @@ export class BattleAudio {
   }
 
   private impact(e: GameEvents['impact']): void {
-    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost' || e.kind === 'hack') return;
+    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost' || e.kind === 'hack' || e.kind === 'acid') return;
     if (e.splash >= 1.8) {
       this.activity.add(STIR.blast);
       this.cue('blast', 'explosions', e.x, e.z, Math.min(1.2, 0.6 + e.splash * 0.12));

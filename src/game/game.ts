@@ -48,6 +48,7 @@ import { WreckageField } from './wreckage';
 import { SmokeField, smokeSystem } from './smoke';
 import { hackSystem } from './hacking';
 import { dropPodSystem, Strikes } from './zenith';
+import { hiveSystem } from './hive';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -165,7 +166,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
       trafficSystem(ctx),

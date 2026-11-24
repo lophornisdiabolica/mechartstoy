@@ -62,6 +62,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   cipher: ['Network', 'Signal', 'Cell', 'Protocol'],
   veil: ['Choir', 'Shroud', 'Vigil', 'Silence'],
   zenith: ['Ascendancy', 'Orbit', 'Descent', 'Firmament'],
+  hive: ['Collective', 'Swarm', 'Brood', 'Nest'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

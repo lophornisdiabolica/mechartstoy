@@ -206,6 +206,14 @@ export class Effects {
         this.shocks.spawn({ x: e.x, y: e.y + 0.1, z: e.z, life: 0.4, size: 0.5, endSize: 3.2, color: 0xb0a080, endColor: 0x000000 });
       } else this.dust(e.x, e.y, e.z, 1, 6);
     });
+    // A Hive fabricator chewing wreckage: scraps of metal flicked up round its mandibles.
+    events.on('chewed', (e) => {
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = rand(0.6, 1.6);
+        this.debris.spawn({ x: e.x + Math.cos(a) * 0.8, y: e.y + 0.4, z: e.z + Math.sin(a) * 0.8, vx: Math.cos(a) * sp, vy: rand(1.5, 3), vz: Math.sin(a) * sp, life: rand(0.5, 0.9), size: rand(0.06, 0.12), endSize: 0.04, color: 0x6b6258, gravity: 12 });
+      }
+    });
     events.on('hacked', (e) => this.hacked(e.x, e.y, e.z, e.back));
     events.on('shieldHit', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.25, size: 0.4, endSize: 1.4, color: 0xc8f0ff, endColor: 0x000000 }));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
@@ -422,6 +430,12 @@ export class Effects {
     // The hack itself is drawn when it takes (see hacked); the bolt just fizzles.
     if (kind === 'hack') {
       this.flashes.spawn({ x, y, z, life: 0.12, size: 0.3, endSize: 0.6, color: 0x6ab8aa, endColor: 0x000000 });
+      return;
+    }
+    // Acid: a splash of sickly green and a wisp of fumes.
+    if (kind === 'acid') {
+      this.flashes.spawn({ x, y, z, life: 0.2, size: 0.3 + splash * 0.3, endSize: 0.6 + splash * 0.6, color: 0xd4f04a, endColor: 0x203000 });
+      this.smoke.spawn({ x, y, z, vy: 0.5, life: 0.9, size: 0.2, endSize: 0.5 + splash * 0.4, color: 0x9aa84a });
       return;
     }
     if (kind === 'beam') {

@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid';
 
 export interface WeaponDef {
   name: string;
@@ -244,6 +244,18 @@ export interface UnitDef {
    * straight at the nearest enemy, to take some of them with it when it goes up.
    */
   desperate?: number;
+  /** A Hive fabricator: it chews wreckage round it into more units (see hive.ts). */
+  eats?: EatsDef;
+}
+
+/** What a fabricator eats and makes (see hive.ts). */
+export interface EatsDef {
+  /** How far round itself it chews. */
+  radius: number;
+  /** Salvage it chews a second, in tank-sized wrecks. */
+  rate: number;
+  /** What it turns it into, taking turns: each batch costs `cost` of salvage. */
+  makes: { unit: string; count: number; cost: number }[];
 }
 
 /** A weapon with the usual defaults filled in, for the units below that only change a few things. */
@@ -1888,6 +1900,138 @@ export const UNIT_DEFS = {
     weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 190, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
     mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
+    siege: true,
+  },
+  // Hive: a swarm grown from wreckage (see hive.ts).
+  // Mites: knee-high biting bugs, three to an infantry slot. They swarm over walls and buildings.
+  mite: {
+    id: 'mite',
+    name: 'Mite',
+    class: 'infantry',
+    category: 'infantry',
+    capCost: 0.34,
+    move: 'climber',
+    role: 'frontline',
+    model: 'mite',
+    hp: 32,
+    armor: 1,
+    speed: 2.6,
+    turnRate: 7,
+    radius: 0.3,
+    sight: 12,
+    turret: false,
+    turretTurnRate: 7,
+    weapon: weapon({ name: 'Mandibles', range: 0.4, damage: 9, cooldown: 0.8, projectile: 'shell', speed: 1, muzzleHeight: 0.25, pierce: 0.3, melee: { style: 'thrust', lunge: 0.8, knock: 0.1, charge: 1.4 } }),
+    wreckTime: 0,
+    siege: false,
+  },
+  // A tiny spider mech with a gun on its back: the swarm's ranged support.
+  gunMite: {
+    id: 'gunMite',
+    name: 'Gun Mite',
+    class: 'mech',
+    category: 'vehicle',
+    capCost: 0.35,
+    move: 'climber',
+    role: 'frontline',
+    model: 'gunMite',
+    hp: 55,
+    armor: 1,
+    speed: 3,
+    turnRate: 4,
+    radius: 0.5,
+    sight: 15,
+    turret: true,
+    turretTurnRate: 5,
+    weapon: weapon({ name: 'Needle gun', range: 10, damage: 4, cooldown: 1, burst: 3, burstGap: 0.1, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 0.6, targets: 'both' }),
+    wreckTime: 8,
+    siege: false,
+  },
+  // A slow armoured crawler that chews wrecks round it into mites and gun mites, right at the front.
+  fabricator: {
+    id: 'fabricator',
+    name: 'Fabricator',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'support',
+    model: 'fabricator',
+    hp: 280,
+    armor: 7,
+    speed: 1.8,
+    turnRate: 1.4,
+    radius: 1.2,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 2,
+    weapon: weapon({ name: 'Cutting arm', range: 1.2, damage: 30, cooldown: 1.8, projectile: 'shell', speed: 1, muzzleHeight: 0.9, pierce: 0.4, melee: { style: 'swing', lunge: 0.6, knock: 0.6, sweep: 1, sweepMost: 3 } }),
+    eats: { radius: 8, rate: 0.35, makes: [{ unit: 'mite', count: 3, cost: 0.5 }, { unit: 'gunMite', count: 1, cost: 0.45 }, { unit: 'mite', count: 3, cost: 0.5 }] },
+    wreckTime: 20,
+    siege: false,
+  },
+  // A bloated bug that spits acid: lobbed globs on the ground, and up at aircraft.
+  acidSpitter: {
+    id: 'acidSpitter',
+    name: 'Acid Spitter',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'climber',
+    role: 'frontline',
+    model: 'acidSpitter',
+    hp: 140,
+    armor: 3,
+    speed: 2.6,
+    turnRate: 2.4,
+    radius: 0.9,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 3,
+    weapon: weapon({ name: 'Acid glob', range: 15, damage: 14, cooldown: 1.6, burst: 2, burstGap: 0.25, projectile: 'acid', speed: 26, splash: 1.4, spread: 0.08, muzzleHeight: 1.1, pierce: 0.25, targets: 'both' }),
+    wreckTime: 15,
+    siege: false,
+  },
+  // The swarm's heavy: a great armoured beetle with crushing pincers.
+  ravager: {
+    id: 'ravager',
+    name: 'Ravager',
+    class: 'mech',
+    category: 'vehicle',
+    move: 'climber',
+    role: 'frontline',
+    model: 'ravager',
+    hp: 370,
+    armor: 11,
+    speed: 2.4,
+    turnRate: 1.8,
+    radius: 1.3,
+    sight: 16,
+    turret: true,
+    turretTurnRate: 2.4,
+    weapon: weapon({ name: 'Pincers', range: 1.4, damage: 60, cooldown: 2, projectile: 'shell', speed: 1, muzzleHeight: 0.9, pierce: 0.5, melee: { style: 'swing', lunge: 1.2, knock: 1.2, sweep: 1.4, sweepMost: 3, charge: 1.4 } }),
+    wreckTime: 25,
+    siege: false,
+  },
+  // Super unit: a towering brood mother. Mites crawl off her back, and she eats wrecks as she goes.
+  hiveMother: {
+    id: 'hiveMother',
+    name: 'Hive Mother',
+    class: 'mech',
+    category: 'super',
+    move: 'climber',
+    role: 'frontline',
+    model: 'hiveMother',
+    hp: 1150,
+    armor: 15,
+    speed: 1.4,
+    turnRate: 0.9,
+    radius: 2.2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 1.2,
+    weapon: weapon({ name: 'Acid spray', range: 16, damage: 15, cooldown: 1.6, burst: 4, burstGap: 0.15, projectile: 'acid', speed: 24, splash: 2, spread: 0.12, muzzleHeight: 2.8, pierce: 0.3, targets: 'both' }),
+    carries: { squad: [{ unit: 'mite', count: 4 }], every: 22 },
+    eats: { radius: 10, rate: 0.6, makes: [{ unit: 'mite', count: 4, cost: 0.6 }, { unit: 'gunMite', count: 2, cost: 0.8 }] },
+    wreckTime: 40,
     siege: true,
   },
 } satisfies Record<string, UnitDef>;

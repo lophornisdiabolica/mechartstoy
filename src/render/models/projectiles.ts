@@ -22,6 +22,8 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
   // Rime's cryo spray: a pale puff of freezing mist.
   frost: () => projectile(0.4, 0.3, 0xdff6ff),
   hack: () => projectile(1.2, 0.09, 0x6ab8aa),
+  // Hive's acid: a fat, sickly glob.
+  acid: () => projectile(0.35, 0.26, 0xc6e03a),
   // Zenith's strike: a column of light coming straight down, its foot at the projectile.
   orbital: () => {
     const root = new THREE.Group();

@@ -139,6 +139,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['Paint that {unit} for orbit.', 'Mark the {unit}. Runners, go.'],
     lost: ['The {unit} is down. Keep the beacons lit.', 'We lost the {unit}. Drops continue.'],
   },
+  hive: {
+    attack: ['The swarm moves on {enemy}.', 'Hungry. Feed on {enemy}.'],
+    regroup: ['Back to the nest. Breed.', 'The swarm draws back.'],
+    defend: ['Intruders at the nest. Swarm them.', 'They are at the Recycler. Bite.'],
+    took: ['{where} is ours. The scrap there is ours.', 'The swarm holds {where}.'],
+    hunt: ['A {unit}. Strip it.', 'Find the {unit}. Eat it.'],
+    lost: ['The {unit} is gone. More will hatch.', 'We lost the {unit}. Chew its wreck.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */
