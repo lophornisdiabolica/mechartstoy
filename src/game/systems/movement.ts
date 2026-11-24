@@ -1,3 +1,4 @@
+import { woodland } from '../doctrines';
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
 import { MOVE_RULES, MoveClass, MoveRules } from '../../world/moveClasses';
@@ -105,9 +106,9 @@ function pathArea(grid: NavGrid, nav: NavState, from: { x: number; z: number }, 
  * Pick the point to steer at this tick: a sidestep detour, the goal itself
  * if the straight line is clear, or the next waypoint of a planned route.
  */
-function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, radius: number, budget: { plans: number }): { x: number; z: number } {
+function nextWaypoint(ctx: SimContext, world: World, t: Transform, m: Mover, radius: number, budget: { plans: number }, woods: boolean): { x: number; z: number } {
   const nav = m.nav;
-  const grid = ctx.navs.for(m.move);
+  const grid = ctx.navs.route(m.move, woods);
   const goal = { x: nav.goalX, z: nav.goalZ };
   if (world.time < nav.detourUntil) return { x: nav.detourX, z: nav.detourZ };
 
@@ -172,9 +173,9 @@ const GOAL_SEARCH = 8;
  * Without this a unit sent there pushes against the wall for good, and the
  * ones behind it queue up.
  */
-function standableGoal(ctx: SimContext, m: Mover, radius: number): void {
+function standableGoal(ctx: SimContext, m: Mover, radius: number, woods: boolean): void {
   const nav = m.nav;
-  const grid = ctx.navs.for(m.move);
+  const grid = ctx.navs.route(m.move, woods);
   if (nav.askedX === m.targetX && nav.askedZ === m.targetZ && nav.goalVersion === grid.version) return;
   nav.askedX = m.targetX!;
   nav.askedZ = m.targetZ!;
@@ -332,7 +333,10 @@ export function movementSystem(ctx: SimContext): System {
           continue;
         }
         const radius = world.get(e, Collider)?.radius ?? 0;
-        standableGoal(ctx, m, radius);
+        // A side at home in the woods (Verdant) plans its routes straight through dense forest.
+        const faction = world.get(e, Faction)?.id ?? -1;
+        const woods = woodland(ctx, faction);
+        standableGoal(ctx, m, radius, woods);
         const toGoal = D.hypot(m.nav.goalX - t.x, m.nav.goalZ - t.z);
         if (toGoal < 0.3 || (m.nav.settled && toGoal < SETTLE)) {
           m.targetX = m.targetZ = null;
@@ -341,7 +345,7 @@ export function movementSystem(ctx: SimContext): System {
 
         // Waiting a turn at a narrow (see traffic.ts): pull over to the waiting spot and stay there.
         const holding = world.time < m.nav.holdUntil;
-        const wp = holding ? { x: m.nav.holdX, z: m.nav.holdZ } : nextWaypoint(ctx, world, t, m, radius, budget);
+        const wp = holding ? { x: m.nav.holdX, z: m.nav.holdZ } : nextWaypoint(ctx, world, t, m, radius, budget, woods);
         const dx = wp.x - t.x;
         const dz = wp.z - t.z;
         const dist = D.hypot(dx, dz);
@@ -373,7 +377,10 @@ export function movementSystem(ctx: SimContext): System {
         const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
         // A charging melee unit runs (see Mover.surge).
         const pace = (m.surge ? m.speed * m.surge : m.speed) * (m.pace ?? 1);
-        let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : pace * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
+        const ground = field.groundAt(t.x, t.z);
+        // A side at home in the woods walks through dense forest as if it were open ground (see DoctrineDef.woodland).
+        const sylvan = woods && ground.id === 'thicket';
+        let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : sylvan ? pace : pace * (ground.speed[m.move] ?? 1);
         // An enemy's frost underfoot (or frozen water under a boat) slows it right down (see frost.ts).
         if (!rules.flies && ctx.frost.count > 0) speed *= ctx.frost.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
         if (!rules.flies && ctx.tangle.count > 0) speed *= ctx.tangle.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
@@ -405,7 +412,8 @@ export function movementSystem(ctx: SimContext): System {
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.
-          if (CRUSHERS.has(m.move) && stepLen > 0) {
+          // A side at home in the woods steps between the trunks instead.
+          if (CRUSHERS.has(m.move) && stepLen > 0 && !woods) {
             const r = world.get(e, Collider)?.radius ?? 0.5;
             if (m.move !== 'walker' || r >= 1.2) {
               field.woods.crush(nx, nz, r * 0.8, { x: t.x - D.cos(t.heading), z: t.z + D.sin(t.heading) });

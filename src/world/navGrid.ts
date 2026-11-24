@@ -292,6 +292,8 @@ export class NavGrid {
     readonly move: MoveClass = 'tracked',
     obstacles?: NavObstacles,
     readonly cellSize = 1.5,
+    /** Plans as a side at home in the woods would (Verdant): dense forest costs no more than open ground. */
+    readonly woodland = false,
   ) {
     this.cols = Math.ceil(field.width / cellSize);
     this.rows = Math.ceil(field.depth / cellSize);
@@ -340,7 +342,7 @@ export class NavGrid {
     if (depth > 0) cost *= rules.waterCost;
     else if (slope > STEEP_SLOPE && rules.steep !== Infinity) cost *= rules.steep;
     if (rules.town !== 1 && samples.settled[k] === 1) cost *= rules.town;
-    if (!rules.flies && depth <= 0) cost *= samples.ground[k].cost[this.move] ?? 1;
+    if (!rules.flies && depth <= 0 && !(this.woodland && samples.ground[k].id === 'thicket')) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
     this.deckEdge[k] = samples.rail[k] !== 0 || (samples.deck[k] === 1 && this.offDeckBeside(k)) ? 1 : 0;
   }
@@ -1041,6 +1043,7 @@ export class NavGrid {
  */
 export class NavGrids {
   private readonly grids = new Map<MoveClass, NavGrid>();
+  private readonly woods = new Map<MoveClass, NavGrid>();
   /** The baseline land grid (tracked vehicles), used for lanes, spawn spots and anything not tied to one unit. */
   readonly land: NavGrid;
 
@@ -1050,6 +1053,7 @@ export class NavGrids {
     // A change to the map mid-battle re-reads those cells on every grid, and re-plans every route.
     field.onChange((area) => {
       for (const grid of this.grids.values()) grid.refresh(area);
+      for (const grid of this.woods.values()) grid.refresh(area);
       // Refreshing re-reads a cell's neighbours too, so the change reaches one cell further.
       this.land.obstacles.record({ i0: area.i0 - 1, j0: area.j0 - 1, i1: area.i1 + 1, j1: area.j1 + 1 });
     });
@@ -1060,6 +1064,21 @@ export class NavGrids {
     if (!grid) {
       grid = new NavGrid(this.field, move, this.land.obstacles, this.land.cellSize);
       this.grids.set(move, grid);
+    }
+    return grid;
+  }
+
+  /**
+   * The grid a unit plans its routes on: its class's, or for a side at home
+   * in the woods (Verdant), a copy that walks straight through dense forest.
+   * Where it can go is the same either way; only what a route costs differs.
+   */
+  route(move: MoveClass, woodland: boolean): NavGrid {
+    if (!woodland) return this.for(move);
+    let grid = this.woods.get(move);
+    if (!grid) {
+      grid = new NavGrid(this.field, move, this.land.obstacles, this.land.cellSize, true);
+      this.woods.set(move, grid);
     }
     return grid;
   }

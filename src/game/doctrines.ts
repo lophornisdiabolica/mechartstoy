@@ -55,6 +55,12 @@ export interface DoctrineDef {
   drops?: BuildingId[];
   /** With drops: a light vehicle that rides down in each pod of foot soldiers, if the vehicle cap has room (Zenith's drop buggy). */
   podRider?: UnitId;
+  /**
+   * At home in dense forest (Verdant): its units walk through thickets
+   * without slowing or knocking the trees down, and their shots pass
+   * between the trunks instead of hitting them (see woodland()).
+   */
+  woodland?: boolean;
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
@@ -67,17 +73,17 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'armour',
     name: 'Armour',
     blurb: 'Heavy tanks. Fewer infantry, more vehicles, flak tanks against infantry and aircraft, and the Lancer heavy tank from its tank depot. Super unit: the Titan.',
-    caps: { infantry: 0.8, vehicle: 1.4 },
+    caps: { infantry: 0.8, vehicle: 1.5 },
     production: {
       factory: {
         table: [
-          { unit: 'tank', weight: 3, count: 1 },
-          { unit: 'strider', weight: 2, count: 2 },
+          { unit: 'tank', weight: 4, count: 1 },
+          { unit: 'strider', weight: 0.8, count: 2 },
           { unit: 'flakTank', weight: 2, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
-      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 45 },
+      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 36 },
       mechbay: { table: [{ unit: 'titan', weight: 1, count: 1 }] },
     },
     signature: 'tankDepot',
@@ -87,12 +93,12 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'raiders',
     name: 'Raiders',
     blurb: 'Fast trucks. Machine-gun trucks for infantry and scout buggies with recoilless rifles for armour, in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
-    caps: { infantry: 0.8, vehicle: 1.8 },
+    caps: { infantry: 0.8, vehicle: 1.7 },
     production: {
       factory: {
         table: [
           { unit: 'mgTruck', weight: 3, count: 2 },
-          { unit: 'rocketTruck', weight: 3, count: 1 },
+          { unit: 'rocketTruck', weight: 1, count: 1 },
           { unit: 'buggy', weight: 1, count: 2 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -117,7 +123,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     caps: { infantry: 1.9, vehicle: 0.8 },
     production: {
       // Big squads with two AT troopers each: the Legion's answer to armour is many rockets.
-      barracks: { table: [rifleSquad(4, 3, 2), { unit: 'mortar', weight: 1.6, count: 2 }], interval: 10.5 },
+      barracks: { table: [rifleSquad(4, 3, 2), { unit: 'mortar', weight: 1.2, count: 2 }], interval: 11.5 },
       barracksBlock: { table: [rifleSquad(5, 2, 2), { unit: 'mortar', weight: 1.6, count: 3 }], interval: 12 },
       factory: {
         table: [
@@ -135,7 +141,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'skyline',
     name: 'Skyline',
     blurb: 'Aircraft. Gunships, bombers, strike jets and scout copters from its airpad, which they fly back to to rearm, flak walkers on the ground, a bigger air cap and fewer of everything else. Super unit: the Airship Carrier, which launches drones.',
-    caps: { infantry: 0.8, vehicle: 1.1, air: 2.5 },
+    caps: { infantry: 0.8, vehicle: 1.2, air: 2.7 },
     production: {
       factory: {
         table: [
@@ -150,7 +156,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'jet', weight: 1.2, count: 2 },
           { unit: 'scout', weight: 1.5, count: 2 },
         ],
-        interval: 22,
+        interval: 19,
       },
       mechbay: { table: [{ unit: 'airship', weight: 1, count: 1 }] },
     },
@@ -186,7 +192,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'talon',
     name: 'Talon',
     blurb: 'Walkers. Packs of striders, spider walkers that take any slope, and Warhound heavy walkers from its mech forge. Super unit: the Juggernaut.',
-    caps: { infantry: 0.8, vehicle: 0.95 },
+    caps: { infantry: 0.8, vehicle: 1.05 },
     production: {
       factory: {
         table: [
@@ -211,17 +217,17 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'tidewater',
     name: 'Tidewater',
     blurb: 'Hovers and boats. Tanks with some Skimmer hover tanks and amphibious transports, and missile boats from a dock on the coast (a hover pad if its base has none). Its engineers add the missing hover pad or dock and dig canals that carry the boats further inland. Weaker on dry maps. Super units: the Hover Fortress from its mech bay, and the Dreadnought battleship from its dock.',
-    caps: { infantry: 0.8, vehicle: 1.3 },
+    caps: { infantry: 0.8, vehicle: 1.45 },
     production: {
       factory: {
         table: [
-          { unit: 'tank', weight: 3.5, count: 1 },
+          { unit: 'tank', weight: 4.5, count: 1 },
           { unit: 'amphib', weight: 1, count: 1 },
           { unit: 'skimmer', weight: 1.5, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
         // Its vehicles come one at a time rather than in pairs of skimmers, so the factory works faster.
-        interval: 12,
+        interval: 10.5,
       },
       // Boats launch from the dock's door into the water, and only boats: skimmers come from a hover pad,
       // which engineers put up in a base that has a dock (see commander/engineers.ts).
@@ -284,7 +290,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'rime',
     name: 'Rime',
     blurb: 'Frost. Cryo troopers and freezer trucks lay frost that slows its enemies right down (water freezes too, so boats crawl), and shard tanks shatter whatever stands on it. Fire melts the frost. Its cryo plant keeps the ground round the base frozen. Super unit: the Glacier, a walker that freezes the ground it walks on.',
-    caps: { infantry: 0.9, vehicle: 1.35 },
+    caps: { infantry: 0.9, vehicle: 1.45 },
     production: {
       barracks: {
         table: [
@@ -309,13 +315,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'sabre',
     name: 'Sabre',
     blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Reavers, heavy tanks whose turret is a great axe arm, all fighting hand to hand, with a gun each for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
-    caps: { infantry: 0.55, vehicle: 1.25 },
+    caps: { infantry: 0.55, vehicle: 1.45 },
     production: {
       barracks: { table: [rifleSquad(3, 1)], interval: 20 },
       factory: {
         table: [
           { unit: 'duelist', weight: 2.6, count: 3 },
-          { unit: 'reaver', weight: 2.6, count: 1 },
+          { unit: 'reaver', weight: 3.2, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -458,7 +464,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'hwacha', weight: 1.2, count: 1 },
           { unit: 'warKite', weight: 0.6, count: 1 },
         ],
-        interval: 14,
+        interval: 12.5,
       },
       mechbay: { table: [{ unit: 'bronzeColossus', weight: 1, count: 1 }] },
     },
@@ -494,7 +500,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'mirage',
     name: 'Mirage',
     blurb: 'Holograms. Projector trucks throw up hologram prism tanks: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Projectors only project in a fight, out in front toward the enemy. Prism tanks do the real work with their cannons, and its mirror array throws up more holograms by its own units in a fight. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
-    caps: { infantry: 0.9, vehicle: 1.32 },
+    caps: { infantry: 0.9, vehicle: 1.42 },
     production: {
       factory: {
         table: [
@@ -515,13 +521,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'verdant',
     name: 'Verdant',
     blurb: 'Biotech. Grown hulls on machine legs. Stranglers lash vines that leave a patch of tangle where they land, ground grown over with vines that drags at enemies wading through it, worse than frost, though nothing shatters and it withers in a few seconds (fire burns it away). Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Graft walkers are heavy walkers with claw arms and spine launchers, and its greenhouse grows more of both. Super unit: the Worldtree, a towering biotech walker under a canopy of leaf-panels that lashes vines and seeds thickets as it goes.',
-    caps: { infantry: 0.9, vehicle: 1.3 },
+    caps: { infantry: 0.9, vehicle: 0.95 },
     production: {
       factory: {
         table: [
           { unit: 'strangler', weight: 3, count: 1 },
           { unit: 'graftWalker', weight: 1.5, count: 1 },
-          { unit: 'seedMortar', weight: 1.6, count: 1 },
+          { unit: 'seedMortar', weight: 1.1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.6, count: 1 },
         ],
@@ -529,6 +535,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'worldTree', weight: 1, count: 1 }] },
     },
     signature: 'glasshouse',
+    woodland: true,
     waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'graftWalker', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
   },
 
@@ -536,7 +543,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'lodestar',
     name: 'Lodestar',
     blurb: 'Magnets and scrap. Magnet cranes fling the wrecks lying round them in long lobs, and can\'t throw with none in reach, so the longer a fight goes on the harder they hit; now and then a crane drags a heap of wrecks together into a scrap wall ahead of itself, low cover that crumbles after a while. Coil tanks put slugs through armour, and its scrapyard flings wrecks at attackers. Super unit: the Lodestone, a giant walker with a great magnet that hurls whole wrecks.',
-    caps: { infantry: 0.9, vehicle: 1.4 },
+    caps: { infantry: 0.9, vehicle: 1.5 },
     production: {
       factory: {
         table: [
@@ -563,7 +570,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
       // The odd stolen scout copter is all it has in the air.
-      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
+      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 15.5 },
       mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
     },
     signature: 'shrine',
@@ -636,6 +643,11 @@ export function doctrineUnits(d: DoctrineDef): UnitId[] {
 /** A side's doctrine (the civilian town and garrisons have none, and get armour's defaults). */
 export function doctrineOf(ctx: SimContext, faction: number): DoctrineDef {
   return DOCTRINES[ctx.settings.factions[faction]?.doctrine ?? 'armour'];
+}
+
+/** Whether a side's units are at home in dense forest (DoctrineDef.woodland): no slowing, no felling, shots pass between the trees. */
+export function woodland(ctx: SimContext, faction: number): boolean {
+  return faction >= 0 && DOCTRINES[ctx.settings.factions[faction]?.doctrine ?? 'armour']?.woodland === true;
 }
 
 /** What a production building turns out for a side: its doctrine's table, or the building's own. */

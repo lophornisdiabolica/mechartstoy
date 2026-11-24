@@ -268,7 +268,8 @@ export function garrisonSystem(ctx: SimContext): System {
   return {
     name: 'garrison',
     update(world, dt) {
-      if (ctx.outposts.length === 0) return;
+      // Once the battle is decided, the bunkers send out nobody more.
+      if (ctx.outposts.length === 0 || ctx.outcome) return;
       const guards = new Map<string, number>();
       for (const e of world.query(Guard, Faction)) {
         const key = `${world.req(e, Guard).outpost}:${world.req(e, Faction).id}`;

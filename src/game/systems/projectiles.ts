@@ -1,3 +1,4 @@
+import { woodland } from '../doctrines';
 import { Entity, System, World } from '../../core/ecs';
 import { Building, Shield, Collider, Faction, Health, Hit, Projectile, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
@@ -151,8 +152,9 @@ export function projectileSystem(ctx: SimContext): System {
         }
         // An engineers' bridge it lands on, or bursts by, takes the hit too (see commander/engineers.ts).
         ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by, p.kind === 'flame');
-        // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them.
-        ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });
+        // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them, except from a side
+        // at home in the woods, whose shots slip between them (see DoctrineDef.woodland).
+        if (!woodland(ctx, p.faction)) ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });
         ctx.events.emit('impact', { x: p.ex, y: p.ey, z: p.ez, kind: p.kind, splash: w.splash });
         world.destroy(e);
       }

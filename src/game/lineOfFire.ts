@@ -1,3 +1,4 @@
+import { woodland } from './doctrines';
 import { Entity, World } from '../core/ecs';
 import { Armed, Building, Collider, Faction, Renderable, Targetable, Tilt, Transform, Unit } from './components';
 import { HullPose, Mount, mountOf, muzzleWorld, pivotHeight, scaledMount, toHull, hullMatrix } from './mounts';
@@ -123,8 +124,8 @@ export function traceShot(world: World, ctx: SimContext, from: Point3, to: Point
     }
   }
 
-  // Dense forest's trees.
-  const tree = ctx.field.woods.firstHit(from.x, from.z, ux, uz, best, yAt);
+  // Dense forest's trees, except for a side at home in them, whose shots pass between the trunks (see DoctrineDef.woodland).
+  const tree = woodland(ctx, faction) ? null : ctx.field.woods.firstHit(from.x, from.z, ux, uz, best, yAt);
   if (tree !== null && tree < best) {
     best = tree;
     hit = null;

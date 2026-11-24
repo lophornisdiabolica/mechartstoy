@@ -123,6 +123,12 @@ export interface WeaponDef {
    * volley). It still waits for a target in range before it lets go.
    */
   nova?: number;
+  /**
+   * The bearing off the unit's nose this fixed weapon points along, radians
+   * counterclockwise (0 ahead, PI behind): with UnitDef.alternates the unit
+   * turns its body to bring it to bear (see alternate.ts).
+   */
+  faces?: number;
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -315,6 +321,12 @@ export interface UnitDef {
    * there at `mends` of its full health a second until it's back to `until`.
    */
   retreats?: RetreatDef;
+  /**
+   * Its weapons with a `faces` bearing point different ways, and it brings
+   * them to bear in turn (see alternate.ts): it stops and swings round, at
+   * `turnRate` radians a second, to face its target with whichever is ready.
+   */
+  alternates?: { turnRate: number };
 }
 
 /** When a unit falls back to mend, and how fast it mends at home (see UnitDef.retreats). */
@@ -579,7 +591,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'lancer',
-    hp: 352,
+    hp: 385,
     armor: 8,
     speed: 2.0,
     turnRate: 1.3,
@@ -615,7 +627,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'mgTruck',
-    hp: 115,
+    hp: 130,
     armor: 2,
     speed: 4.4,
     turnRate: 3,
@@ -627,7 +639,7 @@ export const UNIT_DEFS = {
       name: 'Heavy machine gun',
       range: 11,
       minRange: 0,
-      damage: 5.5,
+      damage: 7,
       cooldown: 1.2,
       burst: 6,
       burstGap: 0.08,
@@ -1822,7 +1834,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'frontline',
     model: 'overmind',
-    hp: 1100,
+    hp: 1000,
     armor: 18,
     speed: 1.3,
     turnRate: 0.9,
@@ -1830,7 +1842,7 @@ export const UNIT_DEFS = {
     sight: 22,
     turret: true,
     turretTurnRate: 1.1,
-    weapon: weapon({ name: 'Twin cannons', range: 18, damage: 46, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
+    weapon: weapon({ name: 'Twin cannons', range: 18, damage: 40, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
     // A hack array on its back turns enemy vehicles for longer than the trucks do, and often.
     mounts: [{ weapon: weapon({ name: 'Hack array', range: 16, damage: 0, cooldown: 6, projectile: 'hack', speed: 45, spread: 0, muzzleHeight: 4.8, hack: 8 }), mount: 'overmind#array', turnRate: 2 }],
     jam: { radius: 13, pace: 0.6, every: 3 },
@@ -2769,12 +2781,14 @@ export const UNIT_DEFS = {
     sight: 22,
     turret: false,
     turretTurnRate: 1.4,
-    // Its tail whips round through everything near it.
-    weapon: weapon({ name: 'Tail whip', range: 1.8, damage: 50, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, melee: { style: 'swing', knock: 2.4, sweep: Math.PI, sweepMost: 6, charge: 1.4 } }),
+    // Its tail whips round through everything behind it: it wheels round to lash it, then back to breathe fire (see alternate.ts).
+    // The tail's long, so it reaches nearly three metres past its hide.
+    weapon: weapon({ name: 'Tail whip', range: 2.8, damage: 50, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, faces: Math.PI, melee: { style: 'swing', knock: 2.4, sweep: Math.PI * 0.6, sweepMost: 6, charge: 1.4 } }),
+    alternates: { turnRate: 2.2 },
     // Besides the whip: fire breathed on what's in front of it (its head turns a little on its neck), a ring of spines
     // flung at what crowds it, and acid lobbed at what keeps its distance. All of them grow with it (see leviathan.ts).
     mounts: [
-      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), mount: 'leviathan#head', turnRate: 1.4 },
+      { weapon: { ...flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), faces: 0 }, mount: 'leviathan#head', turnRate: 1.4 },
       { weapon: weapon({ name: 'Spine volley', range: 7, damage: 16, cooldown: 9, projectile: 'spine', arc: true, speed: 18, splash: 0.8, spread: 0.05, muzzleHeight: 2.2, pierce: 0.3, nova: 12 }) },
       { weapon: weapon({ name: 'Acid pods', range: 18, minRange: 5, damage: 24, cooldown: 7, burst: 2, burstGap: 0.4, projectile: 'acid', arc: true, speed: 16, splash: 2, spread: 0.1, muzzleHeight: 2.6, pierce: 0.2 }) },
     ],
