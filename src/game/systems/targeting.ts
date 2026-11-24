@@ -132,7 +132,8 @@ function findTarget(world: World, ctx: SimContext, e: Entity, armed: Armed, spot
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.score - b.score || a.e - b.e);
   // Lobbed shots go over cover, flame licks round it, and a blow lands on whatever it's touching.
-  if (armed.weapon.arc || armed.weapon.projectile === 'flame' || armed.weapon.melee) return candidates[0].e;
+  // Lobbed, flame, melee and orbital calls don't need a clear line to the target.
+  if (armed.weapon.arc || armed.weapon.orbital || armed.weapon.projectile === 'flame' || armed.weapon.melee) return candidates[0].e;
   for (const c of candidates.slice(0, SIGHT_CHECKS)) {
     const muzzle = muzzleToward(world, ctx, e, armed, c.e);
     if (muzzle && clearShot(world, ctx, muzzle, c.e, e, faction)) return c.e;
@@ -171,7 +172,7 @@ export function firingSpot(world: World, ctx: SimContext, e: Entity, armed: Arme
     const ground = grid.rules.flies ? t.y : ctx.field.surfaceAt(x, z);
     const from = { x, y: ground + (mount ? pivotHeight(mount) : armed.weapon.muzzleHeight), z };
     // Not perched so high above it (or so far below) that the barrels can't pitch to bear.
-    if (mount?.elev && !armed.weapon.arc) {
+    if (mount?.elev && !armed.weapon.arc && !armed.weapon.orbital) {
       const climb = D.atan2(aimPoint(world, target).y - from.y, ring);
       if (climb < mount.elev[0] || climb > mount.elev[1]) continue;
     }

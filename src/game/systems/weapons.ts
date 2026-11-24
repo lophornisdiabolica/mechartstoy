@@ -323,7 +323,7 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       return;
     }
     // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
-    if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
+    if (!armed.weapon.arc && !armed.weapon.orbital && armed.weapon.projectile !== 'flame') {
       const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, armed.shot, ctx);
       armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
       if (armed.blocked) return;

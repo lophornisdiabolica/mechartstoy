@@ -251,5 +251,6 @@ export function elevationFor(world: World, e: Entity, mount: Mount, armed: Armed
   const tilt = world.get(e, Tilt);
   const want = !tilt || (tilt.pitch === 0 && tilt.roll === 0) ? climb : toHull(hullMatrix(t.heading, tilt.pitch, tilt.roll, _hull), aim, climb).elev;
   const elev = want < lo ? lo : want > hi ? hi : want;
-  return { elev, reach: w.arc || (want >= lo - ELEV_SLACK && want <= hi + ELEV_SLACK) };
+  // Lobbed shells and orbital calls (the dish just points up) aren't held back by how far the barrels pitch.
+  return { elev, reach: w.arc || w.orbital !== undefined || (want >= lo - ELEV_SLACK && want <= hi + ELEV_SLACK) };
 }

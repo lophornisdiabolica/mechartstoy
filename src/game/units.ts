@@ -1938,7 +1938,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'artillery',
     model: 'lancePlatform',
-    hp: 1250,
+    hp: 1100,
     armor: 18,
     speed: 1.1,
     turnRate: 0.8,
@@ -1947,7 +1947,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 0.9,
     // Heavy strikes on anything its beacon runners can see.
-    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 230, cooldown: 5.5, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
+    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 160, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
     mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
     siege: true,
