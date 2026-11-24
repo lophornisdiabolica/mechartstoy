@@ -247,6 +247,8 @@ export const Building = defineComponent<Building>('Building');
 export interface Hit {
   source: string;
   faction: number;
+  /** The weapon's name (WeaponDef.name), for damage by weapon in the stats; left out for burning ground, crushes and the like. */
+  weapon?: string;
 }
 
 export interface Health {

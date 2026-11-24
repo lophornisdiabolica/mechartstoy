@@ -24,6 +24,8 @@ export interface TypeStats {
   dealt: number;
   taken: number;
   dealtTo: Record<string, number>;
+  /** What it did by weapon (WeaponDef.name; 'other' for burning ground and the like), to spot a weapon that never lands. */
+  dealtBy?: Record<string, number>;
   /**
    * Seconds its units spent on the field (all of them added up, so a cap slot
    * held for a minute is 60), seconds with a target picked, and seconds
@@ -107,6 +109,9 @@ export class BattleStats {
         const t = this.type(k.faction, k.source);
         t.dealt += e.amount;
         t.dealtTo[e.category] = (t.dealtTo[e.category] ?? 0) + e.amount;
+        const by = (t.dealtBy ??= {});
+        const weapon = k.weapon ?? 'other';
+        by[weapon] = (by[weapon] ?? 0) + e.amount;
       }
     });
     events.on('militia', (e) => {

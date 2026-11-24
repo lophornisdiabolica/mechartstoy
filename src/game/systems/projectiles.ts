@@ -94,7 +94,7 @@ export function projectileSystem(ctx: SimContext): System {
 
         const hit = new Set<Entity>();
         const w = p.weapon;
-        const by: Hit = { source: p.source, faction: p.faction };
+        const by: Hit = { source: p.source, faction: p.faction, weapon: p.weapon.name };
         // Bursting on an enemy dome that's still up: the dome takes it all (see shields.ts).
         if (p.dome !== undefined && world.get(p.dome, Shield)?.downUntil === -Infinity) {
           hitDome(world, ctx, p.dome, w.damage * (w.breaker ?? 1), p.ex, p.ey, p.ez, by);
