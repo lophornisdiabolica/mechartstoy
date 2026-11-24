@@ -998,3 +998,25 @@ registerModel('bld:castrum', (faction) => {
   return setRig(g, { turret, ...mounted('bld:castrum', g, turret, [bow]) });
 });
 const BRONZE_POLE = 0xc08a3a;
+
+// Tin Soldiers' toy box: a giant painted wooden chest, lid propped open, with a jack-in-the-box cannon springing out of it.
+registerModel('bld:toyBox', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.4, 0.2, 5.0, 0xc8b898, 0, 0.1, 0));
+  g.add(box(4.2, 2.0, 3.6, primary, 0, 1.2, 0));
+  g.add(box(4.25, 0.25, 3.65, secondary, 0, 0.5, 0)); // painted band
+  g.add(box(4.25, 0.25, 3.65, secondary, 0, 1.9, 0));
+  const lid = box(4.2, 0.2, 3.6, primary, -2.0, 3.0, 0);
+  lid.rotation.z = 1.2;
+  g.add(lid);
+  for (const [x, z, c] of [[1.6, 2.1, 0xd04040], [-1.4, 2.2, 0x40a0d0], [2.3, -1.9, 0xe0c040]] as const) g.add(box(0.6, 0.6, 0.6, c, x, 0.5, z)); // toy blocks
+  const turret = new THREE.Group();
+  turret.position.set(0.4, 2.3, 0);
+  turret.add(box(0.3, 0.6, 0.3, 0x8a8a8a, 0, 0.3, 0)); // the spring
+  turret.add(box(0.6, 0.5, 0.6, 0xf0d0b0, 0, 0.85, 0)); // the jack's head
+  const barrel = barrelPivot('bld:toyBox', turret);
+  barrel.add(box(0.7, 0.16, 0.16, 0x2a2a2a, 0.3, 0, 0));
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:toyBox', g, turret, [barrel]) });
+});

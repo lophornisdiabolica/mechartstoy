@@ -50,6 +50,7 @@ import { hackSystem } from './hacking';
 import { dropPodSystem, Strikes } from './zenith';
 import { hiveSystem } from './hive';
 import { nomadSystem } from './nomad';
+import { toppleSystem, windUpSystem } from './windup';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -171,6 +172,7 @@ export class Game {
       ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx)] : []),
       targetingSystem(ctx),
       aiSystem(ctx),
+      windUpSystem(ctx),
       trafficSystem(ctx),
       dashSystem(ctx),
       movementSystem(ctx),
@@ -178,6 +180,7 @@ export class Game {
       laneKeepSystem(ctx),
       groundFollowSystem(this.field, ctx),
       tiltSystem(ctx),
+      toppleSystem(),
       shieldSystem(ctx),
       weaponSystem(ctx),
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).

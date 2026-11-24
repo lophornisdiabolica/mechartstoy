@@ -2192,3 +2192,171 @@ registerModel('warKite', (faction) => {
   root.add(turret);
   return setRig(root, { turret, ...mounted('warKite', root, turret, [bow]) });
 });
+
+// Tin Soldiers: clockwork toys, each with a wind-up key in its back that turns as it goes, and whirs round fast while it stands winding up.
+const TIN = 0xb8bcc2;
+const GOLD = 0xd8b04a;
+
+/** A wind-up key on a toy's back, turning: slowly as it marches, quickly while it stands (mostly winding up). */
+function windKey(parent: THREE.Object3D, x: number, y: number, size: number) {
+  const key = new THREE.Group();
+  key.position.set(x, y, 0);
+  const back = Math.sign(x);
+  key.add(box(size * 0.62, size * 0.2, size * 0.2, GOLD, size * 0.3 * back, 0, 0));
+  key.add(box(size * 0.15, size * 0.9, size * 0.15, GOLD, size * 0.6 * back, 0, 0));
+  key.add(box(size * 0.12, size * 0.14, size * 0.9, GOLD, size * 0.6 * back, 0, 0));
+  parent.add(key);
+  return (s: AnimState) => {
+    key.rotation.x += s.dt * (s.speed > 0.05 ? 2 : 9);
+  };
+}
+
+// A tin soldier: a toy guardsman in the side's colour with a tall shako, a white cross-belt and a rifle.
+registerModel('tinSoldier', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 0.42;
+  root.add(body);
+  body.add(box(0.2, 0.32, 0.26, primary, 0, 0.16, 0));
+  body.add(box(0.21, 0.04, 0.27, 0xf0f0f0, 0, 0.1, 0)); // belt
+  body.add(box(0.13, 0.13, 0.13, 0xf0d0b0, 0, 0.385, 0));
+  body.add(box(0.15, 0.2, 0.15, 0x1a1a1a, 0, 0.55, 0)); // shako
+  body.add(box(0.03, 0.05, 0.08, secondary, 0.075, 0.6, 0)); // its badge
+  body.add(box(0.06, 0.4, 0.06, 0x3a2f2a, 0.12, 0.25, -0.16)); // rifle, shouldered
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.21, 0.21, 0.08, 0x1a1a1a, 0x1a1a1a);
+    leg.hip.position.set(0, 0, side * 0.07);
+    body.add(leg.hip);
+    return leg;
+  });
+  const turn = windKey(body, -0.1, 0.18, 0.18);
+  const walk = walker(legs, body, 0.3, 0.5);
+  return setRig(root, {
+    ...walk,
+    animate: (s) => {
+      walk.animate(s);
+      turn(s);
+    },
+    ...mounted('tinSoldier', root, null),
+  });
+});
+
+// A clockwork tank: a tin box on tracks with rivets, a round turret, and a big key in the back.
+registerModel('clockworkTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(1.9, 0.36, 0.42, 0.62));
+  root.add(box(1.8, 0.45, 1.1, primary, 0, 0.65, 0));
+  root.add(box(1.82, 0.08, 1.12, secondary, 0, 0.6, 0)); // tin seam
+  const turret = new THREE.Group();
+  turret.position.set(0.1, 0.88, 0);
+  turret.add(cylinder(0.4, 0.45, 0.35, 10, TIN, 0, 0.17, 0));
+  const barrel = barrelPivot('clockworkTank', turret);
+  barrel.add(box(0.9, 0.12, 0.12, TIN, 0.45, 0, 0));
+  root.add(turret);
+  const turn = windKey(root, -0.9, 0.75, 0.4);
+  return setRig(root, { turret, ...mounted('clockworkTank', root, turret, [barrel]), animate: turn });
+});
+
+// A toy cannon: a fat painted barrel on two spoked wheels.
+registerModel('toyCannon', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const wheel = cylinder(0.4, 0.4, 0.08, 8, GOLD, 0, 0.4, side * 0.42);
+    wheel.rotation.x = Math.PI / 2;
+    root.add(wheel);
+  }
+  root.add(box(1.2, 0.12, 0.3, primary, -0.3, 0.3, 0)); // trail
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.55, 0);
+  turret.add(box(0.3, 0.2, 0.5, secondary, 0, 0, 0));
+  const barrel = barrelPivot('toyCannon', turret);
+  barrel.add(box(0.8, 0.28, 0.28, 0x2a2a2a, 0.3, 0, 0));
+  barrel.add(box(0.12, 0.34, 0.34, GOLD, 0.66, 0, 0));
+  root.add(turret);
+  const turn = windKey(root, -0.85, 0.4, 0.3);
+  return setRig(root, { turret, ...mounted('toyCannon', root, turret, [barrel]), animate: turn });
+});
+
+// A tin robot: a box body with dials, a square head with glowing eyes, hammer fists, and a key in its back.
+registerModel('tinRobot', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.0;
+  root.add(body);
+  body.add(box(0.7, 0.8, 0.9, primary, 0, 0.4, 0));
+  body.add(box(0.06, 0.2, 0.2, secondary, 0.36, 0.5, 0.2)); // dials
+  body.add(box(0.06, 0.2, 0.2, GOLD, 0.36, 0.5, -0.2));
+  for (const side of [-1, 1]) body.add(box(0.3, 0.6, 0.22, TIN, 0.1, 0.35, side * 0.56)); // arms
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.85, 0);
+  turret.add(box(0.5, 0.42, 0.5, TIN, 0, 0.21, 0));
+  turret.add(box(0.04, 0.3, 0.04, TIN, 0, 0.57, 0)); // antenna
+  const eyes = barrelPivot('tinRobot', turret);
+  for (const side of [-1, 1]) {
+    const eye = glowBox(0.06, 0.1, 0.1, 0xff5a3a);
+    eye.position.set(0.03, 0, side * 0.12);
+    eyes.add(eye);
+  }
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.5, 0.5, 0.22, TIN, 0x2a2a2a);
+    leg.hip.position.set(0, 0, side * 0.24);
+    body.add(leg.hip);
+    return leg;
+  });
+  const turn = windKey(body, -0.36, 0.45, 0.4);
+  const walk = walker(legs, body, 0.5, 0.4);
+  return setRig(root, {
+    turret,
+    ...walk,
+    animate: (s) => {
+      walk.animate(s);
+      turn(s);
+    },
+    ...mounted('tinRobot', root, turret, [eyes]),
+  });
+});
+
+// Tin Soldiers' super unit: a towering clockwork giant, a chest cannon in its belly and a huge key turning in its back.
+registerModel('clockworkGiant', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.4, 1.8, 2.0, primary, 0, 0.9, 0));
+  turret.add(box(1.42, 0.2, 2.02, GOLD, 0, 0.3, 0));
+  turret.add(box(0.9, 0.8, 0.9, TIN, 0, 2.2, 0)); // head
+  for (const side of [-1, 1]) {
+    const eye = glowBox(0.05, 0.14, 0.18, 0xffc060);
+    eye.position.set(0.46, 2.3, side * 0.2);
+    turret.add(eye);
+    turret.add(box(0.5, 1.4, 0.45, TIN, 0.1, 0.9, side * 1.25)); // arms
+  }
+  turret.add(box(0.1, 0.3, 0.8, secondary, 0.5, 1.6, 0));
+  const barrel = barrelPivot('clockworkGiant', turret);
+  barrel.add(box(0.8, 0.4, 0.4, 0x2a2a2a, 0.3, 0, 0));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.3, 1.3, 0.5, TIN, 0x2a2a2a);
+    leg.hip.position.set(0, 0, side * 0.55);
+    body.add(leg.hip);
+    return leg;
+  });
+  const turn = windKey(turret, -0.7, 1.1, 1.2);
+  const walk = walker(legs, body, 1.2, 0.4);
+  return setRig(root, {
+    turret,
+    ...walk,
+    animate: (s) => {
+      walk.animate(s);
+      turn(s);
+    },
+    ...mounted('clockworkGiant', root, turret, [barrel]),
+  });
+});

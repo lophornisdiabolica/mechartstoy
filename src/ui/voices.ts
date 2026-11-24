@@ -163,6 +163,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['That {unit} is an abomination. Bring it down.', 'Elephants, charge the {unit}!'],
     lost: ['The {unit} has fallen. The gods are cruel.', 'We lost the {unit}. Write it in the annals.'],
   },
+  tin: {
+    attack: ['Wind them up! Quick march on {enemy}!', 'Tick, tock. Forward against {enemy}.'],
+    regroup: ['Back to the toy box.', 'Everyone wind up and fall in.'],
+    defend: ['Someone is in the playroom! Defend the toy box!', 'Stand up straight and hold the line!'],
+    took: ['{where} is ours. Plant the little flag.', 'We have taken {where}. Tick, tock.'],
+    hunt: ['Knock over that {unit}.', 'March on the {unit}.'],
+    lost: ['The {unit} is broken. Put it back in the box.', 'We lost the {unit}. Its spring went.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */

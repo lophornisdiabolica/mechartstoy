@@ -161,6 +161,13 @@ export const MOUNTS: Record<string, Mount> = {
   bronzeColossus: { turret: [0, 2.6, 0], muzzles: [[2.4, 0.1, 0.95]] },
   warKite: { turret: [0, 0, 0], pivot: [0, 0.02, 0], muzzles: [[0.145, 0, 0.15]], elev: [-1.4, 0.4] },
   'bld:castrum': { turret: [2.75, 2.2, 0], pivot: [0, 0.3, 0], muzzles: [[0.6, 0, 0]], elev: [-0.4, 0.6] },
+  // Tin Soldiers.
+  tinSoldier: { turret: [0, 0, 0], muzzles: [[0.12, 0.87, -0.16]], hull: true },
+  clockworkTank: { turret: [0.1, 0.88, 0], pivot: [0.2, 0.18, 0], muzzles: [[0.9, 0, 0]], elev: [-0.2, 0.4] },
+  toyCannon: { turret: [0, 0.55, 0], pivot: [0, 0.1, 0], muzzles: [[0.72, 0, 0]], elev: [0, 1.1], rest: 0.5 },
+  tinRobot: { turret: [0, 1.85, 0], pivot: [0.25, 0.25, 0], muzzles: [[0.06, 0, 0.12], [0.06, 0, -0.12]], elev: [-0.4, 0.8] },
+  clockworkGiant: { turret: [0, 2.6, 0], pivot: [0.7, 0.8, 0], muzzles: [[0.7, 0, 0]], elev: [-0.3, 0.4] },
+  'bld:toyBox': { turret: [0.4, 2.3, 0], pivot: [0.3, 0.85, 0], muzzles: [[0.65, 0, 0]], elev: [-0.4, 0.5] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },

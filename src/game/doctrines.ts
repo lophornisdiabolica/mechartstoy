@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -411,7 +411,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'recycler',
     waves: [{ unit: 'mite', weight: 3, count: 10 }, { unit: 'gunMite', weight: 2, count: 3 }, { unit: 'fabricator', weight: 1, count: 1 }, { unit: 'ravager', weight: 1, count: 1 }],
-  },  nomad: {
+  },
+
+  nomad: {
     id: 'nomad',
     name: 'Nomad',
     blurb: 'A base that walks. Its HQ stays put, but its factories are crawlers: huge slow rigs that drive out and set up camp a set way behind the army, never behind the start. A camp takes a while to unfold and to pack up again; set up, it turns out squads, outriders and tanks close to the fight, and the wounded heal round it. When the army moves on, forward or back, the camps pack up and follow. Outriders, fast bikes with a pillion gunner, do the raiding. Super unit: the Ark, a land-ship with heavy cannons that drops off a squad now and then.',
@@ -430,7 +432,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'crawlerYard',
     waves: [rifleSquad(4, 3), { unit: 'outrider', weight: 3, count: 2 }, { unit: 'tank', weight: 2, count: 1 }, { unit: 'rocketTruck', weight: 1, count: 1 }],
-  },  antiquity: {
+  },
+
+  antiquity: {
     id: 'antiquity',
     name: 'Antiquity',
     blurb: 'An ancient army, Roman and Chinese, against tanks: a silly underdog. Legionaries lock big shields in front, and bullets from in front mostly glance off (shells lobbed over the top don\'t); crossbowmen loose quick volleys, even at aircraft. Ballistae put bolts through armour, trebuchets lob stones a long way, hwachas fire racks of fire arrows, chariots and war elephants charge. Everything is cheap and there\'s lots of it. Super unit: the Bronze Colossus, a giant automaton with a great sword.',
@@ -456,6 +460,31 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     waves: [{ unit: 'legionary', weight: 3, count: 6 }, { unit: 'crossbowman', weight: 2, count: 5 }, { unit: 'chariot', weight: 2, count: 2 }, { unit: 'warElephant', weight: 1, count: 1 }],
   },
 
+  tin: {
+    id: 'tin',
+    name: 'Tin Soldiers',
+    blurb: 'Clockwork toys at war: a silly one. Every toy runs down after a while and stops where it is to wind its key back up, and a hard enough knock tips it over onto its side for a few seconds. Tin soldiers with cork rifles, clockwork tanks, toy cannons and sparking tin robots; its toy box turns out more soldiers. Super unit: the Clockwork Giant, with a huge key turning in its back.',
+    caps: { infantry: 1.05, vehicle: 1.4 },
+    production: {
+      barracks: { table: [{ unit: 'tinSoldier', weight: 1, count: 6 }], interval: 18 },
+      hq: { table: [{ unit: 'tinSoldier', weight: 1, count: 4 }] },
+      barracksBlock: { table: [{ unit: 'tinSoldier', weight: 1, count: 6 }] },
+      factory: {
+        table: [
+          { unit: 'clockworkTank', weight: 3, count: 1 },
+          { unit: 'toyCannon', weight: 1.6, count: 1 },
+          { unit: 'tinRobot', weight: 2, count: 1 },
+          { unit: 'flakTank', weight: 0.8, count: 1 },
+          { unit: 'scout', weight: 0.6, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'clockworkGiant', weight: 1, count: 1 }] },
+    },
+    signature: 'toyBox',
+    waves: [{ unit: 'tinSoldier', weight: 3, count: 6 }, { unit: 'clockworkTank', weight: 2, count: 1 }, { unit: 'tinRobot', weight: 1, count: 1 }],
+  },
+
+
 
 };
 
@@ -474,7 +503,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];
