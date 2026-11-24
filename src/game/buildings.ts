@@ -73,6 +73,8 @@ export interface BuildingDef {
   low?: boolean;
   /** Aircraft out of ammunition fly to the nearest of these of their side to rearm (see Ammo): airpads and forward helipads. */
   rearms?: boolean;
+  /** Units falling back to mend go to the nearest of these of their side (see retreat.ts): Leviathan's shrine. */
+  mends?: boolean;
   /** A Hive building that chews wreckage round it into units (see hive.ts). */
   eats?: EatsDef;
   /** Nomad's crawler yard (see nomad.ts): the crawler it turns out now and then. */
@@ -431,9 +433,9 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.2,
     production: { table: [{ unit: 'trooper', weight: 2, count: 3, with: { unit: 'atTrooper', count: 1 } }, { unit: 'tank', weight: 2.5, count: 1 }, { unit: 'beaconRunner', weight: 0.7, count: 1 }], interval: 28 },
-    // A targeting laser on top of the drop tube calls strikes down on whatever comes at the base.
-    weapon: { name: 'Base uplink', range: 30, minRange: 4, damage: 170, cooldown: 6, burst: 1, burstGap: 0, projectile: 'orbital', speed: 1, splash: 4.5, spread: 0.03, arc: false, muzzleHeight: 4.2, targets: 'ground', orbital: { delay: 2.4 } },
-    sight: 30,
+    // A targeting laser on top of the drop tube calls strikes down on whatever comes at the base: units only, and not far.
+    weapon: { name: 'Base uplink', range: 24, minRange: 4, damage: 170, cooldown: 6, burst: 1, burstGap: 0, projectile: 'orbital', speed: 1, splash: 4.5, spread: 0.03, arc: false, muzzleHeight: 4.2, targets: 'ground', orbital: { delay: 2.4 }, unitsOnly: true },
+    sight: 24,
     turretTurnRate: 1.5,
     rebuildDelay: 40,
     buildTime: 10,
@@ -460,7 +462,8 @@ export const BUILDING_DEFS = {
     armor: 8,
     radius: 2.6,
     height: 3,
-    production: { table: [{ unit: 'mite', weight: 2, count: 4 }, { unit: 'gunMite', weight: 1, count: 2 }], interval: 28 },
+    // It trains fabricators, so every Hive side has some chewing at the front, whatever its factory rolls.
+    production: { table: [{ unit: 'fabricator', weight: 1, count: 1 }], interval: 55 },
     eats: { radius: 14, rate: 0.5, makes: [{ unit: 'mite', count: 4, cost: 0.6 }, { unit: 'gunMite', count: 2, cost: 0.8 }] },
     weapon: { name: 'Acid spout', range: 17, minRange: 0, damage: 16, cooldown: 1.4, burst: 3, burstGap: 0.2, projectile: 'acid', speed: 26, splash: 1.6, spread: 0.08, arc: false, muzzleHeight: 3.2, targets: 'both' },
     sight: 20,
@@ -539,14 +542,14 @@ export const BUILDING_DEFS = {
     armor: 7,
     radius: 2.6,
     height: 4,
-    projects: { units: ['holoPrism', 'holoTank'], count: 3, every: 18 },
-    weapon: { name: 'Prism beam', range: 20, minRange: 0, damage: 40, cooldown: 2.4, burst: 1, burstGap: 0, projectile: 'beam', speed: 90, splash: 0, spread: 0.03, arc: false, muzzleHeight: 4, targets: 'ground', pierce: 0.4 },
+    projects: { units: ['holoPrism'], count: 3, every: 18 },
+    weapon: { name: 'Prism cannon', range: 20, minRange: 0, damage: 40, cooldown: 2.4, burst: 1, burstGap: 0, projectile: 'shell', speed: 42, splash: 0.7, spread: 0.03, arc: false, muzzleHeight: 4, targets: 'ground', pierce: 0.4 },
     sight: 22,
     turretTurnRate: 2,
     rebuildDelay: 40,
     buildTime: 10,
   },
-  /** Verdant's signature: a great glasshouse that grows treants and stranglers, with a vine turret that holds attackers. */
+  /** Verdant's signature: a great greenhouse that grows graft walkers and stranglers, with a vine turret that tangles attackers. */
   glasshouse: {
     id: 'glasshouse',
     name: 'Glasshouse',
@@ -555,8 +558,8 @@ export const BUILDING_DEFS = {
     armor: 7,
     radius: 2.8,
     height: 3,
-    production: { table: [{ unit: 'strangler', weight: 2, count: 2 }, { unit: 'treant', weight: 1, count: 1 }], interval: 34 },
-    weapon: { name: 'Vine lash', range: 18, minRange: 0, damage: 24, cooldown: 1.8, burst: 1, burstGap: 0, projectile: 'vine', speed: 40, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3, targets: 'ground', pierce: 0.3, roots: 3 },
+    production: { table: [{ unit: 'strangler', weight: 2, count: 2 }, { unit: 'graftWalker', weight: 1, count: 1 }], interval: 34 },
+    weapon: { name: 'Vine lash', range: 18, minRange: 0, damage: 24, cooldown: 1.8, burst: 1, burstGap: 0, projectile: 'vine', speed: 40, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3, targets: 'ground', pierce: 0.3, tangle: 5 },
     sight: 20,
     turretTurnRate: 2,
     rebuildDelay: 40,
@@ -603,6 +606,7 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.6,
     production: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 16 },
+    mends: true,
     weapon: { name: 'Burning eyes', range: 20, minRange: 0, damage: 22, cooldown: 1.6, burst: 2, burstGap: 0.2, projectile: 'beam', speed: 90, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3.4, targets: 'both', pierce: 0.3 },
     sight: 22,
     turretTurnRate: 2,

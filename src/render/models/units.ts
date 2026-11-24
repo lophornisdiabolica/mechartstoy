@@ -296,6 +296,49 @@ registerModel('buggy', (faction) => {
   return setRig(root, { turret, ...mounted('buggy', root, turret, [gun]) });
 });
 
+/** Leviathan's cult drives whatever it could get: rust and patches. */
+const RUST = 0x7a4a32;
+
+// A rusty pilgrim pickup: a patched cab, a scrap plate, and a machine gun on a post in the bed.
+registerModel('pilgrimTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.55, 0.5], 0.38, 0.36));
+  root.add(box(1.7, 0.2, 0.8, RUST, 0, 0.42, 0)); // chassis
+  root.add(box(0.6, 0.45, 0.76, primary, 0.45, 0.745, 0)); // cab
+  root.add(box(0.06, 0.3, 0.6, DARK, 0.77, 0.8, 0)); // windscreen
+  root.add(box(0.4, 0.3, 0.04, secondary, 0.45, 0.72, 0.4)); // a scrap plate wired over the door
+  for (const z of [-0.36, 0.36]) root.add(box(0.9, 0.2, 0.06, 0x5a4a3a, -0.4, 0.62, z)); // bed sides
+  const turret = new THREE.Group();
+  turret.position.set(-0.4, 0.98, 0);
+  turret.add(box(0.08, 0.46, 0.08, DARK, 0, -0.2, 0)); // the post
+  const gun = barrelPivot('pilgrimTruck', turret);
+  gun.add(box(0.7, 0.08, 0.08, DARK, 0.25, 0, 0));
+  gun.add(box(0.05, 0.22, 0.36, METAL, 0.02, 0.02, 0)); // a gun shield cut from a road sign
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('pilgrimTruck', root, turret, [gun]) });
+});
+
+// A farm tractor: big back wheels, small front ones, an exhaust stack, and a whaling harpoon gun on the bonnet.
+registerModel('harpoonTractor', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.4], 0.42, 0.66));
+  root.add(...wheels([0.55], 0.3, 0.36));
+  root.add(box(1.1, 0.34, 0.46, primary, 0.2, 0.62, 0)); // bonnet
+  root.add(box(0.42, 0.5, 0.56, RUST, -0.35, 0.79, 0)); // the seat's housing
+  root.add(box(0.36, 0.06, 0.6, secondary, -0.35, 1.07, 0)); // a tin roof over it
+  root.add(box(0.06, 0.44, 0.06, DARK, 0.55, 0.99, 0.14)); // exhaust stack
+  const turret = new THREE.Group();
+  turret.position.set(0.3, 0.92, 0);
+  turret.add(box(0.24, 0.16, 0.24, DARK, 0, 0.0, 0));
+  const gun = barrelPivot('harpoonTractor', turret);
+  gun.add(box(0.8, 0.1, 0.1, DARK, 0.3, 0, 0));
+  gun.add(box(0.28, 0.06, 0.06, 0xd8cfb8, 0.84, 0, 0)); // the harpoon, loaded
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('harpoonTractor', root, turret, [gun]) });
+});
+
 registerModel('rocketTruck', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -390,7 +433,7 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia' | 'cultist' | 'zealot';
 
 /** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
 const TOWN_CLOTHES: Record<string, [string, string, string]> = {
@@ -414,6 +457,34 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       g.fillStyle = c;
       g.fillRect(ox + x, y, w, h);
     };
+    if (kit === 'cultist' || kit === 'zealot') {
+      // Leviathan's cult: dark hooded robes with a sash in the side's colour, faces in shadow.
+      const robe = '#3a2a3a';
+      px(2, 0, 4, 3, robe); // hood
+      px(3, 1, 2, 2, '#1a1418'); // the shadow in it
+      px(3, 2, 1, 1, '#d8d0c0'); // a pale chin
+      px(2, 3, 4, kit === 'cultist' ? 7 : 5, robe); // robe, short for running in
+      px(2, 5, 4, 1, hex(primary)); // sash
+      px(2, 0, 4, 1, hex(secondary)); // hood trim
+      px(1, 3, 1, 3, robe); // arm
+      if (kit === 'cultist') {
+        px(5, 4, 3, 1, '#5a3c22'); // old rifle
+        px(7, 4, 1, 1, '#222');
+        // The robe's hem sways between frames.
+        if (frame === 0) px(2, 10, 4, 1, robe);
+        else px(1, 10, 6, 1, robe);
+        for (const x of frame === 0 ? [2, 4] : [1, 5]) px(x, 11, 2, 1, '#1d1d1d');
+      } else {
+        px(6, 1, 1, 4, '#6b4a2a'); // torch, held high
+        px(6, 0, 1, 1, '#ffb43a');
+        px(7, 0, 1, 1, '#ff7a2a');
+        px(0, 5, 2, 2, '#6a5a3a'); // satchel charge
+        for (const [x, y, w, h] of frame === 0 ? [[2, 8, 2, 3], [4, 8, 2, 3]] : [[1, 8, 2, 3], [5, 8, 2, 2]]) px(x, y, w, h, '#2a2228');
+        px(1, 11, 3, 1, '#1d1d1d');
+        px(4, 11, 3, 1, '#1d1d1d');
+      }
+      continue;
+    }
     const clothes = TOWN_CLOTHES[kit];
     if (clothes) {
       // Townsfolk: bare heads (a flat cap for the militia), everyday clothes.
@@ -1650,22 +1721,25 @@ registerModel('eclipse', (faction) => {
 // Zenith: drops and orbital strikes.
 const BEACON = 0xffd27a;
 
-// A fast little tracked scout with a tall beacon mast, its lamp lit, and a pintle gun.
+// A fast little tracked scout with a pintle gun on a post up front and a tall beacon mast behind it, its lamp lit.
 registerModel('beaconRunner', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   root.add(...tracks(1.4, 0.26, 0.3, 0.36));
   root.add(box(1.25, 0.28, 0.66, primary, 0, 0.42, 0));
   root.add(box(0.36, 0.12, 0.7, secondary, 0.5, 0.36, 0));
-  // The beacon mast, with a steady lamp on top.
-  root.add(box(0.07, 1.5, 0.07, METAL, 0.1, 1.3, 0.2));
+  // The beacon mast at the back, with a steady lamp on top.
+  root.add(box(0.12, 0.08, 0.12, METAL, -0.35, 0.6, 0.15));
+  root.add(box(0.07, 1.5, 0.07, METAL, -0.35, 1.32, 0.15));
   const lamp = glowBox(0.16, 0.16, 0.16, BEACON);
-  lamp.position.set(0.1, 2.1, 0.2);
+  lamp.position.set(-0.35, 2.12, 0.15);
   root.add(lamp);
+  // The pintle gun up front, on a post standing on the hull.
   const turret = new THREE.Group();
-  turret.position.set(-0.35, 0.72, 0);
-  turret.add(box(0.22, 0.14, 0.22, METAL, 0, 0.04, 0));
-  turret.add(box(0.4, 0.05, 0.05, DARK, 0.25, 0.12, 0));
+  turret.position.set(0.3, 0.56, 0);
+  turret.add(box(0.08, 0.18, 0.08, METAL, 0, 0.09, 0));
+  turret.add(box(0.22, 0.1, 0.16, METAL, 0.02, 0.22, 0));
+  turret.add(box(0.36, 0.05, 0.05, DARK, 0.3, 0.24, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('beaconRunner', root, turret) });
 });
@@ -1728,7 +1802,9 @@ registerModel('lancePlatform', (faction) => {
 
 // Hive: bugs and crawlers grown from scrap.
 const CHITIN = 0x3b2a1e;
-const ACID = 0xc6e03a;
+const ACID = 0xbcc232;
+/** The Hive Mother's size, as a share of how she was first drawn (see mounts.ts and her UnitDef radius, scaled to match). */
+const HIVE_MOTHER_SIZE = 0.72;
 
 // A mite: a knee-high biting bug on six legs. It lunges in head first to bite.
 registerModel('mite', (faction) => {
@@ -1867,29 +1943,32 @@ registerModel('ravager', (faction) => {
 // Hive's super unit: a towering brood mother on eight legs, her egg-sacs glowing, spraying acid from her head.
 registerModel('hiveMother', (faction) => {
   const { primary, secondary } = factionColors(faction);
+  // Built at this share of the size she was first drawn at (she towered over everything).
+  const k = HIVE_MOTHER_SIZE;
+  const b = (w: number, h: number, d: number, c: number, x: number, y: number, z: number) => box(w * k, h * k, d * k, c, x * k, y * k, z * k);
   const root = new THREE.Group();
   const body = new THREE.Group();
-  body.position.y = 2.6;
+  body.position.y = 2.6 * k;
   root.add(body);
-  body.add(box(2.2, 1.0, 2.0, primary, 0.4, 0, 0)); // thorax
-  body.add(box(2.6, 1.6, 2.4, CHITIN, -1.6, 0.4, 0)); // abdomen
-  body.add(box(2.0, 0.2, 2.5, secondary, -1.6, 1.25, 0));
+  body.add(b(2.2, 1.0, 2.0, primary, 0.4, 0, 0)); // thorax
+  body.add(b(2.6, 1.6, 2.4, CHITIN, -1.6, 0.4, 0)); // abdomen
+  body.add(b(2.0, 0.2, 2.5, secondary, -1.6, 1.25, 0));
   for (const [x, z] of [[-1.0, 0.7], [-2.1, -0.6], [-1.5, 0], [-2.3, 0.8], [-0.9, -0.8]]) {
-    const egg = glowBox(0.45, 0.4, 0.45, ACID);
-    egg.position.set(x, 1.45, z);
+    const egg = glowBox(0.45 * k, 0.4 * k, 0.45 * k, ACID);
+    egg.position.set(x * k, 1.45 * k, z * k);
     body.add(egg);
   }
   const turret = new THREE.Group();
-  turret.position.set(1.8, 0.3, 0);
-  turret.add(box(0.9, 0.8, 1.1, CHITIN, 0.1, 0, 0));
-  for (const side of [-1, 1]) turret.add(box(0.8, 0.16, 0.16, METAL, 0.7, -0.35, side * 0.35)); // mandibles
+  turret.position.set(1.8 * k, 0.3 * k, 0);
+  turret.add(b(0.9, 0.8, 1.1, CHITIN, 0.1, 0, 0));
+  for (const side of [-1, 1]) turret.add(b(0.8, 0.16, 0.16, METAL, 0.7, -0.35, side * 0.35)); // mandibles
   const spout = barrelPivot('hiveMother', turret);
-  spout.add(box(0.5, 0.26, 0.26, CHITIN, 0.25, 0, 0));
-  const drip = glowBox(0.08, 0.16, 0.16, ACID);
-  drip.position.set(0.52, 0, 0);
+  spout.add(b(0.5, 0.26, 0.26, CHITIN, 0.25, 0, 0));
+  const drip = glowBox(0.08 * k, 0.16 * k, 0.16 * k, ACID);
+  drip.position.set(0.52 * k, 0, 0);
   spout.add(drip);
   body.add(turret);
-  return setRig(root, { turret, ...spiderLegs(body, 4, 4.4, 1.3, 2.6, 0.32), ...mounted('hiveMother', root, turret, [spout]) });
+  return setRig(root, { turret, ...spiderLegs(body, 4, 4.4 * k, 1.3 * k, 2.6 * k, 0.32 * k), ...mounted('hiveMother', root, turret, [spout]) });
 });
 
 // Nomad: a base that walks.
@@ -2442,11 +2521,12 @@ registerModel('fataMorgana', (faction) => {
   return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('fataMorgana', root, turret, [lance]) });
 });
 
-// Verdant: a living army of plant-mechs.
-const BARK = 0x5a4030;
-const LEAF = 0x4a8a3a;
+// Verdant: biotech walkers, grown hulls on machine legs. Hulls in the side's own colours, so two Verdant sides
+// tell apart; only the small glowing bio-sacs and vine tips are Verdant's own.
+const SAC = 0x5fae86;
+const VINE = 0x3e6a2c;
 
-// A strangler: a bulb body on two root legs, with a coil of vine on top that it lashes out.
+// A strangler: a grown bulb hull on two machine legs, with a coil of vine on top that it lashes out.
 registerModel('strangler', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -2455,15 +2535,20 @@ registerModel('strangler', (faction) => {
   root.add(body);
   body.add(box(0.8, 0.6, 0.8, primary, 0, 0.2, 0));
   body.add(box(0.6, 0.12, 0.84, secondary, 0, 0.52, 0));
+  for (const side of [-1, 1]) {
+    const sac = glowBox(0.16, 0.2, 0.08, SAC);
+    sac.position.set(-0.1, 0.18, side * 0.42);
+    body.add(sac);
+  }
   const turret = new THREE.Group();
   turret.position.set(0, 0.4, 0);
-  turret.add(box(0.4, 0.3, 0.4, LEAF, 0, 0.15, 0));
+  turret.add(box(0.4, 0.3, 0.4, METAL, 0, 0.15, 0));
   const vine = barrelPivot('strangler', turret);
-  vine.add(box(0.7, 0.1, 0.1, LEAF, 0.3, 0, 0));
-  vine.add(box(0.14, 0.2, 0.2, 0xc04a6a, 0.7, 0, 0)); // a flower at its tip
+  vine.add(box(0.7, 0.1, 0.1, VINE, 0.3, 0, 0));
+  vine.add(box(0.14, 0.2, 0.2, secondary, 0.7, 0, 0)); // the lash's barbed tip
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.5, 0.5, 0.14, BARK, BARK);
+    const leg = makeLeg(0.5, 0.5, 0.14, METAL, DARK);
     leg.hip.position.set(0, -0.05, side * 0.22);
     body.add(leg.hip);
     return leg;
@@ -2471,67 +2556,79 @@ registerModel('strangler', (faction) => {
   return setRig(root, { turret, ...walker(legs, body, 0.6, 0.45), ...mounted('strangler', root, turret, [vine]) });
 });
 
-// A seed mortar: a big seed bulb on a wheeled cart, its mouth tilted up.
+// A seed mortar: a grown seed bulb on a wheeled cart, its mouth tilted up.
 registerModel('seedMortar', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   root.add(...wheels([-0.5, 0.5], 0.45, 0.4));
-  root.add(box(1.6, 0.25, 0.9, BARK, 0, 0.5, 0));
+  root.add(box(1.6, 0.25, 0.9, METAL, 0, 0.5, 0));
   root.add(box(0.5, 0.2, 0.92, secondary, -0.5, 0.7, 0));
   const turret = new THREE.Group();
   turret.position.set(0.15, 0.62, 0);
   turret.add(box(0.7, 0.5, 0.7, primary, 0, 0.25, 0));
   const mouth = barrelPivot('seedMortar', turret);
-  mouth.add(box(0.5, 0.36, 0.36, LEAF, 0.2, 0, 0));
+  mouth.add(box(0.5, 0.36, 0.36, VINE, 0.2, 0, 0));
+  const sac = glowBox(0.12, 0.2, 0.2, SAC);
+  sac.position.set(0.46, 0, 0);
+  mouth.add(sac);
   root.add(turret);
   return setRig(root, { turret, ...mounted('seedMortar', root, turret, [mouth]) });
 });
 
-// A treant: a walking tree-mech, a bark trunk with a leafy crown and club arms, and a thorn spitter in its crown.
-registerModel('treant', (faction) => {
+// A graft walker: a heavy biotech walker, a grown armoured torso on machine legs, ribbed down its back, with
+// glowing bio-sacs on its flanks, two claw arms, and a spine launcher on its back.
+registerModel('graftWalker', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   const body = new THREE.Group();
   body.position.y = 1.2;
   root.add(body);
   const turret = new THREE.Group();
-  turret.add(box(0.8, 1.2, 0.9, BARK, 0, 0.6, 0));
-  turret.add(box(0.82, 0.16, 0.92, primary, 0, 0.4, 0)); // a band in the side's colour
-  turret.add(box(1.3, 0.7, 1.4, LEAF, -0.1, 1.5, 0)); // crown
-  turret.add(box(0.3, 0.2, 0.3, secondary, 0.3, 1.9, 0.3));
+  turret.add(box(0.9, 0.9, 1.0, primary, 0, 0.5, 0)); // torso
+  turret.add(box(1.04, 0.18, 1.1, secondary, -0.04, 1.0, 0)); // carapace
+  for (const x of [-0.3, 0, 0.3]) turret.add(box(0.12, 0.14, 0.5, DARK, x - 0.05, 1.15, 0)); // ribs down its back
+  turret.add(box(0.3, 0.3, 0.6, primary, 0.5, 0.75, 0)); // head
+  turret.add(box(0.06, 0.08, 0.4, DARK, 0.66, 0.8, 0)); // visor slit
+  for (const side of [-1, 1]) {
+    const sac = glowBox(0.3, 0.3, 0.1, SAC);
+    sac.position.set(-0.15, 0.45, side * 0.52);
+    turret.add(sac);
+  }
   const arms = [-1, 1].map((side) => {
     const arm = new THREE.Group();
-    arm.position.set(0, 1.0, side * 0.6);
-    arm.add(box(0.25, 0.9, 0.25, BARK, 0, -0.35, 0));
-    arm.add(box(0.4, 0.4, 0.4, BARK, 0.1, -0.85, 0)); // club
+    arm.position.set(0.1, 0.85, side * 0.66);
+    arm.add(box(0.2, 0.7, 0.2, METAL, 0, -0.3, 0));
+    arm.add(box(0.36, 0.3, 0.3, primary, 0.1, -0.75, 0)); // fist
+    for (const z of [-0.09, 0.09]) arm.add(box(0.26, 0.06, 0.06, DARK, 0.32, -0.82, z)); // claws
     turret.add(arm);
     return arm;
   });
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.6, 0.6, 0.3, BARK, BARK);
-    leg.hip.position.set(0, 0, side * 0.25);
+    const leg = makeLeg(0.6, 0.6, 0.26, METAL, DARK);
+    leg.hip.position.set(0, 0, side * 0.28);
     body.add(leg.hip);
     return leg;
   });
-  const thorns = ownMount(root, 'treant#thorns', (t) => {
-    t.add(box(0.2, 0.16, 0.2, LEAF, 0, 0, 0));
-    t.add(box(0.36, 0.06, 0.06, BARK, 0.17, 0.02, 0));
+  const spines = ownMount(root, 'graftWalker#spines', (t) => {
+    t.add(box(0.26, 0.18, 0.26, DARK, 0, 0, 0));
+    t.add(box(0.38, 0.07, 0.07, VINE, 0.18, 0.03, 0));
   });
-  body.add(thorns.turret);
-  thorns.turret.position.y -= body.position.y;
+  body.add(spines.turret);
+  spines.turret.position.y -= body.position.y;
   return setRig(root, {
     turret,
     ...walker(legs, body, 0.6, 0.4),
-    ...mounted('treant', root, turret),
-    mounts: [thorns],
+    ...mounted('graftWalker', root, turret),
+    mounts: [spines],
     strike(k) {
       for (const arm of arms) arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
     },
   });
 });
 
-// Verdant's super unit: the Worldtree, a giant walking tree with a vast crown, vines hanging from it, and seed pods.
+// Verdant's super unit: the Worldtree, a towering biotech walker, a grown hull carrying a canopy of
+// leaf-panels, vines hanging from it, and seed pods.
 registerModel('worldTree', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -2539,28 +2636,34 @@ registerModel('worldTree', (faction) => {
   body.position.y = 2.6;
   root.add(body);
   const turret = new THREE.Group();
-  turret.add(box(1.6, 2.6, 1.6, BARK, 0, 1.3, 0));
-  turret.add(box(1.62, 0.3, 1.62, primary, 0, 0.6, 0));
-  turret.add(box(3.4, 1.4, 3.4, LEAF, 0, 3.2, 0)); // crown
-  turret.add(box(2.4, 0.8, 2.4, 0x3e7a30, 0, 4.2, 0));
+  turret.add(box(1.6, 2.6, 1.6, primary, 0, 1.3, 0)); // the trunk-hull
+  turret.add(box(1.62, 0.3, 1.62, secondary, 0, 0.6, 0));
+  for (const y of [1.4, 2.1]) turret.add(box(1.64, 0.12, 1.64, DARK, 0, y, 0)); // ribs
+  // The canopy: tilted leaf-panels round a mast, in the side's colours, not a tree's crown.
+  turret.add(box(0.3, 1.2, 0.3, METAL, 0, 3.1, 0));
+  for (const [x, z, c] of [[1.0, 0, secondary], [-1.0, 0, secondary], [0, 1.0, primary], [0, -1.0, primary]] as const) {
+    const panel = box(1.5, 0.12, 1.1, c, x, 3.4, z);
+    panel.rotation.set(z * 0.25, 0, -x * 0.25);
+    turret.add(panel);
+  }
   for (const [x, z] of [[1.0, 1.0], [-1.1, 0.6], [0.4, -1.2]]) {
-    const pod = glowBox(0.3, 0.4, 0.3, 0xc8e070);
+    const pod = glowBox(0.3, 0.4, 0.3, SAC);
     pod.position.set(x, 2.3, z);
     turret.add(pod);
   }
   turret.add(box(0.2, 0.3, 0.6, secondary, 0.81, 1.8, 0));
   const vines = barrelPivot('worldTree', turret);
-  vines.add(box(1.4, 0.2, 0.2, LEAF, 0.6, 0, 0));
+  vines.add(box(1.4, 0.2, 0.2, VINE, 0.6, 0, 0));
   body.add(turret);
   const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(1.3, 1.3, 0.55, BARK, BARK);
+    const leg = makeLeg(1.3, 1.3, 0.55, METAL, DARK);
     leg.hip.position.set(0, 0, side * 0.55);
     body.add(leg.hip);
     return leg;
   });
   const seeds = ownMount(root, 'worldTree#seeds', (t) => {
-    t.add(box(0.5, 0.4, 0.5, LEAF, 0, 0.0, 0));
-    t.add(box(0.4, 0.28, 0.3, 0xc8e070, 0.35, 0.04, 0));
+    t.add(box(0.5, 0.4, 0.5, METAL, 0, 0.0, 0));
+    t.add(box(0.4, 0.28, 0.3, SAC, 0.35, 0.04, 0));
   });
   turret.add(seeds.turret);
   seeds.turret.position.y -= body.position.y;
@@ -2576,7 +2679,8 @@ registerModel('magnetCrane', (faction) => {
   const root = new THREE.Group();
   root.add(...tracks(2.1, 0.4, 0.42, 0.7));
   root.add(box(2.0, 0.45, 1.3, primary, 0, 0.66, 0));
-  root.add(box(0.6, 0.6, 0.9, secondary, 0.6, 1.18, 0.15)); // cab
+  // The cab sits off to one side, clear of the jib, as on a real crane truck.
+  root.add(box(0.6, 0.6, 0.7, secondary, 0.6, 1.18, 0.45)); // cab
   const turret = new THREE.Group();
   turret.position.set(-0.3, 0.9, 0);
   turret.add(box(0.7, 0.3, 0.7, METAL, 0, 0.15, 0));
@@ -2642,7 +2746,6 @@ registerModel('lodestone', (faction) => {
 
 // Leviathan: one giant creature and its cult.
 const HIDE = 0x2e4a4a;
-const ROBE = 0x3a2a3a;
 
 // The Leviathan: a hulking four-legged sea beast with a ridged back, a long tail, a frilled head and glowing eyes.
 registerModel('leviathan', (faction) => {
@@ -2654,22 +2757,28 @@ registerModel('leviathan', (faction) => {
   body.add(box(3.6, 1.8, 2.2, HIDE, 0, 0, 0));
   body.add(box(3.0, 0.3, 1.6, primary, -0.2, 0.95, 0)); // markings down its back
   for (const x of [-1.3, -0.5, 0.3, 1.0]) body.add(box(0.4, 0.6, 0.12, secondary, x, 1.35, 0)); // ridge plates
-  body.add(box(2.2, 0.9, 1.0, HIDE, -2.8, -0.2, 0)); // tail
-  body.add(box(1.4, 0.5, 0.5, HIDE, -4.4, -0.5, 0));
-  const turret = new THREE.Group();
-  turret.position.set(2.0, 0.5, 0);
-  turret.add(box(1.6, 1.1, 1.4, HIDE, 0.6, 0, 0)); // head
-  turret.add(box(0.1, 1.0, 2.2, primary, 0.0, 0.4, 0)); // frill
-  for (const side of [-1, 1]) {
-    const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
-    eye.position.set(1.42, 0.25, side * 0.45);
-    turret.add(eye);
-  }
-  const jaw = new THREE.Group();
-  jaw.position.set(0.2, -0.55, 0);
-  jaw.add(box(1.4, 0.3, 1.2, 0x223838, 0.7, 0, 0));
-  turret.add(jaw);
-  body.add(turret);
+  // The tail: it whips round when it strikes.
+  const tail = new THREE.Group();
+  tail.position.set(-1.8, 0, 0);
+  tail.add(box(2.2, 0.9, 1.0, HIDE, -1.0, -0.2, 0));
+  tail.add(box(1.4, 0.5, 0.5, HIDE, -2.6, -0.5, 0));
+  body.add(tail);
+  // The head turns a little on its neck to breathe fire (its own mount, see mounts.ts).
+  const head = ownMount(root, 'leviathan#head', (t) => {
+    t.add(box(1.6, 1.1, 1.4, HIDE, 0.6, 0, 0));
+    t.add(box(0.1, 1.0, 2.2, primary, 0.0, 0.4, 0)); // frill
+    for (const side of [-1, 1]) {
+      const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
+      eye.position.set(1.42, 0.25, side * 0.45);
+      t.add(eye);
+    }
+    const jaw = new THREE.Group();
+    jaw.position.set(0.2, -0.55, 0);
+    jaw.add(box(1.4, 0.3, 1.2, 0x223838, 0.7, 0, 0));
+    t.add(jaw);
+  });
+  body.add(head.turret);
+  head.turret.position.y -= body.position.y;
   const legs = [-1.1, 1.1].flatMap((x) => [-1, 1].map((side) => {
     const leg = makeLeg(0.8, 0.8, 0.5, HIDE, 0x1a2a2a);
     leg.hip.position.set(x, -0.6, side * 0.8);
@@ -2677,61 +2786,17 @@ registerModel('leviathan', (faction) => {
     return leg;
   }));
   return setRig(root, {
-    turret,
     ...walker(legs, body, 0.9, 0.3),
-    ...mounted('leviathan', root, turret),
-    // Its jaw drops open and snaps shut.
+    ...mounted('leviathan', root, null),
+    // The spines and acid pods fire from its back, on no mount of their own.
+    mounts: [head, {}, {}],
+    // The tail lashes out to one side and back.
     strike(k) {
-      jaw.rotation.z = -Math.sin(Math.PI * k) * 0.6;
+      tail.rotation.y = Math.sin(Math.PI * k) * 1.1;
     },
   });
 });
 
-/** A robed cult figure: legs, a hooded robe, a pale face in the hood. Returns the body to hang kit on. */
-function cultFigure(root: THREE.Group, trim: number): { body: THREE.Group; legs: Leg[] } {
-  const body = new THREE.Group();
-  body.position.y = 0.42;
-  root.add(body);
-  body.add(box(0.24, 0.36, 0.28, ROBE, 0, 0.14, 0));
-  body.add(box(0.25, 0.05, 0.29, trim, 0, 0.0, 0)); // a sash in the side's colour
-  body.add(box(0.17, 0.17, 0.17, ROBE, 0, 0.41, 0)); // hood
-  body.add(box(0.03, 0.08, 0.09, 0xd8d0c0, 0.085, 0.4, 0)); // face
-  const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.21, 0.21, 0.08, ROBE, 0x1a1a1a);
-    leg.hip.position.set(0, -0.04, side * 0.07);
-    body.add(leg.hip);
-    return leg;
-  });
-  return { body, legs };
-}
-
-// A cultist with an old rifle.
-registerModel('cultist', (faction) => {
-  const { primary } = factionColors(faction);
-  const root = new THREE.Group();
-  const { body, legs } = cultFigure(root, primary);
-  body.add(box(0.42, 0.05, 0.05, 0x5a4030, 0.22, 0.24, -0.1));
-  return setRig(root, { ...walker(legs, body, 0.3, 0.5), ...mounted('cultist', root, null) });
-});
-
-// A zealot with a burning torch and a satchel charge.
-registerModel('zealot', (faction) => {
-  const { primary } = factionColors(faction);
-  const root = new THREE.Group();
-  const { body, legs } = cultFigure(root, primary);
-  const arm = new THREE.Group();
-  arm.position.set(0.05, 0.3, -0.16);
-  arm.add(box(0.05, 0.28, 0.05, 0x5a4030, 0, 0.1, 0));
-  const flame = glowBox(0.09, 0.12, 0.09, 0xffa040);
-  flame.position.set(0, 0.29, 0);
-  arm.add(flame);
-  body.add(arm);
-  body.add(box(0.14, 0.14, 0.08, 0x6a5a3a, 0.02, 0.1, 0.18)); // satchel
-  return setRig(root, {
-    ...walker(legs, body, 0.3, 0.5),
-    ...mounted('zealot', root, null),
-    strike(k) {
-      arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
-    },
-  });
-});
+// Leviathan's cult are sprites, like other infantry: a crowd of them is cheap to draw.
+registerModel('cultist', (faction) => infantry(faction, 'cultist'));
+registerModel('zealot', (faction) => infantry(faction, 'zealot'));

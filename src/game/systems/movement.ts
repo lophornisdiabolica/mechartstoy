@@ -376,6 +376,7 @@ export function movementSystem(ctx: SimContext): System {
         let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : pace * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
         // An enemy's frost underfoot (or frozen water under a boat) slows it right down (see frost.ts).
         if (!rules.flies && ctx.frost.count > 0) speed *= ctx.frost.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
+        if (!rules.flies && ctx.tangle.count > 0) speed *= ctx.tangle.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
         const stepLen = Math.min(dist, speed * throttle * dt);
         const nx = t.x + D.cos(t.heading) * stepLen;
         const nz = t.z - D.sin(t.heading) * stepLen;

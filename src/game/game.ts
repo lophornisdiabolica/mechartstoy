@@ -52,9 +52,10 @@ import { hiveSystem } from './hive';
 import { nomadSystem } from './nomad';
 import { toppleSystem, windUpSystem } from './windup';
 import { mirageSystem } from './mirage';
-import { Groves, rootSystem } from './verdant';
+import { Groves, TANGLE_RULES } from './verdant';
 import { lodestarSystem } from './lodestar';
 import { leviathanSystem } from './leviathan';
+import { retreatSystem } from './retreat';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -151,6 +152,7 @@ export class Game {
       fire: new FireField(this.field),
       domes: new Domes(),
       frost: new FrostField(this.field),
+      tangle: new FrostField(this.field, TANGLE_RULES),
       wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
       strikes: new Strikes(),
@@ -176,9 +178,9 @@ export class Game {
       navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
       targetingSystem(ctx),
+      retreatSystem(ctx),
       aiSystem(ctx),
       windUpSystem(ctx),
-      rootSystem(),
       trafficSystem(ctx),
       dashSystem(ctx),
       movementSystem(ctx),

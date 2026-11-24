@@ -8,7 +8,7 @@ import { Building, Faction, Producer, Unit } from '../game/components';
 import { outpostsHeldBy } from '../game/outposts';
 import { applyParams, settingsToParams, UNIT_STATS } from '../ui/settingsUrl';
 import { fightingStrength, strengthOf } from '../game/offensive';
-import { UNIT_DEFS } from '../game/units';
+import { UNIT_DEFS, UnitDef } from '../game/units';
 import * as D from '../core/dmath';
 
 /**
@@ -890,6 +890,8 @@ export interface UnitReportRow {
   dealt: number;
   taken: number;
   dealtTo: Record<string, number>;
+  /** What it did by weapon (see TypeStats.dealtBy). */
+  dealtBy: Record<string, number>;
   /** Seconds on the field (all its units added up), with a target, and firing (see TypeStats). */
   alive: number;
   engaged: number;
@@ -912,7 +914,7 @@ export function unitReport(results: BattleResult[]): UnitReportRow[] {
         const key = `${side.doctrine}:${unit}`;
         let row = rows.get(key);
         if (!row) {
-          row = { doctrine: side.doctrine, unit, built: 0, lost: 0, kills: 0, razed: 0, dealt: 0, taken: 0, dealtTo: {}, alive: 0, engaged: 0, firing: 0, victims: [], killers: [], v: {}, k: {} };
+          row = { doctrine: side.doctrine, unit, built: 0, lost: 0, kills: 0, razed: 0, dealt: 0, taken: 0, dealtTo: {}, dealtBy: {}, alive: 0, engaged: 0, firing: 0, victims: [], killers: [], v: {}, k: {} };
           rows.set(key, row);
         }
         row.built += t.built;
@@ -926,6 +928,7 @@ export function unitReport(results: BattleResult[]): UnitReportRow[] {
         row.engaged += t.engaged ?? 0;
         row.firing += t.firing ?? 0;
         for (const [c, n] of Object.entries(t.dealtTo ?? {})) row.dealtTo[c] = (row.dealtTo[c] ?? 0) + n;
+        for (const [w, n] of Object.entries(t.dealtBy ?? {})) row.dealtBy[w] = (row.dealtBy[w] ?? 0) + n;
         for (const [id, n] of Object.entries(t.victims)) row.v[id] = (row.v[id] ?? 0) + n;
         for (const [id, n] of Object.entries(t.killers)) row.k[id] = (row.k[id] ?? 0) + n;
       }
@@ -1001,14 +1004,59 @@ export function formatUnits(results: BattleResult[]): string {
     );
   }
   out.push('Dmg and Taken are per unit built. Slot-min is a minute of one cap slot spent on that unit. Trade is the fighting strength of what it killed over that of its own it lost. Firing is the share of field time spent shooting.');
+  const split = weaponSplit(rows);
+  if (split.length > 0) {
+    out.push(
+      '',
+      'Units with more than one weapon, share of their damage by weapon (! under 5%):',
+      formatGrid(['Doctrine', 'Unit', 'Weapons'], split.map((s) => [s.doctrine, s.unit, s.weapons.map((w) => `${w.name} ${pct(w.share)}${w.share < IDLE_WEAPON ? ' !' : ''}`).join(', ')])),
+    );
+  }
   return out.join('\n').trimEnd();
+}
+
+/** A weapon doing less than this share of its unit's damage gets flagged (it may never be firing: see weaponSplit). */
+const IDLE_WEAPON = 0.05;
+
+/** Every weapon a unit type carries, by name: its main one, a heavy round, and any on mounts of their own. */
+function weaponNames(unit: string): string[] {
+  const def = (UNIT_DEFS as Record<string, UnitDef>)[unit];
+  if (!def) return [];
+  // Weapons that do no damage by design (hacking) aren't counted.
+  const all = [def.weapon, ...(def.weapon.heavy ? [def.weapon.heavy] : []), ...(def.mounts ?? []).map((m) => m.weapon)];
+  return [...new Set(all.filter((w) => w.damage > 0).map((w) => w.name))];
+}
+
+/**
+ * Per unit type with more than one weapon (and some built), each weapon's
+ * share of what it did, weapons that never did anything included, so a gun
+ * that never fires (an orbital lance stuck "engaging") shows up as 0%.
+ * Damage from no weapon (burning ground) is left out.
+ */
+export function weaponSplit(rows: UnitReportRow[]): { doctrine: DoctrineId; unit: string; weapons: { name: string; share: number }[] }[] {
+  const out: { doctrine: DoctrineId; unit: string; weapons: { name: string; share: number }[] }[] = [];
+  for (const r of rows) {
+    const names = weaponNames(r.unit);
+    if (names.length < 2 || r.built === 0) continue;
+    const total = names.reduce((a, n) => a + (r.dealtBy[n] ?? 0), 0);
+    if (total <= 0) continue;
+    const weapons = names.map((name) => ({ name, share: (r.dealtBy[name] ?? 0) / total })).sort((a, b) => b.share - a.share);
+    out.push({ doctrine: r.doctrine, unit: r.unit, weapons });
+  }
+  return out;
+}
+
+/** Weapons on units built often enough to tell that do under IDLE_WEAPON of their unit's damage: a short warning list for the summary. */
+export function idleWeapons(results: BattleResult[]): string[] {
+  return weaponSplit(unitReport(results))
+    .flatMap((s) => s.weapons.filter((w) => w.share < IDLE_WEAPON).map((w) => `${s.doctrine} ${s.unit}: ${w.name} ${pct(w.share)}`));
 }
 
 /** Unit report rows as CSV, for a spreadsheet. */
 export function unitsCsv(results: BattleResult[]): string {
   const quote = (v: string) => (/[,"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const cats = ['infantry', 'vehicle', 'air', 'super', 'building'];
-  const lines = [`doctrine,unit,built,lost,kills,razed,dealt,taken,${cats.map((c) => `dealt_${c}`).join(',')},alive_s,engaged_s,firing_s,killed_most,killed_most_by`];
+  const lines = [`doctrine,unit,built,lost,kills,razed,dealt,taken,${cats.map((c) => `dealt_${c}`).join(',')},alive_s,engaged_s,firing_s,killed_most,killed_most_by,dealt_by_weapon`];
   for (const r of unitReport(results)) {
     lines.push(
       [
@@ -1026,6 +1074,7 @@ export function unitsCsv(results: BattleResult[]): string {
         Math.round(r.firing),
         quote(top(r.victims, 5)),
         quote(top(r.killers, 5)),
+        quote(Object.entries(r.dealtBy).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${Math.round(n)}`).join('; ')),
       ].join(','),
     );
   }
@@ -1371,6 +1420,9 @@ export function formatNiche(results: BattleResult[]): string {
     ),
     'Lives is minutes on the field per one built (still alive at the end counts up to then). Trade as above.',
   );
+  // Only when a weapon looks idle: the full split is in the units report.
+  const idle = idleWeapons(results);
+  if (idle.length > 0) out.push('', `Weapons doing under ${pct(IDLE_WEAPON)} of their unit's damage (may never be firing; split in the units report): ${idle.join('; ')}.`);
   out.push(...lengthSplit(results));
   const scenarios = [...new Set(results.map((r) => r.scenario))];
   if (scenarios.length > 1) {

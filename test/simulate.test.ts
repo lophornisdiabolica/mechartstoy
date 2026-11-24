@@ -20,6 +20,7 @@ import {
   summarizeDoctrines,
   unitReport,
   unitsCsv,
+  weaponSplit,
 } from '../src/sim/simulate';
 import { settingsFromParams } from '../src/ui/settingsUrl';
 
@@ -208,5 +209,16 @@ describe('balance runs', () => {
     const text = compareRuns({ battles: before }, { battles: after, set: 'prod=2' });
     expect(text).toContain('3 battles were played in both runs; 1 of them (33%) changed winner.');
     expect(text).toContain('Settings changed for every battle');
+  });
+
+  it('splits a unit\'s damage by weapon, so one that never lands shows up', () => {
+    const row = { doctrine: 'zenith' as const, unit: 'lancePlatform', built: 4, lost: 2, kills: 3, razed: 0, dealt: 900, taken: 500, dealtTo: { vehicle: 900 }, dealtBy: { 'Point guns': 900 }, alive: 600, engaged: 300, firing: 200, victims: [], killers: [] };
+    const [split] = weaponSplit([row]);
+    expect(split.weapons).toEqual([
+      { name: 'Point guns', share: 1 },
+      { name: 'Orbital lance', share: 0 },
+    ]);
+    // Single-weapon units are left out.
+    expect(weaponSplit([{ ...row, unit: 'tank', dealtBy: { Cannon: 900 } }])).toEqual([]);
   });
 });

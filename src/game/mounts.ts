@@ -33,6 +33,8 @@ export interface Mount {
   elev?: readonly [number, number];
   /** How far up the barrels sit when there's nothing to shoot (a rocket rack, a howitzer), radians. */
   rest?: number;
+  /** How far the turret turns either side of the nose, radians (a neck); without it, all the way round. */
+  yaw?: number;
 }
 
 /** Most mounts have two barrels side by side. */
@@ -76,6 +78,8 @@ export const MOUNTS: Record<string, Mount> = {
   siegeCrawler: { turret: [0.3, 1.9, 0], pivot: [0.2, 0.55, 0], muzzles: pair(1.0, 0, 0.3), elev: [0.3, 1.2], rest: 0.8 },
   mgTruck: { turret: [-0.35, 0.82, 0], pivot: [0, 0.42, 0], muzzles: [[0.75, 0, 0]], elev: AA },
   buggy: { turret: [-0.25, 0.98, 0], pivot: [0, 0.08, 0], muzzles: [[0.55, 0, 0]], elev: AA },
+  pilgrimTruck: { turret: [-0.4, 0.98, 0], pivot: [0, 0.12, 0], muzzles: [[0.6, 0, 0]], elev: [-0.3, 0.7] },
+  harpoonTractor: { turret: [0.3, 0.92, 0], pivot: [0, 0.1, 0], muzzles: [[0.98, 0, 0]], elev: [-0.25, 0.4] },
   rocketTruck: {
     turret: [-0.4, 0.62, 0],
     pivot: [0, 0.45, 0],
@@ -130,7 +134,7 @@ export const MOUNTS: Record<string, Mount> = {
   eclipse: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'frostTower#mortar': { turret: [0, 2.32, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [0.3, 1.2], rest: 0.8 },
   // Zenith.
-  beaconRunner: { turret: [-0.35, 0.72, 0], muzzles: [[0.45, 0.12, 0]] },
+  beaconRunner: { turret: [0.3, 0.56, 0], muzzles: [[0.5, 0.24, 0]] },
   uplinkTruck: { turret: [-0.55, 0.75, 0], pivot: [0, 1.75, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.7], rest: -0.2 },
   lancePlatform: { turret: [0, 3.0, 0], pivot: [0.3, 1.0, 0], muzzles: [[3.1, 0, 0]], elev: [0, 1.2], rest: 0.45 },
   'bld:dropControl': { turret: [-1.3, 3.95, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.8], rest: -0.1 },
@@ -141,7 +145,8 @@ export const MOUNTS: Record<string, Mount> = {
   fabricator: { turret: [0.3, 1.0, 0], muzzles: [[1.5, 0.15, 0]] },
   acidSpitter: { turret: [0.45, 0.95, 0], pivot: [0.2, 0.08, 0], muzzles: [[0.32, 0, 0]], elev: [-0.4, 1.2] },
   ravager: { turret: [0.9, 0.95, 0], muzzles: [[1.0, -0.05, 0.32]] },
-  hiveMother: { turret: [1.8, 2.9, 0], pivot: [0.55, -0.1, 0], muzzles: [[0.56, 0, 0]], elev: [-0.7, 1.0] },
+  // Drawn at 0.72 of her first size (HIVE_MOTHER_SIZE in render/models/units.ts).
+  hiveMother: { turret: [1.296, 2.088, 0], pivot: [0.396, -0.072, 0], muzzles: [[0.4032, 0, 0]], elev: [-0.7, 1.0] },
   'bld:recycler': { turret: [-0.4, 2.65, 0], pivot: [0.3, 0.2, 0], muzzles: [[0.55, 0, 0]], elev: [-0.6, 1.0] },
   // Nomad.
   crawler: { turret: [1.45, 2.1, 0], pivot: [0.1, 0.18, 0], muzzles: pair(0.6, 0, 0.12), elev: [-0.4, 1.0] },
@@ -176,22 +181,22 @@ export const MOUNTS: Record<string, Mount> = {
   // Verdant.
   strangler: { turret: [0, 1.3, 0], pivot: [0.1, 0.18, 0], muzzles: [[0.77, 0, 0]], elev: [-0.4, 0.8] },
   seedMortar: { turret: [0.15, 0.62, 0], pivot: [0.2, 0.3, 0], muzzles: [[0.45, 0, 0]], elev: [0, 1.1], rest: 0.6 },
-  treant: { turret: [0, 1.2, 0], muzzles: [[0.3, 0.15, 0.6]] },
-  'treant#thorns': { turret: [0.35, 2.85, 0], muzzles: [[0.35, 0.02, 0]] },
+  graftWalker: { turret: [0, 1.2, 0], muzzles: [[0.55, 0.03, 0.57]] },
+  'graftWalker#spines': { turret: [-0.2, 2.47, 0], muzzles: [[0.37, 0.03, 0]] },
   worldTree: { turret: [0, 2.6, 0], pivot: [0.9, 1.8, 0], muzzles: [[1.3, 0, 0]], elev: [-0.4, 0.6] },
   'worldTree#seeds': { turret: [0.8, 4.4, 1.0], muzzles: [[0.55, 0.05, 0]] },
-  'bld:glasshouse': { turret: [0, 2.63, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },
+  'bld:glasshouse': { turret: [0, 2.78, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },
   // Lodestar.
-  magnetCrane: { turret: [-0.3, 0.9, 0], pivot: [0.2, 0.3, 0], muzzles: [[2.1, 0, 0]], elev: [0, 1.0], rest: 0.4 },
-  'magnetCrane#mg': { turret: [0.6, 1.5, 0.15], muzzles: [[0.42, 0.08, 0]] },
+  magnetCrane: { turret: [-0.3, 0.9, 0], pivot: [0.2, 0.3, 0], muzzles: [[2.1, 0, 0]], elev: [0, 1.0], rest: 0.55 },
+  'magnetCrane#mg': { turret: [0.6, 1.5, 0.45], muzzles: [[0.42, 0.08, 0]] },
   coilTank: { turret: [0, 0.88, 0], pivot: [0.35, 0.2, 0], muzzles: [[1.5, 0, 0]], elev: [-0.2, 0.4] },
   lodestone: { turret: [0, 2.6, 0], pivot: [0.8, 1.0, 0], muzzles: [[2.2, 0, 0.45]], elev: [-0.3, 0.9] },
   'lodestone#coils': { turret: [0.2, 4.5, 0.7], muzzles: [[0.95, 0, 0.12], [0.95, 0, -0.12]] },
   'bld:scrapyard': { turret: [0.6, 2.6, 0.2], pivot: [0, 0.35, 0], muzzles: [[1.7, 0, 0]], elev: [0, 1.0], rest: 0.3 },
   // Leviathan.
-  leviathan: { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]] },
-  cultist: { turret: [0, 0, 0], muzzles: [[0.43, 0.66, -0.1]], hull: true },
-  zealot: { turret: [0, 0, 0], muzzles: [[0.05, 1.065, -0.16]], hull: true },
+  // Its tail whips round (the main, melee weapon), and its head turns a little on its neck to breathe fire.
+  leviathan: { turret: [0, 0, 0], muzzles: [[1.8, 2.2, 0]], hull: true },
+  'leviathan#head': { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]], yaw: 1.0 },
   'bld:shrine': { turret: [0, 2.3, 0], pivot: [0.56, 0.5, 0], muzzles: [[0.08, 0, 0.25], [0.08, 0, -0.25]], elev: [-0.4, 0.5] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
@@ -201,6 +206,22 @@ export const MOUNTS: Record<string, Mount> = {
 
 export function mountOf(model: string): Mount | undefined {
   return MOUNTS[model];
+}
+
+const scaledMounts = new WeakMap<Mount, Map<number, Mount>>();
+/** A mount on a model drawn `scale` times its size (a growing Leviathan): every point moved out with it. */
+export function scaledMount(mount: Mount, scale: number): Mount {
+  const k = Math.round(scale * 100) / 100;
+  if (k === 1) return mount;
+  let sizes = scaledMounts.get(mount);
+  if (!sizes) scaledMounts.set(mount, (sizes = new Map()));
+  let m = sizes.get(k);
+  if (!m) {
+    const s = (v: V3): V3 => [v[0] * k, v[1] * k, v[2] * k];
+    m = { ...mount, turret: s(mount.turret), ...(mount.pivot ? { pivot: s(mount.pivot) } : {}), muzzles: mount.muzzles.map(s) };
+    sizes.set(k, m);
+  }
+  return m;
 }
 
 /** How a hull sits: its heading and, on a slope, its pitch (nose up) and roll (toward its left side). */

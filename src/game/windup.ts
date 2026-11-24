@@ -74,9 +74,15 @@ export function toppleSystem(): System {
         const w = world.req(e, WindUp);
         const tilt = world.req(e, Tilt);
         const want = world.time < w.downUntil ? LIE * w.side : null;
-        if (want === null && Math.abs(tilt.roll) < 0.3) continue;
+        // Toy soldiers on foot stand upright on a slope (only the tanks and trucks lie along it).
+        const upright = world.get(e, Unit)?.def.move === 'foot';
+        if (upright) tilt.pitch = 0;
+        if (want === null && Math.abs(tilt.roll) < 0.3) {
+          if (upright) tilt.roll = 0;
+          continue;
+        }
         // Over quickly, back up a little slower.
-        const goal = want ?? tilt.wantRoll;
+        const goal = want ?? (upright ? 0 : tilt.wantRoll);
         tilt.roll += (goal - tilt.roll) * Math.min(1, dt * (want !== null ? 9 : 4));
       }
     },

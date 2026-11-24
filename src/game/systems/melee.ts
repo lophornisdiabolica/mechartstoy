@@ -124,7 +124,7 @@ export function strike(world: World, ctx: SimContext, e: Entity, armed: Armed, t
     sz += dz;
   }
 
-  const by: Hit = { source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown', faction };
+  const by: Hit = { source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown', faction, weapon: w.name };
   const heading = D.atan2(-(tt.z - sz), tt.x - sx);
   const struck = [target];
   if (melee.sweep) {

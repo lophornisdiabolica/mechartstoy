@@ -142,6 +142,30 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
  * fire together, one from each of the others too, out of the same burst.
  */
 function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon, at?: Spot): void {
+  // A ring of shots all round (WeaponDef.nova): the Leviathan's spines, each flying at the nearest enemy its way, if there is one.
+  if (w.nova) {
+    const t = world.req(e, Transform);
+    const faction = world.req(e, Faction).id;
+    const slice = (Math.PI * 2) / w.nova;
+    const reach = w.range * NOVA_REACH;
+    // Every enemy unit in reach, and its bearing (in heading terms) and distance.
+    const near: { x: number; z: number; a: number; d: number }[] = [];
+    ctx.grid.forEachNear(t.x, t.z, reach, (other, d2) => {
+      if (world.get(other, Targetable)?.kind !== 'unit' || !ctx.sides.hostile(faction, world.req(other, Faction).id)) return;
+      const m = world.get(other, Mover);
+      if (m && MOVE_RULES[m.move].flies) return;
+      const ot = world.req(other, Transform);
+      near.push({ x: ot.x, z: ot.z, a: D.atan2(-(ot.z - t.z), ot.x - t.x), d: Math.sqrt(d2) });
+    });
+    for (let k = 0; k < w.nova; k++) {
+      const a = t.heading + k * slice;
+      let best: { x: number; z: number; d: number } | null = null;
+      for (const o of near) if (Math.abs(wrapAngle(o.a - a)) <= slice * NOVA_SEEK && (!best || o.d < best.d)) best = o;
+      const at = best ?? { x: t.x + D.cos(a) * w.range * 0.9, z: t.z - D.sin(a) * w.range * 0.9 };
+      fire(world, ctx, e, armed, target, mount, w, { x: at.x, z: at.z });
+    }
+    return;
+  }
   fire(world, ctx, e, armed, target, mount, w, at);
   if (mount?.salvo !== 'together') return;
   for (let k = 1; k < mount.muzzles.length && armed.burstLeft > 0; k++) {
@@ -149,6 +173,10 @@ function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: 
     armed.burstLeft--;
   }
 }
+
+/** How far past its range a nova shot reaches for an enemy, and how wide either side of its own line it looks, in slices. */
+const NOVA_REACH = 1.3;
+const NOVA_SEEK = 1.5;
 
 /** Move `from` toward `to` by at most `step`. */
 function approach(from: number, to: number, step: number): number {
@@ -278,6 +306,11 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
   const desired = D.atan2(-(tt.z - t.z), tt.x - t.x);
   if (armed.turret) {
     armed.aim = turnToward(armed.aim, desired, armed.turnRate * dt);
+    // A head on a neck turns only so far either side of the nose (Mount.yaw): past that it waits for the body to come round.
+    if (mount?.yaw !== undefined) {
+      const off = wrapAngle(armed.aim - t.heading);
+      if (Math.abs(off) > mount.yaw) armed.aim = t.heading + Math.sign(off) * mount.yaw;
+    }
   } else {
     // Turret-less units turn the whole body once they've stopped to shoot.
     const mover = world.get(e, Mover);
@@ -323,7 +356,7 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       return;
     }
     // Direct fire holds while a building or the ground is in the way; the AI looks for a better spot.
-    if (!armed.weapon.arc && armed.weapon.projectile !== 'flame') {
+    if (!armed.weapon.arc && !armed.weapon.orbital && armed.weapon.projectile !== 'flame') {
       const muzzle = weaponMuzzle(world, e, armed, armed.aim, armed.elev, armed.shot, ctx);
       armed.blocked = !clearShot(world, ctx, muzzle, target, e, world.req(e, Faction).id, FIRE_ROOM);
       if (armed.blocked) return;

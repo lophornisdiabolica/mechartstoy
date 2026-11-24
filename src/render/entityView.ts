@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Entity, World } from '../core/ecs';
-import { Armed, Arsenal, Collider, Construction, Faction, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
+import { Armed, Arsenal, Building, Collider, Construction, Faction, Nomad, Unit, Renderable, Tilt, Transform, Veiled, Wreck } from '../game/components';
+import { UNIT_DEFS, UnitDef } from '../game/units';
 import { hullMatrix, mountOf, turretYaw } from '../game/mounts';
 import { Batcher } from './batcher';
 import { createModel, getRig, modelKeys } from './models';
@@ -22,6 +23,8 @@ interface ViewEntry {
   obj: THREE.Object3D;
   /** Faction the model was built for; a captured outpost building is rebuilt in its new colours. */
   faction: number;
+  /** The model it was built from (a Nomad camp unfolding shows its crawler's; see drawnModel). */
+  model: string;
   lastX: number;
   lastZ: number;
   wrecked: boolean;
@@ -234,13 +237,14 @@ export class EntityView {
       if (entry) entry.obj.visible = true;
       const t = w.req(e, Transform);
       const faction = w.get(e, Faction)?.id ?? 0;
-      if (entry && entry.faction !== faction) {
+      const model = drawnModel(w, e);
+      if (entry && (entry.faction !== faction || entry.model !== model)) {
         this.remove(e);
         entry = undefined;
       }
       if (!entry) {
         const r = w.req(e, Renderable);
-        const obj = createModel(r.model, faction);
+        const obj = createModel(model, faction);
         obj.scale.setScalar(r.scale);
         const meshes: THREE.Mesh[] = [];
         const sprites: THREE.Sprite[] = [];
@@ -254,7 +258,7 @@ export class EntityView {
         const bounds = new THREE.Box3().setFromObject(obj);
         const top = naval ? bounds.max.y : 0;
         const radius = 1 + 1.25 * Math.max(bounds.min.length(), bounds.max.length());
-        entry = { obj, faction, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN), holo: w.get(e, Unit)?.def.decoy !== undefined };
+        entry = { obj, faction, model, lastX: t.px, lastZ: t.pz, wrecked: false, meshes, sprites, roll: 0, collapse: null, crumble: null, top, duck: 0, grounded, strike: null, fade: 0, hiddenFor: 0, radius, posed: -1, rigless: !getRig(obj), pose: new Float64Array(POSE_SIZE).fill(NaN), holo: w.get(e, Unit)?.def.decoy !== undefined };
         // Turn, then pitch the nose, then roll along the model's own length (banking, or lying along a slope), as the sim's mounts do (see game/mounts.ts).
         obj.rotation.order = 'YZX';
         this.entries.set(e, entry);
@@ -300,7 +304,8 @@ export class EntityView {
       const scale = w.req(e, Renderable).scale;
       // (Only the Leviathan changes size as it goes; see game/leviathan.ts.)
       obj.scale.x = obj.scale.z = scale;
-      obj.scale.y = construction ? scale * Math.max(0.04, construction.elapsed / construction.duration) : scale;
+      // (A Nomad camp doesn't: its crawler stands there unfolding until it's set up.)
+      obj.scale.y = construction && model === w.req(e, Renderable).model ? scale * Math.max(0.04, construction.elapsed / construction.duration) : scale;
 
       if (!entry.wrecked && w.has(e, Wreck)) {
         entry.wrecked = true;
@@ -481,4 +486,21 @@ function samePose(entry: ViewEntry): boolean {
   q[7] = k.y;
   q[8] = k.z;
   return false;
+}
+
+/** For each Nomad camp, the model of the crawler that unfolds into it (see UnitDef.deploys). */
+const CRAWLER_OF = new Map<string, string>(
+  (Object.values(UNIT_DEFS) as UnitDef[]).flatMap((d) => (d.deploys ? [[d.deploys.into, d.model] as [string, string]] : [])),
+);
+
+/**
+ * The model an entity is drawn with: its own, except a Nomad camp setting up
+ * (game/nomad.ts), which is drawn as the crawler it's unfolding from until
+ * it's done, rather than rising out of the ground like a building site.
+ */
+function drawnModel(w: World, e: Entity): string {
+  const model = w.req(e, Renderable).model;
+  if (!w.has(e, Construction) || !w.has(e, Nomad)) return model;
+  const crawler = CRAWLER_OF.get(w.get(e, Building)?.def.id ?? '');
+  return crawler ?? model;
 }

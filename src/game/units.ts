@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine' | 'scrap';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine' | 'scrap' | 'spine';
 
 export interface WeaponDef {
   name: string;
@@ -54,8 +54,10 @@ export interface WeaponDef {
   targets: WeaponTargets;
   /** Share of the target's armour this weapon's direct hits ignore (0 to 1; see damageThrough). */
   pierce?: number;
-  /** Verdant's vines (see verdant.ts): a direct hit holds a ground vehicle or walker where it is for this many seconds. */
-  roots?: number;
+  /** Only ever aims at units, never buildings (a base's defences, there to meet attackers, not to shell the neighbours). */
+  unitsOnly?: boolean;
+  /** Verdant's vines (see verdant.ts): lays this much tangle where it lands, ground grown over with vines that drags at enemies. */
+  tangle?: number;
   /** Verdant's seed pods (see verdant.ts): a thicket this wide springs up where it lands (a side plants one every so often). */
   plants?: number;
   /** Lodestar's magnet cranes (see lodestar.ts): each throw takes this much of the wreckage in reach, and with none there it can't throw. */
@@ -115,6 +117,12 @@ export interface WeaponDef {
    * straight down and bursts with the weapon's damage and splash.
    */
   orbital?: { delay: number };
+  /**
+   * Fires this many shots at once in a ring all round the shooter, each
+   * landing `range` out, instead of one at its target (the Leviathan's spine
+   * volley). It still waits for a target in range before it lets go.
+   */
+  nova?: number;
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -297,9 +305,23 @@ export interface UnitDef {
   /**
    * Leviathan (see leviathan.ts): it eats the wrecks within `radius` (times
    * its size) at `rate` a second, growing `perWreck` in size for each
-   * tank-sized wreck, from `from` up to `most` times its model's size.
+   * tank-sized wreck, from `from` up to `most` times its model's size, but
+   * never more than `perMinute` a minute since it hatched.
    */
-  grows?: { radius: number; rate: number; perWreck: number; from: number; most: number };
+  grows?: { radius: number; rate: number; perWreck: number; from: number; most: number; perMinute: number };
+  /**
+   * Knows when to break off (see retreat.ts): below `below` of its health it
+   * falls back to its base, fighting only what gets in its way, and mends
+   * there at `mends` of its full health a second until it's back to `until`.
+   */
+  retreats?: RetreatDef;
+}
+
+/** When a unit falls back to mend, and how fast it mends at home (see UnitDef.retreats). */
+export interface RetreatDef {
+  below: number;
+  until: number;
+  mends: number;
 }
 
 /** What a Mirage projector throws up (see mirage.ts). */
@@ -639,6 +661,28 @@ export const UNIT_DEFS = {
     turretTurnRate: 6,
     // One heavy recoilless round rather than a machine gun: it hits and runs, and it dents armour and buildings.
     weapon: weapon({ name: 'Recoilless rifle', range: 11, damage: 26, cooldown: 3.4, projectile: 'shell', speed: 45, splash: 0.4, spread: 0.05, muzzleHeight: 0.8, pierce: 0.3, targets: 'ground' }),
+    wreckTime: 12,
+    siege: false,
+  },
+  // Zenith: a light buggy with a machine gun that rides down in a drop pod with a squad (DoctrineDef.podRider).
+  dropBuggy: {
+    id: 'dropBuggy',
+    name: 'Drop Buggy',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.5,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'buggy',
+    hp: 70,
+    armor: 1,
+    speed: 5.2,
+    turnRate: 3.5,
+    radius: 0.6,
+    sight: 20,
+    turret: true,
+    turretTurnRate: 6,
+    weapon: weapon({ name: 'Light machine gun', range: 10, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 0.8 }),
     wreckTime: 12,
     siege: false,
   },
@@ -1938,7 +1982,7 @@ export const UNIT_DEFS = {
     move: 'walker',
     role: 'artillery',
     model: 'lancePlatform',
-    hp: 1250,
+    hp: 1100,
     armor: 18,
     speed: 1.1,
     turnRate: 0.8,
@@ -1947,7 +1991,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 0.9,
     // Heavy strikes on anything its beacon runners can see.
-    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 230, cooldown: 5.5, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
+    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 160, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
     mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
     siege: true,
@@ -2074,7 +2118,7 @@ export const UNIT_DEFS = {
     armor: 15,
     speed: 1.4,
     turnRate: 0.9,
-    radius: 2.2,
+    radius: 1.6,
     sight: 22,
     turret: true,
     turretTurnRate: 1.2,
@@ -2363,7 +2407,7 @@ export const UNIT_DEFS = {
     move: 'foot',
     role: 'frontline',
     model: 'tinSoldier',
-    hp: 30,
+    hp: 34,
     armor: 1,
     speed: 1.5,
     turnRate: 5,
@@ -2385,7 +2429,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'clockworkTank',
-    hp: 230,
+    hp: 250,
     armor: 7,
     speed: 2.8,
     turnRate: 1.8,
@@ -2393,7 +2437,7 @@ export const UNIT_DEFS = {
     sight: 17,
     turret: true,
     turretTurnRate: 2.2,
-    weapon: weapon({ name: 'Tin cannon', range: 15, damage: 30, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.9, spread: 0.04, muzzleHeight: 1.1, pierce: 0.3 }),
+    weapon: weapon({ name: 'Tin cannon', range: 15, damage: 34, cooldown: 2.6, projectile: 'shell', speed: 40, splash: 0.9, spread: 0.04, muzzleHeight: 1.1, pierce: 0.3 }),
     windUp: { run: 16, rewind: 3.5, topple: 0.3 },
     wreckTime: 18,
     siege: false,
@@ -2437,7 +2481,7 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 3,
-    weapon: weapon({ name: 'Ray eyes', range: 12, damage: 14, cooldown: 1.4, burst: 2, burstGap: 0.2, projectile: 'beam', speed: 90, spread: 0.04, muzzleHeight: 2.0, targets: 'both' }),
+    weapon: weapon({ name: 'Ray eyes', range: 12, damage: 16, cooldown: 1.4, burst: 2, burstGap: 0.2, projectile: 'beam', speed: 90, spread: 0.04, muzzleHeight: 2.0, targets: 'both' }),
     windUp: { run: 14, rewind: 3.5, topple: 0.25 },
     wreckTime: 18,
     siege: false,
@@ -2482,7 +2526,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Prism beam', range: 16, damage: 40, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.1, pierce: 0.4 }),
+    weapon: weapon({ name: 'Prism cannon', range: 16, damage: 40, cooldown: 2.6, projectile: 'shell', speed: 42, splash: 0.7, spread: 0.04, muzzleHeight: 1.1, pierce: 0.4 }),
     wreckTime: 18,
     siege: false,
   },
@@ -2504,29 +2548,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Prism beam', range: 16, damage: 0, cooldown: 2.6, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 1.1, pierce: 0.4 }),
-    decoy: { lasts: 20 },
-    wreckTime: 0,
-    siege: false,
-  },
-  holoTank: {
-    id: 'holoTank',
-    name: 'Battle Tank (hologram)',
-    class: 'vehicle',
-    category: 'vehicle',
-    capCost: 0,
-    move: 'tracked',
-    role: 'frontline',
-    model: 'tank',
-    hp: 70,
-    armor: 0,
-    speed: 2.6,
-    turnRate: 1.6,
-    radius: 1.1,
-    sight: 18,
-    turret: true,
-    turretTurnRate: 1.8,
-    weapon: weapon({ name: 'Cannon', range: 15, damage: 0, cooldown: 3, projectile: 'shell', speed: 40, spread: 0.04, muzzleHeight: 1.1 }),
+    weapon: weapon({ name: 'Prism cannon', range: 16, damage: 0, cooldown: 2.6, projectile: 'shell', speed: 42, splash: 0.7, spread: 0.04, muzzleHeight: 1.1, pierce: 0.4 }),
     decoy: { lasts: 20 },
     wreckTime: 0,
     siege: false,
@@ -2549,7 +2571,7 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 3,
     weapon: weapon({ name: 'Machine gun', range: 11, damage: 5, cooldown: 1, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.07, muzzleHeight: 1.6, targets: 'both' }),
-    projects: { units: ['holoPrism', 'holoTank'], count: 2, every: 15 },
+    projects: { units: ['holoPrism'], count: 2, every: 15 },
     wreckTime: 15,
     siege: false,
   },
@@ -2570,8 +2592,8 @@ export const UNIT_DEFS = {
     sight: 22,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Mirror lance', range: 20, damage: 72, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'beam', speed: 90, spread: 0.03, muzzleHeight: 3.8, pierce: 0.5 }),
-    projects: { units: ['holoPrism', 'holoPrism', 'holoTank'], count: 3, every: 12 },
+    weapon: weapon({ name: 'Mirror cannons', range: 20, damage: 58, cooldown: 3, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 42, splash: 1.1, spread: 0.04, muzzleHeight: 3.8, pierce: 0.5 }),
+    projects: { units: ['holoPrism'], count: 2, every: 14 },
     wreckTime: 40,
     siege: true,
   },
@@ -2593,7 +2615,7 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 3,
-    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, roots: 2 }),
+    weapon: weapon({ name: 'Vine lash', range: 11, damage: 16, cooldown: 1.8, projectile: 'vine', speed: 40, spread: 0.04, muzzleHeight: 1.3, pierce: 0.3, tangle: 5 }),
     wreckTime: 14,
     siege: false,
   },
@@ -2618,16 +2640,16 @@ export const UNIT_DEFS = {
     wreckTime: 14,
     siege: true,
   },
-  // A treant: a walking tree-mech with club arms, slow and very tough.
-  treant: {
-    id: 'treant',
-    name: 'Treant',
+  // A graft walker: a heavy biotech walker with claw arms, slow and very tough, and a spine launcher on its back.
+  graftWalker: {
+    id: 'graftWalker',
+    name: 'Graft Walker',
     class: 'mech',
     category: 'vehicle',
     move: 'walker',
     role: 'frontline',
-    model: 'treant',
-    hp: 400,
+    model: 'graftWalker',
+    hp: 410,
     armor: 9,
     speed: 1.9,
     turnRate: 1.6,
@@ -2635,12 +2657,12 @@ export const UNIT_DEFS = {
     sight: 16,
     turret: true,
     turretTurnRate: 2,
-    weapon: weapon({ name: 'Club arms', range: 1.4, damage: 50, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2, pierce: 0.4, melee: { style: 'swing', lunge: 1, knock: 1.6, sweep: 1.4, sweepMost: 4, charge: 1.4 } }),
-    mounts: [{ weapon: weapon({ name: 'Thorn spitter', range: 12, damage: 6, cooldown: 1.2, burst: 3, burstGap: 0.12, projectile: 'vine', speed: 40, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'treant#thorns', turnRate: 4 }],
+    weapon: weapon({ name: 'Claw arms', range: 1.4, damage: 50, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2, pierce: 0.4, melee: { style: 'swing', lunge: 1, knock: 1.6, sweep: 1.4, sweepMost: 4, charge: 1.4 } }),
+    mounts: [{ weapon: weapon({ name: 'Spine launcher', range: 12, damage: 6, cooldown: 1.2, burst: 3, burstGap: 0.12, projectile: 'vine', speed: 40, spread: 0.07, muzzleHeight: 2.6, targets: 'both' }), mount: 'graftWalker#spines', turnRate: 4 }],
     wreckTime: 25,
     siege: false,
   },
-  // Super unit: the Worldtree, a giant walking tree. It lashes vines and seeds thickets round itself as it goes.
+  // Super unit: the Worldtree, a towering biotech walker. It lashes vines and seeds thickets round itself as it goes.
   worldTree: {
     id: 'worldTree',
     name: 'Worldtree',
@@ -2657,7 +2679,7 @@ export const UNIT_DEFS = {
     sight: 20,
     turret: true,
     turretTurnRate: 1.2,
-    weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, roots: 2 }),
+    weapon: weapon({ name: 'Great vines', range: 14, damage: 40, cooldown: 1.6, burst: 2, burstGap: 0.3, projectile: 'vine', speed: 40, spread: 0.05, muzzleHeight: 4, pierce: 0.4, tangle: 5 }),
     mounts: [{ weapon: weapon({ name: 'Seed burst', range: 24, minRange: 6, damage: 40, cooldown: 6, projectile: 'seed', speed: 16, splash: 2.2, spread: 0.12, arc: true, muzzleHeight: 5, plants: 2.6 }), mount: 'worldTree#seeds', turnRate: 2 }],
     wreckTime: 45,
     siege: true,
@@ -2695,7 +2717,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'coilTank',
-    hp: 220,
+    hp: 245,
     armor: 7,
     speed: 2.5,
     turnRate: 1.6,
@@ -2703,7 +2725,7 @@ export const UNIT_DEFS = {
     sight: 18,
     turret: true,
     turretTurnRate: 1.8,
-    weapon: weapon({ name: 'Coilgun', range: 17, damage: 44, cooldown: 3, projectile: 'shell', speed: 80, spread: 0.03, muzzleHeight: 1.1, pierce: 0.6 }),
+    weapon: weapon({ name: 'Coilgun', range: 17, damage: 48, cooldown: 3, projectile: 'shell', speed: 80, spread: 0.03, muzzleHeight: 1.1, pierce: 0.6 }),
     wreckTime: 20,
     siege: false,
   },
@@ -2739,18 +2761,72 @@ export const UNIT_DEFS = {
     move: 'amphibious',
     role: 'frontline',
     model: 'leviathan',
-    hp: 3000,
+    hp: 2500,
     armor: 14,
     speed: 1.7,
     turnRate: 0.9,
     radius: 2.2,
     sight: 22,
-    turret: true,
+    turret: false,
     turretTurnRate: 1.4,
-    weapon: weapon({ name: 'Jaws', range: 1.6, damage: 90, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2.4, pierce: 0.4, melee: { style: 'thrust', lunge: 1.6, knock: 2.4, sweep: 1.8, sweepMost: 6, charge: 1.4 } }),
-    grows: { radius: 9, rate: 0.6, perWreck: 0.07, from: 0.8, most: 1.8 },
+    // Its tail whips round through everything near it.
+    weapon: weapon({ name: 'Tail whip', range: 1.8, damage: 50, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, melee: { style: 'swing', knock: 2.4, sweep: Math.PI, sweepMost: 6, charge: 1.4 } }),
+    // Besides the whip: fire breathed on what's in front of it (its head turns a little on its neck), a ring of spines
+    // flung at what crowds it, and acid lobbed at what keeps its distance. All of them grow with it (see leviathan.ts).
+    mounts: [
+      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), mount: 'leviathan#head', turnRate: 1.4 },
+      { weapon: weapon({ name: 'Spine volley', range: 7, damage: 16, cooldown: 9, projectile: 'spine', arc: true, speed: 18, splash: 0.8, spread: 0.05, muzzleHeight: 2.2, pierce: 0.3, nova: 12 }) },
+      { weapon: weapon({ name: 'Acid pods', range: 18, minRange: 5, damage: 24, cooldown: 7, burst: 2, burstGap: 0.4, projectile: 'acid', arc: true, speed: 16, splash: 2, spread: 0.1, muzzleHeight: 2.6, pierce: 0.2 }) },
+    ],
+    grows: { radius: 9, rate: 0.6, perWreck: 0.07, from: 0.8, most: 1.8, perMinute: 0.09 },
+    retreats: { below: 0.35, until: 0.9, mends: 0.012 },
     wreckTime: 60,
     siege: true,
+  },
+  // The cult's vehicles are whatever its faithful drove in on: weak, but enough to hold a line until the Leviathan has grown.
+  // A rusty pickup with a scrap plate on the cab and a machine gun in the bed.
+  pilgrimTruck: {
+    id: 'pilgrimTruck',
+    name: 'Pilgrim Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.75,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'pilgrimTruck',
+    hp: 150,
+    armor: 2,
+    speed: 4.2,
+    turnRate: 3,
+    radius: 0.8,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 5,
+    weapon: weapon({ name: 'Bed machine gun', range: 12, damage: 6, cooldown: 1.2, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1 }),
+    wreckTime: 20,
+    siege: false,
+  },
+  // A farm tractor with a whaling harpoon gun bolted to its bonnet: a slow, heavy shot for vehicles.
+  harpoonTractor: {
+    id: 'harpoonTractor',
+    name: 'Harpoon Tractor',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.75,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'harpoonTractor',
+    hp: 220,
+    armor: 4,
+    speed: 2.6,
+    turnRate: 2,
+    radius: 0.8,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2.5,
+    weapon: weapon({ name: 'Harpoon gun', range: 14, damage: 55, cooldown: 4.5, projectile: 'arrow', speed: 30, spread: 0.04, muzzleHeight: 1, pierce: 0.4 }),
+    wreckTime: 20,
+    siege: false,
   },
   // A cultist in a hooded robe with an old rifle.
   cultist: {

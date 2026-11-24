@@ -247,6 +247,8 @@ export const Building = defineComponent<Building>('Building');
 export interface Hit {
   source: string;
   faction: number;
+  /** The weapon's name (WeaponDef.name), for damage by weapon in the stats; left out for burning ground, crushes and the like. */
+  weapon?: string;
 }
 
 export interface Health {
@@ -571,6 +573,12 @@ export interface Nomad {
 }
 export const Nomad = defineComponent<Nomad>('Nomad');
 
+/** Falling back to its base to mend (see UnitDef.retreats and retreat.ts): since when. */
+export interface FallingBack {
+  since: number;
+}
+export const FallingBack = defineComponent<FallingBack>('FallingBack');
+
 /** A Tin Soldiers toy's clockwork (see windup.ts): run left, when it's done winding back up, when it's back on its feet, its health last tick, and which side it fell on. */
 export interface WindUp {
   left: number;
@@ -587,8 +595,3 @@ export interface Decoy {
 }
 export const Decoy = defineComponent<Decoy>('Decoy');
 
-/** Held where it is by Verdant's vines (see verdant.ts), until this time. */
-export interface Rooted {
-  until: number;
-}
-export const Rooted = defineComponent<Rooted>('Rooted');

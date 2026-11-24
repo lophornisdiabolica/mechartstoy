@@ -26,14 +26,14 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 7, name: 'Ember Syndicate', primary: 0xe07a1f, secondary: 0x2e2a28 },
   // The canonical factions of the doctrines past the eighth: a side that picks one wears these colours
   // (see variety.ts), but a battle still has at most eight slots.
-  { id: 8, name: 'Verdant Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
+  { id: 8, name: 'Mint Protectorate', primary: 0x4cb86a, secondary: 0xdcefff },
   { id: 9, name: 'Celeste Dominion', primary: 0xa9d6e6, secondary: 0x22304a },
   { id: 10, name: 'Onyx Order', primary: 0x3b3f46, secondary: 0xd8434a },
   { id: 11, name: 'Magenta Directive', primary: 0xa83c82, secondary: 0x5f9e92 },
   { id: 12, name: 'Obsidian Choir', primary: 0x3a2f4a, secondary: 0xb9a6e0 },
-  { id: 13, name: 'Olive Ascendancy', primary: 0x7b8a3c, secondary: 0xeee6c8 },
-  { id: 14, name: 'Chartreuse Collective', primary: 0xa8b832, secondary: 0x3b2a1e },
-  { id: 15, name: 'Sienna Caravan', primary: 0xa0522d, secondary: 0xe8d8b0 },
+  { id: 13, name: 'Olive Ascendancy', primary: 0x5c6a2c, secondary: 0xeee6c8 },
+  { id: 14, name: 'Chartreuse Collective', primary: 0x7a8a26, secondary: 0x3b2a1e },
+  { id: 15, name: 'Sienna Caravan', primary: 0xa0522d, secondary: 0x34393e },
   { id: 16, name: 'Imperial Senate', primary: 0xb3262e, secondary: 0xe0c070 },
   { id: 17, name: 'Tinplate Regiment', primary: 0x2f4fa8, secondary: 0xd8b04a },
   { id: 18, name: 'Opaline Court', primary: 0xc9d6e3, secondary: 0x6a4c93 },

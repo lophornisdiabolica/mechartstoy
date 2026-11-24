@@ -53,6 +53,8 @@ export interface DoctrineDef {
    * beacon runners instead of walking out of the door (Zenith; see zenith.ts).
    */
   drops?: BuildingId[];
+  /** With drops: a light vehicle that rides down in each pod of foot soldiers, if the vehicle cap has room (Zenith's drop buggy). */
+  podRider?: UnitId;
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
@@ -348,9 +350,9 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'veil',
     name: 'Veil',
     blurb: 'Haze and stealth. Smoke trucks lob canisters that leave a thin haze: shots into it or out of it go wild, except Veil\'s own. Its only infantry are shades, AT troopers that vanish while they hold their fire in a forest, by a building or in Veil\'s haze, even on the move, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth. It flies strike jets rather than scout copters. Its smoke stacks keep a haze over the base. Super unit: the Eclipse, a walker breathing out haze over the army round it.',
-    caps: { infantry: 1, vehicle: 1 },
+    caps: { infantry: 0.95, vehicle: 0.95 },
     production: {
-      barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 15 },
+      barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 17 },
       // Shades rather than the default trooper squads, so all its infantry hide.
       hq: { table: [shadeSquad(2, 1)] },
       barracksBlock: { table: [shadeSquad(2, 1)] },
@@ -370,7 +372,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   zenith: {
     id: 'zenith',
     name: 'Zenith',
-    blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
+    blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, a little drop buggy last, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
     caps: { infantry: 0.7, vehicle: 1.8 },
     production: {
       barracks: { table: [rifleSquad(4, 3)], interval: 20 },
@@ -388,6 +390,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'dropControl',
     drops: ['barracks', 'dropControl'],
+    podRider: 'dropBuggy',
     waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'uplinkTruck', weight: 1, count: 1 }, { unit: 'beaconRunner', weight: 1, count: 2 }],
     // Its runners mark targets for the uplinks and the Lance Platform.
     spotters: { beaconRunner: 14 },
@@ -395,15 +398,15 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   hive: {
     id: 'hive',
     name: 'Hive',
-    blurb: 'A swarm grown from wreckage. No rifle squads: its barracks breed packs of mites, knee-high biting bugs that climb over walls and buildings, and its fabricators crawl to the front and chew the wrecks there, the heaps and then the scrap buried under old battlefields, into more mites and little gun mites. So a long, bloody fight feeds it, and killing its fabricators starves it. Acid spitters take the place of flak, Ravager beetles are its heavies, and its Recycler eats whatever is wrecked near the base. Super unit: the Hive Mother, a towering brood mother that eats as she goes and sheds mites off her back.',
-    caps: { infantry: 0.9, vehicle: 1.2 },
+    blurb: 'A swarm grown from wreckage. No rifle squads: its barracks breed packs of mites, knee-high biting bugs that climb over walls and buildings, and its fabricators crawl to the front and chew the wrecks there, the heaps and then the scrap buried under old battlefields, into more mites and little gun mites. So a long, bloody fight feeds it, and killing its fabricators starves it. Acid spitters take the place of flak, Ravager beetles are its heavies, and its Recycler eats whatever is wrecked near the base and turns out fabricators. Super unit: the Hive Mother, a towering brood mother that eats as she goes and sheds mites off her back.',
+    caps: { infantry: 0.9, vehicle: 1.12 },
     production: {
-      barracks: { table: [{ unit: 'mite', weight: 1, count: 4 }], interval: 21 },
+      barracks: { table: [{ unit: 'mite', weight: 1, count: 4 }], interval: 23 },
       hq: { table: [{ unit: 'mite', weight: 1, count: 3 }] },
       barracksBlock: { table: [{ unit: 'mite', weight: 1, count: 4 }] },
       factory: {
         table: [
-          { unit: 'fabricator', weight: 2, count: 1 },
+          { unit: 'fabricator', weight: 1, count: 1 },
           { unit: 'ravager', weight: 2.4, count: 1 },
           { unit: 'acidSpitter', weight: 2, count: 1 },
           { unit: 'gunMite', weight: 1.5, count: 3 },
@@ -490,13 +493,12 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   mirage: {
     id: 'mirage',
     name: 'Mirage',
-    blurb: 'Holograms. Projector trucks throw up hologram tanks now and then: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Prism tanks do the real work with focused beams, and its mirror array throws up more holograms round the base. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
-    caps: { infantry: 0.9, vehicle: 1.4 },
+    blurb: 'Holograms. Projector trucks throw up hologram prism tanks: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Projectors only project in a fight, out in front toward the enemy. Prism tanks do the real work with their cannons, and its mirror array throws up more holograms by its own units in a fight. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
+    caps: { infantry: 0.9, vehicle: 1.32 },
     production: {
       factory: {
         table: [
-          { unit: 'prismTank', weight: 3, count: 1 },
-          { unit: 'tank', weight: 1.4, count: 1 },
+          { unit: 'prismTank', weight: 4.2, count: 1 },
           { unit: 'projectorTruck', weight: 2, count: 1 },
           { unit: 'rocketTruck', weight: 1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
@@ -506,19 +508,19 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'fataMorgana', weight: 1, count: 1 }] },
     },
     signature: 'mirrorArray',
-    waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 3, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }, { unit: 'tank', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 3), { unit: 'prismTank', weight: 4, count: 1 }, { unit: 'projectorTruck', weight: 1.5, count: 1 }],
   },
 
   verdant: {
     id: 'verdant',
     name: 'Verdant',
-    blurb: 'A living army. Stranglers, plant-mechs on root legs, lash vines that wrap round vehicles and walkers and hold them where they are for a few seconds. Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Treants are walking tree-mechs with club arms, and its glasshouse grows more of both. Super unit: the Worldtree, a giant walking tree that lashes vines and seeds thickets as it goes.',
+    blurb: 'Biotech. Grown hulls on machine legs. Stranglers lash vines that leave a patch of tangle where they land, ground grown over with vines that drags at enemies wading through it, worse than frost, though nothing shatters and it withers in a few seconds (fire burns it away). Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Graft walkers are heavy walkers with claw arms and spine launchers, and its greenhouse grows more of both. Super unit: the Worldtree, a towering biotech walker under a canopy of leaf-panels that lashes vines and seeds thickets as it goes.',
     caps: { infantry: 0.9, vehicle: 1.3 },
     production: {
       factory: {
         table: [
           { unit: 'strangler', weight: 3, count: 1 },
-          { unit: 'treant', weight: 1.5, count: 1 },
+          { unit: 'graftWalker', weight: 1.5, count: 1 },
           { unit: 'seedMortar', weight: 1.6, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.6, count: 1 },
@@ -527,7 +529,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'worldTree', weight: 1, count: 1 }] },
     },
     signature: 'glasshouse',
-    waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'treant', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
+    waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'graftWalker', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
   },
 
   lodestar: {
@@ -554,14 +556,14 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   leviathan: {
     id: 'leviathan',
     name: 'Leviathan',
-    blurb: 'One giant creature and its cult: a silly boss. No tanks at all: its barracks and factory turn out cultists with old rifles and zealots who run at vehicles with satchel charges. Its whole hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-biting with every meal. Its shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
+    blurb: 'One giant creature and its cult: a silly boss. No tanks: its barracks turn out cultists with old rifles and zealots who run at vehicles with satchel charges, and its factory whatever the faithful drove in on, rusty pilgrim trucks with a gun in the bed and farm tractors with whaling harpoons. Its real hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-hitting with every meal, though only so fast, so it has to live a while to grow big. Besides its bite it breathes fire, throws a ring of spines when it\'s crowded and lobs acid pods at what keeps its distance, and when it\'s beaten it falls back to its shrine to mend. The shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
     caps: { infantry: 2.2, vehicle: 1 },
     production: {
       barracks: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 12 },
       hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
       // The odd stolen scout copter is all it has in the air.
-      factory: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
+      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
       mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
     },
     signature: 'shrine',

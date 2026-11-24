@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { barrelPivot, box, cylinder, factionColors, gableRoof, getRig, glowBox, mounted, registerModel, setRig } from '../models';
+import { barrelPivot, box, cylinder, factionColors, gableRoof, getRig, glowBox, markShared, mounted, registerModel, setRig } from '../models';
 import { mountOf } from '../../game/mounts';
 import { TownStyle } from '../../world/biomes';
 
@@ -910,7 +910,7 @@ registerModel('bld:recycler', (faction) => {
   g.add(box(0.2, 0.9, 1.6, 0x15100c, 2.35, 0.9, 0));
   for (let i = 0; i < 5; i++) g.add(box(0.3, 0.12, 0.12, 0x8a8a8a, 2.45, 0.45 + i * 0.22, (i % 2 ? 0.6 : -0.6)));
   for (const [x, z] of [[-1.6, 1.6], [-1.8, -1.4], [0.6, -2.1]]) {
-    const vat = glowBox(0.6, 0.8, 0.6, 0xc6e03a);
+    const vat = glowBox(0.6, 0.8, 0.6, 0xbcc232);
     vat.position.set(x, 0.65, z);
     g.add(vat);
   }
@@ -1050,21 +1050,64 @@ registerModel('bld:mirrorArray', (faction) => {
   return setRig(g, { turret, ...mounted('bld:mirrorArray', g, turret, [lens]) });
 });
 
-// Verdant's glasshouse: a long glass-roofed hall full of green, a vine turret on its ridge.
+/** A greenhouse's panes: see-through, so the plants inside show. */
+// Lambert (no shine), so each pane is one flat tint like everything else in the game, not a glossy gradient.
+const greenhouseGlass = markShared(new THREE.MeshLambertMaterial({ color: 0xc4ecf0, transparent: true, opacity: 0.4, depthWrite: false }));
+
+/** A pane of greenhouse glass. */
+function pane(geometry: THREE.BufferGeometry): THREE.Mesh {
+  const m = new THREE.Mesh(geometry, greenhouseGlass);
+  m.userData.noShadow = true;
+  m.renderOrder = 1;
+  return m;
+}
+
+// Verdant's glasshouse: a greenhouse, glass walls and a pitched glass roof in a framework of glazing bars over a low wall, beds of glowing plants inside, and a vine turret on its ridge.
 registerModel('bld:glasshouse', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const g = new THREE.Group();
+  /** Wall top, ridge height above it, and the glass's half-length and half-depth. */
+  const WALL = 1.75;
+  const RISE = 0.9;
+  const HX = 2.45;
+  const HZ = 1.75;
   g.add(box(6.0, 0.2, 5.0, 0x7a6a50, 0, 0.1, 0));
-  g.add(box(5.0, 1.4, 3.6, primary, 0, 0.9, 0));
-  g.add(box(5.1, 0.14, 3.7, secondary, 0, 1.67, 0));
-  g.add(box(4.8, 0.9, 3.4, 0xa8d8e0, 0, 2.18, 0)); // the glass
-  for (const x of [-1.8, -0.6, 0.6, 1.8]) {
-    const plant = glowBox(0.6, 0.5, 0.6, 0x6ab84a);
-    plant.position.set(x, 2.0, 0);
-    g.add(plant);
+  g.add(box(5.0, 0.5, 3.7, primary, 0, 0.45, 0)); // the low wall
+  // Beds of plants inside, under the glass.
+  for (const z of [-0.85, 0.85]) {
+    g.add(box(4.4, 0.3, 1.0, 0x5a4030, 0, 0.85, z));
+    for (const x of [-1.65, -0.55, 0.55, 1.65]) {
+      const plant = glowBox(0.6, 0.55, 0.6, 0x6ab84a);
+      plant.position.set(x, 1.27, z);
+      g.add(plant);
+    }
   }
+  const walls = pane(new THREE.BoxGeometry(HX * 2, WALL - 0.7, HZ * 2));
+  walls.position.y = (WALL + 0.7) / 2;
+  g.add(walls);
+  const roof = pane(gableRoof(HX * 2, HZ * 2, RISE, 0, WALL).geometry);
+  roof.position.y = WALL;
+  g.add(roof);
+  // The glazing bars: posts round the walls, an eave rail, rafters down the roof and a ridge beam.
+  for (const x of [-HX, -1.2, 0, 1.2, HX]) {
+    for (const z of [-HZ - 0.02, HZ + 0.02]) g.add(box(0.08, WALL - 0.63, 0.06, secondary, x, (WALL + 0.69) / 2, z));
+  }
+  for (const z of [-0.9, 0, 0.9]) {
+    for (const x of [-HX - 0.01, HX + 0.01]) g.add(box(0.06, WALL - 0.63, 0.08, secondary, x, (WALL + 0.69) / 2, z));
+  }
+  for (const z of [-HZ - 0.02, HZ + 0.02]) g.add(box(HX * 2 + 0.12, 0.08, 0.08, secondary, 0, WALL + 0.02, z));
+  const slope = Math.atan2(RISE, HZ);
+  const run = Math.hypot(RISE, HZ);
+  for (const side of [-1, 1]) {
+    for (const x of [-HX, -1.2, 0, 1.2, HX]) {
+      const rafter = box(0.07, 0.06, run, secondary, x, WALL + RISE / 2 + Math.cos(slope) * 0.04, side * (HZ / 2 + Math.sin(slope) * 0.04));
+      rafter.rotation.x = side * slope;
+      g.add(rafter);
+    }
+  }
+  g.add(box(HX * 2 + 0.16, 0.12, 0.14, secondary, 0, WALL + RISE + 0.02, 0));
   const turret = new THREE.Group();
-  turret.position.set(0, 2.63, 0);
+  turret.position.set(0, 2.78, 0);
   turret.add(box(0.5, 0.3, 0.5, 0x5a4030, 0, 0.15, 0));
   const vine = barrelPivot('bld:glasshouse', turret);
   vine.add(box(0.8, 0.12, 0.12, 0x4a8a3a, 0.35, 0, 0));

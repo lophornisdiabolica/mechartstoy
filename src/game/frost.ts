@@ -32,8 +32,27 @@ const MAX_FROST = 14;
 const THAW = 0.4;
 /** Speed on fully frozen ground, as a share of the usual; it eases from 1 at FROZEN. */
 export const ICE_PACE = 0.5;
+
 /** Frost at which a patch slows as much as it ever will. */
 const DEEP = 4;
+
+/**
+ * How a patch field behaves: frost, or Verdant's tangle (see verdant.ts),
+ * which works the same way with its own numbers.
+ */
+export interface PatchRules {
+  /** At which a patch counts (frozen, tangled). */
+  holds: number;
+  /** Most a patch can hold. */
+  most: number;
+  /** Lost per second on its own. */
+  fades: number;
+  /** Speed at its deepest, as a share of the usual, and the amount at which it gets there. */
+  pace: number;
+  deep: number;
+}
+
+export const FROST_RULES: PatchRules = { holds: FROZEN, most: MAX_FROST, fades: THAW, pace: ICE_PACE, deep: DEEP };
 
 export class FrostField {
   readonly cols: number;
@@ -48,7 +67,10 @@ export class FrostField {
   /** Changes whenever something a watcher could see changes (see the mirror's snapshot). */
   version = 0;
 
-  constructor(field: Battlefield) {
+  constructor(
+    field: Battlefield,
+    readonly rules: PatchRules = FROST_RULES,
+  ) {
     this.minX = field.bounds.minX;
     this.minZ = field.bounds.minZ;
     this.cols = Math.ceil(field.width / FROST_CELL);
@@ -86,16 +108,17 @@ export class FrostField {
   hostileAt(ctx: SimContext, x: number, z: number, faction: number): boolean {
     if (this.active.length === 0) return false;
     const k = this.cellAt(x, z);
-    return k >= 0 && this.frost[k] >= FROZEN && ctx.sides.hostile(this.owner[k], faction);
+    return k >= 0 && this.frost[k] >= this.rules.holds && ctx.sides.hostile(this.owner[k], faction);
   }
 
   /** How fast a unit of `faction` goes on the ground at a point, as a share of its usual: slower on an enemy's frost. */
   paceAt(ctx: SimContext, x: number, z: number, faction: number): number {
     if (this.active.length === 0) return 1;
     const k = this.cellAt(x, z);
-    if (k < 0 || this.frost[k] < FROZEN || !ctx.sides.hostile(this.owner[k], faction)) return 1;
-    const deep = Math.min(1, (this.frost[k] - FROZEN) / (DEEP - FROZEN));
-    return 1 - (1 - ICE_PACE) * (0.5 + 0.5 * deep);
+    const { holds, deep, pace } = this.rules;
+    if (k < 0 || this.frost[k] < holds || !ctx.sides.hostile(this.owner[k], faction)) return 1;
+    const depth = Math.min(1, (this.frost[k] - holds) / (deep - holds));
+    return 1 - (1 - pace) * (0.5 + 0.5 * depth);
   }
 
   /** Lay `amount` of frost on the ground round a point, most in the middle. Frost of another side's is taken over. */
@@ -112,7 +135,7 @@ export class FrostField {
         const d = D.hypot(cx - x, cz - z);
         if (d > r + FROST_CELL * 0.5) continue;
         const k = j * this.cols + i;
-        this.frost[k] = Math.min(MAX_FROST, this.frost[k] + amount * (1 - 0.5 * Math.min(1, d / r)));
+        this.frost[k] = Math.min(this.rules.most, this.frost[k] + amount * (1 - 0.5 * Math.min(1, d / r)));
         this.owner[k] = faction;
         if (!this.listed[k]) {
           this.listed[k] = 1;
@@ -129,7 +152,7 @@ export class FrostField {
     const next: number[] = [];
     for (const k of this.active) {
       const c = this.center(k);
-      this.frost[k] = burning(c.x, c.z) ? 0 : this.frost[k] - THAW * dt;
+      this.frost[k] = burning(c.x, c.z) ? 0 : this.frost[k] - this.rules.fades * dt;
       if (this.frost[k] > 0) next.push(k);
       else {
         this.frost[k] = 0;
@@ -182,7 +205,10 @@ export function frostSystem(ctx: SimContext): System {
     name: 'frost',
     update(world, dt) {
       const frost = ctx.frost;
-      if (frost.count > 0) frost.thaw(dt, (x, z) => ctx.fire.count > 0 && ctx.fire.heatAt(x, z) > 0.25);
+      const burning = (x: number, z: number) => ctx.fire.count > 0 && ctx.fire.heatAt(x, z) > 0.25;
+      if (frost.count > 0) frost.thaw(dt, burning);
+      // Verdant's tangle withers the same way, and burns away too (see verdant.ts).
+      if (ctx.tangle.count > 0) ctx.tangle.thaw(dt, burning);
       // The cold comes off them steadily, every tick, so the edge of an aura doesn't pulse.
       for (const e of world.query(Unit, Transform, Faction)) {
         const chill = world.req(e, Unit).def.chill;

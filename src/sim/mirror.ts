@@ -86,7 +86,6 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   strikeCalled: true,
   chewed: true,
   scrapWall: true,
-  rooted: true,
   grove: true,
   fizzle: true,
   toppled: true,
@@ -268,6 +267,8 @@ export class SimHost {
   private fireSent = 0;
   /** The frost last sent (its version). */
   private frostSent = 0;
+  /** The tangle last sent (its version). */
+  private tangleSent = 0;
   /** The wreckage last sent (its version). */
   private wreckageSent = 0;
   /** The smoke last sent (its version). */
@@ -479,6 +480,7 @@ export class SimHost {
         god: ctx.god.blessings,
         fire: ctx.fire.version !== this.fireSent ? ctx.fire.snapshot() : null,
         frost: ctx.frost.version !== this.frostSent ? ctx.frost.snapshot() : null,
+        tangle: ctx.tangle.version !== this.tangleSent ? ctx.tangle.snapshot() : null,
         wreckage: ctx.wreckage.version !== this.wreckageSent ? ctx.wreckage.snapshot() : null,
         smoke: ctx.smoke.version !== this.smokeSent ? ctx.smoke.snapshot() : null,
       }),
@@ -494,6 +496,7 @@ export class SimHost {
     this.commanderSent = ctx.commander.updatedAt;
     this.fireSent = ctx.fire.version;
     this.frostSent = ctx.frost.version;
+    this.tangleSent = ctx.tangle.version;
     this.wreckageSent = ctx.wreckage.version;
     this.smokeSent = ctx.smoke.version;
     this.destroyed = [];
@@ -518,6 +521,7 @@ interface CtxState {
   god: GodState;
   fire: number[] | null;
   frost: number[] | null;
+  tangle: number[] | null;
   wreckage: number[] | null;
   smoke: number[] | null;
 }
@@ -625,6 +629,7 @@ export class SimView {
     ctx.god.blessings = s.god;
     if (s.fire) ctx.fire.apply(s.fire);
     if (s.frost) ctx.frost.apply(s.frost);
+    if (s.tangle) ctx.tangle.apply(s.tangle);
     if (s.wreckage) ctx.wreckage.apply(s.wreckage);
     if (s.smoke) ctx.smoke.apply(s.smoke);
     if (frame.routes) this.routes = frame.routes;

@@ -35,17 +35,11 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
     return setRig(root, { faceVelocity: true });
   },
   // Hive's acid: a fat, sickly glob.
-  acid: () => projectile(0.35, 0.26, 0xc6e03a),
-  // Zenith's strike: a column of light coming straight down, its foot at the projectile.
-  orbital: () => {
-    const root = new THREE.Group();
-    const core = glowBox(0.35, 16.4, 0.35, 0xfff2c8);
-    core.position.y = 8;
-    const glow = glowBox(0.9, 16, 0.9, 0xffb860);
-    glow.position.y = 8;
-    root.add(glow, core);
-    return root;
-  },
+  acid: () => projectile(0.35, 0.26, 0xbcc232),
+  // The Leviathan's spines: long, pale and sharp.
+  spine: () => projectile(0.8, 0.07, 0xd8cfb8),
+  // Zenith's strike: nothing to draw while it waits; its beam is drawn coming down with its ring (see strikeMarks.ts).
+  orbital: () => new THREE.Group(),
 };
 
 for (const kind of Object.keys(looks) as ProjectileKind[]) {

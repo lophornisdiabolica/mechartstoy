@@ -115,7 +115,6 @@ export type GameEvents = {
   /** A Mirage hologram flickering up or fizzling out (see mirage.ts). */
   fizzle: { x: number; y: number; z: number; radius: number };
   /** Verdant's vines wrapping round something (see verdant.ts). */
-  rooted: { x: number; y: number; z: number; radius: number };
   /** A Verdant seed pod sprouting into a thicket (see verdant.ts). */
   grove: { x: number; y: number; z: number; radius: number };
   /** A Lodestar crane dragging wrecks into a scrap wall (see lodestar.ts). */
@@ -195,6 +194,8 @@ export interface SimContext {
   fire: FireField;
   /** Frosted ground (see frost.ts). */
   frost: FrostField;
+  /** Verdant's tangle: ground grown over with vines that drag at enemies (see verdant.ts). */
+  tangle: FrostField;
   /** Wreckage on the ground (see wreckage.ts). */
   wreckage: WreckageField;
   /** Drifting smoke (see smoke.ts). */
