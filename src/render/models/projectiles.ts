@@ -35,7 +35,7 @@ const looks: Record<ProjectileKind, () => THREE.Object3D> = {
     return setRig(root, { faceVelocity: true });
   },
   // Hive's acid: a fat, sickly glob.
-  acid: () => projectile(0.35, 0.26, 0xc6e03a),
+  acid: () => projectile(0.35, 0.26, 0x9cb02a),
   // Zenith's strike: a column of light coming straight down, its foot at the projectile.
   orbital: () => {
     const root = new THREE.Group();

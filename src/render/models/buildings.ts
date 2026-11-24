@@ -910,7 +910,7 @@ registerModel('bld:recycler', (faction) => {
   g.add(box(0.2, 0.9, 1.6, 0x15100c, 2.35, 0.9, 0));
   for (let i = 0; i < 5; i++) g.add(box(0.3, 0.12, 0.12, 0x8a8a8a, 2.45, 0.45 + i * 0.22, (i % 2 ? 0.6 : -0.6)));
   for (const [x, z] of [[-1.6, 1.6], [-1.8, -1.4], [0.6, -2.1]]) {
-    const vat = glowBox(0.6, 0.8, 0.6, 0xc6e03a);
+    const vat = glowBox(0.6, 0.8, 0.6, 0x9cb02a);
     vat.position.set(x, 0.65, z);
     g.add(vat);
   }

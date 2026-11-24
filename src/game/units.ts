@@ -2098,7 +2098,7 @@ export const UNIT_DEFS = {
     armor: 15,
     speed: 1.4,
     turnRate: 0.9,
-    radius: 2.2,
+    radius: 1.6,
     sight: 22,
     turret: true,
     turretTurnRate: 1.2,

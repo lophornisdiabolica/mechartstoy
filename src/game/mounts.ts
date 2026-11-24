@@ -141,7 +141,8 @@ export const MOUNTS: Record<string, Mount> = {
   fabricator: { turret: [0.3, 1.0, 0], muzzles: [[1.5, 0.15, 0]] },
   acidSpitter: { turret: [0.45, 0.95, 0], pivot: [0.2, 0.08, 0], muzzles: [[0.32, 0, 0]], elev: [-0.4, 1.2] },
   ravager: { turret: [0.9, 0.95, 0], muzzles: [[1.0, -0.05, 0.32]] },
-  hiveMother: { turret: [1.8, 2.9, 0], pivot: [0.55, -0.1, 0], muzzles: [[0.56, 0, 0]], elev: [-0.7, 1.0] },
+  // Drawn at 0.72 of her first size (HIVE_MOTHER_SIZE in render/models/units.ts).
+  hiveMother: { turret: [1.296, 2.088, 0], pivot: [0.396, -0.072, 0], muzzles: [[0.4032, 0, 0]], elev: [-0.7, 1.0] },
   'bld:recycler': { turret: [-0.4, 2.65, 0], pivot: [0.3, 0.2, 0], muzzles: [[0.55, 0, 0]], elev: [-0.6, 1.0] },
   // Nomad.
   crawler: { turret: [1.45, 2.1, 0], pivot: [0.1, 0.18, 0], muzzles: pair(0.6, 0, 0.12), elev: [-0.4, 1.0] },

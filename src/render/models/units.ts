@@ -1731,7 +1731,9 @@ registerModel('lancePlatform', (faction) => {
 
 // Hive: bugs and crawlers grown from scrap.
 const CHITIN = 0x3b2a1e;
-const ACID = 0xc6e03a;
+const ACID = 0x9cb02a;
+/** The Hive Mother's size, as a share of how she was first drawn (see mounts.ts and her UnitDef radius, scaled to match). */
+const HIVE_MOTHER_SIZE = 0.72;
 
 // A mite: a knee-high biting bug on six legs. It lunges in head first to bite.
 registerModel('mite', (faction) => {
@@ -1870,29 +1872,32 @@ registerModel('ravager', (faction) => {
 // Hive's super unit: a towering brood mother on eight legs, her egg-sacs glowing, spraying acid from her head.
 registerModel('hiveMother', (faction) => {
   const { primary, secondary } = factionColors(faction);
+  // Built at this share of the size she was first drawn at (she towered over everything).
+  const k = HIVE_MOTHER_SIZE;
+  const b = (w: number, h: number, d: number, c: number, x: number, y: number, z: number) => box(w * k, h * k, d * k, c, x * k, y * k, z * k);
   const root = new THREE.Group();
   const body = new THREE.Group();
-  body.position.y = 2.6;
+  body.position.y = 2.6 * k;
   root.add(body);
-  body.add(box(2.2, 1.0, 2.0, primary, 0.4, 0, 0)); // thorax
-  body.add(box(2.6, 1.6, 2.4, CHITIN, -1.6, 0.4, 0)); // abdomen
-  body.add(box(2.0, 0.2, 2.5, secondary, -1.6, 1.25, 0));
+  body.add(b(2.2, 1.0, 2.0, primary, 0.4, 0, 0)); // thorax
+  body.add(b(2.6, 1.6, 2.4, CHITIN, -1.6, 0.4, 0)); // abdomen
+  body.add(b(2.0, 0.2, 2.5, secondary, -1.6, 1.25, 0));
   for (const [x, z] of [[-1.0, 0.7], [-2.1, -0.6], [-1.5, 0], [-2.3, 0.8], [-0.9, -0.8]]) {
-    const egg = glowBox(0.45, 0.4, 0.45, ACID);
-    egg.position.set(x, 1.45, z);
+    const egg = glowBox(0.45 * k, 0.4 * k, 0.45 * k, ACID);
+    egg.position.set(x * k, 1.45 * k, z * k);
     body.add(egg);
   }
   const turret = new THREE.Group();
-  turret.position.set(1.8, 0.3, 0);
-  turret.add(box(0.9, 0.8, 1.1, CHITIN, 0.1, 0, 0));
-  for (const side of [-1, 1]) turret.add(box(0.8, 0.16, 0.16, METAL, 0.7, -0.35, side * 0.35)); // mandibles
+  turret.position.set(1.8 * k, 0.3 * k, 0);
+  turret.add(b(0.9, 0.8, 1.1, CHITIN, 0.1, 0, 0));
+  for (const side of [-1, 1]) turret.add(b(0.8, 0.16, 0.16, METAL, 0.7, -0.35, side * 0.35)); // mandibles
   const spout = barrelPivot('hiveMother', turret);
-  spout.add(box(0.5, 0.26, 0.26, CHITIN, 0.25, 0, 0));
-  const drip = glowBox(0.08, 0.16, 0.16, ACID);
-  drip.position.set(0.52, 0, 0);
+  spout.add(b(0.5, 0.26, 0.26, CHITIN, 0.25, 0, 0));
+  const drip = glowBox(0.08 * k, 0.16 * k, 0.16 * k, ACID);
+  drip.position.set(0.52 * k, 0, 0);
   spout.add(drip);
   body.add(turret);
-  return setRig(root, { turret, ...spiderLegs(body, 4, 4.4, 1.3, 2.6, 0.32), ...mounted('hiveMother', root, turret, [spout]) });
+  return setRig(root, { turret, ...spiderLegs(body, 4, 4.4 * k, 1.3 * k, 2.6 * k, 0.32 * k), ...mounted('hiveMother', root, turret, [spout]) });
 });
 
 // Nomad: a base that walks.
