@@ -226,6 +226,17 @@ const SPAN_SHORTER = 0.8;
 const SPAN_APART = 10;
 /** Most canal stretches looked at for a bridge per update (spread evenly along what's dug). */
 const SPAN_CANDIDATES = 8;
+/**
+ * A land route length found stays good this many seconds, even after the
+ * land grid changes: a wreck or a wall barely changes a way across the map,
+ * and searching every way again each time anything was built stalled the
+ * sim for half a second in big battles.
+ */
+const ROUTE_KEEP = 30;
+/** Most new route searches for canal bridges per Commander refresh, all sides together (the rest wait for the next refresh). */
+const ROUTE_SEARCHES = 6;
+/** Seconds a side keeps the canal bridge it chose (or that there's none) before looking again. */
+const SPAN_REPLAN = 10;
 
 /** Whether a side's engineers throw ice bridges rather than timber ones (Rime). */
 function iceBridges(ctx: SimContext, side: number): boolean {
@@ -415,9 +426,12 @@ export class Engineers {
   private spans: Span[] = [];
   /** Seconds put in on each bridge going up, by where it goes. */
   private spanWork = new Map<string, number>();
-  /** Land route lengths, by from, to and the land grid's passable version (bridges are only worth it if they cut one short). */
-  private routeLengths = new Map<string, number>();
-  private routeVersion = -1;
+  /** Land route lengths, by from and to, with the land grid's passable version and when found (bridges are only worth it if they cut one short). */
+  private routeLengths = new Map<string, { len: number; version: number; at: number }>();
+  /** New route searches left this refresh (see ROUTE_SEARCHES). */
+  private routeSearches = 0;
+  /** Per side: the canal bridge it chose, or none, and when to look again. */
+  private canalSpans: ({ job: BridgeJob | null; until: number } | undefined)[] = [];
   /** Choke points found, per side and enemy, for the land grid's passable version. */
   private chokes = new Map<string, { version: number; site: Site | null }>();
   /** Whether there's a way across for big units, and where it's cut (see crossings.ts). */
@@ -505,6 +519,8 @@ export class Engineers {
   /** Find each side's work and hand it to its engineers (with the Commander's picture). */
   update(world: World, ctx: SimContext): void {
     this.jobs.clear();
+    this.routeSearches = ROUTE_SEARCHES;
+    this.forgetRoutes(world);
     this.sideOf.clear();
     const n = ctx.sides.count;
     this.engineers = new Array(n).fill(0);
@@ -1177,24 +1193,31 @@ export class Engineers {
     return out;
   }
 
-  /** Length of the land route between two points (Infinity with none), remembered until the land grid changes. */
-  private routeLength(ctx: SimContext, a: Point, b: Point): number {
+  /**
+   * Length of the land route between two points (Infinity with none),
+   * remembered while the land grid is unchanged or for ROUTE_KEEP seconds.
+   * NaN when it isn't known and this refresh's searches are used up.
+   */
+  private routeLength(world: World, ctx: SimContext, a: Point, b: Point): number {
     const nav = ctx.navs.land;
-    if (this.routeVersion !== nav.passableVersion) {
-      this.routeLengths.clear();
-      this.routeVersion = nav.passableVersion;
-    }
     const key = `${Math.round(a.x)},${Math.round(a.z)}>${Math.round(b.x)},${Math.round(b.z)}`;
     const known = this.routeLengths.get(key);
-    if (known !== undefined) return known;
+    if (known && (known.version === nav.passableVersion || world.time < known.at + ROUTE_KEEP)) return known.len;
+    if (this.routeSearches <= 0) return NaN;
+    this.routeSearches--;
     const path = nav.findPath(a, b);
     let len = Infinity;
     if (path && path.length > 0) {
       len = D.hypot(path[0].x - a.x, path[0].z - a.z);
       for (let k = 1; k < path.length; k++) len += D.hypot(path[k].x - path[k - 1].x, path[k].z - path[k - 1].z);
     }
-    this.routeLengths.set(key, len);
+    this.routeLengths.set(key, { len, version: nav.passableVersion, at: world.time });
     return len;
+  }
+
+  /** Drop route lengths long out of date (rally points move, so old ones would pile up). */
+  private forgetRoutes(world: World): void {
+    for (const [key, r] of this.routeLengths) if (world.time >= r.at + ROUTE_KEEP * 2) this.routeLengths.delete(key);
   }
 
   /**
@@ -1205,11 +1228,27 @@ export class Engineers {
    */
   private bridgeJob(world: World, ctx: SimContext, side: number): BridgeJob | null {
     if (this.spansOf(side) >= spansMost(ctx, side)) return null;
+    // The choice is kept a while (SPAN_REPLAN), unless a bridge has gone up there since.
+    const was = this.canalSpans[side];
+    const gone = was?.job && (ctx.field.nearBridge(was.job.x, was.job.z, SPAN_APART) || !ctx.field.isWater(was.job.x, was.job.z));
+    if (was && world.time < was.until && !gone) {
+      return was.job && this.safe(world, ctx, side, was.job.standX, was.job.standZ) ? was.job : null;
+    }
+    const looked = this.chooseCanalSpan(world, ctx, side);
+    // A look cut short (out of searches) is finished next refresh, the lengths found so far kept.
+    this.canalSpans[side] = looked.complete ? { job: looked.job, until: world.time + SPAN_REPLAN } : undefined;
+    if (!looked.job || !this.safe(world, ctx, side, looked.job.standX, looked.job.standZ)) return null;
+    return looked.job;
+  }
+
+  /** The canal bridge that cuts a side's way to an enemy base shortest, if any (see bridgeJob), and whether every way was weighed. */
+  private chooseCanalSpan(world: World, ctx: SimContext, side: number): { job: BridgeJob | null; complete: boolean } {
     const { field, sides, lanes } = ctx;
     const canals = this.works.filter((w) => w.kind === 'canal' && w.done && sides.hostile(side, w.side));
-    if (canals.length === 0) return null;
+    if (canals.length === 0) return { job: null, complete: true };
     const home = field.baseSites[side];
     const enemies = sides.enemiesOf(side).filter((g) => !sides.eliminated[g]);
+    let complete = true;
     const foot = ctx.navs.for('foot');
     const step = Math.max(1, Math.ceil(canals.length / SPAN_CANDIDATES));
     let best: { job: BridgeJob; gain: number } | null = null;
@@ -1233,15 +1272,18 @@ export class Engineers {
       for (const enemy of enemies) {
         const from = lanes.rally(side, enemy, 0);
         const to = field.baseSites[enemy];
-        const now = this.routeLength(ctx, from, to);
-        const via = this.routeLength(ctx, from, a) + SPAN_HALF * 2 + this.routeLength(ctx, b, to);
+        const now = this.routeLength(world, ctx, from, to);
+        const via = this.routeLength(world, ctx, from, a) + SPAN_HALF * 2 + this.routeLength(world, ctx, b, to);
+        if (Number.isNaN(now) || Number.isNaN(via)) {
+          complete = false;
+          continue;
+        }
         const gain = now === Infinity ? (via === Infinity ? 0 : 1) : 1 - via / now;
         if (gain < 1 - SPAN_SHORTER || (best && gain <= best.gain)) continue;
         best = { job: { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x: mx, z: mz, standX: stand.x, standZ: stand.z, urgent: true }, gain };
       }
     }
-    if (!best || !this.safe(world, ctx, side, best.job.standX, best.job.standZ)) return null;
-    return best.job;
+    return { job: best?.job ?? null, complete };
   }
 
   /**

@@ -53,6 +53,13 @@ const BASE_CLEAR = 16;
 export const REPLAN = 20;
 /** The place chosen is kept while it's at least this share as good as the best. */
 const KEEP = 0.8;
+/**
+ * A cost field (see NavGrid.costsFrom) stays good this many seconds after
+ * the land grid changes: bases and outposts don't move, and every side
+ * flooding the map again from each of them stalled the sim's Commander
+ * refreshes.
+ */
+const FIELD_KEEP = REPLAN;
 
 /** A place a bridge could go: from a on one shore to b on the other, over `wet` metres of water. */
 export interface Shortcut {
@@ -81,6 +88,8 @@ export class Shortcuts {
   private picks: ({ pick: ShortcutPick | null; until: number } | undefined)[] = [];
   /** When a side last looked (see pick). */
   private lookedAt = -1;
+  /** Cost fields from points, by where, with the land grid's passable version and when made (see FIELD_KEEP). */
+  private fields = new Map<string, { costs: Float32Array; version: number; at: number }>();
 
   /** The place a side's engineers should bridge now, if any (see the notes at the top). */
   pick(world: World, ctx: SimContext, side: number, enemy: number): ShortcutPick | null {
@@ -117,7 +126,16 @@ export class Shortcuts {
     const nav = ctx.navs.land;
     const home = field.baseSites[side];
     const from = lanes.rally(side, enemy, 0);
-    const fromCosts = nav.costsFrom(from);
+    for (const [key, f] of this.fields) if (world.time >= f.at + FIELD_KEEP * 2) this.fields.delete(key);
+    const costsFrom = (p: Point): Float32Array => {
+      const key = `${Math.round(p.x * 2)},${Math.round(p.z * 2)}`;
+      const known = this.fields.get(key);
+      if (known && (known.version === nav.passableVersion || world.time < known.at + FIELD_KEEP)) return known.costs;
+      const costs = nav.costsFrom(p);
+      this.fields.set(key, { costs, version: nav.passableVersion, at: world.time });
+      return costs;
+    };
+    const fromCosts = costsFrom(from);
     const cellOf = (x: number, z: number) => {
       const [i, j] = nav.cellOf(x, z);
       return j * nav.cols + i;
@@ -134,7 +152,7 @@ export class Shortcuts {
 
     const gains = new Float64Array(places.length);
     for (const target of targets) {
-      const toCosts = nav.costsFrom(target.at);
+      const toCosts = costsFrom(target.at);
       const nowRaw = fromCosts[cellOf(target.at.x, target.at.z)];
       const now = Number.isFinite(nowRaw) ? nowRaw : far;
       const need = Math.max(MIN_GAIN, now * MIN_SHARE);
