@@ -15,7 +15,7 @@ describe('weapons that point different ways (UnitDef.alternates)', () => {
     game.world.req(beast, Mover).speed = 0;
     // A sturdy enemy close behind it, that doesn't move or shoot back.
     const t = game.world.req(beast, Transform);
-    const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.heavyTank ?? UNIT_DEFS.tank, 1, t.x - D.cos(t.heading) * 4, t.z + D.sin(t.heading) * 4);
+    const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, t.x - D.cos(t.heading) * 4, t.z + D.sin(t.heading) * 4);
     game.world.remove(tank, Ai);
     // Pinned where it is, so the whip's knock doesn't throw it out of reach.
     game.world.remove(tank, Mover);
