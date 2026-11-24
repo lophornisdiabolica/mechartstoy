@@ -571,6 +571,12 @@ export interface Nomad {
 }
 export const Nomad = defineComponent<Nomad>('Nomad');
 
+/** Falling back to its base to mend (see UnitDef.retreats and retreat.ts): since when. */
+export interface FallingBack {
+  since: number;
+}
+export const FallingBack = defineComponent<FallingBack>('FallingBack');
+
 /** A Tin Soldiers toy's clockwork (see windup.ts): run left, when it's done winding back up, when it's back on its feet, its health last tick, and which side it fell on. */
 export interface WindUp {
   left: number;

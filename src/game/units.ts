@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine' | 'scrap';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital' | 'acid' | 'arrow' | 'stone' | 'seed' | 'vine' | 'scrap' | 'spine';
 
 export interface WeaponDef {
   name: string;
@@ -117,6 +117,12 @@ export interface WeaponDef {
    * straight down and bursts with the weapon's damage and splash.
    */
   orbital?: { delay: number };
+  /**
+   * Fires this many shots at once in a ring all round the shooter, each
+   * landing `range` out, instead of one at its target (the Leviathan's spine
+   * volley). It still waits for a target in range before it lets go.
+   */
+  nova?: number;
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -299,9 +305,23 @@ export interface UnitDef {
   /**
    * Leviathan (see leviathan.ts): it eats the wrecks within `radius` (times
    * its size) at `rate` a second, growing `perWreck` in size for each
-   * tank-sized wreck, from `from` up to `most` times its model's size.
+   * tank-sized wreck, from `from` up to `most` times its model's size, but
+   * never more than `perMinute` a minute since it hatched.
    */
-  grows?: { radius: number; rate: number; perWreck: number; from: number; most: number };
+  grows?: { radius: number; rate: number; perWreck: number; from: number; most: number; perMinute: number };
+  /**
+   * Knows when to break off (see retreat.ts): below `below` of its health it
+   * falls back to its base, fighting only what gets in its way, and mends
+   * there at `mends` of its full health a second until it's back to `until`.
+   */
+  retreats?: RetreatDef;
+}
+
+/** When a unit falls back to mend, and how fast it mends at home (see UnitDef.retreats). */
+export interface RetreatDef {
+  below: number;
+  until: number;
+  mends: number;
 }
 
 /** What a Mirage projector throws up (see mirage.ts). */
@@ -2750,9 +2770,62 @@ export const UNIT_DEFS = {
     turret: true,
     turretTurnRate: 1.4,
     weapon: weapon({ name: 'Jaws', range: 1.6, damage: 90, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2.4, pierce: 0.4, melee: { style: 'thrust', lunge: 1.6, knock: 2.4, sweep: 1.8, sweepMost: 6, charge: 1.4 } }),
-    grows: { radius: 9, rate: 0.6, perWreck: 0.07, from: 0.8, most: 1.8 },
+    // Besides its bite: fire on what's in front of it, a ring of spines when it's crowded, and acid lobbed at what keeps its distance.
+    // All of them grow with it (see leviathan.ts), the short ones in reach too.
+    mounts: [
+      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5) },
+      { weapon: weapon({ name: 'Spine volley', range: 7, damage: 16, cooldown: 9, projectile: 'spine', arc: true, speed: 18, splash: 0.8, spread: 0.05, muzzleHeight: 2.2, pierce: 0.3, nova: 12 }) },
+      { weapon: weapon({ name: 'Acid pods', range: 18, minRange: 5, damage: 30, cooldown: 7, burst: 2, burstGap: 0.4, projectile: 'acid', arc: true, speed: 16, splash: 2, spread: 0.1, muzzleHeight: 2.6, pierce: 0.2 }) },
+    ],
+    grows: { radius: 9, rate: 0.6, perWreck: 0.07, from: 0.8, most: 1.8, perMinute: 0.12 },
+    retreats: { below: 0.35, until: 0.9, mends: 0.03 },
     wreckTime: 60,
     siege: true,
+  },
+  // The cult's vehicles are whatever its faithful drove in on: weak, but enough to hold a line until the Leviathan has grown.
+  // A rusty pickup with a scrap plate on the cab and a machine gun in the bed.
+  pilgrimTruck: {
+    id: 'pilgrimTruck',
+    name: 'Pilgrim Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.75,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'pilgrimTruck',
+    hp: 150,
+    armor: 2,
+    speed: 4.2,
+    turnRate: 3,
+    radius: 0.8,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 5,
+    weapon: weapon({ name: 'Bed machine gun', range: 12, damage: 6, cooldown: 1.2, burst: 4, burstGap: 0.08, projectile: 'bullet', speed: 60, spread: 0.08, muzzleHeight: 1 }),
+    wreckTime: 20,
+    siege: false,
+  },
+  // A farm tractor with a whaling harpoon gun bolted to its bonnet: a slow, heavy shot for vehicles.
+  harpoonTractor: {
+    id: 'harpoonTractor',
+    name: 'Harpoon Tractor',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.75,
+    move: 'tracked',
+    role: 'frontline',
+    model: 'harpoonTractor',
+    hp: 220,
+    armor: 4,
+    speed: 2.6,
+    turnRate: 2,
+    radius: 0.8,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2.5,
+    weapon: weapon({ name: 'Harpoon gun', range: 14, damage: 55, cooldown: 4.5, projectile: 'arrow', speed: 30, spread: 0.04, muzzleHeight: 1, pierce: 0.4 }),
+    wreckTime: 20,
+    siege: false,
   },
   // A cultist in a hooded robe with an old rifle.
   cultist: {

@@ -276,6 +276,9 @@ export class BattleAudio {
       case 'frost':
         this.activity.add(STIR.flame);
         return this.cue('hiss', 'gunfire', e.x, e.z, 1);
+      case 'spine':
+        this.activity.add(STIR.bullet);
+        return this.cue('hiss', 'gunfire', e.x, e.z, 0.3);
       case 'arrow':
         this.activity.add(STIR.bullet);
         return this.cue('hiss', 'gunfire', e.x, e.z, 0.5);
@@ -301,7 +304,7 @@ export class BattleAudio {
   }
 
   private impact(e: GameEvents['impact']): void {
-    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost' || e.kind === 'hack' || e.kind === 'acid' || e.kind === 'arrow' || e.kind === 'vine' || e.kind === 'seed') return;
+    if (e.kind === 'bullet' || e.kind === 'flame' || e.kind === 'beam' || e.kind === 'frost' || e.kind === 'hack' || e.kind === 'acid' || e.kind === 'arrow' || e.kind === 'spine' || e.kind === 'vine' || e.kind === 'seed') return;
     if (e.splash >= 1.8) {
       this.activity.add(STIR.blast);
       this.cue('blast', 'explosions', e.x, e.z, Math.min(1.2, 0.6 + e.splash * 0.12));

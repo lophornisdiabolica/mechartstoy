@@ -73,6 +73,8 @@ export interface BuildingDef {
   low?: boolean;
   /** Aircraft out of ammunition fly to the nearest of these of their side to rearm (see Ammo): airpads and forward helipads. */
   rearms?: boolean;
+  /** Units falling back to mend go to the nearest of these of their side (see retreat.ts): Leviathan's shrine. */
+  mends?: boolean;
   /** A Hive building that chews wreckage round it into units (see hive.ts). */
   eats?: EatsDef;
   /** Nomad's crawler yard (see nomad.ts): the crawler it turns out now and then. */
@@ -604,6 +606,7 @@ export const BUILDING_DEFS = {
     radius: 2.6,
     height: 3.6,
     production: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 16 },
+    mends: true,
     weapon: { name: 'Burning eyes', range: 20, minRange: 0, damage: 22, cooldown: 1.6, burst: 2, burstGap: 0.2, projectile: 'beam', speed: 90, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3.4, targets: 'both', pierce: 0.3 },
     sight: 22,
     turretTurnRate: 2,

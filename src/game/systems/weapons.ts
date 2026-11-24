@@ -142,6 +142,15 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
  * fire together, one from each of the others too, out of the same burst.
  */
 function volley(world: World, ctx: SimContext, e: Entity, armed: Armed, target: Entity, mount: Mount | undefined, w: WeaponDef = armed.weapon, at?: Spot): void {
+  // A ring of shots all round (WeaponDef.nova): the Leviathan's spines.
+  if (w.nova) {
+    const t = world.req(e, Transform);
+    for (let k = 0; k < w.nova; k++) {
+      const a = t.heading + (k / w.nova) * Math.PI * 2;
+      fire(world, ctx, e, armed, target, mount, w, { x: t.x + D.cos(a) * w.range * 0.9, z: t.z + D.sin(a) * w.range * 0.9 });
+    }
+    return;
+  }
   fire(world, ctx, e, armed, target, mount, w, at);
   if (mount?.salvo !== 'together') return;
   for (let k = 1; k < mount.muzzles.length && armed.burstLeft > 0; k++) {

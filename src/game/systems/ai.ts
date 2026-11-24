@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../../core/ecs';
-import { Ai, Ammo, Armed, Building, Construction, Faction, GroundFollow, Guard, Health, Mover, Nomad, Targetable, Transform, Unit } from '../components';
+import { Ai, Ammo, Armed, Building, Construction, FallingBack, Faction, GroundFollow, Guard, Health, Mover, Nomad, Targetable, Transform, Unit } from '../components';
 import { SimContext } from '../context';
 import { CAPTURE_RADIUS, Outpost } from '../outposts';
 import { objectiveIn } from '../spawn';
@@ -12,6 +12,7 @@ import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
 import { campSpot } from '../nomad';
+import { mendingPlace } from '../retreat';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -105,6 +106,14 @@ export function aiSystem(ctx: SimContext): System {
             mover.faceZ = out.z;
             continue;
           }
+        }
+        // Beaten: falling back home to mend (see retreat.ts), fighting only what it passes.
+        if (world.has(e, FallingBack)) {
+          const home = mendingPlace(world, ctx, faction, t.x, t.z);
+          const enemy = ctx.sides.target(faction, ctx.offensive.attack(faction, world.time));
+          const face = enemy !== null ? ctx.field.baseSites[enemy] : { x: t.x, z: t.z };
+          moveTo(mover, t, home.x + ai.rallyOffsetX * 0.3, home.z + ai.rallyOffsetZ * 0.3, face.x, face.z);
+          continue;
         }
         // Out of ammunition: home to the airpad, set down, and wait to be loaded again (see Ammo).
         const ammo = world.get(e, Ammo);

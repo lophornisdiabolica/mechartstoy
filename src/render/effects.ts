@@ -395,7 +395,7 @@ export class Effects {
       return;
     }
     // Bowstrings and throwing arms don't flash.
-    if (kind === 'arrow' || kind === 'stone' || kind === 'seed' || kind === 'vine' || kind === 'scrap') return;
+    if (kind === 'arrow' || kind === 'spine' || kind === 'stone' || kind === 'seed' || kind === 'vine' || kind === 'scrap') return;
     if (kind === 'beam' || kind === 'frost') {
       this.flashes.spawn({ x, y, z, life: 0.08, size: kind === 'beam' ? 0.4 : 0.2, color: kind === 'beam' ? 0xc8f0ff : 0xf0faff, endColor: 0x000000 });
       return;
@@ -492,7 +492,7 @@ export class Effects {
       return;
     }
     // An arrow just sticks: a puff of dust. A stone thumps down in a cloud of earth.
-    if (kind === 'arrow') {
+    if (kind === 'arrow' || kind === 'spine') {
       this.smoke.spawn({ x, y, z, vy: 0.4, life: 0.4, size: 0.08, endSize: 0.2, color: 0xa89c88 });
       return;
     }

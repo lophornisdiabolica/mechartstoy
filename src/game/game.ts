@@ -55,6 +55,7 @@ import { mirageSystem } from './mirage';
 import { Groves, TANGLE_RULES } from './verdant';
 import { lodestarSystem } from './lodestar';
 import { leviathanSystem } from './leviathan';
+import { retreatSystem } from './retreat';
 import { dashSystem } from './systems/melee';
 
 export type { GameEvents, Outcome } from './context';
@@ -177,6 +178,7 @@ export class Game {
       navObstacles,
       ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
       targetingSystem(ctx),
+      retreatSystem(ctx),
       aiSystem(ctx),
       windUpSystem(ctx),
       trafficSystem(ctx),

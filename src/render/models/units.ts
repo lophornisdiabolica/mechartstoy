@@ -296,6 +296,49 @@ registerModel('buggy', (faction) => {
   return setRig(root, { turret, ...mounted('buggy', root, turret, [gun]) });
 });
 
+/** Leviathan's cult drives whatever it could get: rust and patches. */
+const RUST = 0x7a4a32;
+
+// A rusty pilgrim pickup: a patched cab, a scrap plate, and a machine gun on a post in the bed.
+registerModel('pilgrimTruck', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.55, 0.5], 0.38, 0.36));
+  root.add(box(1.7, 0.2, 0.8, RUST, 0, 0.42, 0)); // chassis
+  root.add(box(0.6, 0.45, 0.76, primary, 0.45, 0.745, 0)); // cab
+  root.add(box(0.06, 0.3, 0.6, DARK, 0.77, 0.8, 0)); // windscreen
+  root.add(box(0.4, 0.3, 0.04, secondary, 0.45, 0.72, 0.4)); // a scrap plate wired over the door
+  for (const z of [-0.36, 0.36]) root.add(box(0.9, 0.2, 0.06, 0x5a4a3a, -0.4, 0.62, z)); // bed sides
+  const turret = new THREE.Group();
+  turret.position.set(-0.4, 0.98, 0);
+  turret.add(box(0.08, 0.46, 0.08, DARK, 0, -0.2, 0)); // the post
+  const gun = barrelPivot('pilgrimTruck', turret);
+  gun.add(box(0.7, 0.08, 0.08, DARK, 0.25, 0, 0));
+  gun.add(box(0.05, 0.22, 0.36, METAL, 0.02, 0.02, 0)); // a gun shield cut from a road sign
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('pilgrimTruck', root, turret, [gun]) });
+});
+
+// A farm tractor: big back wheels, small front ones, an exhaust stack, and a whaling harpoon gun on the bonnet.
+registerModel('harpoonTractor', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...wheels([-0.4], 0.42, 0.66));
+  root.add(...wheels([0.55], 0.3, 0.36));
+  root.add(box(1.1, 0.34, 0.46, primary, 0.2, 0.62, 0)); // bonnet
+  root.add(box(0.42, 0.5, 0.56, RUST, -0.35, 0.79, 0)); // the seat's housing
+  root.add(box(0.36, 0.06, 0.6, secondary, -0.35, 1.07, 0)); // a tin roof over it
+  root.add(box(0.06, 0.44, 0.06, DARK, 0.55, 0.99, 0.14)); // exhaust stack
+  const turret = new THREE.Group();
+  turret.position.set(0.3, 0.92, 0);
+  turret.add(box(0.24, 0.16, 0.24, DARK, 0, 0.0, 0));
+  const gun = barrelPivot('harpoonTractor', turret);
+  gun.add(box(0.8, 0.1, 0.1, DARK, 0.3, 0, 0));
+  gun.add(box(0.28, 0.06, 0.06, 0xd8cfb8, 0.84, 0, 0)); // the harpoon, loaded
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('harpoonTractor', root, turret, [gun]) });
+});
+
 registerModel('rocketTruck', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
@@ -390,7 +433,7 @@ const TROOPER_H = 12;
 
 /** Pixel-art soldier, two walk frames side by side. Coloured per faction. */
 /** What an infantry sprite carries: a rifle, an AT launcher on the shoulder, a mortar tube, a flamethrower and its fuel tank, or an engineer's wrench (with a hard hat). */
-type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia';
+type Kit = 'rifle' | 'launcher' | 'mortar' | 'flamer' | 'cryo' | 'operator' | 'wrench' | 'civilian0' | 'civilian1' | 'civilian2' | 'militia' | 'cultist' | 'zealot';
 
 /** Townsfolk's clothes (see game/towns.ts): shirt, hair or hat, and trousers. */
 const TOWN_CLOTHES: Record<string, [string, string, string]> = {
@@ -414,6 +457,34 @@ function trooperSheet(faction: number, kit: Kit): THREE.CanvasTexture {
       g.fillStyle = c;
       g.fillRect(ox + x, y, w, h);
     };
+    if (kit === 'cultist' || kit === 'zealot') {
+      // Leviathan's cult: dark hooded robes with a sash in the side's colour, faces in shadow.
+      const robe = '#3a2a3a';
+      px(2, 0, 4, 3, robe); // hood
+      px(3, 1, 2, 2, '#1a1418'); // the shadow in it
+      px(3, 2, 1, 1, '#d8d0c0'); // a pale chin
+      px(2, 3, 4, kit === 'cultist' ? 7 : 5, robe); // robe, short for running in
+      px(2, 5, 4, 1, hex(primary)); // sash
+      px(2, 0, 4, 1, hex(secondary)); // hood trim
+      px(1, 3, 1, 3, robe); // arm
+      if (kit === 'cultist') {
+        px(5, 4, 3, 1, '#5a3c22'); // old rifle
+        px(7, 4, 1, 1, '#222');
+        // The robe's hem sways between frames.
+        if (frame === 0) px(2, 10, 4, 1, robe);
+        else px(1, 10, 6, 1, robe);
+        for (const x of frame === 0 ? [2, 4] : [1, 5]) px(x, 11, 2, 1, '#1d1d1d');
+      } else {
+        px(6, 1, 1, 4, '#6b4a2a'); // torch, held high
+        px(6, 0, 1, 1, '#ffb43a');
+        px(7, 0, 1, 1, '#ff7a2a');
+        px(0, 5, 2, 2, '#6a5a3a'); // satchel charge
+        for (const [x, y, w, h] of frame === 0 ? [[2, 8, 2, 3], [4, 8, 2, 3]] : [[1, 8, 2, 3], [5, 8, 2, 2]]) px(x, y, w, h, '#2a2228');
+        px(1, 11, 3, 1, '#1d1d1d');
+        px(4, 11, 3, 1, '#1d1d1d');
+      }
+      continue;
+    }
     const clothes = TOWN_CLOTHES[kit];
     if (clothes) {
       // Townsfolk: bare heads (a flat cap for the militia), everyday clothes.
@@ -2675,7 +2746,6 @@ registerModel('lodestone', (faction) => {
 
 // Leviathan: one giant creature and its cult.
 const HIDE = 0x2e4a4a;
-const ROBE = 0x3a2a3a;
 
 // The Leviathan: a hulking four-legged sea beast with a ridged back, a long tail, a frilled head and glowing eyes.
 registerModel('leviathan', (faction) => {
@@ -2720,51 +2790,6 @@ registerModel('leviathan', (faction) => {
   });
 });
 
-/** A robed cult figure: legs, a hooded robe, a pale face in the hood. Returns the body to hang kit on. */
-function cultFigure(root: THREE.Group, trim: number): { body: THREE.Group; legs: Leg[] } {
-  const body = new THREE.Group();
-  body.position.y = 0.42;
-  root.add(body);
-  body.add(box(0.24, 0.36, 0.28, ROBE, 0, 0.14, 0));
-  body.add(box(0.25, 0.05, 0.29, trim, 0, 0.0, 0)); // a sash in the side's colour
-  body.add(box(0.17, 0.17, 0.17, ROBE, 0, 0.41, 0)); // hood
-  body.add(box(0.03, 0.08, 0.09, 0xd8d0c0, 0.085, 0.4, 0)); // face
-  const legs = [-1, 1].map((side) => {
-    const leg = makeLeg(0.21, 0.21, 0.08, ROBE, 0x1a1a1a);
-    leg.hip.position.set(0, -0.04, side * 0.07);
-    body.add(leg.hip);
-    return leg;
-  });
-  return { body, legs };
-}
-
-// A cultist with an old rifle.
-registerModel('cultist', (faction) => {
-  const { primary } = factionColors(faction);
-  const root = new THREE.Group();
-  const { body, legs } = cultFigure(root, primary);
-  body.add(box(0.42, 0.05, 0.05, 0x5a4030, 0.22, 0.24, -0.1));
-  return setRig(root, { ...walker(legs, body, 0.3, 0.5), ...mounted('cultist', root, null) });
-});
-
-// A zealot with a burning torch and a satchel charge.
-registerModel('zealot', (faction) => {
-  const { primary } = factionColors(faction);
-  const root = new THREE.Group();
-  const { body, legs } = cultFigure(root, primary);
-  const arm = new THREE.Group();
-  arm.position.set(0.05, 0.3, -0.16);
-  arm.add(box(0.05, 0.28, 0.05, 0x5a4030, 0, 0.1, 0));
-  const flame = glowBox(0.09, 0.12, 0.09, 0xffa040);
-  flame.position.set(0, 0.29, 0);
-  arm.add(flame);
-  body.add(arm);
-  body.add(box(0.14, 0.14, 0.08, 0x6a5a3a, 0.02, 0.1, 0.18)); // satchel
-  return setRig(root, {
-    ...walker(legs, body, 0.3, 0.5),
-    ...mounted('zealot', root, null),
-    strike(k) {
-      arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
-    },
-  });
-});
+// Leviathan's cult are sprites, like other infantry: a crowd of them is cheap to draw.
+registerModel('cultist', (faction) => infantry(faction, 'cultist'));
+registerModel('zealot', (faction) => infantry(faction, 'zealot'));

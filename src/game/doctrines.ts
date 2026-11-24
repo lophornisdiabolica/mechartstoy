@@ -556,14 +556,14 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   leviathan: {
     id: 'leviathan',
     name: 'Leviathan',
-    blurb: 'One giant creature and its cult: a silly boss. No tanks at all: its barracks and factory turn out cultists with old rifles and zealots who run at vehicles with satchel charges. Its whole hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-biting with every meal. Its shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
+    blurb: 'One giant creature and its cult: a silly boss. No tanks: its barracks turn out cultists with old rifles and zealots who run at vehicles with satchel charges, and its factory whatever the faithful drove in on, rusty pilgrim trucks with a gun in the bed and farm tractors with whaling harpoons. Its real hope is the Leviathan, which hatches small, wades through rivers and lakes, and eats the wrecks round it as it goes, growing bigger, tougher and harder-hitting with every meal, though only so fast, so it has to live a while to grow big. Besides its bite it breathes fire, throws a ring of spines when it\'s crowded and lobs acid pods at what keeps its distance, and when it\'s beaten it falls back to its shrine to mend. The shrine\'s idol burns attackers with its eyes. Super unit: the Leviathan.',
     caps: { infantry: 2.2, vehicle: 1 },
     production: {
       barracks: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 12 },
       hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
       // The odd stolen scout copter is all it has in the air.
-      factory: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
+      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 14 },
       mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
     },
     signature: 'shrine',

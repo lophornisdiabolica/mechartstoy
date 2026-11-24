@@ -1,6 +1,6 @@
 import { Entity } from '../core/ecs';
 import { FixedLoop } from '../core/loop';
-import { Building, Construction, Faction, GARRISON, Guard, Health, MILITIA_BASE, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
+import { Building, Construction, FallingBack, Faction, GARRISON, Guard, Health, MILITIA_BASE, NEUTRAL, OutpostPart, Producer, Rubble, Unit, Wreck } from '../game/components';
 import { armsOf } from '../game/arsenal';
 import { Goal, UnitMix } from '../game/commander/commander';
 import { STYLES } from '../game/commander/advice';
@@ -636,6 +636,7 @@ export class Controls {
       lines.push(`${MOVE_LABELS[unit.def.move]}, ${ROLE_LABELS[unit.def.role]}`);
       lines.push(`Speed ${unit.def.speed}, range ${unit.def.weapon.range}`);
     }
+    if (w.has(e, FallingBack)) lines.push('Falling back to mend');
     const guard = w.get(e, Guard);
     if (guard) lines.push('Guarding its outpost');
     const part = w.get(e, OutpostPart);

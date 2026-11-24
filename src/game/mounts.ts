@@ -76,6 +76,8 @@ export const MOUNTS: Record<string, Mount> = {
   siegeCrawler: { turret: [0.3, 1.9, 0], pivot: [0.2, 0.55, 0], muzzles: pair(1.0, 0, 0.3), elev: [0.3, 1.2], rest: 0.8 },
   mgTruck: { turret: [-0.35, 0.82, 0], pivot: [0, 0.42, 0], muzzles: [[0.75, 0, 0]], elev: AA },
   buggy: { turret: [-0.25, 0.98, 0], pivot: [0, 0.08, 0], muzzles: [[0.55, 0, 0]], elev: AA },
+  pilgrimTruck: { turret: [-0.4, 0.98, 0], pivot: [0, 0.12, 0], muzzles: [[0.6, 0, 0]], elev: [-0.3, 0.7] },
+  harpoonTractor: { turret: [0.3, 0.92, 0], pivot: [0, 0.1, 0], muzzles: [[0.98, 0, 0]], elev: [-0.25, 0.4] },
   rocketTruck: {
     turret: [-0.4, 0.62, 0],
     pivot: [0, 0.45, 0],
@@ -191,8 +193,6 @@ export const MOUNTS: Record<string, Mount> = {
   'bld:scrapyard': { turret: [0.6, 2.6, 0.2], pivot: [0, 0.35, 0], muzzles: [[1.7, 0, 0]], elev: [0, 1.0], rest: 0.3 },
   // Leviathan.
   leviathan: { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]] },
-  cultist: { turret: [0, 0, 0], muzzles: [[0.43, 0.66, -0.1]], hull: true },
-  zealot: { turret: [0, 0, 0], muzzles: [[0.05, 1.065, -0.16]], hull: true },
   'bld:shrine': { turret: [0, 2.3, 0], pivot: [0.56, 0.5, 0], muzzles: [[0.08, 0, 0.25], [0.08, 0, -0.25]], elev: [-0.4, 0.5] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
