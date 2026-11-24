@@ -164,6 +164,9 @@ export function productionSystem(ctx: SimContext): System {
           const site = dropSite(world, ctx, faction);
           if (site) {
             const lineUp = squadLineUp(entry);
+            // A little buggy rides down with a squad of foot soldiers, if there's room for it.
+            const rider = doctrineOf(ctx, faction).podRider;
+            if (rider && lineUp.every((id) => ctx.units[id].class === 'infantry') && canBuild(ctx, counts, faction, ctx.units[rider])) lineUp.push(rider);
             const squad = newSquad(ctx);
             if (launchPod(world, ctx, faction, site.x, site.z, lineUp, squad)) {
               recordSquad(ctx, squad, faction, lineUp);

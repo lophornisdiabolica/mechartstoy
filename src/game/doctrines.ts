@@ -53,6 +53,8 @@ export interface DoctrineDef {
    * beacon runners instead of walking out of the door (Zenith; see zenith.ts).
    */
   drops?: BuildingId[];
+  /** With drops: a light vehicle that rides down in each pod of foot soldiers, if the vehicle cap has room (Zenith's drop buggy). */
+  podRider?: UnitId;
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
@@ -370,7 +372,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
   zenith: {
     id: 'zenith',
     name: 'Zenith',
-    blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
+    blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, a little drop buggy last, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
     caps: { infantry: 0.7, vehicle: 1.8 },
     production: {
       barracks: { table: [rifleSquad(4, 3)], interval: 20 },
@@ -388,6 +390,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     },
     signature: 'dropControl',
     drops: ['barracks', 'dropControl'],
+    podRider: 'dropBuggy',
     waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'uplinkTruck', weight: 1, count: 1 }, { unit: 'beaconRunner', weight: 1, count: 2 }],
     // Its runners mark targets for the uplinks and the Lance Platform.
     spotters: { beaconRunner: 14 },

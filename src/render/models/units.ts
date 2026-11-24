@@ -1650,22 +1650,25 @@ registerModel('eclipse', (faction) => {
 // Zenith: drops and orbital strikes.
 const BEACON = 0xffd27a;
 
-// A fast little tracked scout with a tall beacon mast, its lamp lit, and a pintle gun.
+// A fast little tracked scout with a pintle gun on a post up front and a tall beacon mast behind it, its lamp lit.
 registerModel('beaconRunner', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();
   root.add(...tracks(1.4, 0.26, 0.3, 0.36));
   root.add(box(1.25, 0.28, 0.66, primary, 0, 0.42, 0));
   root.add(box(0.36, 0.12, 0.7, secondary, 0.5, 0.36, 0));
-  // The beacon mast, with a steady lamp on top.
-  root.add(box(0.07, 1.5, 0.07, METAL, 0.1, 1.3, 0.2));
+  // The beacon mast at the back, with a steady lamp on top.
+  root.add(box(0.12, 0.08, 0.12, METAL, -0.35, 0.6, 0.15));
+  root.add(box(0.07, 1.5, 0.07, METAL, -0.35, 1.32, 0.15));
   const lamp = glowBox(0.16, 0.16, 0.16, BEACON);
-  lamp.position.set(0.1, 2.1, 0.2);
+  lamp.position.set(-0.35, 2.12, 0.15);
   root.add(lamp);
+  // The pintle gun up front, on a post standing on the hull.
   const turret = new THREE.Group();
-  turret.position.set(-0.35, 0.72, 0);
-  turret.add(box(0.22, 0.14, 0.22, METAL, 0, 0.04, 0));
-  turret.add(box(0.4, 0.05, 0.05, DARK, 0.25, 0.12, 0));
+  turret.position.set(0.3, 0.56, 0);
+  turret.add(box(0.08, 0.18, 0.08, METAL, 0, 0.09, 0));
+  turret.add(box(0.22, 0.1, 0.16, METAL, 0.02, 0.22, 0));
+  turret.add(box(0.36, 0.05, 0.05, DARK, 0.3, 0.24, 0));
   root.add(turret);
   return setRig(root, { turret, ...mounted('beaconRunner', root, turret) });
 });

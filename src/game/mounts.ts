@@ -130,7 +130,7 @@ export const MOUNTS: Record<string, Mount> = {
   eclipse: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'frostTower#mortar': { turret: [0, 2.32, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [0.3, 1.2], rest: 0.8 },
   // Zenith.
-  beaconRunner: { turret: [-0.35, 0.72, 0], muzzles: [[0.45, 0.12, 0]] },
+  beaconRunner: { turret: [0.3, 0.56, 0], muzzles: [[0.5, 0.24, 0]] },
   uplinkTruck: { turret: [-0.55, 0.75, 0], pivot: [0, 1.75, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.7], rest: -0.2 },
   lancePlatform: { turret: [0, 3.0, 0], pivot: [0.3, 1.0, 0], muzzles: [[3.1, 0, 0]], elev: [0, 1.2], rest: 0.45 },
   'bld:dropControl': { turret: [-1.3, 3.95, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.8], rest: -0.1 },
