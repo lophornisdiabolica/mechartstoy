@@ -118,6 +118,8 @@ export type GameEvents = {
   rooted: { x: number; y: number; z: number; radius: number };
   /** A Verdant seed pod sprouting into a thicket (see verdant.ts). */
   grove: { x: number; y: number; z: number; radius: number };
+  /** A Lodestar crane dragging wrecks into a scrap wall (see lodestar.ts). */
+  scrapWall: { x: number; y: number; z: number; fromX: number; fromZ: number };
   /** A Hive fabricator chewing wreckage (see hive.ts). */
   chewed: { x: number; y: number; z: number; faction: number };
   /** A Zenith drop pod hit the ground (`landed`), or crumbled once empty (see zenith.ts). */

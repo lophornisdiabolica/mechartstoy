@@ -2566,3 +2566,76 @@ registerModel('worldTree', (faction) => {
   seeds.turret.position.y -= body.position.y;
   return setRig(root, { turret, ...walker(legs, body, 1.1, 0.35), ...mounted('worldTree', root, turret, [vines]), mounts: [seeds] });
 });
+
+// Lodestar: magnets and scrap.
+const MAGNET = 0xb83a32;
+
+// A magnet crane: a tracked crane with a long jib and a big round magnet hanging off it, and a machine gun on the cab.
+registerModel('magnetCrane', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.1, 0.4, 0.42, 0.7));
+  root.add(box(2.0, 0.45, 1.3, primary, 0, 0.66, 0));
+  root.add(box(0.6, 0.6, 0.9, secondary, 0.6, 1.18, 0.15)); // cab
+  const turret = new THREE.Group();
+  turret.position.set(-0.3, 0.9, 0);
+  turret.add(box(0.7, 0.3, 0.7, METAL, 0, 0.15, 0));
+  const jib = barrelPivot('magnetCrane', turret);
+  jib.add(box(2.2, 0.16, 0.16, primary, 1.0, 0, 0));
+  jib.add(box(0.06, 0.6, 0.06, DARK, 2.0, -0.3, 0)); // cable
+  jib.add(cylinder(0.32, 0.32, 0.16, 10, MAGNET, 2.0, -0.66, 0)); // the magnet
+  root.add(turret);
+  const mg = ownMount(root, 'magnetCrane#mg', (t) => {
+    t.add(box(0.2, 0.12, 0.2, DARK, 0, 0.04, 0));
+    t.add(box(0.4, 0.06, 0.06, DARK, 0.22, 0.08, 0));
+  });
+  return setRig(root, { turret, ...mounted('magnetCrane', root, turret, [jib]), mounts: [mg] });
+});
+
+// A coil tank: a slab-sided hull and a long barrel ringed with magnetic coils.
+registerModel('coilTank', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(...tracks(2.1, 0.4, 0.42, 0.7));
+  root.add(box(2.0, 0.45, 1.3, primary, 0, 0.66, 0));
+  root.add(box(0.5, 0.2, 1.32, secondary, -0.6, 0.8, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.88, 0);
+  turret.add(box(0.9, 0.36, 0.86, primary, 0, 0.18, 0));
+  const barrel = barrelPivot('coilTank', turret);
+  barrel.add(box(1.5, 0.12, 0.12, DARK, 0.75, 0, 0));
+  for (const x of [0.4, 0.75, 1.1]) barrel.add(box(0.1, 0.24, 0.24, 0xb07a3a, x, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('coilTank', root, turret, [barrel]) });
+});
+
+// Lodestar's super unit: the Lodestone, a giant walker with a great horseshoe magnet for an arm, and coilguns on its shoulders.
+registerModel('lodestone', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(1.5, 1.6, 2.0, primary, 0, 0.8, 0));
+  turret.add(box(1.52, 0.2, 2.02, secondary, 0, 1.4, 0));
+  turret.add(box(0.7, 0.5, 0.7, METAL, 0.2, 1.85, 0));
+  const magnet = barrelPivot('lodestone', turret);
+  magnet.add(box(1.2, 0.3, 0.3, METAL, 0.6, 0, 0));
+  magnet.add(box(0.3, 0.32, 1.3, MAGNET, 1.35, 0, 0));
+  for (const side of [-1, 1]) magnet.add(box(0.7, 0.28, 0.3, MAGNET, 1.85, 0, side * 0.45));
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.3, 1.3, 0.5, METAL, DARK);
+    leg.hip.position.set(0, 0, side * 0.55);
+    body.add(leg.hip);
+    return leg;
+  });
+  const coils = ownMount(root, 'lodestone#coils', (t) => {
+    t.add(box(0.4, 0.3, 0.4, DARK, 0, 0, 0));
+    for (const side of [-1, 1]) t.add(box(0.9, 0.1, 0.1, 0xb07a3a, 0.5, 0, side * 0.12));
+  });
+  turret.add(coils.turret);
+  coils.turret.position.y -= body.position.y;
+  return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('lodestone', root, turret, [magnet]), mounts: [coils] });
+});

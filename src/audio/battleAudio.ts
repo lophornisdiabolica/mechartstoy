@@ -288,6 +288,9 @@ export class BattleAudio {
       case 'vine':
         this.activity.add(STIR.bullet);
         return this.cue('hiss', 'gunfire', e.x, e.z, 0.6);
+      case 'scrap':
+        this.activity.add(STIR.artillery);
+        return this.cue('launch', 'explosions', e.x, e.z, 0.8);
       case 'acid':
         this.activity.add(STIR.flame);
         return this.cue('hiss', 'gunfire', e.x, e.z, 0.8);

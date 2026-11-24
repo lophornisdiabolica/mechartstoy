@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'verdant' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'hive' | 'nomad' | 'antiquity' | 'tin' | 'mirage' | 'verdant' | 'lodestar' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -527,6 +527,28 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'treant', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
   },
 
+  lodestar: {
+    id: 'lodestar',
+    name: 'Lodestar',
+    blurb: 'Magnets and scrap. Magnet cranes fling the wrecks lying round them in long lobs, and can\'t throw with none in reach, so the longer a fight goes on the harder they hit; now and then a crane drags a heap of wrecks together into a scrap wall ahead of itself, low cover that crumbles after a while. Coil tanks put slugs through armour, and its scrapyard flings wrecks at attackers. Super unit: the Lodestone, a giant walker with a great magnet that hurls whole wrecks.',
+    caps: { infantry: 0.9, vehicle: 1.4 },
+    production: {
+      factory: {
+        table: [
+          { unit: 'coilTank', weight: 3, count: 1 },
+          { unit: 'magnetCrane', weight: 2, count: 1 },
+          { unit: 'tank', weight: 1, count: 1 },
+          { unit: 'flakTank', weight: 1, count: 1 },
+          { unit: 'scout', weight: 0.6, count: 1 },
+        ],
+      },
+      mechbay: { table: [{ unit: 'lodestone', weight: 1, count: 1 }] },
+    },
+    signature: 'scrapyard',
+    waves: [rifleSquad(4, 3), { unit: 'coilTank', weight: 3, count: 1 }, { unit: 'magnetCrane', weight: 1.5, count: 1 }],
+  },
+
+
 
 
 
@@ -548,7 +570,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage', 'verdant'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith', 'hive', 'nomad', 'antiquity', 'tin', 'mirage', 'verdant', 'lodestar'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

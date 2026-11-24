@@ -187,6 +187,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['Bind that {unit}.', 'Strangle the {unit}.'],
     lost: ['The {unit} is felled.', 'We lost the {unit}. It will grow back.'],
   },
+  lodestar: {
+    attack: ['Magnets on. Bring the scrap to {enemy}.', 'Advance on {enemy}. Every wreck is ammunition.'],
+    regroup: ['Pull back behind the scrap walls.', 'Fall back to the yard.'],
+    defend: ['They are in the scrapyard. Throw everything.', 'Wall the base with wrecks.'],
+    took: ['{where} is ours. Salvage it.', 'Took {where}. Plenty of scrap here.'],
+    hunt: ['That {unit} will make good scrap.', 'Find the {unit} and fling something at it.'],
+    lost: ['The {unit} is scrap now. Pick it up.', 'We lost the {unit}. Throw its wreck back at them.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */
