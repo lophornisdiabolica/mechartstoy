@@ -15,34 +15,40 @@ interface Mark {
   e: GameEvents['strikeCalled'];
   /** Page sim time it was called at. */
   at: number;
-  ring: THREE.LineLoop;
-  inner: THREE.LineLoop;
-  laser: THREE.Line;
+  ring: THREE.Mesh;
+  inner: THREE.Mesh;
+  laser: THREE.Mesh;
 }
 
-/** A hexagon of radius 1, lying flat. */
-function hexagon(): THREE.BufferGeometry {
-  const pts: number[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-    pts.push(Math.cos(a), 0, Math.sin(a));
-  }
-  return new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+/** Width of a ring's band, as a share of its radius (lines are only ever a pixel wide, so these are flat bands). */
+const BAND = 0.09;
+/** Thickness of the caller's targeting laser, world units. */
+const LASER_WIDTH = 0.14;
+
+/** A hexagonal band of outer radius 1, `band` wide, lying flat. */
+function hexagon(band: number): THREE.BufferGeometry {
+  const g = new THREE.RingGeometry(1 - band, 1, 6, 1, Math.PI / 6);
+  g.rotateX(-Math.PI / 2);
+  return g;
 }
 
 /**
  * Zenith's orbital strikes, before they land (see game/zenith.ts): a
  * hexagon ring on the ground where the beam will come down, closing in on
  * its true size in a few steps over the warning time, a small hexagon at
- * its middle, and the caller's targeting laser painting the spot. All
- * steady lines: nothing blinks.
+ * its middle, and the caller's targeting laser painting the spot. Bands
+ * and bars rather than lines, so they read at any zoom; all steady:
+ * nothing blinks.
  */
 export class StrikeMarks {
   readonly root = new THREE.Group();
   private readonly marks: Mark[] = [];
-  private readonly hex = hexagon();
-  private readonly ringMat = new THREE.LineBasicMaterial({ color: RING, transparent: true, opacity: 0.85, depthWrite: false });
-  private readonly laserMat = new THREE.LineBasicMaterial({ color: LASER, transparent: true, opacity: 0.6, depthWrite: false });
+  private readonly hex = hexagon(BAND);
+  /** The small middle mark: a thicker band, since it's small. */
+  private readonly dot = hexagon(BAND * 3);
+  private readonly beam = new THREE.BoxGeometry(LASER_WIDTH, LASER_WIDTH, 1).translate(0, 0, 0.5);
+  private readonly ringMat = new THREE.MeshBasicMaterial({ color: RING, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+  private readonly laserMat = new THREE.MeshBasicMaterial({ color: LASER, transparent: true, opacity: 0.6, depthWrite: false });
   private time = 0;
   private readonly off: () => void;
 
@@ -54,12 +60,18 @@ export class StrikeMarks {
   private add(e: GameEvents['strikeCalled']): void {
     if (this.marks.length >= MOST) this.drop(0);
     const y = this.game.field.surfaceAt(e.x, e.z) + 0.15;
-    const ring = new THREE.LineLoop(this.hex, this.ringMat);
+    const ring = new THREE.Mesh(this.hex, this.ringMat);
     ring.position.set(e.x, y, e.z);
-    const inner = new THREE.LineLoop(this.hex, this.ringMat);
+    const inner = new THREE.Mesh(this.dot, this.ringMat);
     inner.position.set(e.x, y, e.z);
     inner.scale.setScalar(Math.max(0.4, e.radius * 0.18));
-    const laser = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(e.fromX, e.fromY, e.fromZ), new THREE.Vector3(e.x, y, e.z)]), this.laserMat);
+    // A thin bar from the caller's dish to the spot.
+    const from = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
+    const to = new THREE.Vector3(e.x, y, e.z);
+    const laser = new THREE.Mesh(this.beam, this.laserMat);
+    laser.position.copy(from);
+    laser.lookAt(to);
+    laser.scale.z = Math.max(0.01, from.distanceTo(to));
     for (const o of [ring, inner, laser]) {
       o.renderOrder = 3;
       o.userData.noShadow = true;
@@ -71,7 +83,6 @@ export class StrikeMarks {
   private drop(i: number): void {
     const m = this.marks[i];
     this.root.remove(m.ring, m.inner, m.laser);
-    m.laser.geometry.dispose();
     this.marks.splice(i, 1);
   }
 
@@ -97,6 +108,8 @@ export class StrikeMarks {
     this.off();
     while (this.marks.length > 0) this.drop(0);
     this.hex.dispose();
+    this.dot.dispose();
+    this.beam.dispose();
     this.ringMat.dispose();
     this.laserMat.dispose();
   }

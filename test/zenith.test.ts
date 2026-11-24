@@ -16,7 +16,7 @@ function lanceShots(cover: boolean): number {
   const tank = spawnUnit(game.world, game.ctx, { ...UNIT_DEFS.tank, hp: 1e6 }, 1, base.x + 16, base.z);
   game.world.remove(tank, Ai);
   game.world.req(tank, Armed).cooldown = Infinity;
-  if (cover) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.barracksBlock, 0, base.x + 8, base.z);
+  if (cover) spawnBuilding(game.world, game.ctx, BUILDING_DEFS.barracksBlock, 0, base.x + 8, base.z, 0);
   let shots = 0;
   let last = -Infinity;
   for (let i = 0; i < 30 / DT; i++) {
