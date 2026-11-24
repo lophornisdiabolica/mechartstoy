@@ -2767,13 +2767,14 @@ export const UNIT_DEFS = {
     turnRate: 0.9,
     radius: 2.2,
     sight: 22,
-    turret: true,
+    turret: false,
     turretTurnRate: 1.4,
-    weapon: weapon({ name: 'Jaws', range: 1.6, damage: 90, cooldown: 2.2, projectile: 'shell', speed: 1, muzzleHeight: 2.4, pierce: 0.4, melee: { style: 'thrust', lunge: 1.6, knock: 2.4, sweep: 1.8, sweepMost: 6, charge: 1.4 } }),
-    // Besides its bite: fire on what's in front of it, a ring of spines when it's crowded, and acid lobbed at what keeps its distance.
-    // All of them grow with it (see leviathan.ts), the short ones in reach too.
+    // Its tail whips round through everything near it.
+    weapon: weapon({ name: 'Tail whip', range: 1.8, damage: 80, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, melee: { style: 'swing', knock: 2.4, sweep: Math.PI, sweepMost: 6, charge: 1.4 } }),
+    // Besides the whip: fire breathed on what's in front of it (its head turns a little on its neck), a ring of spines
+    // flung at what crowds it, and acid lobbed at what keeps its distance. All of them grow with it (see leviathan.ts).
     mounts: [
-      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5) },
+      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), mount: 'leviathan#head', turnRate: 1.4 },
       { weapon: weapon({ name: 'Spine volley', range: 7, damage: 16, cooldown: 9, projectile: 'spine', arc: true, speed: 18, splash: 0.8, spread: 0.05, muzzleHeight: 2.2, pierce: 0.3, nova: 12 }) },
       { weapon: weapon({ name: 'Acid pods', range: 18, minRange: 5, damage: 30, cooldown: 7, burst: 2, burstGap: 0.4, projectile: 'acid', arc: true, speed: 16, splash: 2, spread: 0.1, muzzleHeight: 2.6, pierce: 0.2 }) },
     ],

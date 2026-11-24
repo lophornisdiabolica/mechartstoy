@@ -33,6 +33,8 @@ export interface Mount {
   elev?: readonly [number, number];
   /** How far up the barrels sit when there's nothing to shoot (a rocket rack, a howitzer), radians. */
   rest?: number;
+  /** How far the turret turns either side of the nose, radians (a neck); without it, all the way round. */
+  yaw?: number;
 }
 
 /** Most mounts have two barrels side by side. */
@@ -192,7 +194,9 @@ export const MOUNTS: Record<string, Mount> = {
   'lodestone#coils': { turret: [0.2, 4.5, 0.7], muzzles: [[0.95, 0, 0.12], [0.95, 0, -0.12]] },
   'bld:scrapyard': { turret: [0.6, 2.6, 0.2], pivot: [0, 0.35, 0], muzzles: [[1.7, 0, 0]], elev: [0, 1.0], rest: 0.3 },
   // Leviathan.
-  leviathan: { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]] },
+  // Its tail whips round (the main, melee weapon), and its head turns a little on its neck to breathe fire.
+  leviathan: { turret: [0, 0, 0], muzzles: [[1.8, 2.2, 0]], hull: true },
+  'leviathan#head': { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]], yaw: 1.0 },
   'bld:shrine': { turret: [0, 2.3, 0], pivot: [0.56, 0.5, 0], muzzles: [[0.08, 0, 0.25], [0.08, 0, -0.25]], elev: [-0.4, 0.5] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
@@ -202,6 +206,22 @@ export const MOUNTS: Record<string, Mount> = {
 
 export function mountOf(model: string): Mount | undefined {
   return MOUNTS[model];
+}
+
+const scaledMounts = new WeakMap<Mount, Map<number, Mount>>();
+/** A mount on a model drawn `scale` times its size (a growing Leviathan): every point moved out with it. */
+export function scaledMount(mount: Mount, scale: number): Mount {
+  const k = Math.round(scale * 100) / 100;
+  if (k === 1) return mount;
+  let sizes = scaledMounts.get(mount);
+  if (!sizes) scaledMounts.set(mount, (sizes = new Map()));
+  let m = sizes.get(k);
+  if (!m) {
+    const s = (v: V3): V3 => [v[0] * k, v[1] * k, v[2] * k];
+    m = { ...mount, turret: s(mount.turret), ...(mount.pivot ? { pivot: s(mount.pivot) } : {}), muzzles: mount.muzzles.map(s) };
+    sizes.set(k, m);
+  }
+  return m;
 }
 
 /** How a hull sits: its heading and, on a slope, its pitch (nose up) and roll (toward its left side). */

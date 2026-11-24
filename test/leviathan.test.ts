@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Ai, FallingBack, Health, Projectile, Renderable, Transform } from '../src/game/components';
+import { Ai, Arsenal, FallingBack, Health, Mover, Projectile, Renderable, Transform } from '../src/game/components';
+import { wrapAngle } from '../src/game/systems/movement';
 import { Game } from '../src/game/game';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
@@ -12,6 +13,26 @@ function lonely(seed = 11) {
 }
 
 describe('the Leviathan', () => {
+  it('turns its head only so far on its neck', () => {
+    const game = new Game(11, { populate: false, autoSpawn: false });
+    const base = game.field.baseSites[0];
+    const beast = spawnUnit(game.world, game.ctx, UNIT_DEFS.leviathan, 0, base.x, base.z);
+    game.world.remove(beast, Ai);
+    game.world.req(beast, Mover).speed = 0;
+    // An enemy right behind it.
+    const t = game.world.req(beast, Transform);
+    const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, t.x - D.cos(t.heading) * 6, t.z + D.sin(t.heading) * 6);
+    game.world.remove(tank, Ai);
+    let widest = 0;
+    for (let i = 0; i < 3 / DT; i++) {
+      game.step(DT);
+      const breath = game.world.req(beast, Arsenal).arms[0];
+      widest = Math.max(widest, Math.abs(wrapAngle(breath.aim - game.world.req(beast, Transform).heading)));
+    }
+    expect(widest).toBeGreaterThan(0.5);
+    expect(widest).toBeLessThanOrEqual(1.0 + 1e-6);
+  });
+
   it('grows no faster than its cap a minute, however much it eats', () => {
     const game = lonely();
     const base = game.field.baseSites[0];
@@ -23,6 +44,8 @@ describe('the Leviathan', () => {
     const scale = game.world.req(beast, Renderable).scale;
     expect(scale).toBeGreaterThan(grows.from);
     expect(scale).toBeLessThanOrEqual(grows.from + grows.perMinute + 1e-6);
+    // Its health stays in whole numbers as it grows, so the unit panel reads cleanly.
+    expect(Number.isInteger(game.world.req(beast, Health).max)).toBe(true);
   });
 
   it('falls back home when beaten, mends there, and goes back out', () => {
@@ -61,12 +84,23 @@ describe('the Leviathan', () => {
     const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 1, base.x + 4, base.z);
     game.world.remove(tank, Ai);
     let most = 0;
+    let atTank = 0;
+    const tt = game.world.req(tank, Transform);
     for (let i = 0; i < 12 / DT; i++) {
       game.step(DT);
       let spines = 0;
-      for (const p of game.world.query(Projectile)) if (game.world.req(p, Projectile).kind === 'spine') spines++;
+      let near = 0;
+      for (const p of game.world.query(Projectile)) {
+        const pr = game.world.req(p, Projectile);
+        if (pr.kind !== 'spine') continue;
+        spines++;
+        if (D.hypot(pr.ex - tt.x, pr.ez - tt.z) < 1.5) near++;
+      }
       most = Math.max(most, spines);
+      atTank = Math.max(atTank, near);
     }
     expect(most).toBe(UNIT_DEFS.leviathan.mounts[1].weapon.nova);
+    // The spines on its side seek the tank out, rather than one of twelve happening to fly its way.
+    expect(atTank).toBeGreaterThanOrEqual(3);
   });
 });

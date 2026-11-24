@@ -66,8 +66,9 @@ export function size(world: World, e: Entity, scale: number): void {
   const h = world.get(e, Health);
   if (h) {
     const share = h.hp / h.max;
-    h.max = def.hp * scale * scale;
-    h.hp = share * h.max;
+    // Whole numbers, so the unit panel reads cleanly.
+    h.max = Math.round(def.hp * scale * scale);
+    h.hp = h.hp > 0 ? Math.max(1, Math.round(share * h.max)) : h.hp;
   }
   if (was === scale) return;
   const armed = world.get(e, Armed);

@@ -2757,22 +2757,28 @@ registerModel('leviathan', (faction) => {
   body.add(box(3.6, 1.8, 2.2, HIDE, 0, 0, 0));
   body.add(box(3.0, 0.3, 1.6, primary, -0.2, 0.95, 0)); // markings down its back
   for (const x of [-1.3, -0.5, 0.3, 1.0]) body.add(box(0.4, 0.6, 0.12, secondary, x, 1.35, 0)); // ridge plates
-  body.add(box(2.2, 0.9, 1.0, HIDE, -2.8, -0.2, 0)); // tail
-  body.add(box(1.4, 0.5, 0.5, HIDE, -4.4, -0.5, 0));
-  const turret = new THREE.Group();
-  turret.position.set(2.0, 0.5, 0);
-  turret.add(box(1.6, 1.1, 1.4, HIDE, 0.6, 0, 0)); // head
-  turret.add(box(0.1, 1.0, 2.2, primary, 0.0, 0.4, 0)); // frill
-  for (const side of [-1, 1]) {
-    const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
-    eye.position.set(1.42, 0.25, side * 0.45);
-    turret.add(eye);
-  }
-  const jaw = new THREE.Group();
-  jaw.position.set(0.2, -0.55, 0);
-  jaw.add(box(1.4, 0.3, 1.2, 0x223838, 0.7, 0, 0));
-  turret.add(jaw);
-  body.add(turret);
+  // The tail: it whips round when it strikes.
+  const tail = new THREE.Group();
+  tail.position.set(-1.8, 0, 0);
+  tail.add(box(2.2, 0.9, 1.0, HIDE, -1.0, -0.2, 0));
+  tail.add(box(1.4, 0.5, 0.5, HIDE, -2.6, -0.5, 0));
+  body.add(tail);
+  // The head turns a little on its neck to breathe fire (its own mount, see mounts.ts).
+  const head = ownMount(root, 'leviathan#head', (t) => {
+    t.add(box(1.6, 1.1, 1.4, HIDE, 0.6, 0, 0));
+    t.add(box(0.1, 1.0, 2.2, primary, 0.0, 0.4, 0)); // frill
+    for (const side of [-1, 1]) {
+      const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
+      eye.position.set(1.42, 0.25, side * 0.45);
+      t.add(eye);
+    }
+    const jaw = new THREE.Group();
+    jaw.position.set(0.2, -0.55, 0);
+    jaw.add(box(1.4, 0.3, 1.2, 0x223838, 0.7, 0, 0));
+    t.add(jaw);
+  });
+  body.add(head.turret);
+  head.turret.position.y -= body.position.y;
   const legs = [-1.1, 1.1].flatMap((x) => [-1, 1].map((side) => {
     const leg = makeLeg(0.8, 0.8, 0.5, HIDE, 0x1a2a2a);
     leg.hip.position.set(x, -0.6, side * 0.8);
@@ -2780,12 +2786,13 @@ registerModel('leviathan', (faction) => {
     return leg;
   }));
   return setRig(root, {
-    turret,
     ...walker(legs, body, 0.9, 0.3),
-    ...mounted('leviathan', root, turret),
-    // Its jaw drops open and snaps shut.
+    ...mounted('leviathan', root, null),
+    // The spines and acid pods fire from its back, on no mount of their own.
+    mounts: [head, {}, {}],
+    // The tail lashes out to one side and back.
     strike(k) {
-      jaw.rotation.z = -Math.sin(Math.PI * k) * 0.6;
+      tail.rotation.y = Math.sin(Math.PI * k) * 1.1;
     },
   });
 });

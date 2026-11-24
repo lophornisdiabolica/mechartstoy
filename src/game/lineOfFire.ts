@@ -1,6 +1,6 @@
 import { Entity, World } from '../core/ecs';
 import { Armed, Building, Collider, Faction, Renderable, Targetable, Tilt, Transform, Unit } from './components';
-import { HullPose, Mount, mountOf, muzzleWorld, pivotHeight, toHull, hullMatrix } from './mounts';
+import { HullPose, Mount, mountOf, muzzleWorld, pivotHeight, scaledMount, toHull, hullMatrix } from './mounts';
 import { SimContext } from './context';
 import { UnitDef } from './units';
 import * as D from '../core/dmath';
@@ -205,9 +205,10 @@ export function hullPose(world: World, e: Entity): HullPose {
  * main guns on, if any.
  */
 export function mountFor(world: World, e: Entity, armed?: Armed): Mount | undefined {
-  if (armed?.mount !== undefined) return mountOf(armed.mount);
   const r = world.get(e, Renderable);
-  return r ? mountOf(r.model) : undefined;
+  const mount = armed?.mount !== undefined ? mountOf(armed.mount) : r ? mountOf(r.model) : undefined;
+  // A model drawn bigger (a grown Leviathan) carries its guns out with it.
+  return mount && r && r.scale !== 1 ? scaledMount(mount, r.scale) : mount;
 }
 
 /**
