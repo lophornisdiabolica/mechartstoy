@@ -2584,7 +2584,8 @@ registerModel('magnetCrane', (faction) => {
   const root = new THREE.Group();
   root.add(...tracks(2.1, 0.4, 0.42, 0.7));
   root.add(box(2.0, 0.45, 1.3, primary, 0, 0.66, 0));
-  root.add(box(0.6, 0.6, 0.9, secondary, 0.6, 1.18, 0.15)); // cab
+  // The cab sits off to one side, clear of the jib, as on a real crane truck.
+  root.add(box(0.6, 0.6, 0.7, secondary, 0.6, 1.18, 0.45)); // cab
   const turret = new THREE.Group();
   turret.position.set(-0.3, 0.9, 0);
   turret.add(box(0.7, 0.3, 0.7, METAL, 0, 0.15, 0));

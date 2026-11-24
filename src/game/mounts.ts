@@ -183,8 +183,8 @@ export const MOUNTS: Record<string, Mount> = {
   'worldTree#seeds': { turret: [0.8, 4.4, 1.0], muzzles: [[0.55, 0.05, 0]] },
   'bld:glasshouse': { turret: [0, 2.63, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },
   // Lodestar.
-  magnetCrane: { turret: [-0.3, 0.9, 0], pivot: [0.2, 0.3, 0], muzzles: [[2.1, 0, 0]], elev: [0, 1.0], rest: 0.4 },
-  'magnetCrane#mg': { turret: [0.6, 1.5, 0.15], muzzles: [[0.42, 0.08, 0]] },
+  magnetCrane: { turret: [-0.3, 0.9, 0], pivot: [0.2, 0.3, 0], muzzles: [[2.1, 0, 0]], elev: [0, 1.0], rest: 0.55 },
+  'magnetCrane#mg': { turret: [0.6, 1.5, 0.45], muzzles: [[0.42, 0.08, 0]] },
   coilTank: { turret: [0, 0.88, 0], pivot: [0.35, 0.2, 0], muzzles: [[1.5, 0, 0]], elev: [-0.2, 0.4] },
   lodestone: { turret: [0, 2.6, 0], pivot: [0.8, 1.0, 0], muzzles: [[2.2, 0, 0.45]], elev: [-0.3, 0.9] },
   'lodestone#coils': { turret: [0.2, 4.5, 0.7], muzzles: [[0.95, 0, 0.12], [0.95, 0, -0.12]] },
