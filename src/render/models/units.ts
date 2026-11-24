@@ -1961,3 +1961,234 @@ registerModel('ark', (faction) => {
   });
   return setRig(root, { turret, ...mounted('ark', root, turret, [barrels]), mounts: [guns] });
 });
+
+// Antiquity: an ancient army against tanks.
+const WOOD = 0x8a6440;
+const BRONZE = 0xc08a3a;
+const SKIN = 0xd9b38c;
+
+/** A little marching soldier: legs, a tunic in the side's colour, a head and helmet. Returns the body to hang kit on. */
+function ancientSoldier(root: THREE.Group, tunic: number, helmet: number): { body: THREE.Group; legs: Leg[] } {
+  const body = new THREE.Group();
+  body.position.y = 0.42;
+  root.add(body);
+  body.add(box(0.2, 0.3, 0.26, tunic, 0, 0.15, 0));
+  body.add(box(0.13, 0.13, 0.13, SKIN, 0, 0.385, 0));
+  body.add(box(0.16, 0.07, 0.16, helmet, 0, 0.47, 0));
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.21, 0.21, 0.07, SKIN, WOOD);
+    leg.hip.position.set(0, 0, side * 0.07);
+    body.add(leg.hip);
+    return leg;
+  });
+  return { body, legs };
+}
+
+// A legionary: a tall curved shield in front (red, with the side's trim), a crested helmet and a short sword.
+registerModel('legionary', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const { body, legs } = ancientSoldier(root, primary, BRONZE);
+  body.add(box(0.03, 0.08, 0.2, 0xb3262e, 0, 0.535, 0)); // crest
+  body.add(box(0.05, 0.46, 0.36, 0xb3262e, 0.16, 0.12, 0)); // the scutum
+  body.add(box(0.06, 0.08, 0.08, secondary, 0.18, 0.13, 0)); // its boss
+  const sword = new THREE.Group();
+  sword.position.set(0.05, 0.12, -0.17);
+  sword.add(box(0.3, 0.03, 0.04, METAL, 0.15, 0, 0));
+  body.add(sword);
+  return setRig(root, {
+    ...walker(legs, body, 0.3, 0.5),
+    ...mounted('legionary', root, null),
+    strike(k) {
+      sword.position.x = 0.05 + Math.sin(Math.PI * k) * 0.2;
+    },
+  });
+});
+
+// A crossbowman with a repeating crossbow, its magazine on top.
+registerModel('crossbowman', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  const { body, legs } = ancientSoldier(root, primary, 0x3a2f2a);
+  body.add(box(0.32, 0.05, 0.05, WOOD, 0.18, 0.22, -0.08)); // stock
+  body.add(box(0.04, 0.04, 0.3, WOOD, 0.3, 0.22, -0.08)); // bow
+  body.add(box(0.12, 0.08, 0.04, WOOD, 0.22, 0.28, -0.08)); // magazine
+  return setRig(root, { ...walker(legs, body, 0.3, 0.5), ...mounted('crossbowman', root, null) });
+});
+
+/** A plain wooden cart: bed and four wheels. */
+function cart(root: THREE.Group, length: number, width: number) {
+  for (const x of [-length * 0.32, length * 0.32]) for (const side of [-1, 1]) root.add(box(0.44, 0.44, 0.08, WOOD, x, 0.22, side * (width / 2 + 0.05)));
+  root.add(box(length, 0.14, width, WOOD, 0, 0.42, 0));
+}
+
+// A ballista on a cart: a great crossbow on a swivel.
+registerModel('ballista', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  cart(root, 1.4, 0.8);
+  root.add(box(0.5, 0.1, 0.84, primary, -0.45, 0.54, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.1, 0.55, 0);
+  turret.add(box(0.14, 0.24, 0.14, WOOD, 0, 0.12, 0));
+  const bow = barrelPivot('ballista', turret);
+  bow.add(box(0.9, 0.08, 0.08, WOOD, 0.2, 0, 0));
+  bow.add(box(0.06, 0.06, 0.9, WOOD, 0.5, 0, 0)); // the arms
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('ballista', root, turret, [bow]) });
+});
+
+// A trebuchet: a tall wooden frame on a cart, a long throwing arm and a counterweight.
+registerModel('trebuchet', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  cart(root, 2.0, 1.2);
+  const turret = new THREE.Group();
+  turret.position.set(0, 0.5, 0);
+  for (const side of [-1, 1]) turret.add(box(0.12, 2.0, 0.12, WOOD, 0, 1.0, side * 0.45));
+  turret.add(box(0.14, 0.14, 1.04, WOOD, 0, 2.0, 0)); // the axle
+  const arm = barrelPivot('trebuchet', turret);
+  arm.add(box(2.4, 0.1, 0.1, WOOD, 0.5, 0, 0));
+  arm.add(box(0.4, 0.5, 0.4, primary, -0.7, -0.25, 0)); // counterweight
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('trebuchet', root, turret, [arm]) });
+});
+
+// A chariot: two horses drawing a little two-wheeled car with an archer in it.
+registerModel('chariot', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const side of [-1, 1]) root.add(box(0.5, 0.5, 0.06, WOOD, -0.25, 0.25, side * 0.36)); // wheels
+  root.add(box(0.5, 0.36, 0.6, primary, -0.25, 0.56, 0)); // the car
+  root.add(box(0.8, 0.05, 0.05, WOOD, 0.4, 0.5, 0)); // pole
+  for (const side of [-1, 1]) {
+    root.add(box(0.6, 0.3, 0.18, 0x6a4a30, 0.75, 0.75, side * 0.16)); // horse
+    root.add(box(0.2, 0.22, 0.12, 0x6a4a30, 1.1, 0.95, side * 0.16));
+    for (const x of [0.55, 0.95]) root.add(box(0.06, 0.6, 0.06, 0x4a3420, x, 0.3, side * 0.16));
+  }
+  const turret = new THREE.Group();
+  turret.position.set(-0.3, 0.8, 0);
+  turret.add(box(0.16, 0.36, 0.2, SKIN, 0, 0.12, 0)); // archer
+  const bow = barrelPivot('chariot', turret);
+  bow.add(box(0.05, 0.05, 0.34, WOOD, 0.14, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('chariot', root, turret, [bow]) });
+});
+
+// A hwacha: a cart carrying a tilted rack full of fire arrows.
+registerModel('hwacha', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const side of [-1, 1]) root.add(box(0.5, 0.5, 0.06, WOOD, -0.2, 0.25, side * 0.4)); // wheels
+  root.add(box(1.2, 0.1, 0.7, WOOD, 0, 0.5, 0));
+  const turret = new THREE.Group();
+  turret.position.set(0.1, 0.55, 0);
+  turret.add(box(0.2, 0.2, 0.2, WOOD, 0, 0.1, 0));
+  const rack = barrelPivot('hwacha', turret);
+  rack.add(box(0.5, 0.5, 0.6, primary, 0.1, 0, 0));
+  rack.add(box(0.06, 0.4, 0.5, 0x3a2f2a, 0.38, 0, 0)); // the arrow heads
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('hwacha', root, turret, [rack]) });
+});
+
+// A war elephant: grey, tusked, with a howdah of archers on its back.
+registerModel('warElephant', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 1.5;
+  root.add(body);
+  const GREY = 0x8a8a88;
+  body.add(box(1.8, 1.1, 1.1, GREY, 0, 0, 0));
+  const head = new THREE.Group();
+  head.position.set(1.0, 0.15, 0);
+  head.add(box(0.6, 0.7, 0.8, GREY, 0.2, 0, 0));
+  head.add(box(0.18, 0.8, 0.18, GREY, 0.55, -0.6, 0)); // trunk
+  for (const side of [-1, 1]) {
+    head.add(box(0.06, 0.55, 0.5, GREY, 0.05, 0.02, side * 0.6)); // ears
+    head.add(box(0.5, 0.07, 0.07, 0xf0e8d8, 0.6, -0.3, side * 0.22)); // tusks
+  }
+  body.add(head);
+  body.add(box(1.0, 0.1, 1.2, primary, -0.1, 0.6, 0)); // the blanket
+  body.add(box(0.8, 0.4, 0.8, WOOD, -0.1, 0.85, 0)); // howdah
+  body.add(box(0.06, 0.6, 0.06, WOOD, -0.45, 1.35, 0.35));
+  body.add(box(0.03, 0.25, 0.35, secondary, -0.45, 1.5, 0.55));
+  const legs = [-0.6, 0.6].flatMap((x) => [-1, 1].map((side) => {
+    const leg = makeLeg(0.55, 0.55, 0.34, GREY, GREY);
+    leg.hip.position.set(x, -0.45, side * 0.36);
+    body.add(leg.hip);
+    return leg;
+  }));
+  const bows = ownMount(root, 'warElephant#bows', (t) => {
+    t.add(box(0.16, 0.3, 0.2, SKIN, 0, 0.0, 0));
+    t.add(box(0.05, 0.05, 0.34, WOOD, 0.14, 0.1, 0));
+  });
+  body.add(bows.turret);
+  bows.turret.position.y -= body.position.y;
+  return setRig(root, {
+    ...walker(legs, body, 0.6, 0.35),
+    ...mounted('warElephant', root, null),
+    mounts: [bows],
+    // It tosses its head and tusks up.
+    strike(k) {
+      head.rotation.z = Math.sin(Math.PI * k) * 0.5;
+    },
+  });
+});
+
+// Antiquity's super unit: a giant bronze automaton with a great sword, gears showing at its joints.
+registerModel('bronzeColossus', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.6;
+  root.add(body);
+  const turret = new THREE.Group();
+  turret.add(box(0.9, 1.4, 1.5, BRONZE, 0, 0.6, 0));
+  turret.add(box(0.95, 0.3, 1.55, primary, 0, 0.9, 0)); // a sash in the side's colour
+  turret.add(box(0.6, 0.6, 0.6, BRONZE, 0, 1.6, 0)); // head
+  turret.add(box(0.1, 0.4, 0.7, secondary, 0, 2.05, 0)); // crest
+  const eyes = glowBox(0.04, 0.08, 0.36, 0xffc060);
+  eyes.position.set(0.31, 1.65, 0);
+  turret.add(eyes);
+  const arm = new THREE.Group();
+  arm.position.set(0, 1.0, 0.95);
+  arm.add(box(0.36, 1.0, 0.36, BRONZE, 0, -0.4, 0));
+  arm.add(box(2.4, 0.12, 0.3, METAL, 1.2, -0.9, 0)); // the great sword
+  turret.add(arm);
+  turret.add(box(0.36, 1.0, 0.36, BRONZE, 0, 0.6, -0.95)); // the other arm
+  body.add(turret);
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(1.3, 1.3, 0.42, BRONZE, 0x6a4a20);
+    leg.hip.position.set(0, 0, side * 0.45);
+    body.add(leg.hip);
+    return leg;
+  });
+  return setRig(root, {
+    turret,
+    ...walker(legs, body, 1.2, 0.45),
+    ...mounted('bronzeColossus', root, turret),
+    strike(k) {
+      arm.rotation.y = Math.sin(Math.PI * k) * 1.4 - 0.2;
+    },
+  });
+});
+
+// A war kite: a red box kite in the side's trim, with an archer hanging in a sling under it.
+registerModel('warKite', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  root.add(box(0.9, 0.5, 0.06, primary, 0, 0.7, 0.45)); // the box kite's sails
+  root.add(box(0.9, 0.5, 0.06, primary, 0, 0.7, -0.45));
+  root.add(box(0.06, 0.06, 1.0, WOOD, 0.4, 0.7, 0)); // spars
+  root.add(box(0.06, 0.06, 1.0, WOOD, -0.4, 0.7, 0));
+  root.add(box(1.2, 0.04, 0.04, secondary, -0.9, 0.7, 0)); // tail
+  root.add(box(0.02, 0.5, 0.02, 0x3a2f2a, 0, 0.25, 0)); // the sling line
+  const turret = new THREE.Group();
+  turret.position.set(0, 0, 0);
+  turret.add(box(0.14, 0.24, 0.16, SKIN, 0, -0.05, 0)); // the archer
+  const bow = barrelPivot('warKite', turret);
+  bow.add(box(0.05, 0.05, 0.3, WOOD, 0.12, 0, 0));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('warKite', root, turret, [bow]) });
+});

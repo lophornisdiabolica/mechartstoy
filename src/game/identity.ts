@@ -64,6 +64,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   zenith: ['Ascendancy', 'Orbit', 'Descent', 'Firmament'],
   hive: ['Collective', 'Swarm', 'Brood', 'Nest'],
   nomad: ['Caravan', 'Horde', 'Column', 'Wanderers'],
+  antiquity: ['Legion', 'Dynasty', 'Senate', 'Empire'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

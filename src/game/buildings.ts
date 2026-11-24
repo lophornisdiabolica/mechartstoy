@@ -496,6 +496,22 @@ export const BUILDING_DEFS = {
     rebuildDelay: 0,
     buildTime: 15,
   },
+  /** Antiquity's signature: a Roman fort that musters more legionaries and crossbowmen, with ballistae on its walls. */
+  castrum: {
+    id: 'castrum',
+    name: 'Castrum',
+    model: 'bld:castrum',
+    hp: 1000,
+    armor: 7,
+    radius: 3,
+    height: 2.6,
+    production: { table: [{ unit: 'legionary', weight: 2, count: 6 }, { unit: 'crossbowman', weight: 1.5, count: 6 }], interval: 20 },
+    weapon: { name: 'Wall ballista', range: 20, minRange: 0, damage: 40, cooldown: 3, burst: 1, burstGap: 0, projectile: 'arrow', speed: 34, splash: 0, spread: 0.03, arc: false, muzzleHeight: 3, targets: 'ground', pierce: 0.6 },
+    sight: 20,
+    turretTurnRate: 1.5,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

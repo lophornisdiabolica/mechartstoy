@@ -47,6 +47,26 @@ export function applyDamage(world: World, ctx: SimContext, e: Entity, amount: nu
   }
 }
 
+/**
+ * What's left of a direct shot after the target's front shield (see
+ * UnitDef.frontShield): a straight shot coming at it from in front loses
+ * the shield's share. Sparks off the shield when it does.
+ */
+function frontBlock(world: World, ctx: SimContext, target: Entity, p: Projectile, tt: Transform): number {
+  const shield = world.get(target, Unit)?.def.frontShield;
+  if (!shield || p.weapon.arc) return 1;
+  // The way back along the shot, against the way the target faces.
+  const bx = p.sx - p.ex;
+  const bz = p.sz - p.ez;
+  const len = D.hypot(bx, bz);
+  if (len < 0.01) return 1;
+  const fx = D.cos(tt.heading);
+  const fz = -D.sin(tt.heading);
+  if ((bx * fx + bz * fz) / len < D.cos(shield.arc)) return 1;
+  ctx.events.emit('blocked', { x: tt.x + fx * 0.3, y: p.ey, z: tt.z + fz * 0.3 });
+  return 1 - shield.block;
+}
+
 /** Share of an orbital strike's delay it waits overhead before the beam comes down. */
 const ORBITAL_HOLD = 0.9;
 
@@ -95,7 +115,7 @@ export function projectileSystem(ctx: SimContext): System {
             if (shattered) ctx.events.emit('shatter', { x: tt.x, y: p.ey, z: tt.z });
             // A hack turns what it lands on rather than hurting it (see hacking.ts).
             if (w.hack) hack(world, ctx, p.target, p.faction, w.hack);
-            else applyDamage(world, ctx, p.target, shattered ? w.damage * w.shatter! : w.damage, by, w.pierce ?? 0);
+            else applyDamage(world, ctx, p.target, (shattered ? w.damage * w.shatter! : w.damage) * frontBlock(world, ctx, p.target, p, tt), by, w.pierce ?? 0);
             hit.add(p.target);
           }
         }

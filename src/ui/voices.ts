@@ -155,6 +155,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['Outriders, run down that {unit}.', 'Chase the {unit} down.'],
     lost: ['The {unit} is gone. Keep moving.', 'We lost the {unit}. The column rolls on.'],
   },
+  antiquity: {
+    attack: ['Testudo! Forward against {enemy}!', 'For glory! March on {enemy}!'],
+    regroup: ['Sound the retreat. Back to the fort.', 'Re-form the line!'],
+    defend: ['The barbarians are at the gates!', 'Man the walls! Defend the castrum!'],
+    took: ['{where} is ours. Raise the standard.', 'We have taken {where}. Build a road to it.'],
+    hunt: ['That {unit} is an abomination. Bring it down.', 'Elephants, charge the {unit}!'],
+    lost: ['The {unit} has fallen. The gods are cruel.', 'We lost the {unit}. Write it in the annals.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */
