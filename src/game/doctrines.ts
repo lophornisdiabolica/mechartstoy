@@ -73,7 +73,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'armour',
     name: 'Armour',
     blurb: 'Heavy tanks. Fewer infantry, more vehicles, flak tanks against infantry and aircraft, and the Lancer heavy tank from its tank depot. Super unit: the Titan.',
-    caps: { infantry: 0.8, vehicle: 1.55 },
+    caps: { infantry: 0.8, vehicle: 1.45 },
     production: {
       factory: {
         table: [
@@ -83,7 +83,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
-      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 32 },
+      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 42 },
       mechbay: { table: [{ unit: 'titan', weight: 1, count: 1 }] },
     },
     signature: 'tankDepot',
@@ -98,7 +98,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       factory: {
         table: [
           { unit: 'mgTruck', weight: 3, count: 2 },
-          { unit: 'rocketTruck', weight: 1.8, count: 1 },
+          { unit: 'rocketTruck', weight: 1.4, count: 1 },
           { unit: 'buggy', weight: 1, count: 2 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -221,13 +221,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     production: {
       factory: {
         table: [
-          { unit: 'tank', weight: 3.5, count: 1 },
+          { unit: 'tank', weight: 4.5, count: 1 },
           { unit: 'amphib', weight: 1, count: 1 },
           { unit: 'skimmer', weight: 1.5, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
         // Its vehicles come one at a time rather than in pairs of skimmers, so the factory works faster.
-        interval: 12,
+        interval: 10.5,
       },
       // Boats launch from the dock's door into the water, and only boats: skimmers come from a hover pad,
       // which engineers put up in a base that has a dock (see commander/engineers.ts).
@@ -315,13 +315,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'sabre',
     name: 'Sabre',
     blurb: 'Blade mechs. Packs of little duelists (two to a vehicle slot) in place of most of its infantry, and Reavers, heavy tanks whose turret is a great axe arm, all fighting hand to hand, with a gun each for what they can\'t reach. They charge what they can see and close to contact. Its duel hall turns out more duelists. Super unit: the Colossus, which hammers everything round it flying.',
-    caps: { infantry: 0.55, vehicle: 1.35 },
+    caps: { infantry: 0.55, vehicle: 1.45 },
     production: {
       barracks: { table: [rifleSquad(3, 1)], interval: 20 },
       factory: {
         table: [
           { unit: 'duelist', weight: 2.6, count: 3 },
-          { unit: 'reaver', weight: 2.6, count: 1 },
+          { unit: 'reaver', weight: 3.2, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -464,7 +464,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'hwacha', weight: 1.2, count: 1 },
           { unit: 'warKite', weight: 0.6, count: 1 },
         ],
-        interval: 14,
+        interval: 12.5,
       },
       mechbay: { table: [{ unit: 'bronzeColossus', weight: 1, count: 1 }] },
     },
@@ -521,13 +521,13 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'verdant',
     name: 'Verdant',
     blurb: 'Biotech. Grown hulls on machine legs. Stranglers lash vines that leave a patch of tangle where they land, ground grown over with vines that drags at enemies wading through it, worse than frost, though nothing shatters and it withers in a few seconds (fire burns it away). Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Graft walkers are heavy walkers with claw arms and spine launchers, and its greenhouse grows more of both. Super unit: the Worldtree, a towering biotech walker under a canopy of leaf-panels that lashes vines and seeds thickets as it goes.',
-    caps: { infantry: 0.9, vehicle: 1.15 },
+    caps: { infantry: 0.9, vehicle: 1.05 },
     production: {
       factory: {
         table: [
           { unit: 'strangler', weight: 3, count: 1 },
           { unit: 'graftWalker', weight: 1.5, count: 1 },
-          { unit: 'seedMortar', weight: 1.6, count: 1 },
+          { unit: 'seedMortar', weight: 1.1, count: 1 },
           { unit: 'flakTank', weight: 1, count: 1 },
           { unit: 'scout', weight: 0.6, count: 1 },
         ],
