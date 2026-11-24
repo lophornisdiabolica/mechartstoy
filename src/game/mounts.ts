@@ -181,7 +181,7 @@ export const MOUNTS: Record<string, Mount> = {
   'graftWalker#spines': { turret: [-0.2, 2.47, 0], muzzles: [[0.37, 0.03, 0]] },
   worldTree: { turret: [0, 2.6, 0], pivot: [0.9, 1.8, 0], muzzles: [[1.3, 0, 0]], elev: [-0.4, 0.6] },
   'worldTree#seeds': { turret: [0.8, 4.4, 1.0], muzzles: [[0.55, 0.05, 0]] },
-  'bld:glasshouse': { turret: [0, 2.63, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },
+  'bld:glasshouse': { turret: [0, 2.78, 0], pivot: [0.15, 0.2, 0], muzzles: [[0.75, 0, 0]], elev: [-0.5, 0.6] },
   // Lodestar.
   magnetCrane: { turret: [-0.3, 0.9, 0], pivot: [0.2, 0.3, 0], muzzles: [[2.1, 0, 0]], elev: [0, 1.0], rest: 0.55 },
   'magnetCrane#mg': { turret: [0.6, 1.5, 0.45], muzzles: [[0.42, 0.08, 0]] },
