@@ -352,7 +352,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     blurb: 'Haze and stealth. Smoke trucks lob canisters that leave a thin haze: shots into it or out of it go wild, except Veil\'s own. Its only infantry are shades, AT troopers that vanish while they hold their fire in a forest, by a building or in Veil\'s haze, even on the move, and ghost tanks fade from sight a few seconds after each shot. Spotters (towers, scout copters) see through stealth. It flies strike jets rather than scout copters. Its smoke stacks keep a haze over the base. Super unit: the Eclipse, a walker breathing out haze over the army round it.',
     caps: { infantry: 0.95, vehicle: 0.95 },
     production: {
-      barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 15 },
+      barracks: { table: [shadeSquad(3, 1), shadeSquad(2, 1)], interval: 17 },
       // Shades rather than the default trooper squads, so all its infantry hide.
       hq: { table: [shadeSquad(2, 1)] },
       barracksBlock: { table: [shadeSquad(2, 1)] },
