@@ -14,6 +14,36 @@ import { strike } from './melee';
 import { domeOver } from '../shields';
 import { hazeSpread } from '../smoke';
 
+/** How high above its mark an orbital strike starts. */
+const ORBIT_HEIGHT = 70;
+
+/** Call an orbital strike down on (x, y, z): a projectile that waits overhead, its ring on the ground (see zenith.ts). */
+function orbitalStrike(world: World, ctx: SimContext, e: Entity, w: WeaponDef, faction: number, from: { x: number; y: number; z: number }, x: number, y: number, z: number): void {
+  const delay = w.orbital!.delay;
+  const p = world.create();
+  world.add(p, Transform, makeTransform(x, y + ORBIT_HEIGHT, z, 0));
+  world.add(p, Renderable, { model: 'projectile:orbital', scale: 1 });
+  world.add(p, Projectile, {
+    kind: 'orbital',
+    weapon: w,
+    faction,
+    source: world.get(e, Unit)?.def.id ?? world.get(e, Building)?.def.id ?? 'unknown',
+    target: null,
+    sx: x,
+    sy: y + ORBIT_HEIGHT,
+    sz: z,
+    ex: x,
+    ey: y,
+    ez: z,
+    arcHeight: 0,
+    elapsed: 0,
+    duration: delay,
+  });
+  ctx.strikes.add({ x, z, radius: w.splash, faction, calledAt: world.time, at: world.time + delay });
+  ctx.events.emit('strikeCalled', { x, y, z, radius: w.splash, delay, fromX: from.x, fromY: from.y, fromZ: from.z, faction });
+  ctx.events.emit('fired', { entity: e, x: from.x, y: from.y, z: from.z, heading: D.atan2(-(z - from.z), x - from.x), climb: 0, kind: 'orbital' });
+}
+
 /** How closely the weapon must point at the target before firing, radians. */
 const AIM_TOLERANCE = 0.12;
 
@@ -48,7 +78,12 @@ function fire(world: World, ctx: SimContext, e: Entity, armed: Armed, target: En
   let ey: number;
   let struck: Entity | null = target;
   let dome: Entity | undefined;
-  if (w.arc || w.projectile === 'flame') {
+  if (w.orbital) {
+    // From orbit (see zenith.ts): a ring marks the spot, and the beam comes down there a few seconds later.
+    const ground = ctx.field.surfaceAt(ex, ez);
+    orbitalStrike(world, ctx, e, w, faction, muzzle, ex, ground, ez);
+    return;
+  } else if (w.arc || w.projectile === 'flame') {
     // Lobbed, or flame (which licks round corners a little): lands at the impact point, on the ground or at an aircraft's height.
     const tm = world.get(target, Mover);
     ey = (tm && MOVE_RULES[tm.move].flies ? tt.y : ctx.field.surfaceAt(ex, ez)) + Math.min(1.5, targetRadius * 0.6);

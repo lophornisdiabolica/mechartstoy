@@ -200,6 +200,12 @@ export class Effects {
     events.on('impact', (e) => this.impact(e.x, e.y, e.z, e.kind, e.splash));
     events.on('struck', (e) => this.blow(e));
     events.on('shatter', (e) => this.shatter(e.x, e.y, e.z));
+    events.on('dropPod', (e) => {
+      if (e.landed) {
+        this.dust(e.x, e.y, e.z, 1.6, 10);
+        this.shocks.spawn({ x: e.x, y: e.y + 0.1, z: e.z, life: 0.4, size: 0.5, endSize: 3.2, color: 0xb0a080, endColor: 0x000000 });
+      } else this.dust(e.x, e.y, e.z, 1, 6);
+    });
     events.on('hacked', (e) => this.hacked(e.x, e.y, e.z, e.back));
     events.on('shieldHit', (e) => this.flashes.spawn({ x: e.x, y: e.y, z: e.z, life: 0.25, size: 0.4, endSize: 1.4, color: 0xc8f0ff, endColor: 0x000000 }));
     events.on('unitDestroyed', (e) => this.explosion(e.x, e.y + e.def.radius * 0.6, e.z, e.def.radius, e.def.wreckTime));
@@ -403,6 +409,16 @@ export class Effects {
   }
 
   private impact(x: number, y: number, z: number, kind: ProjectileKind, splash: number): void {
+    // An orbital strike: a white-hot burst at the foot of the beam, a ring of light thrown out across the ground, then the usual blast.
+    if (kind === 'orbital') {
+      const g = this.groundAt(x, z, y);
+      this.flashes.spawn({ x, y: g + 1, z, life: 0.35, size: splash * 0.6, endSize: splash * 1.1, color: 0xfff6d8, endColor: 0x000000 });
+      this.shocks.spawn({ x, y: g + 0.15, z, life: 0.6, size: 0.6, endSize: splash * 2.2, color: 0xffc070, endColor: 0x000000 });
+      for (let i = 0; i < 8; i++) {
+        this.flashes.spawn({ x: x + rand(-0.3, 0.3), y: g + rand(1, 10), z: z + rand(-0.3, 0.3), vy: rand(-1, 1), life: rand(0.2, 0.45), size: 0.5, endSize: 0.1, color: 0xffe6b0, endColor: 0x000000 });
+      }
+      kind = 'artillery';
+    }
     // The hack itself is drawn when it takes (see hacked); the bolt just fizzles.
     if (kind === 'hack') {
       this.flashes.spawn({ x, y, z, life: 0.12, size: 0.3, endSize: 0.6, color: 0x6ab8aa, endColor: 0x000000 });

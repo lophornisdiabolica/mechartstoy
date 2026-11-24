@@ -856,3 +856,44 @@ registerModel('bld:smokeStacks', (faction) => {
   }
   return g;
 });
+
+// Zenith: an ops block under a tall drop tube, its beacon lit, and a landing ring painted on the pad.
+registerModel('bld:dropControl', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(5.0, 0.25, 4.8, CONCRETE, 0, 0.12, 0));
+  g.add(box(2.6, 2.0, 3.0, WALLS[1], 0.9, 1.25, 0));
+  g.add(box(2.7, 0.2, 3.1, primary, 0.9, 2.35, 0));
+  g.add(box(0.06, 1.2, 1.4, DARK, 2.21, 0.85, 0)); // door
+  // The drop tube: a tall hexagonal shaft with bands round it.
+  g.add(cylinder(0.75, 0.9, 3.6, 6, METAL, -1.3, 2.05, 0));
+  for (const y of [1.2, 2.4, 3.4]) g.add(cylinder(0.8, 0.8, 0.16, 6, secondary, -1.3, y, 0));
+  // The targeting laser on top, which turns to paint attackers for a strike.
+  const turret = new THREE.Group();
+  turret.position.set(-1.3, 3.95, 0);
+  turret.add(box(0.5, 0.2, 0.5, DARK, 0, 0.1, 0));
+  const laser = barrelPivot('bld:dropControl', turret);
+  laser.add(box(0.5, 0.16, 0.16, METAL, 0.15, 0, 0));
+  const lens = glowBox(0.06, 0.1, 0.1, 0xff6a3a);
+  lens.position.set(0.42, 0, 0);
+  laser.add(lens);
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:dropControl', g, turret, [laser]) });
+});
+
+// A drop pod: a squat hexagonal capsule on four fins, scorched from coming down, in the side's colours.
+registerModel('bld:dropPod', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(0.75, 0.85, 1.1, 6, primary, 0, 0.6, 0));
+  g.add(cylinder(0.3, 0.75, 0.5, 6, 0x4a4640, 0, 1.4, 0)); // heat-scorched nose
+  g.add(cylinder(0.8, 0.8, 0.12, 6, secondary, 0, 0.95, 0));
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const fin = box(0.5, 0.7, 0.08, DARK, Math.cos(a) * 0.8, 0.35, Math.sin(a) * 0.8);
+    fin.rotation.y = -a;
+    g.add(fin);
+  }
+  g.add(box(0.06, 0.7, 0.5, DARK, 0.8, 0.5, 0)); // hatch
+  return g;
+});

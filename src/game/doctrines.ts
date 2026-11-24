@@ -13,7 +13,7 @@ import type { BuildingDef } from './buildings';
  * missiles also bring down aircraft), the Scout Copter, a heavy unit that can
  * stand up to super units and buildings, the HQ and towers.
  */
-export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'bastionSpider';
+export type DoctrineId = 'armour' | 'raiders' | 'legion' | 'bastion' | 'talon' | 'skyline' | 'tidewater' | 'firestorm' | 'aegis' | 'rime' | 'sabre' | 'cipher' | 'veil' | 'zenith' | 'bastionSpider';
 
 export interface DoctrineDef {
   id: DoctrineId;
@@ -48,6 +48,11 @@ export interface DoctrineDef {
    * a faction's default. It wears the colours of the doctrine it varies.
    */
   testOf?: DoctrineId;
+  /**
+   * Production buildings whose squads come down by drop pod by the side's
+   * beacon runners instead of walking out of the door (Zenith; see zenith.ts).
+   */
+  drops?: BuildingId[];
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
@@ -359,6 +364,31 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     signature: 'smokeStacks',
     waves: [shadeSquad(2, 4), { unit: 'ghostTank', weight: 2, count: 1 }, { unit: 'smokeTruck', weight: 1, count: 1 }],
   },
+  zenith: {
+    id: 'zenith',
+    name: 'Zenith',
+    blurb: 'Drops and orbital strikes. Its squads come down in drop pods by its beacon runners (fast scouts that keep with the army) or at outposts it holds, never out past the army, so reinforcements arrive at the front: a pod lets its squad out over a few seconds, and shooting it cuts the squad short. Uplink trucks paint a ring on the ground and a few seconds later a beam comes down there; what\'s under it scatters. Its drop control calls down more squads. Super unit: the Lance Platform, a slow walker calling heavy strikes on anything its runners can see.',
+    caps: { infantry: 0.7, vehicle: 1.8 },
+    production: {
+      barracks: { table: [rifleSquad(4, 3)], interval: 20 },
+      factory: {
+        table: [
+          { unit: 'tank', weight: 3, count: 1 },
+          { unit: 'uplinkTruck', weight: 2.6, count: 1 },
+          { unit: 'beaconRunner', weight: 0.8, count: 1 },
+          { unit: 'flakTank', weight: 0.9, count: 1 },
+          { unit: 'scout', weight: 0.8, count: 1 },
+        ],
+        interval: 14,
+      },
+      mechbay: { table: [{ unit: 'lancePlatform', weight: 1, count: 1 }] },
+    },
+    signature: 'dropControl',
+    drops: ['barracks', 'dropControl'],
+    waves: [rifleSquad(4, 4), { unit: 'tank', weight: 2, count: 1 }, { unit: 'uplinkTruck', weight: 1, count: 1 }, { unit: 'beaconRunner', weight: 1, count: 2 }],
+    // Its runners mark targets for the uplinks and the Lance Platform.
+    spotters: { beaconRunner: 14 },
+  },
 };
 
 /**
@@ -376,7 +406,7 @@ export const DOCTRINES: Record<DoctrineId, DoctrineDef> = { ...CANONICAL, bastio
 } };
 
 /** Doctrines in the order the setup screen lists them; the order of the design notes, and of the faction slots. */
-export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil'];
+export const DOCTRINE_IDS: DoctrineId[] = ['armour', 'raiders', 'legion', 'bastion', 'talon', 'skyline', 'tidewater', 'firestorm', 'aegis', 'rime', 'sabre', 'cipher', 'veil', 'zenith'];
 
 /** Variants to try out (see DoctrineDef.testOf): pickable per side, but nowhere by default. */
 export const TEST_DOCTRINE_IDS: DoctrineId[] = ['bastionSpider'];

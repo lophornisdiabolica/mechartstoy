@@ -129,6 +129,12 @@ export const MOUNTS: Record<string, Mount> = {
   ghostTank: { turret: [-0.1, 0.8, 0], pivot: [0.4, 0.2, 0], muzzles: [[1.3, 0, 0]], elev: GUN },
   eclipse: { turret: [0, 3.1, 0], muzzles: pair(1.6, 0.5, 1.2) },
   'frostTower#mortar': { turret: [0, 2.32, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [0.3, 1.2], rest: 0.8 },
+  // Zenith.
+  beaconRunner: { turret: [-0.35, 0.72, 0], muzzles: [[0.45, 0.12, 0]] },
+  uplinkTruck: { turret: [-0.55, 0.75, 0], pivot: [0, 1.75, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.7], rest: -0.2 },
+  lancePlatform: { turret: [0, 3.0, 0], pivot: [0.3, 1.0, 0], muzzles: [[3.1, 0, 0]], elev: [0, 1.2], rest: 0.45 },
+  'bld:dropControl': { turret: [-1.3, 3.95, 0], pivot: [0, 0.2, 0], muzzles: [[0.45, 0, 0]], elev: [-0.9, 0.8], rest: -0.1 },
+  'lancePlatform#guns': { turret: [-1.0, 3.1, 0], muzzles: pair(0.5, 0.1, 0.3) },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },

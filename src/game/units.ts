@@ -27,7 +27,7 @@ export type Role = 'frontline' | 'artillery' | 'support';
 export type WeaponTargets = 'ground' | 'air' | 'both';
 
 /** How a projectile travels and looks. */
-export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack';
+export type ProjectileKind = 'bullet' | 'shell' | 'missile' | 'artillery' | 'flame' | 'beam' | 'frost' | 'hack' | 'orbital';
 
 export interface WeaponDef {
   name: string;
@@ -89,6 +89,13 @@ export interface WeaponDef {
    * it go wild, except its own side's.
    */
   smoke?: number;
+  /**
+   * Calls a strike down from orbit instead of firing a shot (Zenith; see
+   * zenith.ts): a warning ring marks where it will land for `delay`
+   * seconds, long enough for what's under it to scatter, then a beam comes
+   * straight down and bursts with the weapon's damage and splash.
+   */
+  orbital?: { delay: number };
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -1814,6 +1821,72 @@ export const UNIT_DEFS = {
     weapon: weapon({ name: 'Twin cannons', range: 18, damage: 48, cooldown: 3.6, burst: 2, burstGap: 0.3, projectile: 'shell', speed: 40, splash: 1.3, spread: 0.06, muzzleHeight: 3.3 }),
     // Smoke pours off it: it's too big to hide in it, but what walks with it isn't.
     smokes: { radius: 8, rate: 1.4 },
+    wreckTime: 35,
+    siege: true,
+  },
+  // Zenith: drops and orbital strikes (see zenith.ts). Its squads come down in pods by its beacon runners,
+  // and its uplinks call strikes that land after a warning ring.
+  beaconRunner: {
+    id: 'beaconRunner',
+    name: 'Beacon Runner',
+    class: 'vehicle',
+    category: 'vehicle',
+    capCost: 0.35,
+    move: 'tracked',
+    role: 'support',
+    model: 'beaconRunner',
+    hp: 100,
+    armor: 2,
+    speed: 4.6,
+    turnRate: 3.2,
+    radius: 0.65,
+    sight: 20,
+    turret: true,
+    turretTurnRate: 4,
+    weapon: weapon({ name: 'Pintle gun', range: 10, damage: 4, cooldown: 1.1, burst: 3, projectile: 'bullet', speed: 55, spread: 0.08, muzzleHeight: 0.9, targets: 'both' }),
+    wreckTime: 10,
+    siege: false,
+  },
+  uplinkTruck: {
+    id: 'uplinkTruck',
+    name: 'Uplink Truck',
+    class: 'vehicle',
+    category: 'vehicle',
+    move: 'tracked',
+    role: 'artillery',
+    model: 'uplinkTruck',
+    hp: 170,
+    armor: 4,
+    speed: 2.8,
+    turnRate: 2.2,
+    radius: 0.95,
+    sight: 18,
+    turret: true,
+    turretTurnRate: 2,
+    // A targeting laser paints the ground, and a few seconds later a beam comes down from orbit.
+    weapon: weapon({ name: 'Orbital uplink', range: 24, minRange: 5, damage: 150, cooldown: 8, projectile: 'orbital', speed: 1, splash: 4.2, spread: 0.04, muzzleHeight: 2.6, orbital: { delay: 2.4 } }),
+    wreckTime: 15,
+    siege: false,
+  },
+  lancePlatform: {
+    id: 'lancePlatform',
+    name: 'Lance Platform',
+    class: 'mech',
+    category: 'super',
+    move: 'walker',
+    role: 'artillery',
+    model: 'lancePlatform',
+    hp: 1100,
+    armor: 18,
+    speed: 1.1,
+    turnRate: 0.8,
+    radius: 2,
+    sight: 22,
+    turret: true,
+    turretTurnRate: 0.9,
+    // Heavy strikes on anything its beacon runners can see.
+    weapon: weapon({ name: 'Orbital lance', range: 38, minRange: 6, damage: 190, cooldown: 6, projectile: 'orbital', speed: 1, splash: 5.5, spread: 0.04, muzzleHeight: 4.4, orbital: { delay: 3.2 } }),
+    mounts: [{ weapon: weapon({ name: 'Point guns', range: 12, damage: 8, cooldown: 1.2, burst: 3, projectile: 'bullet', speed: 55, splash: 0.3, spread: 0.07, muzzleHeight: 2.4, targets: 'both' }), mount: 'lancePlatform#guns', turnRate: 3 }],
     wreckTime: 35,
     siege: true,
   },
