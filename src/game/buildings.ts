@@ -593,6 +593,22 @@ export const BUILDING_DEFS = {
     rebuildDelay: 0,
     buildTime: 2,
   },
+  /** Leviathan's signature: a shrine to the creature, an idol whose eyes burn at attackers, where more of the cult gathers. */
+  shrine: {
+    id: 'shrine',
+    name: 'Shrine',
+    model: 'bld:shrine',
+    hp: 1000,
+    armor: 8,
+    radius: 2.6,
+    height: 3.6,
+    production: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }], interval: 16 },
+    weapon: { name: 'Burning eyes', range: 20, minRange: 0, damage: 22, cooldown: 1.6, burst: 2, burstGap: 0.2, projectile: 'beam', speed: 90, splash: 0, spread: 0.04, arc: false, muzzleHeight: 3.4, targets: 'both', pierce: 0.3 },
+    sight: 22,
+    turretTurnRate: 2,
+    rebuildDelay: 40,
+    buildTime: 10,
+  },
   tower: {
     id: 'tower',
     name: 'Guard Tower',

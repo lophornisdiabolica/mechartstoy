@@ -69,6 +69,7 @@ export const DOCTRINE_WORDS: Record<Exclude<DoctrineId, 'bastionSpider'>, readon
   mirage: ['Court', 'Reflection', 'Prism', 'Illusion'],
   verdant: ['Wardens', 'Grove', 'Thicket', 'Bough'],
   lodestar: ['Union', 'Foundry', 'Magnetics', 'Salvage'],
+  leviathan: ['Cult', 'Deep', 'Abyss', 'Brethren'],
 };
 
 /** Generic political and military organisation words, for when a doctrine's own pool runs out (or for variety). */

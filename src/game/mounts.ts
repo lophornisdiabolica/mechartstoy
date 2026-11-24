@@ -188,6 +188,11 @@ export const MOUNTS: Record<string, Mount> = {
   lodestone: { turret: [0, 2.6, 0], pivot: [0.8, 1.0, 0], muzzles: [[2.2, 0, 0.45]], elev: [-0.3, 0.9] },
   'lodestone#coils': { turret: [0.2, 4.5, 0.7], muzzles: [[0.95, 0, 0.12], [0.95, 0, -0.12]] },
   'bld:scrapyard': { turret: [0.6, 2.6, 0.2], pivot: [0, 0.35, 0], muzzles: [[1.7, 0, 0]], elev: [0, 1.0], rest: 0.3 },
+  // Leviathan.
+  leviathan: { turret: [2.0, 2.7, 0], muzzles: [[1.6, -0.55, 0]] },
+  cultist: { turret: [0, 0, 0], muzzles: [[0.43, 0.66, -0.1]], hull: true },
+  zealot: { turret: [0, 0, 0], muzzles: [[0.05, 1.065, -0.16]], hull: true },
+  'bld:shrine': { turret: [0, 2.3, 0], pivot: [0.56, 0.5, 0], muzzles: [[0.08, 0, 0.25], [0.08, 0, -0.25]], elev: [-0.4, 0.5] },
   'bld:tower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:frostTower': { turret: [0, 1.75, 0], pivot: [0.35, 0.35, 0], muzzles: pair(1.0, 0, 0.15), elev: [-0.5, 1.2] },
   'bld:bigGun': { turret: [0, 0.8, 0], pivot: [0.4, 0.5, 0], muzzles: [[2.6, 0, 0]], elev: [0, 0.9], rest: 0.25 },

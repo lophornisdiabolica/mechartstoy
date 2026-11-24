@@ -195,6 +195,14 @@ const VOICES: Partial<Record<DoctrineId, Lines>> = {
     hunt: ['That {unit} will make good scrap.', 'Find the {unit} and fling something at it.'],
     lost: ['The {unit} is scrap now. Pick it up.', 'We lost the {unit}. Throw its wreck back at them.'],
   },
+  leviathan: {
+    attack: ['The Deep One hungers. Lead it to {enemy}.', 'Feed it {enemy}!'],
+    regroup: ['Back to the shrine, brothers.', 'Withdraw and pray.'],
+    defend: ['Heretics at the shrine!', 'Defend the idol!'],
+    took: ['{where} is consecrated.', 'We have taken {where}. It will feed there.'],
+    hunt: ['Offer it that {unit}.', 'The {unit} will make a fine meal.'],
+    lost: ['The {unit} is lost. It will be avenged.', 'We lost the {unit}. The Deep One remembers.'],
+  },
 };
 
 /** Lines for a doctrine without a voice of its own. */

@@ -2639,3 +2639,99 @@ registerModel('lodestone', (faction) => {
   coils.turret.position.y -= body.position.y;
   return setRig(root, { turret, ...walker(legs, body, 1.1, 0.4), ...mounted('lodestone', root, turret, [magnet]), mounts: [coils] });
 });
+
+// Leviathan: one giant creature and its cult.
+const HIDE = 0x2e4a4a;
+const ROBE = 0x3a2a3a;
+
+// The Leviathan: a hulking four-legged sea beast with a ridged back, a long tail, a frilled head and glowing eyes.
+registerModel('leviathan', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.position.y = 2.2;
+  root.add(body);
+  body.add(box(3.6, 1.8, 2.2, HIDE, 0, 0, 0));
+  body.add(box(3.0, 0.3, 1.6, primary, -0.2, 0.95, 0)); // markings down its back
+  for (const x of [-1.3, -0.5, 0.3, 1.0]) body.add(box(0.4, 0.6, 0.12, secondary, x, 1.35, 0)); // ridge plates
+  body.add(box(2.2, 0.9, 1.0, HIDE, -2.8, -0.2, 0)); // tail
+  body.add(box(1.4, 0.5, 0.5, HIDE, -4.4, -0.5, 0));
+  const turret = new THREE.Group();
+  turret.position.set(2.0, 0.5, 0);
+  turret.add(box(1.6, 1.1, 1.4, HIDE, 0.6, 0, 0)); // head
+  turret.add(box(0.1, 1.0, 2.2, primary, 0.0, 0.4, 0)); // frill
+  for (const side of [-1, 1]) {
+    const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
+    eye.position.set(1.42, 0.25, side * 0.45);
+    turret.add(eye);
+  }
+  const jaw = new THREE.Group();
+  jaw.position.set(0.2, -0.55, 0);
+  jaw.add(box(1.4, 0.3, 1.2, 0x223838, 0.7, 0, 0));
+  turret.add(jaw);
+  body.add(turret);
+  const legs = [-1.1, 1.1].flatMap((x) => [-1, 1].map((side) => {
+    const leg = makeLeg(0.8, 0.8, 0.5, HIDE, 0x1a2a2a);
+    leg.hip.position.set(x, -0.6, side * 0.8);
+    body.add(leg.hip);
+    return leg;
+  }));
+  return setRig(root, {
+    turret,
+    ...walker(legs, body, 0.9, 0.3),
+    ...mounted('leviathan', root, turret),
+    // Its jaw drops open and snaps shut.
+    strike(k) {
+      jaw.rotation.z = -Math.sin(Math.PI * k) * 0.6;
+    },
+  });
+});
+
+/** A robed cult figure: legs, a hooded robe, a pale face in the hood. Returns the body to hang kit on. */
+function cultFigure(root: THREE.Group, trim: number): { body: THREE.Group; legs: Leg[] } {
+  const body = new THREE.Group();
+  body.position.y = 0.42;
+  root.add(body);
+  body.add(box(0.24, 0.36, 0.28, ROBE, 0, 0.14, 0));
+  body.add(box(0.25, 0.05, 0.29, trim, 0, 0.0, 0)); // a sash in the side's colour
+  body.add(box(0.17, 0.17, 0.17, ROBE, 0, 0.41, 0)); // hood
+  body.add(box(0.03, 0.08, 0.09, 0xd8d0c0, 0.085, 0.4, 0)); // face
+  const legs = [-1, 1].map((side) => {
+    const leg = makeLeg(0.21, 0.21, 0.08, ROBE, 0x1a1a1a);
+    leg.hip.position.set(0, -0.04, side * 0.07);
+    body.add(leg.hip);
+    return leg;
+  });
+  return { body, legs };
+}
+
+// A cultist with an old rifle.
+registerModel('cultist', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  const { body, legs } = cultFigure(root, primary);
+  body.add(box(0.42, 0.05, 0.05, 0x5a4030, 0.22, 0.24, -0.1));
+  return setRig(root, { ...walker(legs, body, 0.3, 0.5), ...mounted('cultist', root, null) });
+});
+
+// A zealot with a burning torch and a satchel charge.
+registerModel('zealot', (faction) => {
+  const { primary } = factionColors(faction);
+  const root = new THREE.Group();
+  const { body, legs } = cultFigure(root, primary);
+  const arm = new THREE.Group();
+  arm.position.set(0.05, 0.3, -0.16);
+  arm.add(box(0.05, 0.28, 0.05, 0x5a4030, 0, 0.1, 0));
+  const flame = glowBox(0.09, 0.12, 0.09, 0xffa040);
+  flame.position.set(0, 0.29, 0);
+  arm.add(flame);
+  body.add(arm);
+  body.add(box(0.14, 0.14, 0.08, 0x6a5a3a, 0.02, 0.1, 0.18)); // satchel
+  return setRig(root, {
+    ...walker(legs, body, 0.3, 0.5),
+    ...mounted('zealot', root, null),
+    strike(k) {
+      arm.rotation.z = -Math.sin(Math.PI * k) * 1.2;
+    },
+  });
+});

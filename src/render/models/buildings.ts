@@ -1103,3 +1103,30 @@ registerModel('bld:scrapWall', (faction) => {
   g.add(plate);
   return g;
 });
+
+// Leviathan's shrine: a stepped stone platform with standing stones round it and a great idol of the beast whose eyes burn.
+registerModel('bld:shrine', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const STONE = 0x6a6a64;
+  const g = new THREE.Group();
+  g.add(box(5.6, 0.3, 5.6, STONE, 0, 0.15, 0));
+  g.add(box(4.2, 0.4, 4.2, 0x5a5a54, 0, 0.5, 0));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    g.add(box(0.4, 1.6, 0.3, STONE, Math.cos(a) * 2.5, 1.1, Math.sin(a) * 2.5));
+  }
+  g.add(box(1.4, 1.6, 1.4, 0x2e4a4a, 0, 1.5, 0)); // the idol's body
+  g.add(box(1.5, 0.2, 1.5, primary, 0, 1.0, 0));
+  g.add(box(0.12, 0.8, 1.8, secondary, -0.2, 2.6, 0)); // its frill
+  const turret = new THREE.Group();
+  turret.position.set(0, 2.3, 0);
+  turret.add(box(1.0, 0.8, 1.0, 0x2e4a4a, 0.1, 0.4, 0)); // head
+  const eyes = barrelPivot('bld:shrine', turret);
+  for (const side of [-1, 1]) {
+    const eye = glowBox(0.08, 0.16, 0.2, 0xd8f070);
+    eye.position.set(0.04, 0, side * 0.25);
+    eyes.add(eye);
+  }
+  g.add(turret);
+  return setRig(g, { turret, ...mounted('bld:shrine', g, turret, [eyes]) });
+});

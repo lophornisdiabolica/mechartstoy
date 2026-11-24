@@ -39,6 +39,7 @@ export const FACTIONS: readonly FactionDef[] = [
   { id: 18, name: 'Opaline Court', primary: 0xc9d6e3, secondary: 0x6a4c93 },
   { id: 19, name: 'Moss Wardens', primary: 0x5a7a3a, secondary: 0xd8c8a0 },
   { id: 20, name: 'Ferrous Union', primary: 0x8a5a44, secondary: 0xc8ccd2 },
+  { id: 21, name: 'Abyssal Cult', primary: 0x2a5a6a, secondary: 0xc8b070 },
 ];
 
 /** Most sides a battle can have. */
