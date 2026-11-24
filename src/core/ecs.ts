@@ -28,6 +28,47 @@ export interface System {
   update(world: World, dt: number): void;
 }
 
+/**
+ * One component type's values. Lookups by entity go to an array indexed by
+ * the entity's id (much faster than a Map's hashing, and systems look
+ * components up constantly); the Map keeps the order entities got the
+ * component in, which queries iterate in, so battles play out the same.
+ */
+class Store<T> {
+  readonly map = new Map<Entity, T>();
+  /** Values by entity id (undefined where the entity hasn't this component). Never sparse, so it stays a fast array. */
+  private readonly byId: (T | undefined)[] = [];
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  get(e: Entity): T | undefined {
+    return this.byId[e];
+  }
+
+  has(e: Entity): boolean {
+    return this.byId[e] !== undefined;
+  }
+
+  set(e: Entity, value: T): void {
+    const byId = this.byId;
+    while (byId.length < e) byId.push(undefined);
+    byId[e] = value;
+    this.map.set(e, value);
+  }
+
+  delete(e: Entity): void {
+    if (this.byId[e] === undefined) return;
+    this.byId[e] = undefined;
+    this.map.delete(e);
+  }
+
+  keys(): IterableIterator<Entity> {
+    return this.map.keys();
+  }
+}
+
 export class World {
   /** Simulation time in seconds. */
   time = 0;
@@ -36,7 +77,7 @@ export class World {
   private nextId = 1;
   private readonly alive = new Set<Entity>();
   /** One store per component type, indexed by its id. */
-  private readonly stores: (Map<Entity, unknown> | undefined)[] = [];
+  private readonly stores: (Store<unknown> | undefined)[] = [];
   private readonly pendingDestroy = new Set<Entity>();
   private readonly systems: System[] = [];
   private readonly destroyListeners: ((e: Entity) => void)[] = [];
@@ -106,7 +147,7 @@ export class World {
    */
   query(...types: ComponentType<unknown>[]): IterableIterator<Entity> {
     if (types.length === 0) return new Query([], [][Symbol.iterator](), this.pendingDestroy);
-    const stores: Map<Entity, unknown>[] = new Array(types.length);
+    const stores: Store<unknown>[] = new Array(types.length);
     let smallest = (stores[0] = this.store(types[0]));
     for (let i = 1; i < types.length; i++) {
       const s = (stores[i] = this.store(types[i]));
@@ -174,20 +215,20 @@ export class World {
     this.pendingDestroy.clear();
   }
 
-  private store<T>(type: ComponentType<T>): Map<Entity, T> {
+  private store<T>(type: ComponentType<T>): Store<T> {
     let s = this.stores[type.id];
     if (!s) {
-      s = new Map();
+      s = new Store();
       this.stores[type.id] = s;
     }
-    return s as Map<Entity, T>;
+    return s as Store<T>;
   }
 }
 
 /** World.query's iterator: a plain object rather than a generator, which is slower to step through. */
 class Query implements IterableIterator<Entity> {
   constructor(
-    private readonly stores: Map<Entity, unknown>[],
+    private readonly stores: Store<unknown>[],
     private readonly keys: Iterator<Entity>,
     private readonly pending: Set<Entity>,
   ) {}
