@@ -591,7 +591,7 @@ export const UNIT_DEFS = {
     move: 'tracked',
     role: 'frontline',
     model: 'lancer',
-    hp: 370,
+    hp: 385,
     armor: 8,
     speed: 2.0,
     turnRate: 1.3,

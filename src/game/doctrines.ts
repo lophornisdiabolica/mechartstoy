@@ -73,7 +73,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'armour',
     name: 'Armour',
     blurb: 'Heavy tanks. Fewer infantry, more vehicles, flak tanks against infantry and aircraft, and the Lancer heavy tank from its tank depot. Super unit: the Titan.',
-    caps: { infantry: 0.8, vehicle: 1.45 },
+    caps: { infantry: 0.8, vehicle: 1.5 },
     production: {
       factory: {
         table: [
@@ -83,7 +83,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
       },
-      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 42 },
+      tankDepot: { table: [{ unit: 'lancer', weight: 1, count: 1 }], interval: 36 },
       mechbay: { table: [{ unit: 'titan', weight: 1, count: 1 }] },
     },
     signature: 'tankDepot',
@@ -93,12 +93,12 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'raiders',
     name: 'Raiders',
     blurb: 'Fast trucks. Machine-gun trucks for infantry and scout buggies with recoilless rifles for armour, in numbers, rocket trucks for the heavy work, and a motor pool. Super unit: the Land-train.',
-    caps: { infantry: 0.8, vehicle: 1.8 },
+    caps: { infantry: 0.8, vehicle: 1.7 },
     production: {
       factory: {
         table: [
           { unit: 'mgTruck', weight: 3, count: 2 },
-          { unit: 'rocketTruck', weight: 1.4, count: 1 },
+          { unit: 'rocketTruck', weight: 1, count: 1 },
           { unit: 'buggy', weight: 1, count: 2 },
           { unit: 'scout', weight: 0.8, count: 1 },
         ],
@@ -156,7 +156,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
           { unit: 'jet', weight: 1.2, count: 2 },
           { unit: 'scout', weight: 1.5, count: 2 },
         ],
-        interval: 22,
+        interval: 19,
       },
       mechbay: { table: [{ unit: 'airship', weight: 1, count: 1 }] },
     },
@@ -500,7 +500,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'mirage',
     name: 'Mirage',
     blurb: 'Holograms. Projector trucks throw up hologram prism tanks: they move and shoot like the real thing, see-through to us but not to the enemy, and their shots do no harm, so they draw fire until they\'re shot apart or fizzle out. Projectors only project in a fight, out in front toward the enemy. Prism tanks do the real work with their cannons, and its mirror array throws up more holograms by its own units in a fight. Super unit: the Fata Morgana, a tall walker crowned with mirrors that brings a whole column of holograms with it.',
-    caps: { infantry: 0.9, vehicle: 1.32 },
+    caps: { infantry: 0.9, vehicle: 1.42 },
     production: {
       factory: {
         table: [
@@ -521,7 +521,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
     id: 'verdant',
     name: 'Verdant',
     blurb: 'Biotech. Grown hulls on machine legs. Stranglers lash vines that leave a patch of tangle where they land, ground grown over with vines that drags at enemies wading through it, worse than frost, though nothing shatters and it withers in a few seconds (fire burns it away). Seed mortars lob pods that burst into small thickets, a few trees that block shots until tanks crush them (only now and then, so the map doesn\'t fill up). Graft walkers are heavy walkers with claw arms and spine launchers, and its greenhouse grows more of both. Super unit: the Worldtree, a towering biotech walker under a canopy of leaf-panels that lashes vines and seeds thickets as it goes.',
-    caps: { infantry: 0.9, vehicle: 1.05 },
+    caps: { infantry: 0.9, vehicle: 0.95 },
     production: {
       factory: {
         table: [
@@ -570,7 +570,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       hq: { table: [{ unit: 'cultist', weight: 1, count: 4 }] },
       barracksBlock: { table: [{ unit: 'cultist', weight: 2, count: 6 }, { unit: 'zealot', weight: 1, count: 4 }] },
       // The odd stolen scout copter is all it has in the air.
-      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 14 },
+      factory: { table: [{ unit: 'pilgrimTruck', weight: 2, count: 2 }, { unit: 'harpoonTractor', weight: 1.5, count: 1 }, { unit: 'zealot', weight: 1, count: 4 }, { unit: 'scout', weight: 0.4, count: 1 }], interval: 15.5 },
       mechbay: { table: [{ unit: 'leviathan', weight: 1, count: 1 }] },
     },
     signature: 'shrine',
