@@ -13,6 +13,7 @@ import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
 import { campSpot } from '../nomad';
 import { mendingPlace } from '../retreat';
+import { presenting } from '../alternate';
 
 /** How far an outpost's guards chase from the post before going back. */
 const GUARD_LEASH = CAPTURE_RADIUS + 12;
@@ -180,6 +181,22 @@ export function aiSystem(ctx: SimContext): System {
         if (armed.target !== null && world.isAlive(armed.target) && (!post || near(world, armed.target, post, GUARD_LEASH))) {
           const tt = world.req(armed.target, Transform);
           const reach = effectiveRange(world, e, armed, armed.target);
+          // A unit whose weapons point different ways (see alternate.ts): it closes until the one it's bringing
+          // to bear reaches, then stops and swings round to face its target with it (the weapons system turns it).
+          const turning = def?.alternates ? presenting(world, e) : null;
+          if (turning) {
+            const pt = world.req(turning.target, Transform);
+            if (!turning.inReach) {
+              if (turning.armed.weapon.melee?.charge) mover.surge = turning.armed.weapon.melee.charge;
+              mover.faceX = mover.targetX = pt.x;
+              mover.faceZ = mover.targetZ = pt.z;
+            } else {
+              mover.targetX = mover.targetZ = null;
+              mover.faceX = t.x + D.cos(turning.heading) * 10;
+              mover.faceZ = t.z - D.sin(turning.heading) * 10;
+            }
+            continue;
+          }
           // Melee units fight up against their target: they close on it at a run, and keep pressing in (see melee.ts).
           if (melee) {
             const closing = distanceToTarget(world, e, armed.target) > reach;

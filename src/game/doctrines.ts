@@ -55,6 +55,12 @@ export interface DoctrineDef {
   drops?: BuildingId[];
   /** With drops: a light vehicle that rides down in each pod of foot soldiers, if the vehicle cap has room (Zenith's drop buggy). */
   podRider?: UnitId;
+  /**
+   * At home in dense forest (Verdant): its units walk through thickets
+   * without slowing or knocking the trees down, and their shots pass
+   * between the trunks instead of hitting them (see woodland()).
+   */
+  woodland?: boolean;
 }
 
 const rifleSquad = (riflemen: number, weight = 1, at = 1): ProductionEntry => ({ unit: 'trooper', weight, count: riflemen, with: { unit: 'atTrooper', count: at } });
@@ -529,6 +535,7 @@ const CANONICAL: Record<Exclude<DoctrineId, 'bastionSpider'>, DoctrineDef> = {
       mechbay: { table: [{ unit: 'worldTree', weight: 1, count: 1 }] },
     },
     signature: 'glasshouse',
+    woodland: true,
     waves: [rifleSquad(4, 3), { unit: 'strangler', weight: 3, count: 2 }, { unit: 'graftWalker', weight: 1.5, count: 1 }, { unit: 'seedMortar', weight: 1, count: 1 }],
   },
 
@@ -636,6 +643,11 @@ export function doctrineUnits(d: DoctrineDef): UnitId[] {
 /** A side's doctrine (the civilian town and garrisons have none, and get armour's defaults). */
 export function doctrineOf(ctx: SimContext, faction: number): DoctrineDef {
   return DOCTRINES[ctx.settings.factions[faction]?.doctrine ?? 'armour'];
+}
+
+/** Whether a side's units are at home in dense forest (DoctrineDef.woodland): no slowing, no felling, shots pass between the trees. */
+export function woodland(ctx: SimContext, faction: number): boolean {
+  return faction >= 0 && DOCTRINES[ctx.settings.factions[faction]?.doctrine ?? 'armour']?.woodland === true;
 }
 
 /** What a production building turns out for a side: its doctrine's table, or the building's own. */

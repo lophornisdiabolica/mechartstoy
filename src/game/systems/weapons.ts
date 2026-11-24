@@ -14,6 +14,7 @@ import { SCRAP_REACH, scrapHeft } from '../lodestar';
 import { strike } from './melee';
 import { domeOver } from '../shields';
 import { hazeSpread } from '../smoke';
+import { presenting } from '../alternate';
 
 /** How high above its mark an orbital strike starts. */
 const ORBIT_HEIGHT = 70;
@@ -266,12 +267,29 @@ export function weaponSystem(ctx: SimContext): System {
     update(world, dt) {
       for (const e of world.query(Armed, Transform)) {
         if (world.has(e, Construction)) continue;
+        turnAbout(world, e, dt);
         operate(world, ctx, e, world.req(e, Armed), dt, true);
         const arsenal = world.get(e, Arsenal);
         if (arsenal) for (const armed of arsenal.arms) operate(world, ctx, e, armed, dt, false);
       }
     },
   };
+}
+
+/**
+ * A unit whose weapons point different ways (UnitDef.alternates), stopped
+ * by its target, swings its body round to bring the next one to bear (see
+ * alternate.ts). On the move, its path steers it as usual.
+ */
+function turnAbout(world: World, e: Entity, dt: number): void {
+  const rule = world.get(e, Unit)?.def.alternates;
+  if (!rule) return;
+  const mover = world.get(e, Mover);
+  if (mover && mover.targetX !== null) return;
+  const p = presenting(world, e);
+  if (!p || !p.inReach) return;
+  const t = world.req(e, Transform);
+  t.heading = turnToward(t.heading, p.heading, rule.turnRate * dt);
 }
 
 /**
@@ -312,11 +330,12 @@ function operate(world: World, ctx: SimContext, e: Entity, armed: Armed, dt: num
       if (Math.abs(off) > mount.yaw) armed.aim = t.heading + Math.sign(off) * mount.yaw;
     }
   } else {
-    // Turret-less units turn the whole body once they've stopped to shoot.
+    // Turret-less units turn the whole body once they've stopped to shoot (or, with weapons pointing
+    // different ways, to whichever is next: see turnAbout), and a weapon facing off the nose points that way.
     const mover = world.get(e, Mover);
     // Planes can only aim by flying at it (see Mover.cruise).
-    if (main && (!mover || (mover.targetX === null && !mover.cruise))) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
-    armed.aim = t.heading;
+    if (main && !world.get(e, Unit)?.def.alternates && (!mover || (mover.targetX === null && !mover.cruise))) t.heading = turnToward(t.heading, desired, armed.turnRate * dt);
+    armed.aim = t.heading + (armed.weapon.faces ?? 0);
   }
 
   // Barrels pitch toward the target as the turret comes round.

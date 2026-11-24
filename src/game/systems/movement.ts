@@ -1,3 +1,4 @@
+import { woodland } from '../doctrines';
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
 import { MOVE_RULES, MoveClass, MoveRules } from '../../world/moveClasses';
@@ -373,7 +374,11 @@ export function movementSystem(ctx: SimContext): System {
         const wet = !rules.flies && field.isWater(t.x, t.z) && (rules.minDepth > 0 || field.deckAt(t.x, t.z) === null);
         // A charging melee unit runs (see Mover.surge).
         const pace = (m.surge ? m.speed * m.surge : m.speed) * (m.pace ?? 1);
-        let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : pace * (field.groundAt(t.x, t.z).speed[m.move] ?? 1);
+        const ground = field.groundAt(t.x, t.z);
+        // A side at home in the woods walks through dense forest as if it were open ground (see DoctrineDef.woodland).
+        const faction = world.get(e, Faction)?.id ?? -1;
+        const sylvan = ground.id === 'thicket' && woodland(ctx, faction);
+        let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : sylvan ? pace : pace * (ground.speed[m.move] ?? 1);
         // An enemy's frost underfoot (or frozen water under a boat) slows it right down (see frost.ts).
         if (!rules.flies && ctx.frost.count > 0) speed *= ctx.frost.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
         if (!rules.flies && ctx.tangle.count > 0) speed *= ctx.tangle.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
@@ -405,7 +410,8 @@ export function movementSystem(ctx: SimContext): System {
           t.x = nx;
           t.z = nz;
           // Vehicles and big walkers flatten the dense forest's trees they push into.
-          if (CRUSHERS.has(m.move) && stepLen > 0) {
+          // A side at home in the woods steps between the trunks instead.
+          if (CRUSHERS.has(m.move) && stepLen > 0 && !woodland(ctx, faction)) {
             const r = world.get(e, Collider)?.radius ?? 0.5;
             if (m.move !== 'walker' || r >= 1.2) {
               field.woods.crush(nx, nz, r * 0.8, { x: t.x - D.cos(t.heading), z: t.z + D.sin(t.heading) });

@@ -123,6 +123,12 @@ export interface WeaponDef {
    * volley). It still waits for a target in range before it lets go.
    */
   nova?: number;
+  /**
+   * The bearing off the unit's nose this fixed weapon points along, radians
+   * counterclockwise (0 ahead, PI behind): with UnitDef.alternates the unit
+   * turns its body to bring it to bear (see alternate.ts).
+   */
+  faces?: number;
 }
 
 /** A jamming field round a unit or building (Cipher; see hacking.ts). */
@@ -315,6 +321,12 @@ export interface UnitDef {
    * there at `mends` of its full health a second until it's back to `until`.
    */
   retreats?: RetreatDef;
+  /**
+   * Its weapons with a `faces` bearing point different ways, and it brings
+   * them to bear in turn (see alternate.ts): it stops and swings round, at
+   * `turnRate` radians a second, to face its target with whichever is ready.
+   */
+  alternates?: { turnRate: number };
 }
 
 /** When a unit falls back to mend, and how fast it mends at home (see UnitDef.retreats). */
@@ -2769,12 +2781,14 @@ export const UNIT_DEFS = {
     sight: 22,
     turret: false,
     turretTurnRate: 1.4,
-    // Its tail whips round through everything near it.
-    weapon: weapon({ name: 'Tail whip', range: 1.8, damage: 50, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, melee: { style: 'swing', knock: 2.4, sweep: Math.PI, sweepMost: 6, charge: 1.4 } }),
+    // Its tail whips round through everything behind it: it wheels round to lash it, then back to breathe fire (see alternate.ts).
+    // The tail's long, so it reaches nearly three metres past its hide.
+    weapon: weapon({ name: 'Tail whip', range: 2.8, damage: 50, cooldown: 2.4, projectile: 'shell', speed: 1, muzzleHeight: 1.7, pierce: 0.4, faces: Math.PI, melee: { style: 'swing', knock: 2.4, sweep: Math.PI * 0.6, sweepMost: 6, charge: 1.4 } }),
+    alternates: { turnRate: 2.2 },
     // Besides the whip: fire breathed on what's in front of it (its head turns a little on its neck), a ring of spines
     // flung at what crowds it, and acid lobbed at what keeps its distance. All of them grow with it (see leviathan.ts).
     mounts: [
-      { weapon: flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), mount: 'leviathan#head', turnRate: 1.4 },
+      { weapon: { ...flamer('Fire breath', 7, 12, 5, 1.3, 2.2, 5), faces: 0 }, mount: 'leviathan#head', turnRate: 1.4 },
       { weapon: weapon({ name: 'Spine volley', range: 7, damage: 16, cooldown: 9, projectile: 'spine', arc: true, speed: 18, splash: 0.8, spread: 0.05, muzzleHeight: 2.2, pierce: 0.3, nova: 12 }) },
       { weapon: weapon({ name: 'Acid pods', range: 18, minRange: 5, damage: 24, cooldown: 7, burst: 2, burstGap: 0.4, projectile: 'acid', arc: true, speed: 16, splash: 2, spread: 0.1, muzzleHeight: 2.6, pierce: 0.2 }) },
     ],
