@@ -17,13 +17,16 @@
     "leaks": "node --expose-gc scripts/leaks.mjs",
     "sounds": "node scripts/sounds.mjs",
     "flicker": "node scripts/flicker.mjs",
-    "pairs": "node scripts/pairs.mjs"
+    "pairs": "node scripts/pairs.mjs",
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "simplex-noise": "^4.0.3",
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@types/three": "^0.187.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.5",
