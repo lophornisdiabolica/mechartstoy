@@ -116,6 +116,10 @@ export const BOUNDED: Record<string, string> = {
   'game.ctx.navs.grids[*].open.items': 'NavGrid.findPath',
   // Cells with wreckage on them: no more than the map's wreckage cells, and it rusts away (WreckageField). It fills up over a long battle as the fighting spreads.
   'game.ctx.wreckage.active': 'WreckageField.add',
+  // A component store's slots for the first EARLY ids: a fixed-size array per store, made when the store's window first moves past them (World's Store).
+  'game.world.stores[*].early': 'Store.setOld',
+  // A component store's live entities from before its window: only ever entities still alive (deleted with them), so no more than the battle has; a long battle's mid-battle buildings drift into it as the window moves on.
+  'game.world.stores[*].old': 'Store.slide',
 };
 
 export interface Grower {

@@ -36,3 +36,26 @@ describe('World', () => {
     expect(w.tick).toBe(1);
   });
 });
+
+describe('component stores over a long battle', () => {
+  it('find every component after ids have run far past the first ones, and keep query order', () => {
+    const w = new World();
+    const C = defineComponent<{ v: number }>('LongC');
+    const keep: number[] = [];
+    // A few long-lived entities from the start and from mid-battle, among many short-lived ones.
+    for (let n = 0; n < 60000; n++) {
+      const e = w.create();
+      w.add(e, C, { v: e });
+      if (n < 5 || n % 9973 === 0) keep.push(e);
+      else w.destroy(e);
+      if (n % 100 === 0) w.step(1 / 30);
+    }
+    w.step(1 / 30);
+    for (const e of keep) expect(w.get(e, C)?.v).toBe(e);
+    expect([...w.query(C)]).toEqual(keep);
+    expect(w.has(keep[keep.length - 1] + 1, C)).toBe(false);
+    w.remove(keep[0], C);
+    expect(w.has(keep[0], C)).toBe(false);
+    expect([...w.query(C)]).toEqual(keep.slice(1));
+  });
+});

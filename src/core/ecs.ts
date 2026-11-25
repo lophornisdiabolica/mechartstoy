@@ -28,6 +28,97 @@ export interface System {
   update(world: World, dt: number): void;
 }
 
+/**
+ * One component type's values. Lookups go to an array indexed by entity id
+ * (much faster than hashing every id in a Map, and systems look components
+ * up constantly). Ids only ever go up, so the array covers a window of them,
+ * from `base`: when it gets much longer than there are values, the window
+ * moves up, and the few long-lived entities left below it (buildings,
+ * mostly) move to a small Map. The big Map keeps the order
+ * entities got the component in, which queries iterate in, so battles play
+ * out the same.
+ */
+class Store<T> {
+  readonly map = new Map<Entity, T>();
+  private base = 0;
+  private window: (T | undefined)[] = [];
+  /** Values of entities below the window: the first EARLY ids (the battle's opening buildings, mostly) in an array, later ones in a Map. */
+  private early: (T | undefined)[] | null = null;
+  private readonly old = new Map<Entity, T>();
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  get(e: Entity): T | undefined {
+    if (e >= this.base) return this.window[e - this.base];
+    return e < EARLY ? this.early?.[e] : this.old.get(e);
+  }
+
+  has(e: Entity): boolean {
+    return this.get(e) !== undefined;
+  }
+
+  set(e: Entity, value: T): void {
+    this.map.set(e, value);
+    if (e < this.base) {
+      this.setOld(e, value);
+      return;
+    }
+    const w = this.window;
+    const i = e - this.base;
+    // Never sparse, so it stays a fast array.
+    while (w.length < i) w.push(undefined);
+    w[i] = value;
+    if (w.length > WINDOW_SLACK * this.map.size + WINDOW_MIN) this.slide();
+  }
+
+  delete(e: Entity): void {
+    if (!this.map.delete(e)) return;
+    if (e < this.base) {
+      if (e < EARLY) this.early![e] = undefined;
+      else this.old.delete(e);
+      return;
+    }
+    const w = this.window;
+    w[e - this.base] = undefined;
+    while (w.length > 0 && w[w.length - 1] === undefined) w.pop();
+    if (w.length > WINDOW_SLACK * this.map.size + WINDOW_MIN) this.slide();
+  }
+
+  keys(): IterableIterator<Entity> {
+    return this.map.keys();
+  }
+
+  /** Move the window's start up so it's half as long as allowed, the values below it going to `old`. */
+  private slide(): void {
+    const w = this.window;
+    const top = this.base + w.length;
+    const base = Math.max(this.base, top - Math.floor((WINDOW_SLACK * this.map.size + WINDOW_MIN) / 2));
+    for (let e = this.base; e < base; e++) {
+      const v = w[e - this.base];
+      if (v !== undefined) this.setOld(e, v);
+    }
+    this.window = w.slice(base - this.base);
+    this.base = base;
+  }
+
+  private setOld(e: Entity, value: T): void {
+    if (e >= EARLY) {
+      this.old.set(e, value);
+      return;
+    }
+    if (!this.early) this.early = new Array<T | undefined>(EARLY).fill(undefined);
+    this.early[e] = value;
+  }
+}
+
+/** A Store's window moves up once it's this many times longer than the values it holds, plus this many. */
+const WINDOW_SLACK = 32;
+const WINDOW_MIN = 4096;
+/** Ids below this keep a fast slot of their own once the window has moved past them. */
+const EARLY = 4096;
+
 export class World {
   /** Simulation time in seconds. */
   time = 0;
@@ -36,7 +127,7 @@ export class World {
   private nextId = 1;
   private readonly alive = new Set<Entity>();
   /** One store per component type, indexed by its id. */
-  private readonly stores: (Map<Entity, unknown> | undefined)[] = [];
+  private readonly stores: (Store<unknown> | undefined)[] = [];
   private readonly pendingDestroy = new Set<Entity>();
   private readonly systems: System[] = [];
   private readonly destroyListeners: ((e: Entity) => void)[] = [];
@@ -106,7 +197,7 @@ export class World {
    */
   query(...types: ComponentType<unknown>[]): IterableIterator<Entity> {
     if (types.length === 0) return new Query([], [][Symbol.iterator](), this.pendingDestroy);
-    const stores: Map<Entity, unknown>[] = new Array(types.length);
+    const stores: Store<unknown>[] = new Array(types.length);
     let smallest = (stores[0] = this.store(types[0]));
     for (let i = 1; i < types.length; i++) {
       const s = (stores[i] = this.store(types[i]));
@@ -174,20 +265,20 @@ export class World {
     this.pendingDestroy.clear();
   }
 
-  private store<T>(type: ComponentType<T>): Map<Entity, T> {
+  private store<T>(type: ComponentType<T>): Store<T> {
     let s = this.stores[type.id];
     if (!s) {
-      s = new Map();
+      s = new Store();
       this.stores[type.id] = s;
     }
-    return s as Map<Entity, T>;
+    return s as Store<T>;
   }
 }
 
 /** World.query's iterator: a plain object rather than a generator, which is slower to step through. */
 class Query implements IterableIterator<Entity> {
   constructor(
-    private readonly stores: Map<Entity, unknown>[],
+    private readonly stores: Store<unknown>[],
     private readonly keys: Iterator<Entity>,
     private readonly pending: Set<Entity>,
   ) {}

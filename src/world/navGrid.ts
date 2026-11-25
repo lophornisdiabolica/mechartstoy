@@ -110,20 +110,28 @@ class CellSamples {
 
 /** Minimal binary min-heap of cell indices keyed by an external score array. */
 export class Heap {
-  private items: number[] = [];
+  /** Cell indices, a binary heap on their scores (the same swaps as ever, so ties come out the same). */
+  private items = new Int32Array(1024);
+  private count = 0;
   constructor(private readonly score: Float32Array) {}
 
   get size(): number {
-    return this.items.length;
+    return this.count;
   }
 
   push(i: number): void {
+    if (this.count === this.items.length) {
+      const more = new Int32Array(this.count * 2);
+      more.set(this.items);
+      this.items = more;
+    }
     const a = this.items;
-    a.push(i);
-    let c = a.length - 1;
+    const score = this.score;
+    let c = this.count++;
+    a[c] = i;
     while (c > 0) {
       const p = (c - 1) >> 1;
-      if (this.score[a[p]] <= this.score[a[c]]) break;
+      if (score[a[p]] <= score[a[c]]) break;
       const tmp = a[p];
       a[p] = a[c];
       a[c] = tmp;
@@ -133,17 +141,18 @@ export class Heap {
 
   pop(): number {
     const a = this.items;
+    const score = this.score;
     const top = a[0];
-    const last = a.pop()!;
-    if (a.length > 0) {
-      a[0] = last;
+    const n = --this.count;
+    if (n > 0) {
+      a[0] = a[n];
       let p = 0;
       for (;;) {
         const l = p * 2 + 1;
         const r = l + 1;
         let m = p;
-        if (l < a.length && this.score[a[l]] < this.score[a[m]]) m = l;
-        if (r < a.length && this.score[a[r]] < this.score[a[m]]) m = r;
+        if (l < n && score[a[l]] < score[a[m]]) m = l;
+        if (r < n && score[a[r]] < score[a[m]]) m = r;
         if (m === p) break;
         const tmp = a[p];
         a[p] = a[m];
@@ -155,7 +164,7 @@ export class Heap {
   }
 
   clear(): void {
-    this.items.length = 0;
+    this.count = 0;
   }
 }
 
@@ -427,6 +436,7 @@ export class NavGrid {
     heap.push(sk);
     const free = (ci: number, cj: number) => ci >= 0 && cj >= 0 && ci < cols && cj < rows && terrain[cj * cols + ci] === 0;
     const walls = this.railWalls();
+    const { rail, deck } = this.samples;
     while (heap.size > 0) {
       const k = heap.pop();
       if (done[k]) continue;
@@ -440,7 +450,7 @@ export class NavGrid {
         if (di !== 0 && dj !== 0 && (!free(i + di, j) || !free(i, j + dj))) continue;
         const nk = (j + dj) * cols + i + di;
         if (done[nk]) continue;
-        if (walls && this.overRail(k, nk)) continue;
+        if (walls && ((deck[k] === 1 && rail[nk] === 1) || (rail[k] === 1 && deck[nk] === 1))) continue;
         const ng = g[k] + NEIGHBOUR_STEP[n] * this.cellSize * cost[nk];
         if (ng >= g[nk]) continue;
         g[nk] = ng;
@@ -930,6 +940,10 @@ export class NavGrid {
     const need = radius + CLEARANCE_MARGIN;
     const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
     const walls = this.railWalls();
+    // overRail and byDeck, written out too.
+    const { rail, deck } = this.samples;
+    const deckEdge = this.deckEdge;
+    const sides = !this.rules.flies && !walls;
     while (open.size > 0 && expansions++ < MAX_EXPANSIONS) {
       const k = open.pop();
       if (closed[k] === id) continue;
@@ -956,8 +970,8 @@ export class NavGrid {
         // No squeezing diagonally between two blocked cells.
         if (di !== 0 && dj !== 0 && (isBlocked(i + di, j) || isBlocked(i, j + dj))) continue;
         if (closed[nk] === id) continue;
-        if (walls && this.overRail(k, nk)) continue;
-        if (this.byDeck(k, nk) && !this.sideStep(k, n, nk)) continue;
+        if (walls && ((deck[k] === 1 && rail[nk] === 1) || (rail[k] === 1 && deck[nk] === 1))) continue;
+        if (sides && deckEdge[k] + deckEdge[nk] > 0 && !this.sideStep(k, n, nk)) continue;
         const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
