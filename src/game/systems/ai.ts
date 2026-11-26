@@ -13,6 +13,7 @@ import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
 import { fireEscape } from '../wildfire';
 import { tideEscape } from '../tides';
+import { floodEscape } from '../flood';
 import { campSpot } from '../nomad';
 import { mendingPlace } from '../retreat';
 import { presenting } from '../alternate';
@@ -113,6 +114,17 @@ export function aiSystem(ctx: SimContext): System {
         // Caught in nobody's fire (a wildfire, a burning oil field): out of it the shortest way (see wildfire.ts).
         if (ctx.fire.count > 0 && !MOVE_RULES[mover.move].flies) {
           const out = fireEscape(ctx, faction, t.x, t.z);
+          if (out) {
+            mover.targetX = out.x;
+            mover.targetZ = out.z;
+            mover.faceX = out.x;
+            mover.faceZ = out.z;
+            continue;
+          }
+        }
+        // In the way of a flood coming down the valley: out of the valley (see flood.ts).
+        if (ctx.flood && ctx.flood.state === 'flooding') {
+          const out = floodEscape(ctx, mover.move, t.x, t.z);
           if (out) {
             mover.targetX = out.x;
             mover.targetZ = out.z;

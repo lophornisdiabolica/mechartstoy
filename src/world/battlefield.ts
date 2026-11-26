@@ -186,7 +186,7 @@ export interface TownSite {
  * hill, the citadel, the landing field and rail stations are placed on
  * their own (king of the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station' | 'drawbridge';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station' | 'drawbridge' | 'sluice';
 /** The kinds a map deals out to ordinary outposts. */
 export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal', 'drawbridge'];
 

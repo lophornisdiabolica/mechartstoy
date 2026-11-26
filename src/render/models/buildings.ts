@@ -655,6 +655,32 @@ registerModel('bld:winchHouse', (faction) => {
   return g;
 });
 
+/** A stretch of a dam: a thick concrete wall with a walkway, its sluice gates on the water side. */
+registerModel('bld:dam', () => {
+  const g = new THREE.Group();
+  g.add(box(1.8, 0.3, 3.3, 0x8a877e, 0, 0.15, 0));
+  g.add(box(1.4, 1.9, 3.2, 0xa8a59c, 0, 1.25, 0));
+  g.add(box(1.6, 0.14, 3.24, 0x8f8c84, 0, 2.27, 0));
+  for (const z of [-0.9, 0.9]) g.add(box(0.12, 1.1, 0.8, 0x5a6670, -0.76, 1.0, z)); // sluice gates
+  for (const z of [-1.5, 1.5]) g.add(box(0.1, 0.5, 0.1, DARK, 0.6, 2.58, z)); // railing posts
+  g.add(box(0.06, 0.06, 2.96, DARK, 0.6, 2.75, 0));
+  return g;
+});
+
+/** A dam control outpost's sluice house: a small concrete control room with the big gate wheel on its roof. */
+registerModel('bld:sluiceHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.2, 0.25, 3.2, CONCRETE, 0, 0.12, 0));
+  g.add(box(2.4, 1.8, 2.0, 0xa8a59c, 0, 1.15, 0));
+  g.add(box(2.6, 0.16, 2.2, primary, 0, 2.13, 0));
+  g.add(box(0.05, 1.0, 0.6, DARK, 1.23, 0.75, 0)); // door
+  g.add(box(0.06, 0.4, 1.2, 0x40525e, -1.23, 1.4, 0)); // window
+  g.add(cylinder(0.08, 0.08, 0.5, 6, DARK, 0, 2.46, 0));
+  g.add(cylinder(0.55, 0.55, 0.08, 12, secondary, 0, 2.75, 0).rotateX(Math.PI / 2));
+  return g;
+});
+
 /** A landing field's flight tower: a glazed cab on a slim tower, a beacon on its roof and a windsock. */
 registerModel('bld:flightTower', (faction) => {
   const { primary, secondary } = factionColors(faction);
