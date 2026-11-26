@@ -120,6 +120,10 @@ export class Ticker {
       if (e.faction >= 0 && e.faction < this.factions.length) this.say([this.side(e.faction), ` opened the sluices of the dam${where}: the valley's flooding`]);
       else this.say([`The dam${where} has burst: the valley's flooding`]);
     });
+    events.on('iceBroke', (e) => {
+      if (this.game !== game) return;
+      this.say([`The ice on the lake${this.direction(e.x, e.z, ' in the ')} gave way`, e.drowned > 1 ? `: ${e.drowned} went through` : ': one went through']);
+    });
     events.on('militia', (e) => {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([`The townsfolk${this.direction(e.x, e.z, ' in the ')} take up arms against `, this.side(e.faction)]);
