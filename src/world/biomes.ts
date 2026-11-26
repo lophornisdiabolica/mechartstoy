@@ -35,7 +35,7 @@ export interface BiomeDef {
   /** How civilian buildings look (see the town styles in models/buildings.ts), unless the map's settings choose another. */
   town: TownStyle;
   /** Dense forest's trees (see woods.ts and render/woodsMesh.ts): their shape and tint. */
-  woods: { plant: 'tree' | 'pine' | 'snowPine' | 'cactus'; tint: number };
+  woods: { plant: 'tree' | 'pine' | 'snowPine' | 'cactus' | 'jungle' | 'monolith'; tint: number };
 }
 
 export type TownStyle = 'brick' | 'adobe' | 'alpine' | 'timber' | 'concrete' | 'thatch' | 'shanty' | 'yurt' | 'dome';
@@ -108,7 +108,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     sky: 0x8fb0a0,
     props: { density: 150, gentle: { tree: 62, shrub: 32, rock: 6 }, steep: { tree: 1, rock: 2 } },
     town: 'thatch',
-    woods: { plant: 'tree', tint: 0x2f6a2c },
+    woods: { plant: 'jungle', tint: 0xd2dcc8 },
   },
   steppe: {
     id: 'steppe',
@@ -118,7 +118,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     sky: 0xc4c8b8,
     props: { density: 16, gentle: { shrub: 60, rock: 28, tree: 12 }, steep: { rock: 1 } },
     town: 'yurt',
-    woods: { plant: 'tree', tint: 0x5a7a3a },
+    woods: { plant: 'tree', tint: 0x5c6a42 },
   },
   tundra: {
     id: 'tundra',
@@ -158,7 +158,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     sky: 0xb4b0cc,
     props: { density: 28, gentle: { crystal: 50, rock: 35, shrub: 15 }, steep: { rock: 2, crystal: 1 } },
     town: 'dome',
-    woods: { plant: 'pine', tint: 0x8a9ab8 },
+    woods: { plant: 'monolith', tint: 0xa8b4e0 },
   },
 };
 

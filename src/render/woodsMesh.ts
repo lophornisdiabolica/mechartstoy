@@ -4,7 +4,7 @@ import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { TREE_HEIGHT } from '../world/woods';
-import { cactusGeometry, Detail, pineGeometry, treeGeometry } from './propsMesh';
+import { cactusGeometry, Detail, jungleTreeGeometry, monolithGeometry, pineGeometry, treeGeometry } from './propsMesh';
 import { PlantMesh, PlantShapes } from './plantLod';
 
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
@@ -44,7 +44,22 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const trees = field.woods.trees;
   const woods = BIOMES[field.config.biome].woods;
   const desert = woods.plant === 'cactus';
-  const shape = (d: Detail) => (desert ? cactusGeometry(d) : woods.plant === 'snowPine' ? pineGeometry(true, d) : woods.plant === 'pine' ? pineGeometry(false, d) : treeGeometry(d));
+  const shape = (d: Detail) => {
+    switch (woods.plant) {
+      case 'cactus':
+        return cactusGeometry(d);
+      case 'snowPine':
+        return pineGeometry(true, d);
+      case 'pine':
+        return pineGeometry(false, d);
+      case 'jungle':
+        return jungleTreeGeometry(d);
+      case 'monolith':
+        return monolithGeometry(d);
+      default:
+        return treeGeometry(d);
+    }
+  };
   const shapes: PlantShapes = { near: shape('near'), far: shape('far'), shadow: shape('shadow') };
   /** Every square's mesh, for setFar. */
   const meshes: PlantMesh[] = [];
@@ -55,8 +70,8 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
   const dummy = new THREE.Object3D();
   const base = new THREE.Color(tint);
-  // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki.
-  const fallen = new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
+  // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki; toppled crystal dulls.
+  const fallen = woods.plant === 'monolith' ? base.clone().multiplyScalar(0.6) : new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
   /** Per tree: the mesh its plants are in, and their instances there. */
   const drawn = new Map<number, { mesh: THREE.InstancedMesh; plants: Plant[]; instances: number[] }>();
   const { minX, minZ } = field.bounds;

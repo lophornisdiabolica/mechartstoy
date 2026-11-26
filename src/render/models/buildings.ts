@@ -549,34 +549,44 @@ function styledRoof(faction: number): number {
 /**
  * The roof on a box of the given footprint whose walls end at `h`: a gable
  * (steep and deep in alpine towns, with snow on it), or a flat roof with a
- * parapet in adobe towns.
+ * parapet in adobe towns. `tight`: a house in a row (see bld:terrace), whose
+ * roof stops at its own side walls (z) instead of overhanging next door's.
  */
-function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number): void {
+function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number, tight = false): void {
   const style = faction < 0 ? townStyle : 'brick';
   const color = styledRoof(faction);
+  /** How far past the side walls (z) a roof reaches, against the usual. */
+  const sides = (usual: number) => (tight ? d - 0.01 : d + usual);
   if (style === 'shanty') {
-    // A sheet of corrugated iron, laid on a slant.
-    const sheet = box(w + 0.3, 0.08, d + 0.3, color, 0, h + 0.2, 0);
-    sheet.rotation.x = 0.2;
+    // A sheet of corrugated iron, laid on a slant from front to back, high enough that its low
+    // edge clears the top of the wall (a big block's sheet drops further over its depth).
+    const run = w + 0.3;
+    const sheet = box(run, 0.08, sides(0.3), color, 0, h + (w / 2) * Math.tan(SHEET_TILT) + 0.06, 0);
+    sheet.rotation.z = SHEET_TILT;
     g.add(sheet);
     return;
   }
   if (style === 'dome') {
-    g.add(box(w + 0.06, 0.1, d + 0.06, TOWN_COLORS.dome.trim, 0, h + 0.05, 0));
+    g.add(box(w + 0.06, 0.1, sides(0.06), TOWN_COLORS.dome.trim, 0, h + 0.05, 0));
     dome(g, Math.min(w, d) * 0.45, h + 0.1, color);
     return;
   }
   if (style === 'adobe' || style === 'concrete') {
-    g.add(box(w + 0.08, 0.12, d + 0.08, color, 0, h + 0.06, 0));
-    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, d / 2));
-    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -d / 2));
+    g.add(box(w + 0.08, 0.12, sides(0.08), color, 0, h + 0.06, 0));
+    // The parapets along the sides, inside the walls in a row.
+    const edge = tight ? d / 2 - 0.06 : d / 2;
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, edge));
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -edge));
     return;
   }
   const pitch = style === 'alpine' ? 1.15 : style === 'thatch' ? 1.05 : style === 'timber' ? 0.8 : style === 'yurt' ? 0.5 : 0.7;
   // Thatch hangs well past the walls.
   const eaves = style === 'thatch' ? 0.6 : 0.2;
-  g.add(gableRoof(w + eaves, d + eaves + 0.05, pitch, color, h));
+  g.add(gableRoof(w + eaves, sides(eaves + 0.05), pitch, color, h));
 }
+
+/** How steeply a shanty's iron sheet roof slants, radians. */
+const SHEET_TILT = 0.2;
 
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
@@ -746,7 +756,7 @@ registerModel('bld:terrace', (faction) => {
     const deep = k % 2 === 0 ? 2.7 : 2.56;
     const face = deep / 2;
     house.add(box(deep, h, w - 0.04, wallColor(faction), 0, h / 2, 0));
-    roofOn(house, deep, w - 0.04, h, faction);
+    roofOn(house, deep, w - 0.04, h, faction, true);
     house.add(box(0.05, 0.6, 0.3, DARK, face + 0.025, 0.3, 0)); // door (proud of the windows above it)
     for (const y of [h * 0.45, h * 0.8].filter((y) => y < h - 0.25)) {
       house.add(box(0.05, 0.28, 0.32, WINDOW, face + 0.01, y, 0));
