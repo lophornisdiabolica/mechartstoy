@@ -377,6 +377,11 @@ there first, and fire slowly knocks them down.
 - *Sacred grove:* a ring of giant trees round a clearing, with a few ways in.
   Vehicles go round it, only super units push the giants over, and the
   woodland sides' shots slip between the trunks.
+- *Citadel:* an outpost near the middle walled in like a fortress, with four
+  gates, a tower at each corner, two bunkers, a keep and twice the usual
+  garrison. Whoever takes it gets +20% production.
+- *Landing field:* an outpost on a paved apron with a flight tower. Its
+  holder's aircraft, and a drop side's drops, come 35% faster.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).
@@ -1356,7 +1361,7 @@ outposts and the light scenery are still placed once, at the start.
   wears the colours of a faction not in the battle. A side takes one by
   having units inside the ring with no defenders there; more units take it
   faster, and two attacking teams at once stall each other. The towers and
-  bunker then switch sides. Each outpost is one of six kinds
+  bunker then switch sides. Each outpost is one of ten kinds
   (`OUTPOST_KINDS`; the setup screen picks which the map deals out), with
   a building of its own and a bonus for its holder (`OutpostBonus`; the
   Outposts bonus setting scales it): a *supply depot* (+10% production), an
@@ -1365,7 +1370,17 @@ outposts and the light scenery are still placed once, at the start.
   holder's team grows impatient 40% faster while massing, so its attacks
   set out sooner, and the mast spots for its guns), a *fuel depot* (+10%
   production, and its tanks blow up) and a *ruined factory* (turns out one
-  of the holder's factory batches every 75 seconds). Every outpost makes
+  of the holder's factory batches every 75 seconds). Four more are off by
+  default, so the usual battles stay as they were: a *shipyard* (dealt to
+  the outpost with the most water by it, it launches a missile boat for its
+  holder every 80 seconds, two afloat at most, even for a side with no
+  navy), a *sensor station* (a wide spotting ring that picks out stealthy
+  units for its holder's team), a *repair yard* (mends the holder's team's
+  vehicles and walkers that come by it, about 2.5% a second, and units that
+  fall back to mend use it) and a *signal fire* (every two minutes a relief
+  column of three of the holder's wave picks marches in from the nearest map
+  edge). The clock on a shipyard or signal fire starts again when it changes
+  hands, so taking one doesn't pay out at once. Every outpost makes
   the ground round it the holder's territory (see below). A production bonus adds the same to
   every side (+10% of a normal side's rate), so a side boosted for uneven
   teams doesn't get three times as much from it. Attacking squads take any

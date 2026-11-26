@@ -65,6 +65,8 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   buildingDestroyed: true,
   constructionStarted: true,
   outpostCaptured: true,
+  outpostLaunch: true,
+  outpostRelief: true,
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,

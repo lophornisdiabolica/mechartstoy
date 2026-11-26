@@ -53,12 +53,17 @@ export function musterPoint(ctx: SimContext, faction: number, time: number, forw
 export function spawnWave(world: World, ctx: SimContext, faction: number, picks: number, forward = 0, counts: CategoryCounts[] = countByCategory(world, ctx.sides.count)): void {
   const base = ctx.field.baseSites[faction];
   const { x: cx, z: cz } = musterPoint(ctx, faction, world.time, forward);
+  spawnWaveAt(world, ctx, faction, picks, cx, cz, base.radius * 0.6, counts);
+}
+
+/** Spawn `picks` groups from the wave table round (cx, cz), each forming up somewhere within `spread` of it. */
+export function spawnWaveAt(world: World, ctx: SimContext, faction: number, picks: number, cx: number, cz: number, spread: number, counts: CategoryCounts[] = countByCategory(world, ctx.sides.count)): void {
   for (let i = 0; i < picks; i++) {
     const entry = pickEntry(ctx, faction);
     if (!canBuild(ctx, counts, faction, ctx.units[entry.unit])) continue;
     // Each pick forms up as a group at a random spot on the base pad.
     const a = ctx.rng.range(0, Math.PI * 2);
-    const r = ctx.rng.range(0, base.radius * 0.6);
+    const r = ctx.rng.range(0, spread);
     const gx = cx + D.cos(a) * r;
     const gz = cz + D.sin(a) * r;
     const squad = newSquad(ctx);

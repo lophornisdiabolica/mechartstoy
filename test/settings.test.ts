@@ -17,7 +17,7 @@ function run(game: Game, seconds: number): void {
 describe('battle settings', () => {
   it('defaults reproduce the hand-tuned map', () => {
     // The same terrain and town; outposts (one per side by default) are added on top.
-    expect(battlefieldConfig(defaultSettings())).toEqual({ ...DEFAULT_BATTLEFIELD, outposts: 2, outpostKinds: OUTPOST_KIND_IDS.filter((k) => k !== 'relay'), forest: 0.2 });
+    expect(battlefieldConfig(defaultSettings())).toEqual({ ...DEFAULT_BATTLEFIELD, outposts: 2, outpostKinds: OUTPOST_KIND_IDS.slice(0, 6).filter((k) => k !== 'relay'), forest: 0.2 });
   });
 
   it('applies unit multipliers without touching the base definitions', () => {

@@ -181,12 +181,14 @@ export interface TownSite {
 
 /**
  * The kinds of outpost (what each one gives is in game/outposts.ts): a supply
- * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot or a ruined
- * factory.
+ * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot, a ruined
+ * factory, a shipyard, a sensor station, a repair yard or a signal fire. The
+ * hill, the citadel and the landing field are placed on their own (king of
+ * the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'hill';
-/** The kinds a map deals out to ordinary outposts (the hill is placed on its own, see BattlefieldConfig.hill). */
-export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory'];
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing';
+/** The kinds a map deals out to ordinary outposts. */
+export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal'];
 
 /** A flattened clearing in no-man's land where a capturable outpost stands. */
 export interface OutpostSite {
@@ -1207,7 +1209,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     : square && config.outposts > 0
       ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
       : placeOutposts(field, rng, config.outposts);
-  const kinds = dealOutpostKinds(spots, config.outpostKinds.filter((k) => k !== 'hill'), rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z));
+  const dealable = config.outpostKinds.filter((k) => OUTPOST_KIND_IDS.includes(k));
+  const kinds = dealOutpostKinds(field, spots, dealable, rng.fork(0x6b696e64));
   // King of the hill: the hill (placed before the towns) goes first, and the other outposts keep clear of it.
   if (hill) {
     if (!config.outpostPlaces) {
@@ -1215,7 +1218,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : [])];
       const rest = square && config.outposts > 0 ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng.fork(0x72657374), config.outposts - 1, taken)] : placeOutposts(field, rng.fork(0x72657374), config.outposts, taken);
       spots.splice(0, spots.length, ...rest.filter((p) => D.hypot(p.x - hill.x, p.z - hill.z) > OUTPOST_RADIUS * 2.5));
-      kinds.splice(0, kinds.length, ...dealOutpostKinds(spots, config.outpostKinds.filter((k) => k !== 'hill'), rng.fork(0x6b696e64), (p) => field.heightAt(p.x, p.z)));
+      kinds.splice(0, kinds.length, ...dealOutpostKinds(field, spots, dealable, rng.fork(0x6b696e64)));
     } else {
       for (let k = spots.length - 1; k >= 0; k--) {
         if (D.hypot(spots[k].x - hill.x, spots[k].z - hill.z) < OUTPOST_RADIUS * 2.5) {
@@ -1233,13 +1236,16 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
   });
   // Map traits (an oil field, ruins...) last of all, round everything else, on their own stream.
-  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169));
+  const traitOutposts = field.outpostSites.length;
+  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten);
+  // Outposts that traits added (a citadel, a landing field...) get bridged out to if they're cut off.
+  const held = field.outpostSites.slice(traitOutposts);
   // Levelling towns and outposts may have filled in the water under a bridge: take it away
   // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
   // On maps from the newer generator, also bridge out to any town left on an island (an archipelago's), and to any
   // base that levelling beside a cliff has walled off.
   const newer = field.styled;
-  if (dropDryBridges(field) > 0 || newer) bridgeLand(field, newer ? townSites : []);
+  if (dropDryBridges(field) > 0 || newer || held.length > 0) bridgeLand(field, newer ? [...townSites, ...held] : held);
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);
@@ -1449,7 +1455,7 @@ const CITY_LEAST = 10;
  * if there are more outposts than kinds), except that a hilltop gun, if
  * dealt, goes to the highest site.
  */
-function dealOutpostKinds<P>(sites: P[], allowed: OutpostKind[], rng: Rng, height: (p: P) => number): OutpostKind[] {
+function dealOutpostKinds(field: Battlefield, sites: { x: number; z: number }[], allowed: OutpostKind[], rng: Rng): OutpostKind[] {
   if (sites.length === 0) return [];
   const pool = allowed.length > 0 ? [...allowed] : ['supply' as OutpostKind];
   for (let i = pool.length - 1; i > 0; i--) {
@@ -1461,11 +1467,47 @@ function dealOutpostKinds<P>(sites: P[], allowed: OutpostKind[], rng: Rng, heigh
   if (gun >= 0) {
     let top = 0;
     sites.forEach((p, k) => {
-      if (height(p) > height(sites[top])) top = k;
+      if (field.heightAt(p.x, p.z) > field.heightAt(sites[top].x, sites[top].z)) top = k;
     });
     [dealt[gun], dealt[top]] = [dealt[top], dealt[gun]];
   }
+  // A shipyard needs water to launch into: each one goes to the wettest site not yet taken, and one with no water left gets something else.
+  if (dealt.includes('shipyard')) {
+    const wet = sites.map((p) => shoreNear(field, p.x, p.z, SHIPYARD_REACH));
+    const other = pool.find((k) => k !== 'shipyard' && k !== 'gun') ?? 'supply';
+    const placed = new Set<number>();
+    for (let yard = dealt.indexOf('shipyard'); yard >= 0; yard = dealt.indexOf('shipyard', yard + 1)) {
+      let best = -1;
+      wet.forEach((w, k) => {
+        if (w > 0 && !placed.has(k) && dealt[k] !== 'gun' && (best < 0 || w > wet[best])) best = k;
+      });
+      if (best < 0) {
+        dealt[yard] = other;
+        continue;
+      }
+      [dealt[yard], dealt[best]] = [dealt[best], dealt[yard]];
+      placed.add(best);
+      // What it swapped out may be another shipyard further on: the loop comes back to it.
+      if (dealt[yard] === 'shipyard' && yard !== best) yard--;
+    }
+  }
   return dealt;
+}
+
+/** How far from an outpost's middle a shipyard looks for water to launch its boats into. */
+export const SHIPYARD_REACH = 15;
+
+/** How much open water (deep enough for a boat) there is within `reach` of a point, as a count of sample points. */
+function shoreNear(field: Battlefield, x: number, z: number, reach: number): number {
+  let n = 0;
+  for (let r = OUTPOST_RADIUS + 2; r <= reach; r += 2) {
+    for (let k = 0; k < 16; k++) {
+      const px = x + D.cos((k / 16) * Math.PI * 2) * r;
+      const pz = z + D.sin((k / 16) * Math.PI * 2) * r;
+      if (field.contains(px, pz, 1) && field.heightAt(px, pz) < field.seaLevel - 0.6 && field.deckAt(px, pz) === null) n++;
+    }
+  }
+  return n;
 }
 
 /**
