@@ -3,6 +3,7 @@ import { weaponsOf } from '../game/arsenal';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS, TOWN_STYLES, TownStyle } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TERRAIN_STYLES, TerrainStyle } from '../world/terrainStyles';
 import { MAP_OUTLINE_IDS, MAP_OUTLINES, MapOutline } from '../world/outlines';
+import { MAP_TRAIT_IDS, MAP_TRAITS } from '../world/traits';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
 import { MapPreview } from './mapPreview';
@@ -53,6 +54,7 @@ const ROW_ROLL: Record<string, string> = {
   'Town style': 'townstyle',
   Terrain: 'terrain',
   Outline: 'outline',
+  Traits: 'traits',
   Bases: 'layout',
   Waterways: 'ways',
   Scrap: 'scrap',
@@ -683,6 +685,26 @@ export class SetupScreen {
     );
     row(map, 'Outline', outline.row);
     this.sync.push(() => outline.set(this.settings.map.outline));
+    // Map traits: a toggle each, any number on (none is the usual map).
+    const traitBox = el('div', { class: 'inline kinds' });
+    const traitButtons = MAP_TRAIT_IDS.map((k) => {
+      const b = el('button', { type: 'button', class: 'chip', title: MAP_TRAITS[k].blurb, 'aria-pressed': 'false' }, MAP_TRAITS[k].label);
+      b.addEventListener('click', () => {
+        const on = this.settings.map.traits.includes(k);
+        this.settings.map.traits = MAP_TRAIT_IDS.filter((x) => (x === k ? !on : this.settings.map.traits.includes(x)));
+        this.changed();
+      });
+      traitBox.append(b);
+      return b;
+    });
+    row(map, 'Traits', traitBox);
+    this.sync.push(() =>
+      traitButtons.forEach((b, i) => {
+        const on = this.settings.map.traits.includes(MAP_TRAIT_IDS[i]);
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      }),
+    );
     const layout = segmented<BaseLayout>(
       [
         { label: 'Ring', value: 'ring', title: 'Round the edge of the map, allies side by side' },

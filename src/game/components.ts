@@ -35,6 +35,12 @@ export const NEUTRAL = -1;
 export const GARRISON = -2;
 /** God powers (see god.ts): hostile to everyone, so bombs and quakes spare nobody. */
 export const GOD = -3;
+/**
+ * A map trait's relics (old walls, hulks, columns; see game/traits.ts):
+ * nobody's, nobody's enemy and nobody's ally, so nobody aims at them, but
+ * they stop shots and stray fire wears them down.
+ */
+export const RELIC = -4;
 
 /**
  * A town's militia (see towns.ts) is a faction of its own: MILITIA_BASE for

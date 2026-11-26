@@ -352,6 +352,35 @@ off. *Island*, *Isthmus*, *Inland sea*, *Crescent bay* and *Peninsula* map
 styles use them. **Shape** now runs from 2.5× deeper (a long front between
 two sides) to 2.5× wider.
 
+**Traits** lay one or more special features over the map, each a headline for
+the battle, on contested ground between the sides. Nothing on the map is
+anyone's, and nobody aims at it, but its old walls, hulks and columns stop
+shots and block the way like any building, so they're cover for whoever gets
+there first, and fire slowly knocks them down.
+
+- *Old battlefield:* craters, junk and the burnt-out hulks of an earlier
+  fight, picked clean long ago.
+- *Fortified line:* a broken line of old walls and pillboxes across the
+  middle, with gaps wide enough for a tank.
+- *Crashed hulk:* the wreck of a giant machine at the end of the furrow it
+  ploughed. Huge cover, and the scrap round it never runs out while it
+  stands, so the scrap sides (Hive, Lodestar) feed on it.
+- *Oil field:* derricks over pools of crude. A shell or flame bursting on a
+  pool sets it alight, the fire running across it and burning everyone in it
+  under a pall of black smoke, until it burns dry. A derrick blows up when
+  it's destroyed and lights the pools round it, and while one stands the
+  pools by it fill back up.
+- *Geysers:* vents that blow steam every half minute or so, thick enough to
+  throw everyone's shots off for a few seconds and to hide stealthy units.
+- *Ancient ruins:* columns and broken temple walls on old paving. Soldiers in
+  the ruins take half a burst that lands outside them, as in a trench.
+- *Sacred grove:* a ring of giant trees round a clearing, with a few ways in.
+  Vehicles go round it, only super units push the giants over, and the
+  woodland sides' shots slip between the trunks.
+
+A map style re-roll gives most maps a trait or two (the link key is
+`traits=oil,ruins`).
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is

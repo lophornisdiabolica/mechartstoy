@@ -1,6 +1,7 @@
 import type { Style } from './commander/advice';
 import { TerrainStyle } from '../world/terrainStyles';
 import { MapOutline } from '../world/outlines';
+import { MapTrait } from '../world/traits';
 import { TownStyle } from '../world/biomes';
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
@@ -108,6 +109,8 @@ export interface BattleSettings {
     outline: MapOutline;
     /** How civilian buildings look: 'biome' for the biome's own style (see world/biomes.ts). Looks only. */
     townStyle: TownStyle | 'biome';
+    /** Special features laid over the map, a headline each (see world/traits.ts): none for the usual map. */
+    traits: MapTrait[];
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -314,7 +317,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', outline: 'full', townStyle: 'biome', shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', outline: 'full', townStyle: 'biome', traits: [], shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -498,6 +501,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     terrain: s.map.terrain,
     outline: s.map.outline,
     townStyle: s.map.townStyle,
+    traits: [...(s.map.traits ?? [])],
   };
 }
 

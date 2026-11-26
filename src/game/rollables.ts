@@ -2,6 +2,7 @@ import { Rng } from '../core/rng';
 import { BIOME_IDS, TOWN_STYLE_IDS, TownStyle } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TerrainStyle } from '../world/terrainStyles';
 import { MAP_OUTLINE_IDS, MapOutline } from '../world/outlines';
+import { MAP_TRAIT_IDS, MapTrait } from '../world/traits';
 import type { AttackTiming, BaseLayout, BattleMode, BattleSettings, CityMode, MapSize, SuperGrowth, TownSize } from './settings';
 import { LIMITS, rampMode, ROLLED_MAP_SIZES, TOWN_SIZES } from './settings';
 import type { VarietyKey } from './variety';
@@ -104,6 +105,8 @@ const build = (): Rollable[] => [
   range('hills', 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), 'style'),
   choice<TownStyle | 'biome'>('townstyle', 'Town style', ['biome', ...TOWN_STYLE_IDS], (s) => s.map.townStyle, (s, v) => (s.map.townStyle = v), 'biome'),
   choice<MapOutline>('outline', 'Outline', MAP_OUTLINE_IDS, (s) => s.map.outline, (s, v) => (s.map.outline = v), 'style'),
+  // A die on traits rolls one of them (or none): pick more by hand.
+  choice<MapTrait | 'none'>('traits', 'Map trait', ['none', ...MAP_TRAIT_IDS], (s) => s.map.traits[0] ?? 'none', (s, v) => (s.map.traits = v === 'none' ? [] : [v]), 'style'),
   choice<TerrainStyle>('terrain', 'Terrain', TERRAIN_STYLE_IDS, (s) => s.map.terrain, (s, v) => (s.map.terrain = v), 'style'),
   range('mtn', 'Mountains', 'mountains', 0.05, (s) => s.map.mountains, (s, v) => (s.map.mountains = v), 'style'),
   range('cliff', 'Cliffs', 'cliffs', 0.05, (s) => s.map.cliffs, (s, v) => (s.map.cliffs = v), 'style'),

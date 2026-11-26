@@ -124,8 +124,10 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
       fortLine(field, out, r);
       continue;
     }
-    const radius = RADII[kind] * scale;
-    const at = findSpot(field, out, radius, r);
+    // Smaller if it doesn't fit (a crowded map, or a second trait).
+    let radius = RADII[kind] * scale;
+    let at = findSpot(field, out, radius, r);
+    if (!at) at = findSpot(field, out, (radius *= 0.7), r);
     if (!at) continue;
     out.sites.push({ kind, x: at.x, z: at.z, radius });
     BUILDERS[kind](field, out, at.x, at.z, radius, r, scale);
@@ -169,7 +171,7 @@ const BUILDERS: Record<Exclude<MapTrait, 'fortLine'>, Builder> = {
       const off = Math.abs((vx - x) * -uz + (vz - z) * ux);
       const fade = 1 - along / length;
       const half = 1.6 + 1.2 * fade;
-      if (off < half) heights[k] -= 1.1 * fade * (1 - (off / half) ** 2);
+      if (off < half) heights[k] -= 1.1 * fade * (1 - (off / half) * (off / half));
       else if (off < half * 2) heights[k] += 0.45 * fade * (1 - (off - half) / half);
     });
     // Half buried where it stopped.
@@ -292,8 +294,8 @@ const BUILDERS: Record<Exclude<MapTrait, 'fortLine'>, Builder> = {
 /**
  * Fortified line: a broken line of old walls and pillboxes across the map,
  * square across the way between the first base and the base furthest from
- * it, wavering a little. Runs of a few walls, gaps between them wide enough
- * for a tank, a pillbox every thirty-odd paces; gaps wherever the line
+ * it, wavering a little. Runs of four to seven walls, gaps between them wide
+ * enough for a tank, a pillbox every thirty-odd paces; gaps wherever the line
  * meets water, a road, a bridge, a town or another trait.
  */
 function fortLine(field: Battlefield, out: TraitLayout, rng: Rng): void {
@@ -313,7 +315,7 @@ function fortLine(field: Battlefield, out: TraitLayout, rng: Rng): void {
   const point = (s: number) => ({ x: mx - nz * s + nx * offset(s), z: mz + nx * s + nz * offset(s) });
   const reach = Math.max(field.width, field.depth);
   const STEP = 2.6;
-  let run = rng.int(3, 6);
+  let run = rng.int(4, 7);
   let gap = 0;
   let sinceBox = 0;
   let boxEvery = rng.range(12, 24);
@@ -333,8 +335,9 @@ function fortLine(field: Battlefield, out: TraitLayout, rng: Rng): void {
     const heading = -D.atan2(tx, -tz);
     const pillbox = sinceBox >= boxEvery;
     const r = pillbox ? 2 : 1.5;
-    if (!free(field, out, p.x, p.z, r) || out.sites.some((t) => D.hypot(t.x - p.x, t.z - p.z) < t.radius + 2)) {
-      run = rng.int(3, 6);
+    // Walls stand end to end (closer than relics usually may).
+    if (!free(field, out, p.x, p.z, r, -1.4) || out.sites.some((t) => D.hypot(t.x - p.x, t.z - p.z) < t.radius + 2)) {
+      run = rng.int(4, 7);
       continue;
     }
     if (pillbox) {
@@ -346,8 +349,8 @@ function fortLine(field: Battlefield, out: TraitLayout, rng: Rng): void {
     }
     built++;
     if (--run <= 0) {
-      run = rng.int(3, 6);
-      gap = rng.int(2, 3);
+      run = rng.int(4, 7);
+      gap = 2;
     }
   }
   if (built > 0) out.sites.push({ kind: 'fortLine', x: mx, z: mz, radius: 0 });
@@ -363,10 +366,11 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
   for (let n = 0; n < TRIES; n++) {
     const x = rng.range(-hw, hw);
     const z = rng.range(-hd, hd);
-    if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius * 1.35 + radius + 8)) continue;
-    if (out.sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < t.radius + radius + 6)) continue;
-    if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + radius + 3)) continue;
-    if (!field.config.citySprawl && field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + radius + 2)) continue;
+    // A trait can spread toward a base or a town; its relics and ground keep clear of them (see free).
+    if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius * 1.35 + radius * 0.5 + 4)) continue;
+    if (out.sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < t.radius + radius + 4)) continue;
+    if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + radius * 0.6)) continue;
+    if (!field.config.citySprawl && field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + radius * 0.6)) continue;
     // Mostly open, dry, gentle ground.
     let open = 0;
     let total = 0;
@@ -376,10 +380,10 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
         const px = x + D.cos(a) * radius * f;
         const pz = z + D.sin(a) * radius * f;
         total++;
-        if (dry(field, px, pz) && !field.sheerAt(px, pz) && field.slopeAt(px, pz) < 0.7 && !field.inCity(px, pz, 2)) open++;
+        if (dry(field, px, pz) && !field.sheerAt(px, pz) && field.slopeAt(px, pz) < 0.7 && !field.inCity(px, pz, 2) && !field.townSites.some((t) => field.inTown(t, px, pz))) open++;
       }
     }
-    if (open < total * 0.8) continue;
+    if (open < total * 0.7) continue;
     // Contested: about as far from one side as from the next.
     const d = field.baseSites.map((b) => D.hypot(b.x - x, b.z - z)).sort((p, q) => p - q);
     const score = Math.abs(d[0] - d[1]) + 0.25 * D.hypot(x, z) + rng.range(0, 6);
@@ -392,7 +396,7 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
 }
 
 /** Whether a relic of this radius can stand at a point: dry, gentle ground clear of bases, towns, outposts, roads, bridges and other relics. */
-function free(field: Battlefield, out: TraitLayout, x: number, z: number, r: number): boolean {
+function free(field: Battlefield, out: TraitLayout, x: number, z: number, r: number, gap = 0.4): boolean {
   if (!field.contains(x, z, r + 1) || !dry(field, x, z) || field.slopeAt(x, z) > 0.6 || field.sheerAt(x, z)) return false;
   for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) if (!dry(field, x + dx, z + dz)) return false;
   if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius * 1.35 + r + 4)) return false;
@@ -406,11 +410,11 @@ function free(field: Battlefield, out: TraitLayout, x: number, z: number, r: num
     const [ii, jj] = field.cellAt(x + dx, z + dz);
     if (field.roadCell[jj * field.config.cols + ii]) return false;
   }
-  return !relicNear(out, x, z, r);
+  return !relicNear(out, x, z, r, gap);
 }
 
-function relicNear(out: TraitLayout, x: number, z: number, r: number): boolean {
-  return out.relics.some((q) => D.hypot(q.x - x, q.z - z) < r + RELIC_RADIUS[q.building] + 0.4);
+function relicNear(out: TraitLayout, x: number, z: number, r: number, gap = 0.4): boolean {
+  return out.relics.some((q) => D.hypot(q.x - x, q.z - z) < r + RELIC_RADIUS[q.building] + gap);
 }
 
 /** Relics' footprints (BuildingDef.radius), for spacing them at generation. */
@@ -471,3 +475,4 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
+

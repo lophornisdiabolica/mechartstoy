@@ -1,3 +1,4 @@
+import { MAP_TRAIT_IDS } from '../world/traits';
 import { isStyle } from '../game/commander/advice';
 import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
@@ -82,6 +83,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.terrain !== d.map.terrain) p.set('terrain', s.map.terrain);
   if (s.map.outline !== d.map.outline) p.set('outline', s.map.outline);
   if (s.map.townStyle !== d.map.townStyle) p.set('townstyle', s.map.townStyle);
+  if (s.map.traits.length > 0) p.set('traits', s.map.traits.join(','));
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
@@ -169,6 +171,12 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (outline && isMapOutline(outline)) s.map.outline = outline;
   const townStyle = p.get('townstyle');
   if (townStyle && (townStyle === 'biome' || isTownStyle(townStyle))) s.map.townStyle = townStyle;
+  // Map traits as a list, e.g. traits=oil,ruins (kept in the standard order; none is the usual map).
+  const traits = p.get('traits');
+  if (traits !== null) {
+    const listed = traits.split(',').map((k) => k.trim());
+    s.map.traits = MAP_TRAIT_IDS.filter((k) => listed.includes(k));
+  }
   const layout = p.get('layout');
   if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
   const tsize = p.get('tsize');
