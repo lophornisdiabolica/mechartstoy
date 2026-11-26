@@ -329,7 +329,7 @@ export function landReach(field: Battlefield): Uint8Array {
   const dry = (k: number) => {
     const x = field.vertexX(k % g.stride);
     const z = field.vertexZ(Math.floor(k / g.stride));
-    return field.deckAt(x, z) !== null || (field.heights[k] >= field.seaLevel && !cliffBeside(field, x, z));
+    return field.deckAt(x, z) !== null || (field.heights[k] >= field.seaLevel && !cliffBeside(field, x, z) && !wetBeside(field, x, z));
   };
   const site = field.baseSites[0];
   const start = vertexAt(field, site.x, site.z);
@@ -358,6 +358,20 @@ function cliffBeside(field: Battlefield, x: number, z: number): boolean {
   return field.cliffAt(x - h, z - h) || field.cliffAt(x + h, z - h) || field.cliffAt(x - h, z + h) || field.cliffAt(x + h, z + h);
 }
 
+/**
+ * On maps from the newer generator (high ground, or a terrain style other
+ * than rolling), whether any of the four cells round a vertex is under
+ * water: going by cells, as routes do, so a neck of land too thin for a
+ * route doesn't count as joining two shores. (Rolling maps without high
+ * ground go by vertices alone, as they always have.)
+ */
+function wetBeside(field: Battlefield, x: number, z: number): boolean {
+  if (!field.cliffs && field.config.terrain === 'rolling') return false;
+  const h = field.config.cellSize / 2;
+  const wet = (px: number, pz: number) => field.contains(px, pz) && field.isWater(px, pz) && field.deckAt(px, pz) === null;
+  return wet(x - h, z - h) || wet(x + h, z - h) || wet(x - h, z + h) || wet(x + h, z + h);
+}
+
 /** The vertex nearest a world point. */
 export function vertexAt(field: Battlefield, x: number, z: number): number {
   const { cols, rows, cellSize } = field.config;
@@ -367,18 +381,19 @@ export function vertexAt(field: Battlefield, x: number, z: number): number {
 }
 
 /**
- * Make sure every base can be reached by land: while some base is cut off,
- * bridge the shortest stretch of water between the land the first base
- * reaches and the land the cut-off base is on. Returns the number of bridges built.
+ * Make sure every base (and any points in `also`) can be reached by land:
+ * while one is cut off, bridge the shortest stretch of water between the
+ * land the first base reaches and the land the cut-off one is on. Returns
+ * the number of bridges built.
  */
-export function bridgeLand(field: Battlefield): number {
+export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] = []): number {
   const g = grid(field);
   const vx = (k: number) => field.vertexX(k % g.stride);
   const vz = (k: number) => field.vertexZ(Math.floor(k / g.stride));
   let built = 0;
-  for (let round = 0; round < field.baseSites.length * 2; round++) {
+  for (let round = 0; round < (field.baseSites.length + also.length) * 2; round++) {
     const reach = landReach(field);
-    const cut = field.baseSites.find((s) => !reach[vertexAt(field, s.x, s.z)]);
+    const cut = field.baseSites.find((s) => !reach[vertexAt(field, s.x, s.z)]) ?? also.find((s) => !reach[vertexAt(field, s.x, s.z)]);
     if (!cut) return built;
     // The land the cut-off base stands on.
     const island = new Uint8Array(g.count);
@@ -388,40 +403,47 @@ export function bridgeLand(field: Battlefield): number {
     while (stack.length) {
       const k = stack.pop()!;
       for (const nk of neighbours(g, k)) {
-        if (!island[nk] && field.heights[nk] >= field.seaLevel && !cliffBeside(field, vx(nk), vz(nk))) {
+        if (!island[nk] && field.heights[nk] >= field.seaLevel && !cliffBeside(field, vx(nk), vz(nk)) && !wetBeside(field, vx(nk), vz(nk))) {
           island[nk] = 1;
           stack.push(nk);
         }
       }
     }
-    // Shortest crossing: from every reachable shore vertex, spread over water until the island.
-    const origin = new Int32Array(g.count).fill(-1);
-    const dist = new Float64Array(g.count).fill(Infinity);
-    const heap = new Heap(dist);
-    for (let k = 0; k < g.count; k++) {
-      if (reach[k] && neighbours(g, k).some((n) => !reach[n])) {
-        dist[k] = 0;
-        origin[k] = k;
-        heap.push(k);
-      }
-    }
+    // Shortest crossing: from every reachable shore vertex, spread over water until the island. On maps from the
+    // newer generator, keep clear of the bridges already there, so a new one doesn't start from another's side (where
+    // its railing would wall the way off) or run across it; only if there's no other way is it let through.
+    const clear = (k: number) => !field.nearBridge(vx(k), vz(k), BRIDGE_WIDTH * 0.5 + 1.5);
     let landing = -1;
-    while (heap.size > 0) {
-      const k = heap.pop();
-      if (island[k]) {
-        landing = k;
-        break;
-      }
-      for (const nk of neighbours(g, k)) {
-        if (reach[nk]) continue;
-        // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
-        const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
-        if (d < dist[nk]) {
-          dist[nk] = d;
-          origin[nk] = origin[k];
-          heap.push(nk);
+    let origin = new Int32Array(0);
+    for (const keepClear of (field.cliffs || field.config.terrain !== 'rolling') && field.bridges.length > 0 ? [true, false] : [false]) {
+      origin = new Int32Array(g.count).fill(-1);
+      const dist = new Float64Array(g.count).fill(Infinity);
+      const heap = new Heap(dist);
+      for (let k = 0; k < g.count; k++) {
+        if (reach[k] && neighbours(g, k).some((n) => !reach[n]) && (!keepClear || clear(k))) {
+          dist[k] = 0;
+          origin[k] = k;
+          heap.push(k);
         }
       }
+      while (heap.size > 0) {
+        const k = heap.pop();
+        if (island[k]) {
+          landing = k;
+          break;
+        }
+        for (const nk of neighbours(g, k)) {
+          if (reach[nk] || (keepClear && !clear(nk))) continue;
+          // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
+          const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
+          if (d < dist[nk]) {
+            dist[nk] = d;
+            origin[nk] = origin[k];
+            heap.push(nk);
+          }
+        }
+      }
+      if (landing >= 0) break;
     }
     if (landing < 0) return built;
     const a = { x: vx(origin[landing]), z: vz(origin[landing]) };

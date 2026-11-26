@@ -9,6 +9,7 @@ import { generateBattlefield } from '../src/world/battlefield';
 import { Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
 import { layoutTown } from '../src/world/settlements';
+import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
 
 const DT = 1 / 30;
 
@@ -306,5 +307,74 @@ describe('maps', () => {
     s.map = { ...s.map, hills: 2.6, mountains: 0.35, cliffs: 0.8 };
     const back = settingsFromParams(settingsToParams(s)).map;
     expect([back.hills, back.mountains, back.cliffs]).toEqual([2.6, 0.35, 0.8]);
+  });
+
+  it('every terrain style generates a playable map, with its own lie of the land', () => {
+    const stats: Record<string, { water: number; sheer: number; bridges: number }> = {};
+    for (const terrain of TERRAIN_STYLE_IDS) {
+      let water = 0;
+      let sheer = 0;
+      let bridges = 0;
+      for (let seed = 0; seed < 4; seed++) {
+        const game = emptyGame(seed * 97 + 5, (s) => {
+          s.map = { ...s.map, size: seed % 2 ? 'medium' : 'small', terrain, water: 0.4, towns: 2, outposts: 3 };
+          s.factions = Array.from({ length: seed < 2 ? 2 : 4 }, (_, i) => defaultFaction(i));
+        });
+        const f = game.field;
+        for (const cls of ['tracked', 'foot', 'walker'] as const) {
+          const nav = game.ctx.navs.for(cls);
+          for (const p of [...f.baseSites, ...f.outpostSites]) expect(nav.connected(f.baseSites[0], p)).toBe(true);
+        }
+        const { cols, rows, cellSize } = f.config;
+        let wet = 0;
+        for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) if (f.isWater(f.bounds.minX + (i + 0.5) * cellSize, f.bounds.minZ + (j + 0.5) * cellSize)) wet++;
+        water += wet / (cols * rows) / 4;
+        sheer += f.sheer.reduce((a, v) => a + v, 0) / f.sheer.length / 4;
+        bridges += f.bridges.length / 4;
+      }
+      stats[terrain] = { water, sheer, bridges };
+    }
+    // Rolling maps have no high ground; a ridge or a canyon is high ground down the middle.
+    expect(stats.rolling.sheer).toBe(0);
+    expect(stats.ridge.sheer).toBeGreaterThan(0.03);
+    expect(stats.canyon.sheer).toBeGreaterThan(0.03);
+    // A river gets bridged; islands and a coast are mostly sea; salt flats are dry.
+    expect(stats.river.bridges).toBeGreaterThanOrEqual(1.5);
+    expect(stats.islands.water).toBeGreaterThan(0.35);
+    expect(stats.coast.water).toBeGreaterThan(stats.rolling.water + 0.1);
+    expect(stats.flats.water).toBeLessThan(stats.rolling.water);
+  });
+
+  it('the rolling terrain style is the map as it always was', () => {
+    const plain = emptyGame(29).field;
+    expect(plain.config.terrain).toBe('rolling');
+    const s = defaultSettings();
+    s.map.terrain = 'canyon';
+    expect(settingsFromParams(settingsToParams(s)).map.terrain).toBe('canyon');
+    expect(settingsToParams(s).get('terrain')).toBe('canyon');
+    expect(settingsFromParams(new URLSearchParams('terrain=volcano')).map.terrain).toBe('rolling');
+  });
+
+  it('a bridge out to cut-off land starts clear of the bridges already there, not from one’s side', () => {
+    let bridges = 0;
+    for (let seed = 1; seed <= 16; seed++) {
+      const s = defaultSettings();
+      s.map.terrain = 'islands';
+      s.map.towns = 2;
+      const f = generateBattlefield(new Rng(seed * 7919), { ...battlefieldConfig(s), seats: [0, 1, 2] });
+      bridges += f.bridges.length;
+      for (const b of f.bridges) {
+        for (const o of f.bridges) {
+          if (o === b) continue;
+          for (const [x, z] of [[b.ax, b.az], [b.bx, b.bz]]) {
+            const dx = o.bx - o.ax;
+            const dz = o.bz - o.az;
+            const t = Math.max(0, Math.min(1, ((x - o.ax) * dx + (z - o.az) * dz) / (dx * dx + dz * dz)));
+            expect(Math.hypot(x - o.ax - dx * t, z - o.az - dz * t)).toBeGreaterThan(o.width / 2 + 0.5);
+          }
+        }
+      }
+    }
+    expect(bridges).toBeGreaterThan(16);
   });
 });

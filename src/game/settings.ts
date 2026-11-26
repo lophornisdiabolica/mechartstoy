@@ -1,4 +1,5 @@
 import type { Style } from './commander/advice';
+import { TerrainStyle } from '../world/terrainStyles';
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
@@ -99,6 +100,8 @@ export interface BattleSettings {
     mountains: number;
     /** Cliffs, 0 (none) to 1: flat-topped mesas with sheer sides, reached by a ramp or two. */
     cliffs: number;
+    /** The lie of the land: a generation style (see world/terrainStyles.ts), 'rolling' for the usual. */
+    terrain: TerrainStyle;
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -305,7 +308,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -486,6 +489,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     outpostPlaces: placed.outposts,
     mountains: s.map.mountains,
     cliffs: s.map.cliffs,
+    terrain: s.map.terrain,
   };
 }
 
