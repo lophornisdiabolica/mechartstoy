@@ -324,6 +324,25 @@ base off or leave a mesa top out of reach (counting only ways wide enough
 for a super unit); towns, cities and outposts keep their own ground level.
 The *Mountain passes* and *Mesa country* map styles use them.
 
+**Terrain** sets the lie of the land, laid over the rolling hills before
+anything is built on it. Features that run across the map run between the
+first sides (north to south when the bases are west and east):
+
+- *Rolling:* the usual map, unchanged.
+- *River valley:* a river winding down a broad valley, bridged in two or three places.
+- *Ridge line:* a tall ridge with sheer flanks, crossed only at its passes.
+- *Canyon:* a deep dry gorge with sheer walls, cut through a raised tableland,
+  with two or three places where the walls ease into slopes to cross by.
+- *Archipelago:* islands in a shallow sea. Bridges join the bases' islands
+  and any town's.
+- *Coastline:* one long side of the map runs down into the sea.
+- *Terraced hills:* hillsides stepped into flat terraces.
+- *Salt flats:* nearly flat open ground.
+- *Crater field:* an old battlefield pocked with craters, the deepest flooded.
+
+Each has a map style of the same name, so re-rolls between battles can deal
+them out.
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is
@@ -353,7 +372,7 @@ The *Mountain passes* and *Mesa country* map styles use them.
 - **Dice and locks:** the re-roll buttons are presets over the settings
   further down, and each setting's row ends in a die (🎲) and, for settings
   a preset rolls, a lock (🔒). A preset lights up the dice of what it rolls
-  (Map size: size and shape; Map style: water, hills, mountains, cliffs,
+  (Map size: size and shape; Map style: terrain, water, hills, mountains, cliffs,
   dense forest, towns, town size and city; Biome: the biome). A lock keeps that setting as it is
   while the preset rolls the rest, so a map style, but always large and wet,
   is Map style and Map size on with Size and Water locked. A die rolls a

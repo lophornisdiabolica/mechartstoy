@@ -4,6 +4,7 @@ import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
 import { rollable } from '../game/rollables';
 import { BattleSettings, CITY_MODES, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
+import { isTerrainStyle } from '../world/terrainStyles';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
 /**
@@ -77,6 +78,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.armies.shortcuts !== d.armies.shortcuts) p.set('span', s.armies.shortcuts ? '1' : '0');
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
+  if (s.map.terrain !== d.map.terrain) p.set('terrain', s.map.terrain);
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
@@ -158,6 +160,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (town === '0' || town === '1') s.map.towns = Number(town);
   const biome = p.get('biome');
   if (biome && isBiome(biome)) s.map.biome = biome;
+  const terrain = p.get('terrain');
+  if (terrain && isTerrainStyle(terrain)) s.map.terrain = terrain;
   const layout = p.get('layout');
   if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
   const tsize = p.get('tsize');

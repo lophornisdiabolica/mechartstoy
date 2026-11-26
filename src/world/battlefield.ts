@@ -5,10 +5,11 @@ import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } fr
 import { connectTowns } from './roads';
 import { CITY_CELL, CityPlan, inCityPlan, planCity, snapToCell } from './city';
 import { growWoods, Woods } from './woods';
-import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
+import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, placeBridge, vertexAt } from './waterways';
 import * as D from '../core/dmath';
 import { CLIFF_SLOPE } from './moveClasses';
 import { raiseHighground } from './highground';
+import { SHEER_STYLES, shapeTerrain, TerrainStyle } from './terrainStyles';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -79,6 +80,8 @@ export interface BattlefieldConfig {
    */
   mountains: number;
   cliffs: number;
+  /** The lie of the land (see terrainStyles.ts): 'rolling' for the usual. */
+  terrain: TerrainStyle;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -104,6 +107,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   outpostPlaces: null,
   mountains: 0,
   cliffs: 0,
+  terrain: 'rolling',
 };
 
 /** Width of town streets and the roads between towns. */
@@ -856,10 +860,10 @@ export class Battlefield {
 
   /**
    * Whether this map can have sheer cliffs (see sheer): only with mountains
-   * or cliffs turned on.
+   * or cliffs turned on, or a ridge line or canyon.
    */
   get cliffs(): boolean {
-    return this.config.mountains > 0 || this.config.cliffs > 0;
+    return this.config.mountains > 0 || this.config.cliffs > 0 || SHEER_STYLES.has(this.config.terrain);
   }
 
   /** Whether a point is on high ground, where steep enough ground is a cliff (see sheer). */
@@ -995,6 +999,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     }
   };
 
+  // The lie of the land (a river, a ridge, islands...), on its own stream so rolling maps don't change.
+  const crossings = shapeTerrain(field, config.terrain, rng.fork(0x74657272));
+
   // Mountains and mesas, on their own random stream so maps without them don't change.
   if (field.cliffs) raiseHighground(field, rng.fork(0x68696768));
 
@@ -1007,6 +1014,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   // Water joined up between the bases (on their own random stream, so dry maps don't change), then
   // bridges wherever that, or the lakes themselves, cut the land.
   if (config.waterways !== 'off') bridgeChannels(field, carveWaterways(field, { everyBase: config.waterways === 'everyBase' }));
+  // The style's own bridges (over a river valley's river), where there's still water to cross.
+  for (const c of crossings) if (field.isWater((c.a.x + c.b.x) / 2, (c.a.z + c.b.z) / 2)) placeBridge(field, c.a, c.b);
   bridgeLand(field);
 
   // King of the hill: the hill takes the fairest ground first, and towns keep off it.
@@ -1200,9 +1209,10 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   });
   // Levelling towns and outposts may have filled in the water under a bridge: take it away
   // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
-  if (dropDryBridges(field) > 0) bridgeLand(field);
-  // And on maps with cliffs, levelling beside one may have steepened it into a wall: bridge (or cut through) to any base it walled off.
-  else if (field.cliffs) bridgeLand(field);
+  // On maps from the newer generator, also bridge out to any town left on an island (an archipelago's), and to any
+  // base that levelling beside a cliff has walled off.
+  const newer = field.cliffs || config.terrain !== 'rolling';
+  if (dropDryBridges(field) > 0 || newer) bridgeLand(field, newer ? townSites : []);
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);

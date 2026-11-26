@@ -74,6 +74,28 @@ export function raiseHighground(field: Battlefield, rng: Rng): number {
   return raised;
 }
 
+/**
+ * Reshape the ground as `shape` does and keep whatever it changed as high
+ * ground (see Battlefield.sheer), if every base can still reach every
+ * other by a way wide enough for a super unit; otherwise undo it. For
+ * map-wide features such as a ridge line or a canyon (see terrainStyles.ts).
+ */
+export function shapeHighground(field: Battlefield, shape: () => void): boolean {
+  const ways = new Ways(field);
+  const box = ways.box(0, 0, Math.max(field.width, field.depth));
+  const heights = box.save();
+  shape();
+  const raised = ways.raised(box, heights);
+  ways.mark(raised, 1);
+  ways.update(box);
+  if (ways.open([])) {
+    for (const k of raised) field.sheer[k] = 1;
+    return true;
+  }
+  box.restore(heights);
+  return false;
+}
+
 /** Try a feature at random spots until one fits and leaves the map passable. */
 function place(field: Battlefield, rng: Rng, ways: Ways, placed: Feature[], plan: (x: number, z: number) => Plan | null): boolean {
   const { width, depth } = field;
@@ -233,7 +255,9 @@ class Ways {
   constructor(private readonly field: Battlefield) {
     const n = field.config.cols * field.config.rows;
     this.cliff = new Uint8Array(n);
-    this.high = new Uint8Array(n);
+    // High ground already on the map (a ridge line or canyon, see terrainStyles.ts) counts from the start.
+    this.high = field.sheer.slice();
+    if (this.high.some((v) => v === 1)) this.update(this.box(0, 0, Math.max(field.width, field.depth)));
   }
 
   box(x: number, z: number, reach: number): Box {
