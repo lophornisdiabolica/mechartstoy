@@ -408,34 +408,41 @@ export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] 
         }
       }
     }
-    // Shortest crossing: from every reachable shore vertex, spread over water until the island.
-    const origin = new Int32Array(g.count).fill(-1);
-    const dist = new Float64Array(g.count).fill(Infinity);
-    const heap = new Heap(dist);
-    for (let k = 0; k < g.count; k++) {
-      if (reach[k] && neighbours(g, k).some((n) => !reach[n])) {
-        dist[k] = 0;
-        origin[k] = k;
-        heap.push(k);
-      }
-    }
+    // Shortest crossing: from every reachable shore vertex, spread over water until the island. On maps from the
+    // newer generator, keep clear of the bridges already there, so a new one doesn't start from another's side (where
+    // its railing would wall the way off) or run across it; only if there's no other way is it let through.
+    const clear = (k: number) => !field.nearBridge(vx(k), vz(k), BRIDGE_WIDTH * 0.5 + 1.5);
     let landing = -1;
-    while (heap.size > 0) {
-      const k = heap.pop();
-      if (island[k]) {
-        landing = k;
-        break;
-      }
-      for (const nk of neighbours(g, k)) {
-        if (reach[nk]) continue;
-        // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
-        const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
-        if (d < dist[nk]) {
-          dist[nk] = d;
-          origin[nk] = origin[k];
-          heap.push(nk);
+    let origin = new Int32Array(0);
+    for (const keepClear of field.styled && field.bridges.length > 0 ? [true, false] : [false]) {
+      origin = new Int32Array(g.count).fill(-1);
+      const dist = new Float64Array(g.count).fill(Infinity);
+      const heap = new Heap(dist);
+      for (let k = 0; k < g.count; k++) {
+        if (reach[k] && neighbours(g, k).some((n) => !reach[n]) && (!keepClear || clear(k))) {
+          dist[k] = 0;
+          origin[k] = k;
+          heap.push(k);
         }
       }
+      while (heap.size > 0) {
+        const k = heap.pop();
+        if (island[k]) {
+          landing = k;
+          break;
+        }
+        for (const nk of neighbours(g, k)) {
+          if (reach[nk] || (keepClear && !clear(nk))) continue;
+          // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
+          const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
+          if (d < dist[nk]) {
+            dist[nk] = d;
+            origin[nk] = origin[k];
+            heap.push(nk);
+          }
+        }
+      }
+      if (landing >= 0) break;
     }
     if (landing < 0) return built;
     const a = { x: vx(origin[landing]), z: vz(origin[landing]) };
