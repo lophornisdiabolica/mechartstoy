@@ -311,6 +311,19 @@ on any size end up about as big as Vast. Huge and Vast give that room to any
 number of sides (a 1v1 on Vast is a long march). Re-rolls and dice between
 battles only pick Small to Large.
 
+Hills go up to 3×. **Mountains** and **Cliffs** (both off by default) raise
+high ground on top: mountains are tall massifs, up to about twice the usual
+hills, steep going most of the way up with sheer crags near the top;
+cliffs are flat-topped mesas with sheer sides and a ramp or two up (the
+first facing one of the bases). A sheer face is a wall to everything on the
+ground except spider walkers, which climb it; aircraft fly over. Only high
+ground has sheer faces, so the steepest ordinary hillside is still just
+slow going, and maps with neither setting are the same maps as before. High
+ground keeps clear of the base pads, and is taken back off if it would cut a
+base off or leave a mesa top out of reach (counting only ways wide enough
+for a super unit); towns, cities and outposts keep their own ground level.
+The *Mountain passes* and *Mesa country* map styles use them.
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is
@@ -340,8 +353,8 @@ battles only pick Small to Large.
 - **Dice and locks:** the re-roll buttons are presets over the settings
   further down, and each setting's row ends in a die (🎲) and, for settings
   a preset rolls, a lock (🔒). A preset lights up the dice of what it rolls
-  (Map size: size and shape; Map style: water, hills, dense forest, towns,
-  town size and city; Biome: the biome). A lock keeps that setting as it is
+  (Map size: size and shape; Map style: water, hills, mountains, cliffs,
+  dense forest, towns, town size and city; Biome: the biome). A lock keeps that setting as it is
   while the preset rolls the rest, so a map style, but always large and wet,
   is Map style and Map size on with Size and Water locked. A die rolls a
   setting on its own every battle, whether a preset covers it or not: a

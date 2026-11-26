@@ -391,7 +391,7 @@ export function movementSystem(ctx: SimContext): System {
         // No going over a bridge's railings; wriggling free of being wedged on a deck may drop off its side, but nothing climbs up one.
         const detouring = world.time < m.nav.detourUntil;
         const canStep = (x: number, z: number) =>
-          grid.terrainAllowsAt(x, z) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
+          (grid.terrainAllowsAt(x, z) || grid.offCliff(t.x, t.z, x, z)) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
         let go = rules.flies || canStep(nx, nz);
         let [gx, gz] = [nx, nz];
         // Nosed into the corner where a ramp's railing starts (cutting across it for the deck): slide on up

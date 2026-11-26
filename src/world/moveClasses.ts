@@ -42,14 +42,23 @@ export interface MoveRules {
    * down the other).
    */
   over: 'none' | 'low' | 'all';
+  /** Climbs sheer cliffs (see CLIFF_SLOPE) as if they were any other slope: spiders do, everything else on the ground goes round. */
+  scales: boolean;
 }
 
 /** Slope above which ground counts as steep (see MoveRules.steep). */
 export const STEEP_SLOPE = 0.7;
+/**
+ * Slope above which ground is a sheer cliff, a wall for everything on the
+ * ground but spiders (see MoveRules.scales). Only maps with cliffs or
+ * mountains have them (see Battlefield.cliffs): elsewhere the steepest
+ * ground is just slow going, as it always was.
+ */
+export const CLIFF_SLOPE = 1.6;
 /** MoveRules.rail at or above this: the class can't get over a bridge's railings at all (see NavGrid.railCrossing). */
 export const RAIL_WALL = 10;
 
-const land: MoveRules = { maxDepth: 0, minDepth: 0, steep: 3, town: 1, bridge: 1, rail: 40, queues: true, waterCost: 1, waterSpeed: 1, flies: false, altitude: 0, over: 'none' };
+const land: MoveRules = { maxDepth: 0, minDepth: 0, steep: 3, town: 1, bridge: 1, rail: 40, queues: true, waterCost: 1, waterSpeed: 1, flies: false, altitude: 0, over: 'none', scales: false };
 
 export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   /** Infantry: happy on slopes, and prefer moving through towns and outposts, where there's cover. */
@@ -65,9 +74,10 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   walker: { ...land, maxDepth: 0.6, steep: 1.4, town: 1.8, bridge: 3, rail: 3, waterCost: 2, waterSpeed: 0.6, over: 'low' },
   /**
    * Spider walkers: many legs take any slope as easily as flat ground, they're
-   * small enough for town streets, and they climb straight over buildings and walls.
+   * small enough for town streets, and they climb straight over buildings and walls,
+   * and up sheer cliffs.
    */
-  climber: { ...land, maxDepth: 0.6, steep: 1, town: 1, rail: 3, queues: false, waterCost: 2, waterSpeed: 0.6, over: 'all' },
+  climber: { ...land, maxDepth: 0.6, steep: 1, town: 1, rail: 3, queues: false, waterCost: 2, waterSpeed: 0.6, over: 'all', scales: true },
   /**
    * Hovercraft: skim water as easily as land, but steep ground is the worst
    * going of any class. Running down a river they hop a bridge's deck rather
@@ -82,11 +92,15 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   air: { ...land, maxDepth: Infinity, steep: 1, rail: 1, queues: false, flies: true, altitude: 6 },
 };
 
-/** Whether a mover of this class can be at a spot with this water depth (depth <= 0 is dry land) and slope. */
-export function terrainAllows(rules: MoveRules, depth: number, slope: number): boolean {
+/**
+ * Whether a mover of this class can be at a spot with this water depth
+ * (depth <= 0 is dry land) and slope, on a map with or without cliffs.
+ */
+export function terrainAllows(rules: MoveRules, depth: number, slope: number, cliffs = false): boolean {
   if (rules.flies) return true;
   if (depth > rules.maxDepth) return false;
   if (rules.minDepth > 0 && depth < rules.minDepth) return false;
   if (depth <= 0 && slope > STEEP_SLOPE && rules.steep === Infinity) return false;
+  if (cliffs && depth <= 0 && slope > CLIFF_SLOPE && !rules.scales) return false;
   return true;
 }

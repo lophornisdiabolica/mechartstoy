@@ -93,8 +93,12 @@ export interface BattleSettings {
     size: MapSize;
     /** 0 (dry) to 1 (lots of lakes). */
     water: number;
-    /** Terrain height multiplier, 0 (flat) to 2. */
+    /** Terrain height multiplier, 0 (flat) to 3. */
     hills: number;
+    /** Mountains, 0 (none) to 1: tall massifs whose sheer crags only spiders and aircraft get over (see world/highground.ts). */
+    mountains: number;
+    /** Cliffs, 0 (none) to 1: flat-topped mesas with sheer sides, reached by a ramp or two. */
+    cliffs: number;
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -262,7 +266,9 @@ export const UNIT_IDS = Object.keys(UNIT_DEFS) as UnitId[];
 /** Ranges the UI offers; the URL parser clamps to them too. */
 export const LIMITS = {
   water: { min: 0, max: 1 },
-  hills: { min: 0, max: 2 },
+  hills: { min: 0, max: 3 },
+  mountains: { min: 0, max: 1 },
+  cliffs: { min: 0, max: 1 },
   shape: { min: 0.6, max: 1.8 },
   towns: { min: 0, max: 4 },
   infantryCap: { min: 5, max: 120 },
@@ -299,7 +305,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -478,6 +484,8 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     citySprawl: s.map.city === 'sprawl',
     townPlaces: s.map.city === 'sprawl' ? null : placed.towns,
     outpostPlaces: placed.outposts,
+    mountains: s.map.mountains,
+    cliffs: s.map.cliffs,
   };
 }
 

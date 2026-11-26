@@ -49,6 +49,8 @@ class CellSamples {
   readonly depth: Float64Array;
   readonly slope: Float64Array;
   readonly deck: Uint8Array;
+  /** 1 on high ground, where a steep enough slope is a cliff (see Battlefield.sheer). */
+  readonly sheer: Uint8Array;
   /** 1 just outside a bridge deck's railings, 2 beside its ramps' open sides, 0 elsewhere (see Battlefield.railKind). */
   readonly rail: Uint8Array;
   readonly settled: Uint8Array;
@@ -68,6 +70,7 @@ class CellSamples {
     this.depth = new Float64Array(n);
     this.slope = new Float64Array(n);
     this.deck = new Uint8Array(n);
+    this.sheer = new Uint8Array(n);
     this.rail = new Uint8Array(n);
     this.settled = new Uint8Array(n);
     this.city = new Uint8Array(n);
@@ -89,6 +92,7 @@ class CellSamples {
         this.rail[k] = this.deck[k] === 0 && field.bridges.length > 0 ? field.railKind(x, z) : 0;
         this.depth[k] = field.seaLevel - field.heightAt(x, z);
         this.slope[k] = field.slopeAt(x, z);
+        this.sheer[k] = field.sheerAt(x, z) ? 1 : 0;
         this.settled[k] = field.townSites.some((t) => field.inTown(t, x, z)) || outposts.some((t) => D.hypot(t.x - x, t.z - z) < t.radius) ? 1 : 0;
         this.city[k] = field.inCity(x, z) ? 1 : 0;
         this.ground[k] = field.groundAt(x, z);
@@ -339,7 +343,7 @@ export class NavGrid {
     const onDeck = !rules.flies && rules.minDepth === 0 && samples.deck[k] === 1;
     const depth = onDeck ? 0 : samples.depth[k];
     const slope = onDeck ? 0 : samples.slope[k];
-    this.terrain[k] = terrainAllows(rules, depth, slope) ? 0 : 1;
+    this.terrain[k] = terrainAllows(rules, depth, slope, samples.sheer[k] === 1) ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
     // Beside a deck, over its railings: vehicles take the ramps instead,
@@ -580,7 +584,20 @@ export class NavGrid {
     const f = this.field;
     // Land units can be anywhere on a bridge deck.
     if (!this.rules.flies && this.rules.minDepth === 0 && f.deckAt(x, z) !== null) return true;
-    return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity ? f.slopeAt(x, z) : 0);
+    const sheer = f.sheerAt(x, z);
+    return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity || sheer ? f.slopeAt(x, z) : 0, sheer);
+  }
+
+  /**
+   * Whether a step from a to b gets a mover down off a cliff face it's
+   * stuck on (shoved there, or the ground reshaped under it): anywhere it
+   * could be but for the slope, no steeper than where it is.
+   */
+  offCliff(ax: number, az: number, bx: number, bz: number): boolean {
+    const f = this.field;
+    if (!f.cliffs || this.rules.scales || this.rules.flies || !f.contains(bx, bz) || !f.cliffAt(ax, az)) return false;
+    if (f.slopeAt(bx, bz) > f.slopeAt(ax, az)) return false;
+    return terrainAllows(this.rules, f.seaLevel - f.heightAt(bx, bz), 0);
   }
 
   /**

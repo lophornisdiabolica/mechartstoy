@@ -22,6 +22,8 @@ const SLIDER_ROLL: Record<string, string> = {
   Wreckage: 'junk',
   'Wreckage lasts': 'junklife',
   Hills: 'hills',
+  Mountains: 'mtn',
+  Cliffs: 'cliff',
   'Infantry cap': 'icap',
   'Vehicle cap': 'vcap',
   'Aircraft cap': 'acap',
@@ -66,7 +68,7 @@ const ROW_ROLL: Record<string, string> = {
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual (Huge and Vast only by hand)' },
   biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
-  style: { label: 'Map style', title: 'Water, hills, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
+  style: { label: 'Map style', title: 'Water, hills, mountains, cliffs, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
 };
@@ -703,6 +705,15 @@ export class SetupScreen {
       ),
     );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
+    slider(map, 'Mountains', 'mountains', 0.05, (s) => s.map.mountains, (s, v) => (s.map.mountains = v), (v) => (v === 0 ? 'None' : percent(v)));
+    slider(map, 'Cliffs', 'cliffs', 0.05, (s) => s.map.cliffs, (s, v) => (s.map.cliffs = v), (v) => (v === 0 ? 'None' : percent(v)));
+    map.append(
+      el(
+        'p',
+        { class: 'hint' },
+        'Mountains are tall massifs with sheer crags near the top; cliffs are flat-topped mesas with sheer sides and a ramp or two up. Only spider walkers climb a sheer face (aircraft fly over); everything else goes round, so high ground makes chokepoints and perches for guns. Bases always stay reachable.',
+      ),
+    );
     const towns = segmented<number>(
       Array.from({ length: LIMITS.towns.max + 1 }, (_, i) => ({ label: i === 0 ? 'None' : String(i), value: i })),
       (v) => {
