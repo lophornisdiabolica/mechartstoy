@@ -1,6 +1,6 @@
 import { Battlefield } from './battlefield';
 import { CellArea, GroundDef } from './ground';
-import { MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows } from './moveClasses';
+import { climbLimited, MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows, terrainAllowsFace } from './moveClasses';
 import * as D from '../core/dmath';
 
 export interface Point {
@@ -20,6 +20,14 @@ const CLEARANCE_MARGIN = 0.1;
 const DECK_EDGE = 1.6;
 /** How finely offSideClear reads the ground between a deck and the strip beside it. */
 const SIDE_STEP = 0.1;
+/**
+ * How many cells round a map change a grid re-reads (see NavGrid.refresh):
+ * a slope's face (see Battlefield.faceHeight) runs a long way, so a crater
+ * at its foot changes how tall it is further up.
+ */
+const FACE_REFRESH = 3;
+/** What a cell too steep for a class costs per unit of slope, when openRamps looks for the easiest way up. */
+const RAMP_COST = 10;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -270,6 +278,18 @@ export class NavGrid {
   private readonly samples: CellSamples;
   /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
   private readonly terrain: Uint8Array;
+  /**
+   * 1 where the only thing keeping this class out is the slope: steeper
+   * than it climbs, and too tall a face of it to get over (see
+   * terrainAllowsFace). Part of terrain.
+   */
+  private readonly face: Uint8Array;
+  /**
+   * 1 where a way up a slope too steep for this class was opened (see
+   * openRamps), so a base, town or outpost walled in by steep slopes can
+   * still be reached: the track up.
+   */
+  private readonly ramp: Uint8Array;
   private readonly cost: Float32Array;
   private readonly occupied: Uint16Array;
   /** Extra cost per cell from busy narrow passages (NavObstacles.traffic), or zeros for a class that doesn't queue. */
@@ -323,6 +343,8 @@ export class NavGrid {
     this.obstacles = obstacles ?? new NavObstacles(this.cols, this.rows);
     const n = this.cols * this.rows;
     this.terrain = new Uint8Array(n);
+    this.face = new Uint8Array(n);
+    this.ramp = new Uint8Array(n);
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.for(this.rules.over);
     this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
@@ -333,6 +355,7 @@ export class NavGrid {
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
+    this.openRamps();
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
     this.parent = new Int32Array(n);
@@ -353,7 +376,9 @@ export class NavGrid {
     const onDeck = !rules.flies && rules.minDepth === 0 && samples.deck[k] === 1;
     const depth = onDeck ? 0 : samples.depth[k];
     const slope = onDeck ? 0 : samples.slope[k];
-    this.terrain[k] = terrainAllows(rules, depth, slope, samples.sheer[k] === 1) ? 0 : 1;
+    const allowed = terrainAllows(rules, depth, slope, samples.sheer[k] === 1);
+    this.face[k] = allowed && depth <= 0 && this.tooSteep(k, slope) ? 1 : 0;
+    this.terrain[k] = allowed && this.face[k] === 0 ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
     // Beside a deck, over its railings: vehicles take the ramps instead,
@@ -368,6 +393,100 @@ export class NavGrid {
     if (!rules.flies && depth <= 0 && !(this.woodland && samples.ground[k].id === 'thicket')) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
     this.deckEdge[k] = samples.rail[k] !== 0 || (samples.deck[k] === 1 && this.offDeckBeside(k)) ? 1 : 0;
+  }
+
+  /** Whether a dry cell's slope is too tall a face of too steep ground for this class to get over (see terrainAllowsFace). */
+  private tooSteep(k: number, slope: number): boolean {
+    const rules = this.rules;
+    if (!climbLimited(rules) || slope <= rules.climb || this.ramp[k] === 1) return false;
+    const { x, z } = this.center(k % this.cols, Math.floor(k / this.cols));
+    return !terrainAllowsFace(rules, slope, this.field.faceHeight(x, z, rules.climb, rules.climbHeight));
+  }
+
+  /**
+   * Open a way up (see ramp) to every base, town and outpost that slopes too
+   * steep for this class cut off from the first base, where it could get
+   * there but for them: the way over the fewest, least steep such cells. A
+   * side whose base tanks can't leave, or a town they can never take,
+   * would make no sense of a battle. Most maps never need one.
+   */
+  private openRamps(): void {
+    if (!this.face.includes(1)) return;
+    const f = this.field;
+    if (f.baseSites.length === 0) return;
+    const cellAt = (p: Point) => {
+      const [i, j] = this.cellOf(p.x, p.z);
+      return j * this.cols + i;
+    };
+    const home = cellAt(f.baseSites[0]);
+    // Where it could go if no slope stopped it.
+    const open = this.labelRegions(this.terrain.map((t, k) => (t === 1 && this.face[k] === 0 ? 1 : 0)));
+    for (const place of [...f.baseSites, ...f.townSites, ...f.outpostSites]) {
+      const k = cellAt(place);
+      if (open[k] < 0 || open[k] !== open[home] || (this.region[k] >= 0 && this.region[k] === this.region[home])) continue;
+      if (!this.carveRamp(k, home)) continue;
+      for (let c = 0; c < this.terrain.length; c++) if (this.ramp[c] === 1 && this.face[c] === 1) this.computeCell(c);
+      this.region = this.labelRegions();
+    }
+  }
+
+  /**
+   * Mark the way from a cell to the region of another (see openRamps) as a
+   * ramp, three cells wide so big units fit up it. Whether there was one.
+   */
+  private carveRamp(from: number, to: number): boolean {
+    const { cols, rows, terrain, face } = this;
+    const target = this.region[to];
+    const n = cols * rows;
+    const g = new Float32Array(n).fill(Infinity);
+    const back = new Int32Array(n).fill(-1);
+    const done = new Uint8Array(n);
+    const heap = new Heap(g);
+    g[from] = 0;
+    heap.push(from);
+    let end = -1;
+    while (heap.size > 0) {
+      const k = heap.pop();
+      if (done[k]) continue;
+      done[k] = 1;
+      if (k === to || (target >= 0 && this.region[k] === target)) {
+        end = k;
+        break;
+      }
+      const i = k % cols;
+      const j = (k - i) / cols;
+      for (let d = 0; d < 8; d++) {
+        const ni = i + NEIGHBOUR_DI[d];
+        const nj = j + NEIGHBOUR_DJ[d];
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const nk = nj * cols + ni;
+        if (done[nk] || (terrain[nk] === 1 && face[nk] === 0)) continue;
+        const ng = g[k] + NEIGHBOUR_STEP[d] * (face[nk] === 1 ? RAMP_COST * this.samples.slope[nk] : 1);
+        if (ng < g[nk]) {
+          g[nk] = ng;
+          back[nk] = k;
+          heap.push(nk);
+        }
+      }
+    }
+    if (end < 0) return false;
+    for (let k = end; k >= 0; k = back[k]) {
+      const i = k % cols;
+      const j = (k - i) / cols;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const ni = i + di;
+          const nj = j + dj;
+          if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && face[nj * cols + ni] === 1) this.ramp[nj * cols + ni] = 1;
+        }
+      }
+    }
+    return true;
+  }
+
+  /** How many cells of ways up too steep slopes this grid opened (see openRamps). */
+  get rampCells(): number {
+    return this.ramp.reduce((a, v) => a + v, 0);
   }
 
   /** Whether a cell has a cell off the deck next to it. */
@@ -406,10 +525,11 @@ export class NavGrid {
    * version so routes planned on the old map get re-planned.
    */
   refresh(area: CellArea): void {
-    const i0 = Math.max(0, area.i0 - 1);
-    const j0 = Math.max(0, area.j0 - 1);
-    const i1 = Math.min(this.cols - 1, area.i1 + 1);
-    const j1 = Math.min(this.rows - 1, area.j1 + 1);
+    const reach = climbLimited(this.rules) ? FACE_REFRESH : 1;
+    const i0 = Math.max(0, area.i0 - reach);
+    const j0 = Math.max(0, area.j0 - reach);
+    const i1 = Math.min(this.cols - 1, area.i1 + reach);
+    const j1 = Math.min(this.rows - 1, area.j1 + reach);
     let terrainChanged = false;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
@@ -475,9 +595,8 @@ export class NavGrid {
   }
 
   /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
-  private labelRegions(): Int32Array {
+  private labelRegions(terrain: Uint8Array = this.terrain): Int32Array {
     const { cols, rows } = this;
-    const terrain = this.terrain;
     const region = new Int32Array(cols * rows).fill(-1);
     let next = 0;
     // Each cell is pushed at most once, so the stack never needs more room than the grid.
@@ -595,17 +714,28 @@ export class NavGrid {
     // Land units can be anywhere on a bridge deck.
     if (!this.rules.flies && this.rules.minDepth === 0 && f.deckAt(x, z) !== null) return true;
     const sheer = f.sheerAt(x, z);
-    return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity || sheer ? f.slopeAt(x, z) : 0, sheer);
+    const depth = f.seaLevel - f.heightAt(x, z);
+    if (!terrainAllows(this.rules, depth, sheer ? f.slopeAt(x, z) : 0, sheer)) return false;
+    // Too steep a slope to get up, read at the cell like routes (a face's height takes a while to follow).
+    return depth > 0 || !this.faceAt(x, z);
+  }
+
+  /** Whether a point's cell is too steep a face for this class (see tooSteep). */
+  private faceAt(x: number, z: number): boolean {
+    const [i, j] = this.cellOf(x, z);
+    return this.face[j * this.cols + i] === 1;
   }
 
   /**
-   * Whether a step from a to b gets a mover down off a cliff face it's
-   * stuck on (shoved there, or the ground reshaped under it): anywhere it
-   * could be but for the slope, no steeper than where it is.
+   * Whether a step from a to b gets a mover down off a cliff face, or a
+   * slope too steep for it (see tooSteep), that it's stuck on (shoved
+   * there, or the ground reshaped under it): anywhere it could be but for
+   * the slope, no steeper than where it is.
    */
   offCliff(ax: number, az: number, bx: number, bz: number): boolean {
     const f = this.field;
-    if (!f.cliffs || this.rules.scales || this.rules.flies || !f.contains(bx, bz) || !f.cliffAt(ax, az)) return false;
+    if (this.rules.scales || this.rules.flies || !f.contains(bx, bz)) return false;
+    if (!(f.cliffs && f.cliffAt(ax, az)) && !(f.contains(ax, az) && this.faceAt(ax, az) && !f.isWater(ax, az))) return false;
     if (f.slopeAt(bx, bz) > f.slopeAt(ax, az)) return false;
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(bx, bz), 0);
   }

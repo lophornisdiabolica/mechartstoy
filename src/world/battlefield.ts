@@ -129,6 +129,8 @@ export const OUTPOST_RADIUS = 7;
 
 /** Clear ground between neighbouring base pads, on top of their radii. */
 const BASE_GAP = 12;
+/** Steps of half a cell that Battlefield.faceHeight follows a slope each way: 18 m on the usual cells, as tall as a hillside gets. */
+const FACE_STEPS = 24;
 
 /**
  * Nominal centre of base seat `k` of `n`. Seats are spread evenly round a
@@ -930,6 +932,37 @@ export class Battlefield {
     const dx = this.heightAt(x + d, z) - this.heightAt(x - d, z);
     const dz = this.heightAt(x, z + d) - this.heightAt(x, z - d);
     return D.hypot(dx, dz) / (2 * d);
+  }
+
+  /**
+   * How tall the face of ground steeper than a slope is through a point:
+   * the height between its foot and its top, found by following the slope
+   * straight uphill and straight downhill from the point for as long as
+   * it stays that steep (up to FACE_REACH each way). Small for a crater's
+   * lip, a terrace's step or a bank, large for a hillside. Stops counting
+   * once it's over `enough`, all a caller wants to know.
+   */
+  faceHeight(x: number, z: number, slope: number, enough = Infinity): number {
+    const d = this.config.cellSize * 0.5;
+    const here = this.heightAt(x, z);
+    let top = here;
+    let foot = here;
+    for (const sign of [1, -1]) {
+      let px = x;
+      let pz = z;
+      for (let n = 0; n < FACE_STEPS; n++) {
+        const gx = this.heightAt(px + d, pz) - this.heightAt(px - d, pz);
+        const gz = this.heightAt(px, pz + d) - this.heightAt(px, pz - d);
+        const g = D.hypot(gx, gz);
+        if (g === 0 || g / (2 * d) <= slope) break;
+        px += ((sign * gx) / g) * d;
+        pz += ((sign * gz) / g) * d;
+        if (sign > 0) top = this.heightAt(px, pz);
+        else foot = this.heightAt(px, pz);
+        if (top - foot > enough) return top - foot;
+      }
+    }
+    return top - foot;
   }
 
   contains(x: number, z: number, margin = 0): boolean {
