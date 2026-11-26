@@ -419,9 +419,13 @@ two sides) to 2.5× wider.
   so it's a slider. More sides
   make a bigger map.
 - **Map:** size and **shape** (wider or deeper, keeping the area), a
-  **biome** (temperate, desert, snow or forest: the ground's colours, the
-  trees and rocks, the water and sky, and the style towns are built in;
-  looks only, nothing moves differently), where the **bases** go (round the
+  **biome** (temperate, desert, snow, forest, jungle, steppe, tundra, ash
+  wastes, scrapland or crystal fields: the ground's colours, the trees,
+  rocks, junk or crystals, the water and sky, and the style towns are built
+  in; looks only, nothing moves differently), a **town style** (the biome's
+  own, or any of brick, adobe, alpine, timber, concrete, thatched stilt
+  houses, shanty, yurts or domes, so a desert can have concrete towns),
+  where the **bases** go (round the
   edge with allies side by side, round the edge with allies spread out, or
   teams in two lines facing each other), water and hills, and how many
   **towns** (none to four) and how big. Towns have districts: a harbour of

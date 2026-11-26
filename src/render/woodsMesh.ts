@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BIOMES } from '../world/biomes';
 import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
@@ -41,14 +42,14 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const group = new THREE.Group();
   group.name = 'woods';
   const trees = field.woods.trees;
-  const biome = field.config.biome;
-  const desert = biome === 'desert';
-  const shape = (d: Detail) => (desert ? cactusGeometry(d) : biome === 'snow' ? pineGeometry(true, d) : biome === 'forest' || biome === 'temperate' ? pineGeometry(false, d) : treeGeometry(d));
+  const woods = BIOMES[field.config.biome].woods;
+  const desert = woods.plant === 'cactus';
+  const shape = (d: Detail) => (desert ? cactusGeometry(d) : woods.plant === 'snowPine' ? pineGeometry(true, d) : woods.plant === 'pine' ? pineGeometry(false, d) : treeGeometry(d));
   const shapes: PlantShapes = { near: shape('near'), far: shape('far'), shadow: shape('shadow') };
   /** Every square's mesh, for setFar. */
   const meshes: PlantMesh[] = [];
   let far = false;
-  const tint = desert ? 0x5f8a4a : biome === 'snow' || biome === 'forest' || biome === 'temperate' ? 0xc8d2c0 : 0x3f6a34;
+  const tint = woods.tint;
   const heightAtScale1 = desert ? CACTUS_HEIGHT : GEOMETRY_HEIGHT;
   const slim = desert ? 0.7 : 1;
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });

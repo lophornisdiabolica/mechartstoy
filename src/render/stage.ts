@@ -295,7 +295,7 @@ export class Stage {
     this.ground = terrain.getObjectByName('ground')!;
     const biome = BIOMES[field.config.biome];
     (this.scene.background as THREE.Color).set(biome.sky);
-    setTownStyle(biome.town);
+    setTownStyle(field.config.townStyle === 'biome' ? biome.town : field.config.townStyle);
     const woods = buildWoods(field, visualRng.fork(0x77));
     this.stopWoods = woods.userData.dispose;
     const props = buildProps(field, game.props, visualRng);

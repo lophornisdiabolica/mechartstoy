@@ -11,6 +11,7 @@ import { NavGrid } from '../src/world/navGrid';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
+import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
 
 const DT = 1 / 30;
 
@@ -142,7 +143,19 @@ describe('maps', () => {
     expect(kinds('desert').has('cactus')).toBe(true);
     expect(kinds('forest').has('pine')).toBe(true);
     expect(emptyGame(9, (s) => (s.map.biome = 'forest')).props.length).toBeGreaterThan(emptyGame(9).props.length * 2);
-    // Same seed, same ground under every biome.
+    // The newer biomes bring their own scenery, and every biome has a town style of its own.
+    const of = (biome: BiomeId) => new Set(emptyGame(9, (s) => (s.map.biome = biome)).props.map((p) => p.kind));
+    expect(of('crystal').has('crystal')).toBe(true);
+    expect(of('scrap').has('junk')).toBe(true);
+    for (const b of BIOME_IDS) expect(TOWN_STYLE_IDS).toContain(BIOMES[b].town);
+    expect(new Set(BIOME_IDS.map((b) => BIOMES[b].town)).size).toBeGreaterThanOrEqual(8);
+    // A town style can be picked apart from the biome, and it's looks only.
+    const s = defaultSettings();
+    s.map.townStyle = 'yurt';
+    expect(settingsFromParams(settingsToParams(s)).map.townStyle).toBe('yurt');
+    expect(settingsFromParams(new URLSearchParams('townstyle=igloo')).map.townStyle).toBe('biome');
+    expect(Array.from(emptyGame(9, (s) => (s.map.townStyle = 'dome')).field.heights)).toEqual(Array.from(emptyGame(9).field.heights));
+        // Same seed, same ground under every biome.
     expect(Array.from(emptyGame(9, (s) => (s.map.biome = 'snow')).field.heights)).toEqual(Array.from(emptyGame(9).field.heights));
   });
 

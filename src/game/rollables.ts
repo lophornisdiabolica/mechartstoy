@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import { BIOME_IDS } from '../world/biomes';
+import { BIOME_IDS, TOWN_STYLE_IDS, TownStyle } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TerrainStyle } from '../world/terrainStyles';
 import { MAP_OUTLINE_IDS, MapOutline } from '../world/outlines';
 import type { AttackTiming, BaseLayout, BattleMode, BattleSettings, CityMode, MapSize, SuperGrowth, TownSize } from './settings';
@@ -102,6 +102,7 @@ const build = (): Rollable[] => [
   range('junklife', 'Wreckage lasts', 'wreckageLife', 0.25, (s) => s.map.wreckageLife, (s, v) => (s.map.wreckageLife = v)),
   flag('crater', 'Craters', (s) => s.map.craters, (s, v) => (s.map.craters = v)),
   range('hills', 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), 'style'),
+  choice<TownStyle | 'biome'>('townstyle', 'Town style', ['biome', ...TOWN_STYLE_IDS], (s) => s.map.townStyle, (s, v) => (s.map.townStyle = v), 'biome'),
   choice<MapOutline>('outline', 'Outline', MAP_OUTLINE_IDS, (s) => s.map.outline, (s, v) => (s.map.outline = v), 'style'),
   choice<TerrainStyle>('terrain', 'Terrain', TERRAIN_STYLE_IDS, (s) => s.map.terrain, (s, v) => (s.map.terrain = v), 'style'),
   range('mtn', 'Mountains', 'mountains', 0.05, (s) => s.map.mountains, (s, v) => (s.map.mountains = v), 'style'),
