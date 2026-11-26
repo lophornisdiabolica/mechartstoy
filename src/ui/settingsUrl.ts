@@ -5,6 +5,7 @@ import { rollable } from '../game/rollables';
 import { BattleSettings, CITY_MODES, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
 import { isBiome } from '../world/biomes';
 import { isTerrainStyle } from '../world/terrainStyles';
+import { isMapOutline } from '../world/outlines';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 
 /**
@@ -79,6 +80,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.size !== d.map.size) p.set('size', s.map.size);
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
   if (s.map.terrain !== d.map.terrain) p.set('terrain', s.map.terrain);
+  if (s.map.outline !== d.map.outline) p.set('outline', s.map.outline);
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
@@ -162,6 +164,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (biome && isBiome(biome)) s.map.biome = biome;
   const terrain = p.get('terrain');
   if (terrain && isTerrainStyle(terrain)) s.map.terrain = terrain;
+  const outline = p.get('outline');
+  if (outline && isMapOutline(outline)) s.map.outline = outline;
   const layout = p.get('layout');
   if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
   const tsize = p.get('tsize');

@@ -2,6 +2,7 @@ import { AttackTiming, BaseLayout, CityMode, BattleMode, rampMode, SuperGrowth, 
 import { weaponsOf } from '../game/arsenal';
 import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TERRAIN_STYLES, TerrainStyle } from '../world/terrainStyles';
+import { MAP_OUTLINE_IDS, MAP_OUTLINES, MapOutline } from '../world/outlines';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
 import { MapPreview } from './mapPreview';
@@ -50,6 +51,7 @@ const ROW_ROLL: Record<string, string> = {
   Size: 'size',
   Biome: 'biome',
   Terrain: 'terrain',
+  Outline: 'outline',
   Bases: 'layout',
   Waterways: 'ways',
   Scrap: 'scrap',
@@ -70,7 +72,7 @@ const ROW_ROLL: Record<string, string> = {
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual (Huge and Vast only by hand)' },
   biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
-  style: { label: 'Map style', title: 'Terrain, water, hills, mountains, cliffs, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
+  style: { label: 'Map style', title: 'Terrain, outline, water, hills, mountains, cliffs, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
 };
@@ -662,6 +664,15 @@ export class SetupScreen {
     );
     row(map, 'Terrain', terrain.row);
     this.sync.push(() => terrain.set(this.settings.map.terrain));
+    const outline = segmented<MapOutline>(
+      MAP_OUTLINE_IDS.map((t) => ({ label: MAP_OUTLINES[t].label, value: t, title: MAP_OUTLINES[t].blurb })),
+      (v) => {
+        this.settings.map.outline = v;
+        this.changed();
+      },
+    );
+    row(map, 'Outline', outline.row);
+    this.sync.push(() => outline.set(this.settings.map.outline));
     const layout = segmented<BaseLayout>(
       [
         { label: 'Ring', value: 'ring', title: 'Round the edge of the map, allies side by side' },

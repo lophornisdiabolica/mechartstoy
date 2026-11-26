@@ -359,14 +359,13 @@ function cliffBeside(field: Battlefield, x: number, z: number): boolean {
 }
 
 /**
- * On maps from the newer generator (high ground, or a terrain style other
- * than rolling), whether any of the four cells round a vertex is under
+ * On maps from the newer generator (see Battlefield.styled), whether any of the four cells round a vertex is under
  * water: going by cells, as routes do, so a neck of land too thin for a
  * route doesn't count as joining two shores. (Rolling maps without high
  * ground go by vertices alone, as they always have.)
  */
 function wetBeside(field: Battlefield, x: number, z: number): boolean {
-  if (!field.cliffs && field.config.terrain === 'rolling') return false;
+  if (!field.styled) return false;
   const h = field.config.cellSize / 2;
   const wet = (px: number, pz: number) => field.contains(px, pz) && field.isWater(px, pz) && field.deckAt(px, pz) === null;
   return wet(x - h, z - h) || wet(x + h, z - h) || wet(x - h, z + h) || wet(x + h, z + h);

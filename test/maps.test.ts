@@ -10,6 +10,7 @@ import { Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
+import { MAP_OUTLINE_IDS } from '../src/world/outlines';
 
 const DT = 1 / 30;
 
@@ -353,5 +354,33 @@ describe('maps', () => {
     expect(settingsFromParams(settingsToParams(s)).map.terrain).toBe('canyon');
     expect(settingsToParams(s).get('terrain')).toBe('canyon');
     expect(settingsFromParams(new URLSearchParams('terrain=volcano')).map.terrain).toBe('rolling');
+  });
+
+  it('every map outline keeps the bases, towns and outposts in reach, with sea where the outline says', () => {
+    const sea: Record<string, number> = {};
+    for (const outline of MAP_OUTLINE_IDS) {
+      let wet = 0;
+      for (let seed = 0; seed < 4; seed++) {
+        const game = emptyGame(seed * 61 + 3, (s) => {
+          s.map = { ...s.map, size: seed % 2 ? 'medium' : 'small', outline, water: 0.3, towns: 2, outposts: 3 };
+          s.factions = Array.from({ length: seed < 2 ? 2 : 5 }, (_, i) => defaultFaction(i));
+        });
+        const f = game.field;
+        for (const cls of ['tracked', 'foot', 'walker'] as const) {
+          const nav = game.ctx.navs.for(cls);
+          for (const p of [...f.baseSites, ...f.outpostSites, ...f.townSites]) expect(nav.connected(f.baseSites[0], p)).toBe(true);
+        }
+        const { cols, rows, cellSize } = f.config;
+        let n = 0;
+        for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) if (f.isWater(f.bounds.minX + (i + 0.5) * cellSize, f.bounds.minZ + (j + 0.5) * cellSize)) n++;
+        wet += n / (cols * rows) / 4;
+      }
+      sea[outline] = wet;
+    }
+    for (const outline of ['island', 'isthmus', 'crescent', 'peninsula']) expect(sea[outline]).toBeGreaterThan(sea.full + 0.12);
+    expect(sea.ring).toBeGreaterThan(sea.full + 0.04);
+    const game = emptyGame(8, (s) => ((s.map.outline = 'ring'), (s.map.water = 0)));
+    expect(game.field.isWater(0, 0)).toBe(true);
+    expect(settingsFromParams(new URLSearchParams('outline=crescent')).map.outline).toBe('crescent');
   });
 });

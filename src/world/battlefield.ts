@@ -10,6 +10,7 @@ import * as D from '../core/dmath';
 import { CLIFF_SLOPE } from './moveClasses';
 import { raiseHighground } from './highground';
 import { SHEER_STYLES, shapeTerrain, TerrainStyle } from './terrainStyles';
+import { MapOutline, shapeOutline } from './outlines';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -82,6 +83,8 @@ export interface BattlefieldConfig {
   cliffs: number;
   /** The lie of the land (see terrainStyles.ts): 'rolling' for the usual. */
   terrain: TerrainStyle;
+  /** The outline of the land, sea beyond (see outlines.ts): 'full' for land edge to edge. */
+  outline: MapOutline;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -108,6 +111,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   mountains: 0,
   cliffs: 0,
   terrain: 'rolling',
+  outline: 'full',
 };
 
 /** Width of town streets and the roads between towns. */
@@ -866,6 +870,16 @@ export class Battlefield {
     return this.config.mountains > 0 || this.config.cliffs > 0 || SHEER_STYLES.has(this.config.terrain);
   }
 
+  /**
+   * Whether this map comes from the newer generator's settings (high
+   * ground, a terrain style or an outline): its land reach goes by cells,
+   * as routes do, and towns on islands get bridges (see bridgeLand).
+   * Maps without them are generated just as they always were.
+   */
+  get styled(): boolean {
+    return this.cliffs || this.config.terrain !== 'rolling' || this.config.outline !== 'full';
+  }
+
   /** Whether a point is on high ground, where steep enough ground is a cliff (see sheer). */
   sheerAt(x: number, z: number): boolean {
     if (!this.cliffs) return false;
@@ -1001,6 +1015,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
 
   // The lie of the land (a river, a ridge, islands...), on its own stream so rolling maps don't change.
   const crossings = shapeTerrain(field, config.terrain, rng.fork(0x74657272));
+  // The outline of the land (an island, an isthmus...), likewise.
+  shapeOutline(field, config.outline, rng.fork(0x6f75746c));
 
   // Mountains and mesas, on their own random stream so maps without them don't change.
   if (field.cliffs) raiseHighground(field, rng.fork(0x68696768));
@@ -1211,7 +1227,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
   // On maps from the newer generator, also bridge out to any town left on an island (an archipelago's), and to any
   // base that levelling beside a cliff has walled off.
-  const newer = field.cliffs || config.terrain !== 'rolling';
+  const newer = field.styled;
   if (dropDryBridges(field) > 0 || newer) bridgeLand(field, newer ? townSites : []);
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.

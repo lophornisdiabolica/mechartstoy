@@ -1,5 +1,6 @@
 import type { Style } from './commander/advice';
 import { TerrainStyle } from '../world/terrainStyles';
+import { MapOutline } from '../world/outlines';
 import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
@@ -102,6 +103,8 @@ export interface BattleSettings {
     cliffs: number;
     /** The lie of the land: a generation style (see world/terrainStyles.ts), 'rolling' for the usual. */
     terrain: TerrainStyle;
+    /** The outline of the land, sea beyond it (see world/outlines.ts): 'full' for land edge to edge. */
+    outline: MapOutline;
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -272,7 +275,7 @@ export const LIMITS = {
   hills: { min: 0, max: 3 },
   mountains: { min: 0, max: 1 },
   cliffs: { min: 0, max: 1 },
-  shape: { min: 0.6, max: 1.8 },
+  shape: { min: 0.4, max: 2.5 },
   towns: { min: 0, max: 4 },
   infantryCap: { min: 5, max: 120 },
   vehicleCap: { min: 0, max: 60 },
@@ -308,7 +311,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', outline: 'full', shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -490,6 +493,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     mountains: s.map.mountains,
     cliffs: s.map.cliffs,
     terrain: s.map.terrain,
+    outline: s.map.outline,
   };
 }
 

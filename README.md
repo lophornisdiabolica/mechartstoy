@@ -343,6 +343,15 @@ first sides (north to south when the bases are west and east):
 Each has a map style of the same name, so re-rolls between battles can deal
 them out.
 
+**Outline** sets the shape of the land, with sea beyond it: *Full* (land edge
+to edge, the usual), *Island*, *Isthmus* (two lands joined by a narrow neck),
+*Ring* (land round a sea in the middle), *Crescent* (an island bowed round a
+bay) and *Peninsula* (a long arm of land reaching out from one end). Every
+base keeps land round it, and bridges join any base or town the sea cuts
+off. *Island*, *Isthmus*, *Inland sea*, *Crescent bay* and *Peninsula* map
+styles use them. **Shape** now runs from 2.5× deeper (a long front between
+two sides) to 2.5× wider.
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is

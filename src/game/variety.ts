@@ -1,4 +1,5 @@
 import { TerrainStyle } from '../world/terrainStyles';
+import { MapOutline } from '../world/outlines';
 import { Rng } from '../core/rng';
 import { BIOME_IDS, BIOMES } from '../world/biomes';
 import { canonicalDoctrine, DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
@@ -97,6 +98,8 @@ export interface MapStyle {
   city?: 'sprawl';
   /** The lie of the land (see world/terrainStyles.ts); rolling unless a style says. */
   terrain?: TerrainStyle;
+  /** The outline of the land (see world/outlines.ts); land edge to edge unless a style says. */
+  outline?: MapOutline;
   /** High ground (see world/highground.ts); none unless a style says. */
   mountains?: number;
   cliffs?: number;
@@ -125,6 +128,11 @@ export const MAP_STYLES: MapStyle[] = [
   { id: 'coast', label: 'Coastline', water: 0.35, hills: 1, forest: 0.2, towns: 2, townSize: 'medium', terrain: 'coast' },
   { id: 'terraces', label: 'Terraced hills', water: 0.3, hills: 1.6, forest: 0.15, towns: 1, townSize: 'small', terrain: 'terraces' },
   { id: 'flats', label: 'Salt flats', water: 0.2, hills: 1, forest: 0, towns: 1, townSize: 'small', terrain: 'flats' },
+  { id: 'isle', label: 'Island', water: 0.3, hills: 1.1, forest: 0.25, towns: 1, townSize: 'medium', outline: 'island' },
+  { id: 'isthmus', label: 'Isthmus', water: 0.3, hills: 1, forest: 0.2, towns: 1, townSize: 'small', outline: 'isthmus' },
+  { id: 'inland', label: 'Inland sea', water: 0.3, hills: 1, forest: 0.2, towns: 2, townSize: 'small', outline: 'ring' },
+  { id: 'crescent', label: 'Crescent bay', water: 0.3, hills: 1, forest: 0.2, towns: 2, townSize: 'small', outline: 'crescent' },
+  { id: 'peninsula', label: 'Peninsula', water: 0.3, hills: 1.1, forest: 0.25, towns: 1, townSize: 'small', outline: 'peninsula' },
   { id: 'craters', label: 'Crater field', water: 0.3, hills: 0.6, forest: 0.1, towns: 1, townSize: 'small', terrain: 'craters' },
 ];
 
@@ -155,6 +163,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     s.map.hills = round2(clamp(style.hills + rng.range(-0.1, 0.1), 'hills'));
     s.map.forest = round2(clamp(style.forest + (style.forest > 0 ? rng.range(-0.05, 0.05) : 0), 'forest'));
     s.map.terrain = style.terrain ?? 'rolling';
+    s.map.outline = style.outline ?? 'full';
     s.map.mountains = style.mountains ?? 0;
     s.map.cliffs = style.cliffs ?? 0;
     s.map.towns = style.towns;
