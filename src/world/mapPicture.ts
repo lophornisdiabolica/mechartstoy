@@ -40,6 +40,8 @@ export function groundPicture(field: Battlefield): Picture {
       if (ground === 'thicket') c = c.map((v) => v * 0.55);
       else if (ground === 'felled') c = c.map((v) => v * 0.8);
       else if (ground === 'road') c = [150, 144, 132];
+      else if (ground === 'oil') c = [28, 26, 24];
+      else if (ground === 'paving') c = [180, 170, 145];
       if (field.deckAt(x, z) !== null) c = [170, 165, 155];
       data.set([c[0], c[1], c[2], 255], (j * cols + i) * 4);
     }

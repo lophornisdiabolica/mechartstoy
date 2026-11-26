@@ -11,6 +11,7 @@ import { CLIFF_SLOPE } from './moveClasses';
 import { raiseHighground } from './highground';
 import { SHEER_STYLES, shapeTerrain, TerrainStyle } from './terrainStyles';
 import { MapOutline, shapeOutline } from './outlines';
+import { emptyTraits, MapTrait, placeTraits, TraitLayout } from './traits';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -87,6 +88,8 @@ export interface BattlefieldConfig {
   outline: MapOutline;
   /** How civilian buildings look: the biome's own style, or another (looks only). */
   townStyle: TownStyle | 'biome';
+  /** Special features laid over the map (see traits.ts): none for the usual. */
+  traits: MapTrait[];
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -115,6 +118,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   terrain: 'rolling',
   outline: 'full',
   townStyle: 'biome',
+  traits: [],
 };
 
 /** Width of town streets and the roads between towns. */
@@ -311,6 +315,8 @@ export class Battlefield {
    * the steepest hillside is only slow going.
    */
   readonly sheer: Uint8Array;
+  /** What the map's traits laid out (see traits.ts): their sites, relics to put up, geyser vents and scenery. */
+  readonly traits: TraitLayout = emptyTraits();
   /** Per cell: the index of the bridge over it, or -1. */
   private readonly bridgeCell: Int16Array;
   /** Per cell: the index of the bridge whose ramp wings might be over it (see wingAt), or -1. */
@@ -1226,6 +1232,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
   });
+  // Map traits (an oil field, ruins...) last of all, round everything else, on their own stream.
+  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169));
   // Levelling towns and outposts may have filled in the water under a bridge: take it away
   // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
   // On maps from the newer generator, also bridge out to any town left on an island (an archipelago's), and to any
