@@ -12,6 +12,7 @@ import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
 import { fireEscape } from '../wildfire';
+import { tideEscape } from '../tides';
 import { campSpot } from '../nomad';
 import { mendingPlace } from '../retreat';
 import { presenting } from '../alternate';
@@ -112,6 +113,17 @@ export function aiSystem(ctx: SimContext): System {
         // Caught in nobody's fire (a wildfire, a burning oil field): out of it the shortest way (see wildfire.ts).
         if (ctx.fire.count > 0 && !MOVE_RULES[mover.move].flies) {
           const out = fireEscape(ctx, faction, t.x, t.z);
+          if (out) {
+            mover.targetX = out.x;
+            mover.targetZ = out.z;
+            mover.faceX = out.x;
+            mover.faceZ = out.z;
+            continue;
+          }
+        }
+        // On a sand bar the tide's about to turn against: off it the shortest way (see tides.ts).
+        if (ctx.tidal) {
+          const out = tideEscape(ctx, mover.move, t.x, t.z);
           if (out) {
             mover.targetX = out.x;
             mover.targetZ = out.z;

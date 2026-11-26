@@ -1,5 +1,6 @@
 import type { TraitState } from './traits';
 import type { BridgeWear } from './bridges';
+import type { Tide } from './tides';
 import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
@@ -64,6 +65,8 @@ export type GameEvents = {
   outpostRelief: { outpost: number; faction: number; x: number; z: number };
   /** A map bridge came down under fire, for good (see bridges.ts). */
   bridgeFell: { x: number; z: number };
+  /** The tide's turning over a Tidal flats bar: going out (ebbing), or about to come in (turning). See tides.ts. */
+  tide: { phase: 'ebbing' | 'turning'; x: number; z: number };
   /** A drawbridge outpost's holder raised (up) or lowered its bridge (see bridges.ts). */
   drawbridge: { outpost: number; faction: number; up: boolean; x: number; z: number };
   /** A rail station put an armoured train on the line for whoever holds it (see rail.ts). */
@@ -226,6 +229,8 @@ export interface SimContext {
   towns: Towns;
   /** The map's own bridges' wear, and those that have fallen (see bridges.ts). */
   bridges: BridgeWear;
+  /** The tide over the Tidal flats trait's sand bars, or null without them (see tides.ts). */
+  tidal: Tide | null;
   /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */
   traffic: Traffic;
 }

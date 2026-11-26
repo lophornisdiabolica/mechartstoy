@@ -391,6 +391,16 @@ there first, and fire slowly knocks them down.
   runs only on the track and takes no orders: it heads for the enemy nearest
   the line, stops to fight whatever's in range with its twin gun, and turns
   back at the ends and short of another train.
+- *Tidal flats:* a sand bar across narrow water in no-man's land (two on a
+  big map), under the sea as the map is made. Fifty seconds in, the tide
+  goes out and uncovers it: a way across for foot, tracks and wheels (heavy
+  going on the wet sand), and a wall to boats. A minute later the tide
+  turns and comes back in over it for a minute, and so on, about every
+  three minutes. Everyone's warned: a bar about to turn against a unit
+  costs a lot to route over, so routes go round, and a unit on it gets off
+  the shortest way. Land units still on it when the sea's over it drown,
+  and boats over it when it dries run aground. Needs water: a dry map gets
+  none, and a rolled map style only deals it to a wet map.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).

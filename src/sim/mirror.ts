@@ -70,6 +70,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   trainLaunched: true,
   bridgeFell: true,
   drawbridge: true,
+  tide: true,
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,
