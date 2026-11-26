@@ -455,7 +455,8 @@ export class NavGrid {
       }
       const i = k % cols;
       const j = (k - i) / cols;
-      for (let d = 0; d < 8; d++) {
+      // Square steps only (the first four), as regions are joined: a diagonal between two cliffs is no way up.
+      for (let d = 0; d < 4; d++) {
         const ni = i + NEIGHBOUR_DI[d];
         const nj = j + NEIGHBOUR_DJ[d];
         if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;

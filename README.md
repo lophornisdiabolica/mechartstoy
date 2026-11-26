@@ -317,8 +317,18 @@ hills, steep going most of the way up with sheer crags near the top;
 cliffs are flat-topped mesas with sheer sides and a ramp or two up (the
 first facing one of the bases). A sheer face is a wall to everything on the
 ground except spider walkers, which climb it; aircraft fly over. Only high
-ground has sheer faces, so the steepest ordinary hillside is still just
-slow going, and maps with neither setting are the same maps as before. High
+ground has sheer faces, and maps with neither setting are the same maps as
+before.
+
+Off high ground, a slope stops a unit only when it's both too steep and too
+tall for it: each kind of mover gets up slopes to a steepness of its own
+whatever their size, and steeper ones only while the face is short (a
+crater's lip, a terrace's step, a bank). Hovercraft climb least, then tanks
+and trucks, then walkers, then infantry; spiders climb anything. On rolling
+hills that's only the odd hillside, but tall hills (2× and up) have whole
+slopes tanks go round. Where steep slopes would cut a base, town or
+outpost off from a class that could otherwise reach it, the easiest way up
+counts as a track it can take. High
 ground keeps clear of the base pads, and is taken back off if it would cut a
 base off or leave a mesa top out of reach (counting only ways wide enough
 for a super unit); towns, cities and outposts keep their own ground level.
