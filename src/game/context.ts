@@ -61,6 +61,8 @@ export type GameEvents = {
   outpostLaunch: { outpost: number; faction: number; x: number; z: number };
   /** A signal fire outpost called in a relief column for whoever holds it. */
   outpostRelief: { outpost: number; faction: number; x: number; z: number };
+  /** A rail station put an armoured train on the line for whoever holds it (see rail.ts). */
+  trainLaunched: { entity: Entity; outpost: number; faction: number; x: number; z: number };
   /** A carrier dropped off its squad. */
   squadDropped: { carrier: Entity; x: number; y: number; z: number; count: number };
   /** Conquest only: a side has lost its last production building. */

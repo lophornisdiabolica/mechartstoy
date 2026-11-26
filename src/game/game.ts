@@ -15,6 +15,8 @@ import { scrapSystem } from './scrap';
 import { Towns, townSystem } from './towns';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem, outpostWorksSystem } from './outposts';
 import { raiseRelics, traitSystem, TraitState } from './traits';
+import { railSystem } from './rail';
+import { nearRail } from '../world/traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
 import { newSquad, spawnBuilding, spawnUnit } from './spawn';
@@ -198,6 +200,7 @@ export class Game {
       projectileSystem(ctx),
       // Oil fires, geysers and the like, only on a map with traits that do something.
       ...(ctx.traits.active ? [traitSystem(ctx)] : []),
+      ...(ctx.field.traits.rail ? [railSystem(ctx)] : []),
       fireSystem(ctx),
       frostSystem(ctx),
       smokeSystem(ctx),
@@ -330,6 +333,8 @@ export class Game {
       ...this.field.townSites.flatMap((site) => layoutTown(this.field, site, rng)),
     ];
     for (const p of placements) {
+      // A rail line runs through a town: nothing's built on the track.
+      if (this.field.traits.rail && nearRail(this.field, p.x, p.z, this.ctx.buildings[p.building].radius + 1.5)) continue;
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
     // Outposts on their own stream, so adding them doesn't reshuffle the bases and town.

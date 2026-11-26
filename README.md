@@ -382,6 +382,15 @@ there first, and fire slowly knocks them down.
   garrison. Whoever takes it gets +20% production.
 - *Landing field:* an outpost on a paved apron with a flight tower. Its
   holder's aircraft, and a drop side's drops, come 35% faster.
+- *Rail line:* a railway across no-man's land between the sides, on a graded
+  bed, through a town if one's in the way (its houses keep off the track).
+  An outpost the track runs past becomes a station, and a new station goes
+  a third of the way in from each end that has none, two in all. A minute
+  after a side takes a station, an armoured train comes out onto the line
+  for it, one train a side, and another a minute after it's lost. The train
+  runs only on the track and takes no orders: it heads for the enemy nearest
+  the line, stops to fight whatever's in range with its twin gun, and turns
+  back at the ends and short of another train.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).

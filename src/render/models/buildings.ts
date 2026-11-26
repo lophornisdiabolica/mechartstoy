@@ -620,6 +620,21 @@ registerModel('bld:citadelWall', (faction) => {
   return g;
 });
 
+/** A rail station's house: a brick booking hall under a pitched roof, a platform canopy along the track side and a water tower. */
+registerModel('bld:stationHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.0, 0.3, 3.0, CONCRETE, 0, 0.15, 0)); // platform
+  g.add(box(2.4, 1.5, 1.5, 0x8a5a44, -0.4, 1.05, -0.5)); // booking hall
+  g.add(gableRoof(2.6, 1.7, 0.6, primary, 1.8).translateX(-0.4).translateZ(-0.5));
+  g.add(box(0.05, 0.9, 0.6, DARK, -0.4, 0.75, 0.26)); // door
+  for (const x of [-1.6, 0.8]) g.add(box(0.12, 1.5, 0.12, DARK, x, 1.05, 1.1)); // canopy posts
+  g.add(box(2.8, 0.1, 1.0, secondary, -0.4, 1.86, 0.95));
+  g.add(cylinder(0.45, 0.45, 0.9, 10, 0x6d6a64, 1.4, 2.25, -0.6)); // water tower
+  for (const [x, z] of [[1.15, -0.85], [1.65, -0.35]]) g.add(box(0.1, 1.6, 0.1, DARK, x, 1.0, z));
+  return g;
+});
+
 /** A landing field's flight tower: a glazed cab on a slim tower, a beacon on its roof and a windsock. */
 registerModel('bld:flightTower', (faction) => {
   const { primary, secondary } = factionColors(faction);
