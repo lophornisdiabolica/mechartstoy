@@ -43,6 +43,12 @@ const WAYPOINT_ROOM = 1.6;
 const FAVOURED_FLANK = 0.7;
 /** A site counts as "between" two bases if going through it is at most this much longer than going straight. */
 const MAX_DETOUR = 1.5;
+/** How far out toward a lane's first waypoint its rally point is, as a share of the way (see Lanes.rally). */
+const RALLY_OUT = 0.5;
+/** How many steps back toward the base a rally point may be pulled to get it off the shore. */
+const RALLY_STEPS = 6;
+/** How far round a rally point there has to be dry ground: about as far as units spread round it (see rallyOffset in spawn.ts). */
+const RALLY_ROOM = 5;
 /** Sites closer than this to the straight line are on the centre lane already. */
 const ON_CENTRE = 9;
 /** At most this many lanes through sites per pair of bases, the most direct first. */
@@ -169,11 +175,38 @@ export class Lanes {
     return this.lanes(from, to)[lane].find((p) => this.progress(from, to, p.x, p.z) > here + 0.03) ?? null;
   }
 
-  /** Where a squad forms up before attacking `to` down this lane: in front of its base, leaning toward the lane. */
+  /**
+   * Where a squad forms up before attacking `to` down this lane: in front of
+   * its base, leaning toward the lane. On a coast or an island, halfway out
+   * to the lane can be at the water's edge or in it, and land units sent to
+   * spots round it all pile up against the shore: it's pulled back toward
+   * the base until there's dry ground all round it.
+   */
   rally(from: number, to: number, lane: LaneId): Point {
+    const key = `${from}-${to}-${lane}`;
+    const known = this.rallies.get(key);
+    if (known) return known;
     const base = this.field.baseSites[from];
     const first = this.lanes(from, to)[lane][0];
-    return { x: base.x + (first.x - base.x) * 0.5, z: base.z + (first.z - base.z) * 0.5 };
+    const at = (k: number) => ({ x: base.x + (first.x - base.x) * k, z: base.z + (first.z - base.z) * k });
+    let spot = at(RALLY_OUT);
+    for (let n = 1; !this.roomAround(base, spot) && n <= RALLY_STEPS; n++) spot = at(RALLY_OUT * (1 - n / (RALLY_STEPS + 1)));
+    this.rallies.set(key, spot);
+    return spot;
+  }
+
+  /** Rally points as worked out (see rally), by from, to and lane. */
+  private readonly rallies = new Map<string, Point>();
+
+  /** Whether land units can get to a rally point from their base, and spread out round it on dry ground. */
+  private roomAround(base: Point, p: Point): boolean {
+    if (!this.nav.terrainAllowsAt(p.x, p.z) || !this.nav.connected(base, p)) return false;
+    for (let a = 0; a < 8; a++) {
+      const x = p.x + D.cos((a / 8) * Math.PI * 2) * RALLY_ROOM;
+      const z = p.z + D.sin((a / 8) * Math.PI * 2) * RALLY_ROOM;
+      if (!this.nav.terrainAllowsAt(x, z)) return false;
+    }
+    return true;
   }
 
   /**

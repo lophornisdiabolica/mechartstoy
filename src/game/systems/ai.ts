@@ -6,7 +6,8 @@ import { objectiveIn } from '../spawn';
 import { hillOf } from '../hill';
 import { Role } from '../units';
 import { distanceToTarget, effectiveRange } from './targeting';
-import { MOVE_RULES } from '../../world/moveClasses';
+import { MOVE_RULES, MoveClass } from '../../world/moveClasses';
+import type { NavGrid } from '../../world/navGrid';
 import { threatKindOf } from '../commander/threats';
 import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
@@ -25,6 +26,12 @@ const PATROL_RADIUS = CAPTURE_RADIUS - 2;
 const ESCORT_RANGE = 24;
 /** How far behind a frontline ally a support unit follows. */
 const SUPPORT_TRAIL = 4;
+/**
+ * How far a frontline ally that goes where a support unit can't (see
+ * outreaches) has to be from any such ground for the support unit to follow
+ * it: a spider at a channel's edge is about to wade across it.
+ */
+const ESCORT_CLEAR = 6;
 /** How far ahead round its circle an aircraft fighting something aims, radians. */
 const ORBIT_STEP = 0.7;
 /** How far a desperate unit looks for an enemy to drive at (see UnitDef.desperate). */
@@ -553,9 +560,21 @@ function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: num
   let fallback: Entity | null = null;
   let bestD2 = ESCORT_RANGE * ESCORT_RANGE;
   let fallbackD2 = bestD2;
+  // Only a lead it can keep up with. A spider or a wading walker crosses a channel (or scales a
+  // cliff) a truck can't, and would draw it to the water's edge to pile up there with the rest of
+  // its kind: one that can go where this can't is only followed while it's well clear of any such ground.
+  const move = world.get(e, Mover)?.move;
+  const grid = move && !MOVE_RULES[move].flies ? ctx.navs.for(move) : null;
   ctx.grid.forEachNear(t.x, t.z, ESCORT_RANGE, (other, d2) => {
     if (other === e || d2 >= ESCORT_RANGE * ESCORT_RANGE || !isFrontline(world, other)) return;
     if (!ctx.sides.allied(faction, world.req(other, Faction).id)) return;
+    if (grid && move) {
+      const lead = world.get(other, Mover)?.move;
+      if (lead && outreaches(lead, move)) {
+        const ot = world.req(other, Transform);
+        if (!grid.connected(t, ot) || !clearAround(grid, ot.x, ot.z, ESCORT_CLEAR)) return;
+      }
+    }
     if (taken?.has(other)) {
       if (d2 < fallbackD2) {
         fallback = other;
@@ -569,6 +588,20 @@ function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: num
     }
   });
   return best ?? fallback;
+}
+
+/** Whether a mover of class `a` can go anywhere one of class `b` can't: deeper water, up cliffs, or into the air. */
+function outreaches(a: MoveClass, b: MoveClass): boolean {
+  const ra = MOVE_RULES[a];
+  const rb = MOVE_RULES[b];
+  return (ra.flies && !rb.flies) || ra.maxDepth > rb.maxDepth || (ra.scales && !rb.scales);
+}
+
+/** Whether a class can be at a point and everywhere round it out to `room` (8 points on the circle). */
+function clearAround(grid: NavGrid, x: number, z: number, room: number): boolean {
+  if (!grid.terrainAllowsAt(x, z)) return false;
+  for (let a = 0; a < 8; a++) if (!grid.terrainAllowsAt(x + D.cos((a / 8) * Math.PI * 2) * room, z + D.sin((a / 8) * Math.PI * 2) * room)) return false;
+  return true;
 }
 
 /** Whether an entity is within `range` of an outpost's post. */
