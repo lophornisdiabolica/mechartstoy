@@ -1064,6 +1064,20 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     const score = townSpot(x, z);
     if (!best || score < best.score) best = { x, z, score };
   }
+  // On a crowded map (three or more bases on a small one) the middle can be all base pads (or the
+  // hill): look further out, on a stream of its own so other maps don't change, and if there's
+  // still nowhere clear of them, no first town at all rather than one on top of a base.
+  const widerTownSpot = (from: { x: number; z: number; score: number }) => {
+    const wider = rng.fork(0x77696465);
+    let pick = from;
+    for (let n = 0; n < 80; n++) {
+      const x = wider.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
+      const z = wider.range(-depth / 2 + townRadius + 3, depth / 2 - townRadius - 3);
+      const score = townSpot(x, z);
+      if (score < pick.score) pick = { x, z, score };
+    }
+    return pick.score < 100 ? pick : null;
+  };
   // Candidates are always rolled so the rest of the map doesn't change with the number of towns.
   const townRng = rng.fork(0x746f776e);
   // A spot given as fractions of the half-width and half-depth, kept far enough in for a pad of this radius.
@@ -1127,7 +1141,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     }
   } else if (city) {
     // The city took the first town's place.
-  } else if (best && config.towns > 0) {
+  } else if (best && config.towns > 0 && (best.score < 100 || (best = widerTownSpot(best)) !== null)) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
     townSites.push({ x: best.x, z: best.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(best.x, best.z, townRadius, height);
