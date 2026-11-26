@@ -44,6 +44,7 @@ export function groundPicture(field: Battlefield): Picture {
       else if (ground === 'paving') c = [180, 170, 145];
       else if (ground === 'apron') c = [154, 152, 144];
       else if (ground === 'ballast') c = [96, 84, 72];
+      else if (ground === 'burnt') c = [48, 42, 38];
       if (field.deckAt(x, z) !== null) c = [170, 165, 155];
       data.set([c[0], c[1], c[2], 255], (j * cols + i) * 4);
     }

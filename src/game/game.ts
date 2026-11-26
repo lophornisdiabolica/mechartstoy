@@ -16,6 +16,7 @@ import { Towns, townSystem } from './towns';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem, outpostWorksSystem } from './outposts';
 import { raiseRelics, traitSystem, TraitState } from './traits';
 import { railSystem } from './rail';
+import { wildfireOn, wildfireSystem } from './wildfire';
 import { nearRail } from '../world/traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -201,6 +202,8 @@ export class Game {
       // Oil fires, geysers and the like, only on a map with traits that do something.
       ...(ctx.traits.active ? [traitSystem(ctx)] : []),
       ...(ctx.field.traits.rail ? [railSystem(ctx)] : []),
+      // Nobody's fire: wildfire in the woods, and everyone keeping clear of it and of burning oil.
+      ...(wildfireOn(ctx) || ctx.traits.pools.length > 0 ? [wildfireSystem(ctx, seed)] : []),
       fireSystem(ctx),
       frostSystem(ctx),
       smokeSystem(ctx),

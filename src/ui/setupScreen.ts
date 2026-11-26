@@ -731,6 +731,7 @@ export class SetupScreen {
     this.sync.push(() => (ways.checked = this.settings.map.waterways));
     map.append(el('p', { class: 'hint' }, 'Channels link the water near the bases so boats can reach each other, and from 60% water every base gets a harbour. Bridges carry the roads over.'));
     slider(map, 'Dense forest', 'forest', 0.05, (s) => s.map.forest, (s, v) => (s.map.forest = v), (v) => (v === 0 ? 'None' : percent(v)));
+    slider(map, 'Wildfire', 'wildfire', 0.05, (s) => s.map.wildfire ?? 0, (s, v) => (s.map.wildfire = v), (v) => (v === 0 ? 'Off' : percent(v)));
     const scrap = el('input', { type: 'checkbox', 'aria-label': 'Scrap' });
     scrap.addEventListener('change', () => {
       this.settings.map.scrap = scrap.checked;
@@ -755,7 +756,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later. Wrecks also leave junk on the ground that piles up where the fighting was heaviest: Wreckage sets how much, and Wreckage lasts how long (a lone wreck’s junk always clears up sooner than a big heap’s). Hulks fall apart the same either way. A super unit blowing up leaves a small crater; on low ground it fills with water, and engineers fill in or bridge any that cut the way across.',
+        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later. Wrecks also leave junk on the ground that piles up where the fighting was heaviest: Wreckage sets how much, and Wreckage lasts how long (a lone wreck’s junk always clears up sooner than a big heap’s). Hulks fall apart the same either way. With Wildfire on, fire that gets going in the woods (a flamer’s, a burning wreck’s) creeps on through them, slowly, faster in dry country, burning everyone in it under a pall of smoke and leaving burnt ground; everyone routes round it and gets out of it. A super unit blowing up leaves a small crater; on low ground it fills with water, and engineers fill in or bridge any that cut the way across.',
       ),
     );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
