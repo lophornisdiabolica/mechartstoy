@@ -68,6 +68,8 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   outpostLaunch: true,
   outpostRelief: true,
   trainLaunched: true,
+  bridgeFell: true,
+  drawbridge: true,
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,

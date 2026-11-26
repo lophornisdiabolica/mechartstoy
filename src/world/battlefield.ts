@@ -186,9 +186,9 @@ export interface TownSite {
  * hill, the citadel, the landing field and rail stations are placed on
  * their own (king of the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station' | 'drawbridge';
 /** The kinds a map deals out to ordinary outposts. */
-export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal'];
+export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal', 'drawbridge'];
 
 /** A flattened clearing in no-man's land where a capturable outpost stands. */
 export interface OutpostSite {
@@ -220,6 +220,8 @@ export interface Bridge {
   ice?: boolean;
   /** Come down (see removeBridge): kept in the list so other bridges keep their indices, but it's no longer there. */
   gone?: boolean;
+  /** Gone because it's a drawbridge raised (see game/bridges.ts): drawn lifted up out of the way rather than not at all. */
+  raised?: boolean;
 }
 
 /** Room under a bridge deck, above the water. */
@@ -531,6 +533,21 @@ export class Battlefield {
   addBridge(bridge: Bridge): void {
     const index = this.bridges.length;
     this.bridges.push(bridge);
+    this.markBridge(index);
+  }
+
+  /** Put a bridge that came down back up (a drawbridge lowered: see game/bridges.ts). */
+  restoreBridge(index: number): void {
+    const bridge = this.bridges[index];
+    if (!bridge || !bridge.gone) return;
+    const { raised: _, ...rest } = bridge;
+    this.bridges[index] = { ...rest, gone: false };
+    this.markBridge(index);
+  }
+
+  /** Mark the cells a bridge's deck and wings cover. */
+  private markBridge(index: number): void {
+    const bridge = this.bridges[index];
     const { cols, cellSize } = this.config;
     const pad = bridge.width / 2 + RAIL_REACH;
     const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + pad);
@@ -546,13 +563,14 @@ export class Battlefield {
   }
 
   /**
-   * Take a bridge off the map (an engineers' bridge coming down). It stays in
-   * the list, marked gone, so the other bridges keep their indices.
+   * Take a bridge off the map (an engineers' bridge coming down, a map bridge
+   * falling, a drawbridge raised). It stays in the list, marked gone, so the
+   * other bridges keep their indices.
    */
-  removeBridge(index: number): void {
+  removeBridge(index: number, raised = false): void {
     const bridge = this.bridges[index];
     if (!bridge || bridge.gone) return;
-    this.bridges[index] = { ...bridge, gone: true };
+    this.bridges[index] = raised ? { ...bridge, gone: true, raised: true } : { ...bridge, gone: true };
     const { cols } = this.config;
     const area = this.areaAround((bridge.ax + bridge.bx) / 2, (bridge.az + bridge.bz) / 2, D.hypot(bridge.bx - bridge.ax, bridge.bz - bridge.az) / 2 + bridge.width / 2 + RAIL_REACH + 1);
     for (let j = area.j0; j <= area.j1; j++) {
@@ -1210,6 +1228,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
       : placeOutposts(field, rng, config.outposts);
   const dealable = config.outpostKinds.filter((k) => OUTPOST_KIND_IDS.includes(k));
+  // A drawbridge needs a bridge to work: one outpost moves to the end of a map bridge.
+  if (dealable.includes('drawbridge') && !config.outpostPlaces) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0);
   const kinds = dealOutpostKinds(field, spots, dealable, rng.fork(0x6b696e64));
   // King of the hill: the hill (placed before the towns) goes first, and the other outposts keep clear of it.
   if (hill) {
@@ -1218,6 +1238,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : [])];
       const rest = square && config.outposts > 0 ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng.fork(0x72657374), config.outposts - 1, taken)] : placeOutposts(field, rng.fork(0x72657374), config.outposts, taken);
       spots.splice(0, spots.length, ...rest.filter((p) => D.hypot(p.x - hill.x, p.z - hill.z) > OUTPOST_RADIUS * 2.5));
+      if (dealable.includes('drawbridge')) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0, [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }]);
       kinds.splice(0, kinds.length, ...dealOutpostKinds(field, spots, dealable, rng.fork(0x6b696e64)));
     } else {
       for (let k = spots.length - 1; k >= 0; k--) {
@@ -1477,6 +1498,7 @@ function dealOutpostKinds(field: Battlefield, sites: { x: number; z: number }[],
     const other = pool.find((k) => k !== 'shipyard' && k !== 'gun') ?? 'supply';
     const placed = new Set<number>();
     for (let yard = dealt.indexOf('shipyard'); yard >= 0; yard = dealt.indexOf('shipyard', yard + 1)) {
+      if (placed.has(yard)) continue;
       let best = -1;
       wet.forEach((w, k) => {
         if (w > 0 && !placed.has(k) && dealt[k] !== 'gun' && (best < 0 || w > wet[best])) best = k;
@@ -1491,7 +1513,104 @@ function dealOutpostKinds(field: Battlefield, sites: { x: number; z: number }[],
       if (dealt[yard] === 'shipyard' && yard !== best) yard--;
     }
   }
+  // A drawbridge needs a map bridge by it to work: each goes to the site nearest a bridge not yet taken, and one with none left gets something else.
+  if (dealt.includes('drawbridge')) {
+    const near = sites.map((p) => mapBridgeNear(field, p.x, p.z));
+    const other = pool.find((k) => k !== 'drawbridge' && k !== 'gun' && k !== 'shipyard') ?? 'supply';
+    const placed = new Set<number>();
+    const works = new Set<number>();
+    for (let at = dealt.indexOf('drawbridge'); at >= 0; at = dealt.indexOf('drawbridge', at + 1)) {
+      if (placed.has(at)) continue;
+      let best = -1;
+      near.forEach((n, k) => {
+        if (n.bridge >= 0 && !works.has(n.bridge) && !placed.has(k) && dealt[k] !== 'gun' && dealt[k] !== 'shipyard' && (best < 0 || n.d < near[best].d)) best = k;
+      });
+      if (best < 0) {
+        dealt[at] = other;
+        continue;
+      }
+      [dealt[at], dealt[best]] = [dealt[best], dealt[at]];
+      placed.add(best);
+      works.add(near[best].bridge);
+      if (dealt[at] === 'drawbridge' && at !== best) at--;
+    }
+  }
   return dealt;
+}
+
+/**
+ * Move one of the outposts (from `keep` on: the city square stays put) to
+ * the end of a map bridge, for a drawbridge to work: dry, flat land the
+ * bases can reach, clear of the deck and its road but within
+ * DRAWBRIDGE_REACH of it, and clear of the other outposts and the towns. A
+ * bridge between the bases is best. It replaces the outpost nearest it; with
+ * nowhere fit, nothing moves.
+ */
+function besideBridge(field: Battlefield, spots: { x: number; z: number }[], keep: number, taken: { x: number; z: number; r: number }[] = []): void {
+  if (spots.length <= keep) return;
+  const r = OUTPOST_RADIUS;
+  const reach = landReach(field);
+  let best: { x: number; z: number; score: number } | null = null;
+  for (const b of field.bridges) {
+    if (b.builtBy !== undefined || b.gone) continue;
+    const len = D.hypot(b.bx - b.ax, b.bz - b.az);
+    if (len < 1) continue;
+    const ux = (b.bx - b.ax) / len;
+    const uz = (b.bz - b.az) / len;
+    const mx = (b.ax + b.bx) / 2;
+    const mz = (b.az + b.bz) / 2;
+    const near = field.baseSites.map((s) => D.hypot(s.x - mx, s.z - mz) - s.radius).sort((p, q) => p - q);
+    const contest = near.length > 1 ? (near[1] - near[0]) / (near[0] + 1) : 0;
+    for (const end of [-1, 1]) {
+      const ex = end < 0 ? b.ax : b.bx;
+      const ez = end < 0 ? b.az : b.bz;
+      for (let along = 0; along <= 12; along += 3) {
+        for (let side = -15; side <= 15; side += 3) {
+          const x = ex + ux * end * along - uz * side;
+          const z = ez + uz * end * along + ux * side;
+          if (!field.contains(x, z, r + 4) || !reach[vertexAt(field, x, z)] || field.nearBridge(x, z, r * 1.35)) continue;
+          const off = distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz);
+          if (off >= DRAWBRIDGE_REACH - 1) continue;
+          if (field.baseSites.some((s) => D.hypot(s.x - x, s.z - z) - s.radius < r + 8)) continue;
+          if (taken.some((t) => D.hypot(t.x - x, t.z - z) < t.r + r + 6)) continue;
+          if (!field.config.citySprawl && field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius - 6 + r + 6)) continue;
+          let flat = 0;
+          for (let a = 0; a < 8; a++) {
+            const px = x + D.cos((a / 8) * Math.PI * 2) * r * 0.8;
+            const pz = z + D.sin((a / 8) * Math.PI * 2) * r * 0.8;
+            flat += field.slopeAt(px, pz) + (field.isWater(px, pz) ? 3 : 0);
+          }
+          const score = -flat * 4 - Math.min(contest, 2) * 20 - off * 0.2;
+          if (!best || score > best.score) best = { x, z, score };
+        }
+      }
+    }
+  }
+  if (!best) return;
+  const spot = best;
+  // It takes the place of the nearest outpost, and keeps clear of the rest.
+  let j = keep;
+  for (let k = keep; k < spots.length; k++) if (D.hypot(spots[k].x - spot.x, spots[k].z - spot.z) < D.hypot(spots[j].x - spot.x, spots[j].z - spot.z)) j = k;
+  if (spots.some((p, k) => k !== j && D.hypot(p.x - spot.x, p.z - spot.z) < r * 2 + 6)) return;
+  spots[j] = { x: spot.x, z: spot.z };
+}
+
+/** How far from a drawbridge outpost's middle the bridge it works can be (to the nearest point of its deck). */
+export const DRAWBRIDGE_REACH = 20;
+
+/** The map bridge (not an engineers') nearest a point within DRAWBRIDGE_REACH, and how far it is; bridge -1 if none. */
+export function mapBridgeNear(field: Battlefield, x: number, z: number): { bridge: number; d: number } {
+  let bridge = -1;
+  let best = DRAWBRIDGE_REACH;
+  field.bridges.forEach((b, k) => {
+    if (b.builtBy !== undefined) return;
+    const d = distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz);
+    if (d < best) {
+      best = d;
+      bridge = k;
+    }
+  });
+  return { bridge, d: best };
 }
 
 /** How far from an outpost's middle a shipyard looks for water to launch its boats into. */

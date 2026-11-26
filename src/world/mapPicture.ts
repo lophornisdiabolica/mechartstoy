@@ -53,7 +53,7 @@ export function groundPicture(field: Battlefield): Picture {
 }
 
 /** Letters for outpost kinds on the picture. */
-const KIND_LETTERS: Record<string, string> = { supply: 'S', airstrip: 'A', gun: 'G', relay: 'R', fuel: 'F', factory: 'M', shipyard: 'Y', sensor: 'E', repair: 'W', signal: 'L', citadel: 'C', landing: 'P', station: 'T', hill: 'H' };
+const KIND_LETTERS: Record<string, string> = { supply: 'S', airstrip: 'A', gun: 'G', relay: 'R', fuel: 'F', factory: 'M', shipyard: 'Y', sensor: 'E', repair: 'W', signal: 'L', citadel: 'C', landing: 'P', station: 'T', drawbridge: 'D', hill: 'H' };
 
 /** A 3×5 pixel font, just the characters the picture needs. */
 const FONT: Record<string, string> = {

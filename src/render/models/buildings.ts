@@ -635,6 +635,26 @@ registerModel('bld:stationHouse', (faction) => {
   return g;
 });
 
+/** A drawbridge's winch house: a squat stone tower with a timber roof, the big winch drum on its side and chains running down to the bridge. */
+registerModel('bld:winchHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  const stone = 0x948e80;
+  g.add(box(3.0, 0.3, 3.0, 0x7d786c, 0, 0.15, 0));
+  g.add(box(2.2, 2.4, 2.2, stone, 0, 1.5, 0));
+  g.add(box(2.44, 0.2, 2.44, 0x857f72, 0, 2.8, 0));
+  g.add(gableRoof(2.3, 2.3, 0.7, 0x6b4a32, 2.9));
+  g.add(box(0.05, 1.1, 0.7, DARK, 1.13, 0.85, 0)); // door
+  g.add(box(0.08, 0.26, 1.3, primary, 1.15, 1.6, 0));
+  // The winch: a drum on two cheeks, with its crank wheel.
+  for (const z of [-0.75, 0.75]) g.add(box(0.5, 0.9, 0.16, DARK, -1.3, 1.25, z));
+  g.add(cylinder(0.36, 0.36, 1.3, 12, 0x5a4a3a, -1.35, 1.5, 0).rotateX(Math.PI / 2));
+  g.add(cylinder(0.5, 0.5, 0.08, 10, secondary, -1.35, 1.5, 0.92).rotateX(Math.PI / 2));
+  // Chains off the drum.
+  for (const z of [-0.35, 0.35]) g.add(box(0.08, 0.08, 0.08, DARK, -1.75, 1.5, z), box(0.07, 1.2, 0.07, DARK, -1.75, 0.9, z));
+  return g;
+});
+
 /** A landing field's flight tower: a glazed cab on a slim tower, a beacon on its roof and a windsock. */
 registerModel('bld:flightTower', (faction) => {
   const { primary, secondary } = factionColors(faction);

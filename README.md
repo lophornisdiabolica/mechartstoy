@@ -535,6 +535,11 @@ A map style re-roll gives most maps a trait or two (the link key is
   everyone in it. Ground burning with nobody's fire (a wildfire, a burning
   oil field) costs a lot to route through, so units go round it, and one
   caught in it gets out the shortest way.
+  **Bridges fall** (off by default): a map bridge takes a lot of punishment
+  but wears down under every shot that bursts on it or by it, whoever fired
+  it, and under heavy fire it comes down for good, taking whatever's on it
+  into the water. The crossing is cut, so routes go round, and the sides'
+  engineers bridge it again if the way round is long.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
   until it's cleared away four minutes later. **Wreckage:** a destroyed
@@ -1389,7 +1394,7 @@ outposts and the light scenery are still placed once, at the start.
   holder's team grows impatient 40% faster while massing, so its attacks
   set out sooner, and the mast spots for its guns), a *fuel depot* (+10%
   production, and its tanks blow up) and a *ruined factory* (turns out one
-  of the holder's factory batches every 75 seconds). Four more are off by
+  of the holder's factory batches every 75 seconds). Five more are off by
   default, so the usual battles stay as they were: a *shipyard* (dealt to
   the outpost with the most water by it, it launches a missile boat for its
   holder every 80 seconds, two afloat at most, even for a side with no
@@ -1398,7 +1403,11 @@ outposts and the light scenery are still placed once, at the start.
   vehicles and walkers that come by it, about 2.5% a second, and units that
   fall back to mend use it) and a *signal fire* (every two minutes a relief
   column of three of the holder's wave picks marches in from the nearest map
-  edge). The clock on a shipyard or signal fire starts again when it changes
+  edge). A fifth, the *drawbridge* (dealt only to an outpost within 20 of a
+  map bridge, one per bridge), works that bridge for its holder: it goes up
+  when the holder's enemies come near it and nobody's on it, so they can't
+  cross there, and comes down again once they've gone; held by its garrison
+  it stays down. The clock on a shipyard or signal fire starts again when it changes
   hands, so taking one doesn't pay out at once. Every outpost makes
   the ground round it the holder's territory (see below). A production bonus adds the same to
   every side (+10% of a normal side's rate), so a side boosted for uneven

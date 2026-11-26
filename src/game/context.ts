@@ -1,4 +1,5 @@
 import type { TraitState } from './traits';
+import type { BridgeWear } from './bridges';
 import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
@@ -61,6 +62,10 @@ export type GameEvents = {
   outpostLaunch: { outpost: number; faction: number; x: number; z: number };
   /** A signal fire outpost called in a relief column for whoever holds it. */
   outpostRelief: { outpost: number; faction: number; x: number; z: number };
+  /** A map bridge came down under fire, for good (see bridges.ts). */
+  bridgeFell: { x: number; z: number };
+  /** A drawbridge outpost's holder raised (up) or lowered its bridge (see bridges.ts). */
+  drawbridge: { outpost: number; faction: number; up: boolean; x: number; z: number };
   /** A rail station put an armoured train on the line for whoever holds it (see rail.ts). */
   trainLaunched: { entity: Entity; outpost: number; faction: number; x: number; z: number };
   /** A carrier dropped off its squad. */
@@ -219,6 +224,8 @@ export interface SimContext {
   domes: Domes;
   /** The towns' people (see towns.ts). */
   towns: Towns;
+  /** The map's own bridges' wear, and those that have fallen (see bridges.ts). */
+  bridges: BridgeWear;
   /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */
   traffic: Traffic;
 }
