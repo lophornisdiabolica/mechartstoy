@@ -354,4 +354,27 @@ describe('maps', () => {
     expect(settingsToParams(s).get('terrain')).toBe('canyon');
     expect(settingsFromParams(new URLSearchParams('terrain=volcano')).map.terrain).toBe('rolling');
   });
+
+  it('a bridge out to cut-off land starts clear of the bridges already there, not from one’s side', () => {
+    let bridges = 0;
+    for (let seed = 1; seed <= 16; seed++) {
+      const s = defaultSettings();
+      s.map.terrain = 'islands';
+      s.map.towns = 2;
+      const f = generateBattlefield(new Rng(seed * 7919), { ...battlefieldConfig(s), seats: [0, 1, 2] });
+      bridges += f.bridges.length;
+      for (const b of f.bridges) {
+        for (const o of f.bridges) {
+          if (o === b) continue;
+          for (const [x, z] of [[b.ax, b.az], [b.bx, b.bz]]) {
+            const dx = o.bx - o.ax;
+            const dz = o.bz - o.az;
+            const t = Math.max(0, Math.min(1, ((x - o.ax) * dx + (z - o.az) * dz) / (dx * dx + dz * dz)));
+            expect(Math.hypot(x - o.ax - dx * t, z - o.az - dz * t)).toBeGreaterThan(o.width / 2 + 0.5);
+          }
+        }
+      }
+    }
+    expect(bridges).toBeGreaterThan(16);
+  });
 });
