@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '../src/game/game';
-import { basePlaces, battlefieldConfig, defaultSettings, seating } from '../src/game/settings';
+import { basePlaces, battlefieldConfig, defaultFaction, defaultSettings, MAP_SIZES, MapSize, ROLLED_MAP_SIZES, seating } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { Transform } from '../src/game/components';
 import { UNIT_DEFS } from '../src/game/units';
@@ -187,6 +187,26 @@ describe('maps', () => {
     const area = (c: { cols: number; rows: number }) => c.cols * c.rows;
     expect(area(wide) / area(deep)).toBeGreaterThan(0.85);
     expect(area(wide) / area(deep)).toBeLessThan(1.15);
+  });
+
+  it('Huge and Vast maps need no extra sides, and more sides still grow a small map', () => {
+    const sized = (size: MapSize, sides: number) => {
+      const s = defaultSettings();
+      s.map.size = size;
+      s.factions = Array.from({ length: sides }, (_, i) => defaultFaction(i));
+      return battlefieldConfig(s);
+    };
+    const area = (c: { cols: number; rows: number }) => c.cols * c.rows;
+    const huge = sized('huge', 2);
+    const vast = sized('vast', 2);
+    expect([huge.cols, huge.rows]).toEqual([MAP_SIZES.huge.cols, MAP_SIZES.huge.rows]);
+    expect([vast.cols, vast.rows]).toEqual([MAP_SIZES.vast.cols, MAP_SIZES.vast.rows]);
+    // A 1v1 on Vast is about as big as eight sides make a map.
+    expect(area(vast) / area(sized('medium', 8))).toBeGreaterThan(0.9);
+    expect(area(sized('small', 8))).toBeGreaterThan(area(sized('small', 2)) * 4);
+    expect(settingsFromParams(settingsToParams({ ...defaultSettings(), map: { ...defaultSettings().map, size: 'vast' } })).map.size).toBe('vast');
+    expect(ROLLED_MAP_SIZES).not.toContain('huge');
+    expect(ROLLED_MAP_SIZES).not.toContain('vast');
   });
 
   it('map settings round-trip through the URL, and old town links still work', () => {

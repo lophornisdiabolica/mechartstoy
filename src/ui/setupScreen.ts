@@ -64,7 +64,7 @@ const ROW_ROLL: Record<string, string> = {
 };
 
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
-  size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual' },
+  size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual (Huge and Vast only by hand)' },
   biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
   style: { label: 'Map style', title: 'Water, hills, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },

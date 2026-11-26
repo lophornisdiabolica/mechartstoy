@@ -89,7 +89,7 @@ describe('settings in the URL', () => {
   });
 
   it('ignores junk and clamps out-of-range values', () => {
-    const s = settingsFromParams(new URLSearchParams('mode=chaos&size=huge&icap=9999&water=abc&tank=5,x,0,-1&color1=zzz&name2=%20%20'));
+    const s = settingsFromParams(new URLSearchParams('mode=chaos&size=gigantic&icap=9999&water=abc&tank=5,x,0,-1&color1=zzz&name2=%20%20'));
     const d = defaultSettings();
     expect(s.mode).toBe(d.mode);
     expect(s.map.size).toBe(d.map.size);

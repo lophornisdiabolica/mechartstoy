@@ -3,8 +3,8 @@ import { BIOME_IDS, BIOMES } from '../world/biomes';
 import { canonicalDoctrine, DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
 import { generateIdentity, isGeneratedIdentity } from './identity';
-import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
-import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
+import type { BattleSettings, FactionSettings, TownSize } from './settings';
+import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS, ROLLED_MAP_SIZES } from './settings';
 import { applyLocksAndDice, rollable } from './rollables';
 
 /**
@@ -151,7 +151,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     label.push(BIOMES[s.map.biome].label);
   }
   if (v.roll.size) {
-    s.map.size = rng.pick(Object.keys(MAP_SIZES) as MapSize[]);
+    s.map.size = rng.pick(ROLLED_MAP_SIZES);
     // Half the time the usual shape; otherwise somewhat wider or deeper.
     s.map.shape = rng.chance(0.5) ? 1 : round2(clamp(rng.chance(0.5) ? rng.range(1.15, 1.6) : 1 / rng.range(1.15, 1.5), 'shape'));
     label.push(MAP_SIZES[s.map.size].label);

@@ -1,7 +1,7 @@
 import { Rng } from '../core/rng';
 import { BIOME_IDS } from '../world/biomes';
 import type { AttackTiming, BaseLayout, BattleMode, BattleSettings, CityMode, MapSize, SuperGrowth, TownSize } from './settings';
-import { LIMITS, MAP_SIZES, rampMode, TOWN_SIZES } from './settings';
+import { LIMITS, rampMode, ROLLED_MAP_SIZES, TOWN_SIZES } from './settings';
 import type { VarietyKey } from './variety';
 
 /**
@@ -79,7 +79,7 @@ const build = (): Rollable[] => [
   choice<BattleMode>('mode', 'Mode', ['eternal', 'conquest', 'hill'], (s) => s.mode, (s, v) => (s.mode = v)),
   range('hold', 'Hold to win', 'hillHold', 15, (s) => s.armies.hillHold, (s, v) => (s.armies.hillHold = v)),
   // Map
-  choice<MapSize>('size', 'Size', Object.keys(MAP_SIZES) as MapSize[], (s) => s.map.size, (s, v) => (s.map.size = v), 'size'),
+  choice<MapSize>('size', 'Size', ROLLED_MAP_SIZES, (s) => s.map.size, (s, v) => (s.map.size = v), 'size'),
   range('shape', 'Shape', 'shape', 0.05, (s) => s.map.shape, (s, v) => (s.map.shape = v), 'size'),
   choice('biome', 'Biome', BIOME_IDS, (s) => s.map.biome, (s, v) => (s.map.biome = v), 'biome'),
   choice<BaseLayout>(

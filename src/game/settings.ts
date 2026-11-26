@@ -28,7 +28,7 @@ export type RampMode = 'eternal' | 'conquest';
 export function rampMode(mode: BattleMode): RampMode {
   return mode === 'eternal' ? 'eternal' : 'conquest';
 }
-export type MapSize = 'small' | 'medium' | 'large';
+export type MapSize = 'small' | 'medium' | 'large' | 'huge' | 'vast';
 /**
  * Where the bases go:
  * - ring: round the edge of the map, allies side by side;
@@ -246,7 +246,16 @@ export const MAP_SIZES: Record<MapSize, { cols: number; rows: number; label: str
   small: { cols: 64, rows: 50, label: 'Small' },
   medium: { cols: 84, rows: 64, label: 'Medium' },
   large: { cols: 112, rows: 80, label: 'Large' },
+  // As big as eight sides make a map, without needing eight sides.
+  huge: { cols: 160, rows: 114, label: 'Huge' },
+  vast: { cols: 210, rows: 150, label: 'Vast' },
 };
+
+/**
+ * The sizes re-rolls and dice pick from between battles. Huge and Vast make
+ * long, slow battles for a few sides, so they're only ever chosen by hand.
+ */
+export const ROLLED_MAP_SIZES: MapSize[] = ['small', 'medium', 'large'];
 
 export const UNIT_IDS = Object.keys(UNIT_DEFS) as UnitId[];
 
@@ -425,7 +434,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
   // Water level scales with the hills so "some water" looks the same on any terrain.
   // The factor makes the defaults (water 0.5, hills 1) match the hand-tuned map.
   const seaLevel = maxHeight * s.map.water * ((DEFAULT_BATTLEFIELD.seaLevel / DEFAULT_BATTLEFIELD.maxHeight) * 2);
-  // More sides need more room: grow the map (keeping its shape) until every base fits with space between.
+  // The size is the smallest the map will be. More sides need more room: grow it (keeping its shape) until every base fits with space between.
   const { cellSize, baseRadius } = DEFAULT_BATTLEFIELD;
   const n = s.factions.length;
   // The shape stretches one way and squeezes the other, keeping the area.

@@ -305,6 +305,12 @@ then start. Each side also picks a **doctrine** (see below). Setup sections fold
 is written to the page URL, so a link reproduces a setup (and, during a
 battle, its exact map via `seed`).
 
+Map sizes run Small, Medium, Large, Huge and Vast. A size is the smallest
+the map will be: more sides grow it until every base fits, so eight sides
+on any size end up about as big as Vast. Huge and Vast give that room to any
+number of sides (a 1v1 on Vast is a long march). Re-rolls and dice between
+battles only pick Small to Large.
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is

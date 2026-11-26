@@ -184,6 +184,8 @@ export const MAP_TYPES: Record<string, string> = {
   rugged: 'water=1&hills=1.6',
   small: 'size=small',
   large: 'size=large',
+  huge: 'size=huge',
+  vast: 'size=vast',
   notown: 'town=0',
   /** The first town is a city. */
   city: 'city=1',
