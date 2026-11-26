@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '../src/game/game';
-import { basePlaces, battlefieldConfig, defaultSettings, seating } from '../src/game/settings';
+import { basePlaces, battlefieldConfig, defaultFaction, defaultSettings, MAP_SIZES, MapSize, ROLLED_MAP_SIZES, seating } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { Transform } from '../src/game/components';
 import { UNIT_DEFS } from '../src/game/units';
@@ -189,6 +189,26 @@ describe('maps', () => {
     expect(area(wide) / area(deep)).toBeLessThan(1.15);
   });
 
+  it('Huge and Vast maps need no extra sides, and more sides still grow a small map', () => {
+    const sized = (size: MapSize, sides: number) => {
+      const s = defaultSettings();
+      s.map.size = size;
+      s.factions = Array.from({ length: sides }, (_, i) => defaultFaction(i));
+      return battlefieldConfig(s);
+    };
+    const area = (c: { cols: number; rows: number }) => c.cols * c.rows;
+    const huge = sized('huge', 2);
+    const vast = sized('vast', 2);
+    expect([huge.cols, huge.rows]).toEqual([MAP_SIZES.huge.cols, MAP_SIZES.huge.rows]);
+    expect([vast.cols, vast.rows]).toEqual([MAP_SIZES.vast.cols, MAP_SIZES.vast.rows]);
+    // A 1v1 on Vast is about as big as eight sides make a map.
+    expect(area(vast) / area(sized('medium', 8))).toBeGreaterThan(0.9);
+    expect(area(sized('small', 8))).toBeGreaterThan(area(sized('small', 2)) * 4);
+    expect(settingsFromParams(settingsToParams({ ...defaultSettings(), map: { ...defaultSettings().map, size: 'vast' } })).map.size).toBe('vast');
+    expect(ROLLED_MAP_SIZES).not.toContain('huge');
+    expect(ROLLED_MAP_SIZES).not.toContain('vast');
+  });
+
   it('map settings round-trip through the URL, and old town links still work', () => {
     const s = defaultSettings();
     s.map = { ...s.map, shape: 1.3, biome: 'desert', layout: 'apart', towns: 2, townSize: 'large', waterways: false };
@@ -204,5 +224,87 @@ describe('maps', () => {
     expect(fresh.costAt(10, 10)).toBeGreaterThan(2);
     expect(new NavGrid(game.field, 'foot').costAt(10, 10)).toBeLessThan(1.5);
     expect(UNIT_DEFS.tank).toBeDefined();
+  });
+
+  it('cliffs wall off everything on the ground but spiders, and only on maps with high ground', () => {
+    const game = emptyGame(11, (s) => ((s.map.cliffs = 1), (s.map.water = 0.2)));
+    const f = game.field;
+    const { cols, rows, cellSize } = f.config;
+    const cells: { x: number; z: number }[] = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) cells.push({ x: f.bounds.minX + (i + 0.5) * cellSize, z: f.bounds.minZ + (j + 0.5) * cellSize });
+    const faces = cells.filter((c) => f.cliffAt(c.x, c.z));
+    expect(faces.length).toBeGreaterThan(30);
+    for (const c of faces) {
+      for (const cls of ['tracked', 'foot', 'walker', 'hover'] as const) expect(game.ctx.navs.for(cls).terrainAllowsAt(c.x, c.z)).toBe(false);
+      expect(game.ctx.navs.for('climber').terrainAllowsAt(c.x, c.z)).toBe(true);
+    }
+    // A unit stuck on a cliff face can still step down off it.
+    const face = faces.find((c) => !f.isWater(c.x, c.z))!;
+    const tracked = game.ctx.navs.for('tracked');
+    const off = cells.find((c) => Math.hypot(c.x - face.x, c.z - face.z) < 3 && tracked.terrainAllowsAt(c.x, c.z));
+    expect(off && tracked.offCliff(face.x, face.z, off.x, off.z)).toBe(true);
+
+    // Without mountains or cliffs, even the steepest hills (and the tallest) are only slow going.
+    const hilly = emptyGame(11, (s) => ((s.map.hills = 3), (s.map.water = 0)));
+    const g = hilly.field;
+    expect(g.cliffs).toBe(false);
+    expect(g.sheer.every((v) => v === 0)).toBe(true);
+    let steepest = 0;
+    for (const c of cells) {
+      if (!g.contains(c.x, c.z)) continue;
+      steepest = Math.max(steepest, g.slopeAt(c.x, c.z));
+      expect(hilly.ctx.navs.for('tracked').terrainAllowsAt(c.x, c.z)).toBe(true);
+    }
+    expect(steepest).toBeGreaterThan(2);
+  });
+
+  it('mountains and mesas keep every base, town and outpost in reach, and mesa tops reachable', () => {
+    const configs = [
+      { hills: 1, mtn: 1, cliff: 1, water: 0.5, sides: 2 },
+      { hills: 3, mtn: 1, cliff: 1, water: 1, sides: 2 },
+      { hills: 2, mtn: 0.6, cliff: 0.6, water: 0.7, sides: 4 },
+      { hills: 0.7, mtn: 0, cliff: 0.75, water: 0.05, sides: 6 },
+    ];
+    for (const c of configs) {
+      for (let seed = 0; seed < 6; seed++) {
+        const game = emptyGame(seed * 131 + 17, (s) => {
+          s.map = { ...s.map, size: 'small', hills: c.hills, mountains: c.mtn, cliffs: c.cliff, water: c.water };
+          s.factions = Array.from({ length: c.sides }, (_, i) => defaultFaction(i));
+        });
+        const f = game.field;
+        expect(f.sheer.some((v) => v === 1)).toBe(true);
+        for (const cls of ['tracked', 'foot', 'walker'] as const) {
+          const nav = game.ctx.navs.for(cls);
+          const home = f.baseSites[0];
+          for (const p of [...f.baseSites, ...f.townSites, ...f.outpostSites]) expect(nav.connected(home, p)).toBe(true);
+        }
+        // Almost all the open ground can be driven to: only bits of crag (and, on the tallest hills, a few nooks) can't.
+        if (c.hills > 1) continue;
+        const nav = game.ctx.navs.for('tracked');
+        const { cols, rows, cellSize } = f.config;
+        let open = 0;
+        let lost = 0;
+        for (let j = 0; j < rows; j++) {
+          for (let i = 0; i < cols; i++) {
+            const p = { x: f.bounds.minX + (i + 0.5) * cellSize, z: f.bounds.minZ + (j + 0.5) * cellSize };
+            if (nav.terrainBlocksCell(p.x, p.z)) continue;
+            open++;
+            if (!nav.connected(f.baseSites[0], p)) lost++;
+          }
+        }
+        expect(lost / open).toBeLessThan(0.02);
+      }
+    }
+  });
+
+  it('maps without mountains or cliffs come out just as before', () => {
+    // High ground is on its own random stream, so turning it off leaves the rest of the map alone.
+    const plain = emptyGame(23).field;
+    const off = emptyGame(23, (s) => ((s.map.mountains = 0), (s.map.cliffs = 0))).field;
+    expect(Array.from(off.heights)).toEqual(Array.from(plain.heights));
+    const s = defaultSettings();
+    s.map = { ...s.map, hills: 2.6, mountains: 0.35, cliffs: 0.8 };
+    const back = settingsFromParams(settingsToParams(s)).map;
+    expect([back.hills, back.mountains, back.cliffs]).toEqual([2.6, 0.35, 0.8]);
   });
 });

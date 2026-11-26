@@ -28,7 +28,7 @@ export type RampMode = 'eternal' | 'conquest';
 export function rampMode(mode: BattleMode): RampMode {
   return mode === 'eternal' ? 'eternal' : 'conquest';
 }
-export type MapSize = 'small' | 'medium' | 'large';
+export type MapSize = 'small' | 'medium' | 'large' | 'huge' | 'vast';
 /**
  * Where the bases go:
  * - ring: round the edge of the map, allies side by side;
@@ -93,8 +93,12 @@ export interface BattleSettings {
     size: MapSize;
     /** 0 (dry) to 1 (lots of lakes). */
     water: number;
-    /** Terrain height multiplier, 0 (flat) to 2. */
+    /** Terrain height multiplier, 0 (flat) to 3. */
     hills: number;
+    /** Mountains, 0 (none) to 1: tall massifs whose sheer crags only spiders and aircraft get over (see world/highground.ts). */
+    mountains: number;
+    /** Cliffs, 0 (none) to 1: flat-topped mesas with sheer sides, reached by a ramp or two. */
+    cliffs: number;
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -246,14 +250,25 @@ export const MAP_SIZES: Record<MapSize, { cols: number; rows: number; label: str
   small: { cols: 64, rows: 50, label: 'Small' },
   medium: { cols: 84, rows: 64, label: 'Medium' },
   large: { cols: 112, rows: 80, label: 'Large' },
+  // As big as eight sides make a map, without needing eight sides.
+  huge: { cols: 160, rows: 114, label: 'Huge' },
+  vast: { cols: 210, rows: 150, label: 'Vast' },
 };
+
+/**
+ * The sizes re-rolls and dice pick from between battles. Huge and Vast make
+ * long, slow battles for a few sides, so they're only ever chosen by hand.
+ */
+export const ROLLED_MAP_SIZES: MapSize[] = ['small', 'medium', 'large'];
 
 export const UNIT_IDS = Object.keys(UNIT_DEFS) as UnitId[];
 
 /** Ranges the UI offers; the URL parser clamps to them too. */
 export const LIMITS = {
   water: { min: 0, max: 1 },
-  hills: { min: 0, max: 2 },
+  hills: { min: 0, max: 3 },
+  mountains: { min: 0, max: 1 },
+  cliffs: { min: 0, max: 1 },
   shape: { min: 0.6, max: 1.8 },
   towns: { min: 0, max: 4 },
   infantryCap: { min: 5, max: 120 },
@@ -290,7 +305,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -425,7 +440,7 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
   // Water level scales with the hills so "some water" looks the same on any terrain.
   // The factor makes the defaults (water 0.5, hills 1) match the hand-tuned map.
   const seaLevel = maxHeight * s.map.water * ((DEFAULT_BATTLEFIELD.seaLevel / DEFAULT_BATTLEFIELD.maxHeight) * 2);
-  // More sides need more room: grow the map (keeping its shape) until every base fits with space between.
+  // The size is the smallest the map will be. More sides need more room: grow it (keeping its shape) until every base fits with space between.
   const { cellSize, baseRadius } = DEFAULT_BATTLEFIELD;
   const n = s.factions.length;
   // The shape stretches one way and squeezes the other, keeping the area.
@@ -469,6 +484,8 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     citySprawl: s.map.city === 'sprawl',
     townPlaces: s.map.city === 'sprawl' ? null : placed.towns,
     outpostPlaces: placed.outposts,
+    mountains: s.map.mountains,
+    cliffs: s.map.cliffs,
   };
 }
 

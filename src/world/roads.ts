@@ -145,6 +145,7 @@ export function planRoad(field: Battlefield, from: Point, to: Point, options: Ro
     const z = cz((k - i) / cols);
     if (!field.contains(x, z, 2)) return true;
     if (field.isWater(x, z) && field.deckAt(x, z) === null) return true;
+    if (field.cliffAt(x, z)) return true;
     // Onto a bridge only by its ends, not over its railings.
     if (field.bridges.length > 0 && field.railAt(x, z)) return true;
     if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + 2)) return true;

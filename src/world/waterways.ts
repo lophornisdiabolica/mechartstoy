@@ -320,12 +320,17 @@ export function bridgeChannels(field: Battlefield, channels: Channel[]): number 
 
 /**
  * Dry land (or a bridge deck) the first base can reach, per vertex: the
- * same land a tank could drive on, give or take steep ground.
+ * same land a tank could drive on, give or take steep ground (but not over
+ * a sheer cliff, on maps with them).
  */
 export function landReach(field: Battlefield): Uint8Array {
   const g = grid(field);
   const reach = new Uint8Array(g.count);
-  const dry = (k: number) => field.heights[k] >= field.seaLevel || field.deckAt(field.vertexX(k % g.stride), field.vertexZ(Math.floor(k / g.stride))) !== null;
+  const dry = (k: number) => {
+    const x = field.vertexX(k % g.stride);
+    const z = field.vertexZ(Math.floor(k / g.stride));
+    return field.deckAt(x, z) !== null || (field.heights[k] >= field.seaLevel && !cliffBeside(field, x, z));
+  };
   const site = field.baseSites[0];
   const start = vertexAt(field, site.x, site.z);
   const stack = [start];
@@ -340,6 +345,17 @@ export function landReach(field: Battlefield): Uint8Array {
     }
   }
   return reach;
+}
+
+/**
+ * Whether any of the four cells round a vertex is a cliff face (see
+ * Battlefield.cliffAt): going by cells, as routes do, so a cliff one cell
+ * thick still walls the land off.
+ */
+function cliffBeside(field: Battlefield, x: number, z: number): boolean {
+  if (!field.cliffs) return false;
+  const h = field.config.cellSize / 2;
+  return field.cliffAt(x - h, z - h) || field.cliffAt(x + h, z - h) || field.cliffAt(x - h, z + h) || field.cliffAt(x + h, z + h);
 }
 
 /** The vertex nearest a world point. */
@@ -372,7 +388,7 @@ export function bridgeLand(field: Battlefield): number {
     while (stack.length) {
       const k = stack.pop()!;
       for (const nk of neighbours(g, k)) {
-        if (!island[nk] && field.heights[nk] >= field.seaLevel) {
+        if (!island[nk] && field.heights[nk] >= field.seaLevel && !cliffBeside(field, vx(nk), vz(nk))) {
           island[nk] = 1;
           stack.push(nk);
         }

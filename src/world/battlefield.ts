@@ -7,6 +7,8 @@ import { CITY_CELL, CityPlan, inCityPlan, planCity, snapToCell } from './city';
 import { growWoods, Woods } from './woods';
 import { bridgeChannels, bridgeLand, carveWaterways, cutBanks, landReach, vertexAt } from './waterways';
 import * as D from '../core/dmath';
+import { CLIFF_SLOPE } from './moveClasses';
+import { raiseHighground } from './highground';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -69,6 +71,14 @@ export interface BattlefieldConfig {
   /** Towns' and outposts' positions, in the same fractions, or null to place them automatically (towns then go by `towns`, outposts by `outposts`). */
   townPlaces: { x: number; z: number }[] | null;
   outpostPlaces: { x: number; z: number }[] | null;
+  /**
+   * High ground (see highground.ts), each 0 for none to 1 for plenty:
+   * mountains (tall massifs whose crags nothing but spiders climb) and
+   * cliffs (flat-topped mesas with sheer sides and a ramp or two up). Either
+   * turns on the cliff rule (see Battlefield.cliffs).
+   */
+  mountains: number;
+  cliffs: number;
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -92,6 +102,8 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   places: null,
   townPlaces: null,
   outpostPlaces: null,
+  mountains: 0,
+  cliffs: 0,
 };
 
 /** Width of town streets and the roads between towns. */
@@ -282,6 +294,12 @@ export class Battlefield {
   readonly woods: Woods;
   /** Per cell: 1 where a road (see addRoad) covers it, so the terrain leaves its colour to the road strip. */
   readonly roadCell: Uint8Array;
+  /**
+   * Per cell: 1 on high ground (see highground.ts), where ground steeper
+   * than CLIFF_SLOPE is a sheer cliff (see cliffAt). Everywhere else, even
+   * the steepest hillside is only slow going.
+   */
+  readonly sheer: Uint8Array;
   /** Per cell: the index of the bridge over it, or -1. */
   private readonly bridgeCell: Int16Array;
   /** Per cell: the index of the bridge whose ramp wings might be over it (see wingAt), or -1. */
@@ -314,6 +332,7 @@ export class Battlefield {
     this.bridgeCell = new Int16Array(config.cols * config.rows).fill(-1);
     this.wingCell = new Int16Array(config.cols * config.rows).fill(-1);
     this.roadCell = new Uint8Array(config.cols * config.rows);
+    this.sheer = new Uint8Array(config.cols * config.rows);
     this.woods = new Woods(this);
   }
 
@@ -835,6 +854,29 @@ export class Battlefield {
     return this.heightAt(x, z) < this.seaLevel;
   }
 
+  /**
+   * Whether this map can have sheer cliffs (see sheer): only with mountains
+   * or cliffs turned on.
+   */
+  get cliffs(): boolean {
+    return this.config.mountains > 0 || this.config.cliffs > 0;
+  }
+
+  /** Whether a point is on high ground, where steep enough ground is a cliff (see sheer). */
+  sheerAt(x: number, z: number): boolean {
+    if (!this.cliffs) return false;
+    const [i, j] = this.cellAt(x, z);
+    return this.sheer[j * this.config.cols + i] === 1;
+  }
+
+  /**
+   * Whether a point is on a sheer cliff face: high ground (see sheer),
+   * dry, and steeper than CLIFF_SLOPE. A wall to everything on the ground but spiders.
+   */
+  cliffAt(x: number, z: number): boolean {
+    return this.sheerAt(x, z) && this.heightAt(x, z) >= this.seaLevel && this.slopeAt(x, z) > CLIFF_SLOPE;
+  }
+
   /** Rough steepness (rise over run) at a point, for placement and pathing decisions. */
   slopeAt(x: number, z: number): number {
     const d = this.config.cellSize * 0.5;
@@ -864,6 +906,23 @@ export function distanceToSegment(x: number, z: number, ax: number, az: number, 
   const l2 = dx * dx + dz * dz;
   const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
   return D.hypot(x - ax - dx * t, z - az - dz * t);
+}
+
+/**
+ * Levelled ground (base pads, towns, cities, outposts) is no longer high
+ * ground: whatever slopes the levelling leaves round it are steep going,
+ * not cliffs, so they never wall it off (see Battlefield.sheer).
+ */
+function unsheer(field: Battlefield, x: number, z: number, radius: number): void {
+  if (!field.cliffs) return;
+  const { cols, cellSize } = field.config;
+  const [i0, j0] = field.cellAt(x - radius, z - radius);
+  const [i1, j1] = field.cellAt(x + radius, z + radius);
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      if (D.hypot(field.bounds.minX + (i + 0.5) * cellSize - x, field.bounds.minZ + (j + 0.5) * cellSize - z) <= radius) field.sheer[j * cols + i] = 0;
+    }
+  }
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -924,6 +983,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   const field = new Battlefield(config, heights, baseSites, townSites, []);
 
   const flatten = (cx: number, cz: number, radius: number, height: number) => {
+    unsheer(field, cx, cz, radius * 1.35);
     for (let j = 0; j <= rows; j++) {
       for (let i = 0; i <= cols; i++) {
         const d = D.hypot(field.vertexX(i) - cx, field.vertexZ(j) - cz);
@@ -934,6 +994,9 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
       }
     }
   };
+
+  // Mountains and mesas, on their own random stream so maps without them don't change.
+  if (field.cliffs) raiseHighground(field, rng.fork(0x68696768));
 
   // Flatten each base pad, keeping it safely above water.
   for (const site of baseSites) {
@@ -951,8 +1014,10 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = config.townRadius;
+  // With cliffs about, keep towns to land the bases can drive to (not a plateau walled in by cliffs).
+  const townReach = field.cliffs ? landReach(field) : null;
   const townSpot = (x: number, z: number, townRadius = config.townRadius) => {
-    let score = 0;
+    let score = townReach && !townReach[vertexAt(field, x, z)] ? 100 : 0;
     for (let a = 0; a < 8; a++) {
       const px = x + D.cos((a / 8) * Math.PI * 2) * townRadius * 0.7;
       const pz = z + D.sin((a / 8) * Math.PI * 2) * townRadius * 0.7;
@@ -962,6 +1027,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     if (field.nearBridge(x, z, townRadius * 1.35)) score += 50;
     // With bases along the long edges too, keep the town off their pads.
     for (const site of baseSites) if (D.hypot(site.x - x, site.z - z) < site.radius + townRadius + 4) score += 100;
+    // Nor against high ground, where levelling would steepen a slope into a cliff.
+    if (townReach) for (let a = 0; a < 8; a++) if (field.sheerAt(x + D.cos((a / 8) * Math.PI * 2) * townRadius * 1.4, z + D.sin((a / 8) * Math.PI * 2) * townRadius * 1.4)) score += 15;
     if (hill && D.hypot(hill.x - x, hill.z - z) < OUTPOST_RADIUS + townRadius + 6) score += 100;
     return score;
   };
@@ -1012,6 +1079,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     const plan = planCity(at.x, at.z, city.rx, city.rz, cityRng.fork(0x706c616e));
     // The main avenue (where roads join) runs the long way.
     townSites.push({ ...at, radius: Math.max(city.rx, city.rz), height, angle: city.rz > city.rx ? Math.PI / 2 : 0, city: plan });
+    unsheer(field, at.x, at.z, D.hypot(city.rx, city.rz) + CITY_EASE);
     // Level right out to the edge (towns only level most of the way): lots sit square on the ground.
     for (let j = 0; j <= rows; j++) {
       for (let i = 0; i <= cols; i++) {
@@ -1064,7 +1132,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   if (config.citySprawl) {
     const at = snapToCell(0, 0, field.bounds.minX, field.bounds.minZ);
     const keep = (x: number, z: number) => {
-      if (!field.contains(x, z, 2) || field.nearBridge(x, z, 3) || field.slopeAt(x, z) > SPRAWL_SLOPE) return false;
+      if (!field.contains(x, z, 2) || field.nearBridge(x, z, 3) || field.slopeAt(x, z) > SPRAWL_SLOPE || field.sheerAt(x, z)) return false;
       for (const [dx, dz] of [[0, 0], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5]]) if (field.heightAt(x + dx, z + dz) < seaLevel + 0.3) return false;
       return baseSites.every((b) => D.hypot(b.x - x, b.z - z) > b.radius + 6);
     };
@@ -1133,6 +1201,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   // Levelling towns and outposts may have filled in the water under a bridge: take it away
   // (rejoining any base it leaves cut off), and cut back ground raised by the rest.
   if (dropDryBridges(field) > 0) bridgeLand(field);
+  // And on maps with cliffs, levelling beside one may have steepened it into a wall: bridge (or cut through) to any base it walled off.
+  else if (field.cliffs) bridgeLand(field);
   for (const b of field.bridges) cutBanks(field, b);
   // Dense forest last, on its own random stream, round everything else.
   growWoods(field, rng.fork(0x776f6f64), config.forest);

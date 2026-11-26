@@ -17,6 +17,8 @@ import { OUTPOST_KIND_IDS } from '../world/battlefield';
 const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSettings) => number; set: (s: BattleSettings, v: number) => void }[] = [
   { key: 'water', limit: 'water', get: (s) => s.map.water, set: (s, v) => (s.map.water = v) },
   { key: 'hills', limit: 'hills', get: (s) => s.map.hills, set: (s, v) => (s.map.hills = v) },
+  { key: 'mtn', limit: 'mountains', get: (s) => s.map.mountains, set: (s, v) => (s.map.mountains = v) },
+  { key: 'cliff', limit: 'cliffs', get: (s) => s.map.cliffs, set: (s, v) => (s.map.cliffs = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
   { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
   { key: 'junk', limit: 'wreckage', get: (s) => s.map.wreckage, set: (s, v) => (s.map.wreckage = v) },

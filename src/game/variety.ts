@@ -3,8 +3,8 @@ import { BIOME_IDS, BIOMES } from '../world/biomes';
 import { canonicalDoctrine, DOCTRINE_IDS, DOCTRINES, DoctrineId } from './doctrines';
 import { FACTIONS } from './factions';
 import { generateIdentity, isGeneratedIdentity } from './identity';
-import type { BattleSettings, FactionSettings, MapSize, TownSize } from './settings';
-import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS } from './settings';
+import type { BattleSettings, FactionSettings, TownSize } from './settings';
+import { cloneSettings, defaultFaction, LIMITS, MAP_SIZES, MAX_FACTIONS, ROLLED_MAP_SIZES } from './settings';
 import { applyLocksAndDice, rollable } from './rollables';
 
 /**
@@ -94,6 +94,9 @@ export interface MapStyle {
   townSize: TownSize;
   /** A city over the whole map (Metropolis). Other styles with towns make their first town a city CITY_ODDS of the time. */
   city?: 'sprawl';
+  /** High ground (see world/highground.ts); none unless a style says. */
+  mountains?: number;
+  cliffs?: number;
 }
 
 /** How often a rolled map style with towns makes its first town a city. */
@@ -110,6 +113,8 @@ export const MAP_STYLES: MapStyle[] = [
   { id: 'badlands', label: 'Badlands', water: 0, hills: 1.5, forest: 0, towns: 2, townSize: 'small' },
   { id: 'countryside', label: 'Countryside', water: 0.45, hills: 1.1, forest: 0.3, towns: 2, townSize: 'medium' },
   { id: 'metropolis', label: 'Metropolis', water: 0.3, hills: 0.6, forest: 0, towns: 0, townSize: 'medium', city: 'sprawl' },
+  { id: 'passes', label: 'Mountain passes', water: 0.3, hills: 1.3, forest: 0.2, towns: 1, townSize: 'small', mountains: 0.8, cliffs: 0.15 },
+  { id: 'mesas', label: 'Mesa country', water: 0.05, hills: 0.7, forest: 0, towns: 1, townSize: 'small', cliffs: 0.75 },
 ];
 
 const clamp = (v: number, limit: keyof typeof LIMITS) => Math.max(LIMITS[limit].min, Math.min(LIMITS[limit].max, v));
@@ -138,6 +143,8 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     s.map.water = round2(clamp(style.water + (style.water > 0 ? rng.range(-0.05, 0.05) : 0), 'water'));
     s.map.hills = round2(clamp(style.hills + rng.range(-0.1, 0.1), 'hills'));
     s.map.forest = round2(clamp(style.forest + (style.forest > 0 ? rng.range(-0.05, 0.05) : 0), 'forest'));
+    s.map.mountains = style.mountains ?? 0;
+    s.map.cliffs = style.cliffs ?? 0;
     s.map.towns = style.towns;
     s.map.townSize = style.townSize;
     // Always drawn, so the rest of the roll doesn't depend on the style.
@@ -151,7 +158,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     label.push(BIOMES[s.map.biome].label);
   }
   if (v.roll.size) {
-    s.map.size = rng.pick(Object.keys(MAP_SIZES) as MapSize[]);
+    s.map.size = rng.pick(ROLLED_MAP_SIZES);
     // Half the time the usual shape; otherwise somewhat wider or deeper.
     s.map.shape = rng.chance(0.5) ? 1 : round2(clamp(rng.chance(0.5) ? rng.range(1.15, 1.6) : 1 / rng.range(1.15, 1.5), 'shape'));
     label.push(MAP_SIZES[s.map.size].label);
