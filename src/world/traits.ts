@@ -7,9 +7,11 @@ import * as D from '../core/dmath';
 /**
  * Map traits: one or two special features laid over a map's style, each a
  * headline for the battle ("ridge line, with an oil field"). Each is placed
- * on contested ground (about as far from one side as from the other) once
- * everything else is built, on its own random stream, so a map with no
- * traits is the same map as ever.
+ * on contested ground (about as far from one side as from the other), near
+ * the middle where the lanes run: its spot is picked before the towns and
+ * outposts, which keep round it (see planTraits), and it's built once
+ * everything else is, on its own random stream, so a map with no traits is
+ * the same map as ever.
  *
  * A trait is mostly what it leaves standing: relics (see RELICS in
  * game/buildings.ts), nobody's buildings that stop shots and block the way
@@ -113,25 +115,60 @@ export const GIANT = 1.6;
 /** Order traits are placed in: the biggest first, the line across everything last. */
 const ORDER: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
 
-/** Lay out the traits on a finished map (see generateBattlefield). */
-export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng): void {
+/** Room a trait plans round (the hill, say), given before anything else is placed. */
+export interface Taken {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/**
+ * Pick the traits' spots before the towns and outposts go down (see
+ * generateBattlefield), so the traits get the middle of the map, where the
+ * lanes run, and the towns and outposts keep round them. Not on maps with
+ * a city: the city takes the middle, and the traits are placed last, round
+ * it (see placeTraits). The fortified line isn't planned: it runs across
+ * everything.
+ */
+export function planTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, taken: readonly Taken[]): TraitSite[] {
+  const planned: TraitSite[] = [];
+  const scale = traitScale(field);
+  for (const kind of ORDER) {
+    if (!traits.includes(kind) || kind === 'fortLine') continue;
+    const at = spotFor(field, planned, kind, scale, rng.fork(0x7400 + ORDER.indexOf(kind)), taken);
+    if (at) planned.push(at);
+  }
+  return planned;
+}
+
+/** Lay out the traits on a finished map (see generateBattlefield), at the spots planned for them, or wherever they fit now. */
+export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, planned: readonly TraitSite[] = []): void {
   const out = field.traits;
-  const scale = Math.max(0.8, Math.min(1.7, Math.sqrt((field.config.cols * field.config.rows) / PER_AREA)));
+  const scale = traitScale(field);
   for (const kind of ORDER) {
     if (!traits.includes(kind)) continue;
-    const r = rng.fork(0x7400 + ORDER.indexOf(kind));
+    const index = ORDER.indexOf(kind);
     if (kind === 'fortLine') {
-      fortLine(field, out, r);
+      fortLine(field, out, rng.fork(0x7400 + index));
       continue;
     }
-    // Smaller if it doesn't fit (a crowded map, or a second trait).
-    let radius = RADII[kind] * scale;
-    let at = findSpot(field, out, radius, r);
-    if (!at) at = findSpot(field, out, (radius *= 0.7), r);
-    if (!at) continue;
-    out.sites.push({ kind, x: at.x, z: at.z, radius });
-    BUILDERS[kind](field, out, at.x, at.z, radius, r, scale);
+    const site = planned.find((p) => p.kind === kind) ?? spotFor(field, [...out.sites, ...planned], kind, scale, rng.fork(0x7400 + index), []);
+    if (!site) continue;
+    out.sites.push(site);
+    BUILDERS[kind](field, out, site.x, site.z, site.radius, rng.fork(0x7480 + index), scale);
   }
+}
+
+function traitScale(field: Battlefield): number {
+  return Math.max(0.8, Math.min(1.7, Math.sqrt((field.config.cols * field.config.rows) / PER_AREA)));
+}
+
+/** A spot for a trait, smaller if it doesn't fit at full size (a crowded map, or a second trait). */
+function spotFor(field: Battlefield, sites: readonly TraitSite[], kind: Exclude<MapTrait, 'fortLine'>, scale: number, rng: Rng, taken: readonly Taken[]): TraitSite | null {
+  let radius = RADII[kind] * scale;
+  let at = findSpot(field, sites, radius, rng, taken);
+  if (!at) at = findSpot(field, sites, (radius *= 0.7), rng, taken);
+  return at && { kind, x: at.x, z: at.z, radius };
 }
 
 const RADII: Record<Exclude<MapTrait, 'fortLine'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
@@ -357,7 +394,7 @@ function fortLine(field: Battlefield, out: TraitLayout, rng: Rng): void {
 }
 
 /** A spot for a trait of this radius: on contested ground, as near the middle as it can be, mostly dry and clear. */
-function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng): { x: number; z: number } | null {
+function findSpot(field: Battlefield, sites: readonly TraitSite[], radius: number, rng: Rng, taken: readonly Taken[]): { x: number; z: number } | null {
   let best: { x: number; z: number } | null = null;
   let bestScore = Infinity;
   const hw = field.width / 2 - radius - 3;
@@ -368,7 +405,8 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
     const z = rng.range(-hd, hd);
     // A trait can spread toward a base or a town; its relics and ground keep clear of them (see free).
     if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius * 1.35 + radius * 0.5 + 4)) continue;
-    if (out.sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < t.radius + radius + 4)) continue;
+    if (sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < t.radius + radius + 4)) continue;
+    if (taken.some((t) => D.hypot(t.x - x, t.z - z) < t.r + radius)) continue;
     if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + radius * 0.6)) continue;
     if (!field.config.citySprawl && field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + radius * 0.6)) continue;
     // Mostly open, dry, gentle ground.
@@ -384,15 +422,21 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
       }
     }
     if (open < total * 0.7) continue;
-    // Contested: about as far from one side as from the next.
-    const d = field.baseSites.map((b) => D.hypot(b.x - x, b.z - z)).sort((p, q) => p - q);
-    const score = Math.abs(d[0] - d[1]) + 0.25 * D.hypot(x, z) + rng.range(0, 6);
+    // Contested: about as far from one side as from the next, and on the way between them, where the lanes run.
+    const near = field.baseSites.map((b) => ({ b, d: D.hypot(b.x - x, b.z - z) })).sort((p, q) => p.d - q.d);
+    const score = Math.abs(near[0].d - near[1].d) + 0.6 * offLine(x, z, near[0].b, near[1].b) + 0.15 * D.hypot(x, z) + rng.range(0, 4);
     if (score < bestScore) {
       bestScore = score;
       best = { x, z };
     }
   }
   return best;
+}
+
+/** How far a point is from the straight way between two bases. */
+function offLine(x: number, z: number, a: { x: number; z: number }, b: { x: number; z: number }): number {
+  const len = D.hypot(b.x - a.x, b.z - a.z) || 1;
+  return Math.abs((x - a.x) * -(b.z - a.z) + (z - a.z) * (b.x - a.x)) / len;
 }
 
 /** Whether a relic of this radius can stand at a point: dry, gentle ground clear of bases, towns, outposts, roads, bridges and other relics. */

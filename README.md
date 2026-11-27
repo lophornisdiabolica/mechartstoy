@@ -353,7 +353,10 @@ styles use them. **Shape** now runs from 2.5× deeper (a long front between
 two sides) to 2.5× wider.
 
 **Traits** lay one or more special features over the map, each a headline for
-the battle, on contested ground between the sides. Nothing on the map is
+the battle, on contested ground between the sides. Traits take their ground
+first, on the way between the bases, and the towns and outposts keep round
+them; an attack lane runs through each (the centre lane, if it's on the
+way). Nothing on the map is
 anyone's, and nobody aims at it, but its old walls, hulks and columns stop
 shots and block the way like any building, so they're cover for whoever gets
 there first, and fire slowly knocks them down.
@@ -889,7 +892,7 @@ src/
       advice.ts        production advice (leaning each doctrine's table toward what the battle needs) and per-side styles
       crossings.ts     whether there's still a way across wide enough for super units, and where it's cut
       roles.ts         jobs that suit the unit: flak covering against aircraft, artillery on high ground, escorts for super units
-    lanes.ts         attack routes (centre, and through outposts and towns) and which squad takes which
+    lanes.ts         attack routes (centre, and through traits, outposts and towns) and which squad takes which
     outposts.ts      capturable outposts: their kinds, garrisons, capturing, bonuses
     hill.ts          king of the hill: the hill's clock and who's winning on it
     tournament.ts    tournament mode: the bracket, its matches and their settings
