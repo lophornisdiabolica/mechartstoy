@@ -982,7 +982,7 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => i + di >= 0 && j + dj >= 0 && i + di <= cols && j + dj <= rows && heights[(j + dj) * stride + i + di] < sea);
   };
   const tried = new Uint8Array(stride * (rows + 1));
-  let best: { region: number[]; shore: number; cx: number; cz: number; score: number } | null = null;
+  const valleys: { region: number[]; shore: number; cx: number; cz: number; score: number }[] = [];
   for (let n = 0; n < 160; n++) {
     const start = rng.int(1, rows - 1) * stride + rng.int(1, cols - 1);
     if (tried[start] || !low(start)) continue;
@@ -1036,12 +1036,25 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     if (shore < 0) continue;
     const dists = field.baseSites.map((b) => D.hypot(b.x - cx, b.z - cz)).sort((p, q) => p - q);
     const score = Math.abs(dists[0] - dists[1]) - Math.min(region.length, 900) * 0.02 + rng.range(0, 6);
-    if (!best || score < best.score) best = { region, shore, cx, cz, score };
+    valleys.push({ region, shore, cx, cz, score });
   }
-  if (!best) return;
+  if (valleys.length === 0) return;
+  valleys.sort((p, q) => p.score - q.score);
   // Best, a reservoir up the valley's head, held back by the dam across its mouth, the valley running from the
   // dam down to the sea. Failing that, the dam stands just off the valley's shore, holding the sea back.
-  const pooled = reservoir(field, best.region, best.shore, rng);
+  // The best few valleys tried in turn, each with the full-size reservoir and then a smaller one; the first that fits is used.
+  let best = valleys[0];
+  let pooled: ReturnType<typeof reservoir> = null;
+  for (const valley of valleys.slice(0, POOL_VALLEYS)) {
+    for (const radius of POOL_RADII) {
+      pooled = reservoir(field, valley.region, valley.shore, rng.fork(radius), radius);
+      if (pooled) break;
+    }
+    if (pooled) {
+      best = valley;
+      break;
+    }
+  }
   let sx = field.vertexX(best.shore % stride);
   let sz = field.vertexZ(Math.floor(best.shore / stride));
   let plain = best.region;
@@ -1123,7 +1136,9 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
  * below the dam's top); how far its banks stand above that; and how far out
  * its banks reach (in radii).
  */
-const POOL_RADIUS = 8;
+const POOL_RADII = [8, 6];
+/** How many of the likeliest valleys are tried for a reservoir before the dam goes offshore. */
+const POOL_VALLEYS = 5;
 const POOL_RISE = 1.6;
 const POOL_RISE_MOST = 2.3;
 const POOL_BANK = 0.3;
@@ -1147,7 +1162,7 @@ const POOL_LAYOUTS = 4;
  * ground the banks raised); or null (and the map as it was) if there's no
  * room, or the reservoir would cut a base, outpost or town off.
  */
-function reservoir(field: Battlefield, region: number[], shore: number, rng: Rng): { x: number; z: number; pool: Reservoir; verts: number[] } | null {
+function reservoir(field: Battlefield, region: number[], shore: number, rng: Rng, radius: number): { x: number; z: number; pool: Reservoir; verts: number[] } | null {
   const { cols, rows } = field.config;
   const stride = cols + 1;
   const heights = field.heights;
@@ -1155,7 +1170,7 @@ function reservoir(field: Battlefield, region: number[], shore: number, rng: Rng
   const top = sea + FLOOD_TOP;
   const vx = (k: number) => field.vertexX(k % stride);
   const vz = (k: number) => field.vertexZ(Math.floor(k / stride));
-  const R = POOL_RADIUS;
+  const R = radius;
   const cut = R - POOL_CUT;
   const span = (DAM_SEGMENTS * DAM_STEP) / 2;
   const reach = R * POOL_REACH;
