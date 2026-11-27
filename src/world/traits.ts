@@ -43,8 +43,13 @@ import * as D from '../core/dmath';
  *   graded bed, with a station (an outpost) a third of the way along from
  *   each end. Whoever holds a station gets an armoured train that runs up
  *   and down the line (see game/rail.ts).
+ * - Tidal flats: sand bars across the water, in no-man's land, where it's
+ *   narrow. Under the sea as the map is made; the tide goes out every few
+ *   minutes and uncovers them, a way across on foot or tracks until it
+ *   comes back in (see game/tides.ts). Boats can't cross them while they're
+ *   dry. Needs water: a dry map gets none.
  */
-export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail';
+export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail' | 'tidal';
 
 export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   oldField: { label: 'Old battlefield', blurb: 'Craters, junk and the hulks of an earlier fight' },
@@ -57,6 +62,7 @@ export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   citadel: { label: 'Citadel', blurb: 'A walled fortress in the middle with a strong garrison: whoever cracks it builds faster' },
   landing: { label: 'Landing field', blurb: 'A big paved pad: aircraft and drops come faster for whoever holds it' },
   rail: { label: 'Rail line', blurb: 'A railway across no-man’s land with two stations: whoever holds one gets an armoured train on the line' },
+  tidal: { label: 'Tidal flats', blurb: 'Sand bars across the water that the tide uncovers and drowns again: land bridges every few minutes' },
 };
 
 export const MAP_TRAIT_IDS = Object.keys(MAP_TRAITS) as MapTrait[];
@@ -118,10 +124,30 @@ export interface TraitLayout {
   vents: Vent[];
   props: TraitProp[];
   rail: RailLine | null;
+  flats: TidalFlat[];
+}
+
+/**
+ * A sand bar across the water (the Tidal flats trait): the map vertices it
+ * covers, with their heights at high tide (under water, as the map is made)
+ * and at low tide (just dry). The tide moves them between the two (see
+ * game/tides.ts).
+ */
+export interface TidalFlat {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  /** Half its width. */
+  half: number;
+  /** Indices into Battlefield.heights. */
+  verts: number[];
+  high: number[];
+  low: number[];
 }
 
 export function emptyTraits(): TraitLayout {
-  return { sites: [], relics: [], vents: [], props: [], rail: null };
+  return { sites: [], relics: [], vents: [], props: [], rail: null, flats: [] };
 }
 
 /** Map area (in cells) sizes are per: a Medium map's. */
@@ -131,9 +157,9 @@ const TRIES = 90;
 /** Tree size at and above which a tree is one of a grove's giants (see woods.ts). */
 export const GIANT = 1.6;
 /** Each trait's own random stream, by its place here (so adding a trait leaves the others' layouts alone). */
-const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail'];
+const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail', 'tidal'];
 /** Order traits are placed in: the outposts of their own, then the biggest first, the line across everything last. */
-const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
+const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'tidal', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
 
 /** Lay out the traits on a finished map (see generateBattlefield). */
 export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
@@ -154,6 +180,10 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
       railLine(field, out, r, flatten);
       continue;
     }
+    if (kind === 'tidal') {
+      tidalFlats(field, out, r, scale);
+      continue;
+    }
     // Smaller if it doesn't fit (a crowded map, or a second trait).
     let radius = RADII[kind] * scale;
     let at = findSpot(field, out, radius, r);
@@ -164,11 +194,11 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
   }
 }
 
-const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
+const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
 
 type Builder = (field: Battlefield, out: TraitLayout, x: number, z: number, radius: number, rng: Rng, scale: number) => void;
 
-const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail'>, Builder> = {
+const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal'>, Builder> = {
   oldField(field, out, x, z, radius, rng, scale) {
     // Craters first, so the hulks and junk sit in them.
     for (let n = Math.round(8 * scale); n > 0; n--) {
@@ -691,6 +721,154 @@ function scatter(field: Battlefield, out: TraitLayout, rng: Rng, x: number, z: n
     if (!dry(field, p.x, p.z) || relicNear(out, p.x, p.z, 0.4) || field.groundAt(p.x, p.z).id === 'road') continue;
     out.props.push({ kind, x: p.x, z: p.z, scale: rng.range(min, max), rotation: rng.range(0, Math.PI * 2) });
   }
+}
+
+/** Tidal flats: how long a crossing can be, how wide a bar is, and how far apart two are. */
+const FLAT_MAX = 46;
+const FLAT_MIN = 6;
+const FLAT_HALF = 3.2;
+const FLAT_APART = 24;
+/** A bar's crest above the sea at low tide, and the water over its middle at high tide (deeper than a walker wades). */
+const FLAT_CREST = 0.3;
+const FLAT_DEPTH = 1.1;
+/** Ground this far above the sea is the shore a bar runs between. */
+const FLAT_SHORE = 0.2;
+/** How far up the shore at each end a bar reaches. */
+const FLAT_LANDING = 2;
+
+/** Lay sand bars across narrow water in no-man's land (one, or two on a big map). */
+function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: number): void {
+  if (field.baseSites.length < 2) return;
+  const want = scale > 1.3 ? 2 : 1;
+  const step = 0.5;
+  const shoreAt = (x: number, z: number, dx: number, dz: number): number => {
+    for (let t = step; t <= FLAT_MAX; t += step) {
+      const px = x + dx * t;
+      const pz = z + dz * t;
+      if (!field.contains(px, pz, 4)) return -1;
+      if (field.heightAt(px, pz) >= field.seaLevel + FLAT_SHORE) return t;
+    }
+    return -1;
+  };
+  const found: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  const hw = field.width / 2 - 6;
+  const hd = field.depth / 2 - 6;
+  for (let n = 0; n < 800; n++) {
+    const x = rng.range(-hw, hw);
+    const z = rng.range(-hd, hd);
+    const angle = rng.range(0, Math.PI);
+    if (!field.isWater(x, z) || field.deckAt(x, z) !== null) continue;
+    const dx = D.cos(angle);
+    const dz = D.sin(angle);
+    const fore = shoreAt(x, z, dx, dz);
+    const back = shoreAt(x, z, -dx, -dz);
+    if (fore < 0 || back < 0) continue;
+    const length = fore + back;
+    if (length < FLAT_MIN || length > FLAT_MAX) continue;
+    // Landing a little way up the shore, on gentle ground, not a cliff or a speck of rock.
+    const a = { x: x - dx * (back + FLAT_LANDING), z: z - dz * (back + FLAT_LANDING) };
+    const b = { x: x + dx * (fore + FLAT_LANDING), z: z + dz * (fore + FLAT_LANDING) };
+    if ([a, b].some((p) => !field.contains(p.x, p.z, 4) || field.heightAt(p.x, p.z) < field.seaLevel + FLAT_SHORE || field.slopeAt(p.x, p.z) > 0.9 || field.sheerAt(p.x, p.z))) continue;
+    // Clear of the bridges (a bar by a bridge is no use), bases, outposts and other bars.
+    let clear = true;
+    for (let t = 0; t <= 1 && clear; t += 0.1) {
+      const px = a.x + (b.x - a.x) * t;
+      const pz = a.z + (b.z - a.z) * t;
+      if (field.nearBridge(px, pz, FLAT_HALF + 6)) clear = false;
+      if (field.baseSites.some((s) => D.hypot(s.x - px, s.z - pz) < s.radius + 4)) clear = false;
+      if (field.outpostSites.some((o) => D.hypot(o.x - px, o.z - pz) < o.radius + FLAT_HALF)) clear = false;
+    }
+    if (!clear) continue;
+    const mx = (a.x + b.x) / 2;
+    const mz = (a.z + b.z) / 2;
+    // Contested, and short.
+    const d = field.baseSites.map((s) => D.hypot(s.x - mx, s.z - mz)).sort((p, q) => p - q);
+    found.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, score: Math.abs(d[0] - d[1]) + length * 0.4 + rng.range(0, 6) });
+  }
+  // Worth crossing: the way round by land is a long one, or there's none (not just across a pond). The longer the better.
+  found.sort((p, q) => p.score - q.score);
+  const worth: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  for (const c of found.slice(0, FLAT_CHECKED)) {
+    const length = D.hypot(c.bx - c.ax, c.bz - c.az);
+    const detour = landWalk(field, c.ax, c.az, c.bx, c.bz) / length;
+    if (detour >= FLAT_DETOUR) worth.push({ ...c, score: c.score - Math.min(detour, 8) * 6 });
+  }
+  worth.sort((p, q) => p.score - q.score);
+  const sea = field.seaLevel;
+  for (const c of worth) {
+    if (out.flats.length >= want) break;
+    const mx = (c.ax + c.bx) / 2;
+    const mz = (c.az + c.bz) / 2;
+    if (out.flats.some((f) => D.hypot((f.ax + f.bx) / 2 - mx, (f.az + f.bz) / 2 - mz) < FLAT_APART)) continue;
+    const flat: TidalFlat = { ax: c.ax, az: c.az, bx: c.bx, bz: c.bz, half: FLAT_HALF, verts: [], high: [], low: [] };
+    const length = D.hypot(c.bx - c.ax, c.bz - c.az);
+    const reach = length / 2 + FLAT_HALF + 1;
+    eachVertex(field, mx, mz, reach, (k, vx, vz) => {
+      const off = segmentDistance(vx, vz, c.ax, c.az, c.bx, c.bz);
+      const h = field.heights[k];
+      if (off > FLAT_HALF || h >= sea + FLAT_CREST) return;
+      const w = 1 - (off / FLAT_HALF) * (off / FLAT_HALF);
+      flat.verts.push(k);
+      flat.low.push(Math.max(h, sea + 0.05 + (FLAT_CREST - 0.05) * w));
+      // (The shore at either end, where the crossing was measured to, is left as it is at high tide.)
+      const along = ((vx - c.ax) * (c.bx - c.ax) + (vz - c.az) * (c.bz - c.az)) / length;
+      const shore = h >= sea + FLAT_SHORE || along < FLAT_LANDING || along > length - FLAT_LANDING;
+      flat.high.push(shore ? h : Math.min(h, sea - 0.25 - (FLAT_DEPTH - 0.25) * w));
+    });
+    if (flat.verts.length === 0) continue;
+    // The map's made at high tide.
+    flat.verts.forEach((k, n) => (field.heights[k] = flat.high[n]));
+    for (let t = 0; t <= 1; t += 0.5 / reach) field.paint(c.ax + (c.bx - c.ax) * t, c.az + (c.bz - c.az) * t, FLAT_HALF, 'flats', (g) => g === 'plain');
+    out.flats.push(flat);
+    out.sites.push({ kind: 'tidal', x: mx, z: mz, radius: 0 });
+  }
+}
+
+/** How much further the way round by land (in steps across map cells, not as the crow flies) must be than a bar, for the bar to be worth laying; and how many crossings are measured. */
+const FLAT_DETOUR = 2;
+const FLAT_CHECKED = 150;
+
+/** How far it is to walk on dry land (or bridges) from one point to another, in map cells' widths; Infinity if there's no way. */
+function landWalk(field: Battlefield, ax: number, az: number, bx: number, bz: number): number {
+  const { cols, rows, cellSize } = field.config;
+  const [ai, aj] = field.cellAt(ax, az);
+  const [bi, bj] = field.cellAt(bx, bz);
+  const goal = bj * cols + bi;
+  const seen = new Int32Array(cols * rows).fill(-1);
+  const queue = new Int32Array(cols * rows);
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = aj * cols + ai;
+  seen[aj * cols + ai] = 0;
+  while (head < tail) {
+    const k = queue[head++];
+    if (k === goal) return seen[k] * cellSize;
+    const i = k % cols;
+    const j = (k - i) / cols;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di;
+      const nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+      const n = nj * cols + ni;
+      if (seen[n] >= 0) continue;
+      const x = field.bounds.minX + (ni + 0.5) * cellSize;
+      const z = field.bounds.minZ + (nj + 0.5) * cellSize;
+      if (n !== goal && field.heightAt(x, z) < field.seaLevel && field.deckAt(x, z) === null) continue;
+      if (field.sheerAt(x, z)) continue;
+      seen[n] = seen[k] + 1;
+      queue[tail++] = n;
+    }
+  }
+  return Infinity;
+}
+
+/** Distance from a point to the segment a-b. */
+function segmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / len2)) : 0;
+  return D.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
 /** Each map vertex within `reach` of a point (a square round it). */
