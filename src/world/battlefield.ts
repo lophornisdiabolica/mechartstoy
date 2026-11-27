@@ -183,10 +183,10 @@ export interface TownSite {
  * The kinds of outpost (what each one gives is in game/outposts.ts): a supply
  * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot, a ruined
  * factory, a shipyard, a sensor station, a repair yard or a signal fire. The
- * hill, the citadel and the landing field are placed on their own (king of
- * the hill, and map traits: see traits.ts).
+ * hill, the citadel, the landing field and rail stations are placed on
+ * their own (king of the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station';
 /** The kinds a map deals out to ordinary outposts. */
 export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal'];
 

@@ -136,6 +136,12 @@ export interface BattleSettings {
     waterways: boolean;
     /** Dense forest, 0 (none) to 1: patches of big trees that block shots and slow vehicles until they're knocked down (see woods.ts). */
     forest: number;
+    /**
+     * Wildfire, 0 (off) to 1: fire that gets going in the woods spreads
+     * through them, slowly, burning everyone in it (see wildfire.ts).
+     * Missing in settings saved before it existed.
+     */
+    wildfire?: number;
     /** Wrecked vehicles pile up into scrap that's hard going for tracks and hovers (see scrap.ts). */
     scrap: boolean;
     /** How much junk a wrecked vehicle leaves on the ground, 0 (none) to 2; 1 is the usual (see wreckage.ts). */
@@ -299,6 +305,7 @@ export const LIMITS = {
   hillHold: { min: 30, max: 900 },
   outposts: { min: 0, max: 12 },
   forest: { min: 0, max: 1 },
+  wildfire: { min: 0, max: 1 },
   wreckage: { min: 0, max: 2 },
   wreckageLife: { min: 0.25, max: 3 },
   outpostBonus: { min: 0, max: 3 },

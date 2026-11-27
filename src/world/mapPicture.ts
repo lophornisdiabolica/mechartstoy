@@ -43,6 +43,8 @@ export function groundPicture(field: Battlefield): Picture {
       else if (ground === 'oil') c = [28, 26, 24];
       else if (ground === 'paving') c = [180, 170, 145];
       else if (ground === 'apron') c = [154, 152, 144];
+      else if (ground === 'ballast') c = [96, 84, 72];
+      else if (ground === 'burnt') c = [48, 42, 38];
       if (field.deckAt(x, z) !== null) c = [170, 165, 155];
       data.set([c[0], c[1], c[2], 255], (j * cols + i) * 4);
     }
@@ -51,7 +53,7 @@ export function groundPicture(field: Battlefield): Picture {
 }
 
 /** Letters for outpost kinds on the picture. */
-const KIND_LETTERS: Record<string, string> = { supply: 'S', airstrip: 'A', gun: 'G', relay: 'R', fuel: 'F', factory: 'M', shipyard: 'Y', sensor: 'E', repair: 'W', signal: 'L', citadel: 'C', landing: 'P', hill: 'H' };
+const KIND_LETTERS: Record<string, string> = { supply: 'S', airstrip: 'A', gun: 'G', relay: 'R', fuel: 'F', factory: 'M', shipyard: 'Y', sensor: 'E', repair: 'W', signal: 'L', citadel: 'C', landing: 'P', station: 'T', hill: 'H' };
 
 /** A 3×5 pixel font, just the characters the picture needs. */
 const FONT: Record<string, string> = {

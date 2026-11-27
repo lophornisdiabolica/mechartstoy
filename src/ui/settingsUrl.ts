@@ -24,6 +24,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'cliff', limit: 'cliffs', get: (s) => s.map.cliffs, set: (s, v) => (s.map.cliffs = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
   { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
+  { key: 'wildfire', limit: 'wildfire', get: (s) => s.map.wildfire ?? 0, set: (s, v) => (s.map.wildfire = v) },
   { key: 'junk', limit: 'wreckage', get: (s) => s.map.wreckage, set: (s, v) => (s.map.wreckage = v) },
   { key: 'junklife', limit: 'wreckageLife', get: (s) => s.map.wreckageLife, set: (s, v) => (s.map.wreckageLife = v) },
   { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
