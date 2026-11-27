@@ -37,12 +37,15 @@ export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
   const props: Prop[] = [];
   const b = field.bounds;
   let attempts = 0;
+  const traits = field.traits.sites.length > 0;
   while (props.length < count && attempts++ < count * 10) {
     const x = rng.range(b.minX + 1, b.maxX - 1);
     const z = rng.range(b.minZ + 1, b.maxZ - 1);
     const y = field.heightAt(x, z);
     if (y < field.seaLevel + 0.3) continue;
     if ([...field.baseSites, ...field.townSites, ...field.outpostSites].some((s) => D.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
+    // Traits bring their own scenery (see traits.ts).
+    if (traits && (field.traits.sites.some((s) => D.hypot(x - s.x, z - s.z) < s.radius) || field.traits.relics.some((r) => D.hypot(x - r.x, z - r.z) < 2.5))) continue;
     // Roads stay clear, and dense forest has trees of its own (see woods.ts).
     if (field.deckAt(x, z) !== null || field.groundAt(x, z).id !== 'plain') continue;
     const slope = field.slopeAt(x, z);
@@ -50,5 +53,6 @@ export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
     if (kind !== 'rock' && slope > 0.8) continue;
     props.push({ kind, x, y, z, scale: rng.range(0.7, 1.3), rotation: rng.range(0, Math.PI * 2) });
   }
+  for (const p of field.traits.props) props.push({ kind: p.kind, x: p.x, y: field.heightAt(p.x, p.z), z: p.z, scale: p.scale, rotation: p.rotation });
   return props;
 }

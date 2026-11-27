@@ -8,7 +8,7 @@
 export type BiomeId = 'temperate' | 'desert' | 'snow' | 'forest' | 'jungle' | 'steppe' | 'tundra' | 'ash' | 'scrap' | 'crystal';
 
 /** Scenery the props scatter can place (see props.ts). */
-export type PropKind = 'tree' | 'pine' | 'snowPine' | 'cactus' | 'shrub' | 'deadTree' | 'rock' | 'crystal' | 'junk';
+export type PropKind = 'tree' | 'pine' | 'snowPine' | 'cactus' | 'shrub' | 'deadTree' | 'rock' | 'crystal' | 'junk' | 'vent' | 'fallenColumn';
 
 export interface BiomeDef {
   id: BiomeId;

@@ -3,6 +3,7 @@ import { BIOMES } from '../world/biomes';
 import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
+import { groundCode } from '../world/ground';
 import { TREE_HEIGHT } from '../world/woods';
 import { cactusGeometry, Detail, jungleTreeGeometry, monolithGeometry, pineGeometry, treeGeometry } from './propsMesh';
 import { PlantMesh, PlantShapes } from './plantLod';
@@ -72,6 +73,13 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const base = new THREE.Color(tint);
   // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki; toppled crystal dulls.
   const fallen = woods.plant === 'monolith' ? base.clone().multiplyScalar(0.6) : new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
+  // Trees a wildfire brought down lie charred on the burnt ground (see game/wildfire.ts).
+  const charred = new THREE.Color(0x2e2925);
+  const burnt = groundCode('burnt');
+  const downColour = (k: number) => {
+    const [i, j] = field.cellAt(trees[k].x, trees[k].z);
+    return field.ground[j * field.config.cols + i] === burnt ? charred : fallen;
+  };
   /** Per tree: the mesh its plants are in, and their instances there. */
   const drawn = new Map<number, { mesh: THREE.InstancedMesh; plants: Plant[]; instances: number[] }>();
   const { minX, minZ } = field.bounds;
@@ -128,7 +136,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
     const mesh = lod.mesh;
     plants.forEach((p, i) => {
       place(mesh, p, i);
-      mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : fallen);
+      mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : downColour(p.tree));
       let entry = drawn.get(p.tree);
       if (!entry) drawn.set(p.tree, (entry = { mesh, plants: [], instances: [] }));
       entry.plants.push(p);
@@ -148,7 +156,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       place(entry.mesh, p, i);
       markRange(entry.mesh.instanceMatrix, i * 16, 16);
       if (colour && entry.mesh.instanceColor) {
-        entry.mesh.setColorAt(i, fallen);
+        entry.mesh.setColorAt(i, downColour(k));
         markRange(entry.mesh.instanceColor, i * 3, 3);
       }
     });

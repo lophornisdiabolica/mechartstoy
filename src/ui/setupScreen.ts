@@ -3,6 +3,7 @@ import { weaponsOf } from '../game/arsenal';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS, TOWN_STYLES, TownStyle } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TERRAIN_STYLES, TerrainStyle } from '../world/terrainStyles';
 import { MAP_OUTLINE_IDS, MAP_OUTLINES, MapOutline } from '../world/outlines';
+import { MAP_TRAIT_IDS, MAP_TRAITS } from '../world/traits';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
 import { OUTPOST_KINDS } from '../game/outposts';
 import { MapPreview } from './mapPreview';
@@ -53,6 +54,7 @@ const ROW_ROLL: Record<string, string> = {
   'Town style': 'townstyle',
   Terrain: 'terrain',
   Outline: 'outline',
+  Traits: 'traits',
   Bases: 'layout',
   Waterways: 'ways',
   Scrap: 'scrap',
@@ -683,6 +685,26 @@ export class SetupScreen {
     );
     row(map, 'Outline', outline.row);
     this.sync.push(() => outline.set(this.settings.map.outline));
+    // Map traits: a toggle each, any number on (none is the usual map).
+    const traitBox = el('div', { class: 'inline kinds' });
+    const traitButtons = MAP_TRAIT_IDS.map((k) => {
+      const b = el('button', { type: 'button', class: 'chip', title: MAP_TRAITS[k].blurb, 'aria-pressed': 'false' }, MAP_TRAITS[k].label);
+      b.addEventListener('click', () => {
+        const on = this.settings.map.traits.includes(k);
+        this.settings.map.traits = MAP_TRAIT_IDS.filter((x) => (x === k ? !on : this.settings.map.traits.includes(x)));
+        this.changed();
+      });
+      traitBox.append(b);
+      return b;
+    });
+    row(map, 'Traits', traitBox);
+    this.sync.push(() =>
+      traitButtons.forEach((b, i) => {
+        const on = this.settings.map.traits.includes(MAP_TRAIT_IDS[i]);
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      }),
+    );
     const layout = segmented<BaseLayout>(
       [
         { label: 'Ring', value: 'ring', title: 'Round the edge of the map, allies side by side' },
@@ -709,6 +731,7 @@ export class SetupScreen {
     this.sync.push(() => (ways.checked = this.settings.map.waterways));
     map.append(el('p', { class: 'hint' }, 'Channels link the water near the bases so boats can reach each other, and from 60% water every base gets a harbour. Bridges carry the roads over.'));
     slider(map, 'Dense forest', 'forest', 0.05, (s) => s.map.forest, (s, v) => (s.map.forest = v), (v) => (v === 0 ? 'None' : percent(v)));
+    slider(map, 'Wildfire', 'wildfire', 0.05, (s) => s.map.wildfire ?? 0, (s, v) => (s.map.wildfire = v), (v) => (v === 0 ? 'Off' : percent(v)));
     const scrap = el('input', { type: 'checkbox', 'aria-label': 'Scrap' });
     scrap.addEventListener('change', () => {
       this.settings.map.scrap = scrap.checked;
@@ -729,11 +752,20 @@ export class SetupScreen {
     cratersLabel.append(craters, document.createTextNode(' Super units leave craters'));
     row(map, 'Craters', cratersLabel);
     this.sync.push(() => (craters.checked = this.settings.map.craters));
+    const bfall = el('input', { type: 'checkbox', 'aria-label': 'Bridges fall' });
+    bfall.addEventListener('change', () => {
+      this.settings.map.bridgesFall = bfall.checked;
+      this.changed();
+    });
+    const bfallLabel = el('label', { class: 'check' });
+    bfallLabel.append(bfall, document.createTextNode(' Bridges come down under heavy fire'));
+    row(map, 'Bridges fall', bfallLabel);
+    this.sync.push(() => (bfall.checked = this.settings.map.bridgesFall ?? false));
     map.append(
       el(
         'p',
         { class: 'hint' },
-        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later. Wrecks also leave junk on the ground that piles up where the fighting was heaviest: Wreckage sets how much, and Wreckage lasts how long (a lone wreck’s junk always clears up sooner than a big heap’s). Hulks fall apart the same either way. A super unit blowing up leaves a small crater; on low ground it fills with water, and engineers fill in or bridge any that cut the way across.',
+        'Dense forest is big trees that stop shots, so infantry find cover in it, and slow vehicles down until they knock the trees flat; fighting clears it. Where enough vehicles are wrecked, the ground turns to scrap, which slows tracks and hovers until it’s cleared away a few minutes later. Wrecks also leave junk on the ground that piles up where the fighting was heaviest: Wreckage sets how much, and Wreckage lasts how long (a lone wreck’s junk always clears up sooner than a big heap’s). Hulks fall apart the same either way. With Wildfire on, fire that gets going in the woods (a flamer’s, a burning wreck’s) creeps on through them, slowly, faster in dry country, burning everyone in it under a pall of smoke and leaving burnt ground; everyone routes round it and gets out of it. A super unit blowing up leaves a small crater; on low ground it fills with water, and engineers fill in or bridge any that cut the way across.',
       ),
     );
     slider(map, 'Hills', 'hills', 0.05, (s) => s.map.hills, (s, v) => (s.map.hills = v), (v) => (v === 0 ? 'Flat' : times(v)));
@@ -937,7 +969,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. The map deals out the kinds that are on, the gun going to the highest outpost. Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter. Task forces let each side’s Commander send up to that share of its army, between attacks, to take outposts it can beat the defence at, or to save its own outposts from capture.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. Off by default: a shipyard launches a missile boat now and then, a sensor station picks out stealthy units, a repair yard mends vehicles by it, a signal fire calls in a relief column every couple of minutes, and a drawbridge raises the bridge by it when its holder’s enemies come. The map deals out the kinds that are on, the gun going to the highest outpost, a shipyard to one by water and a drawbridge to one by a bridge. The Citadel, Landing field and Rail line traits add outposts of their own (a rail station puts an armoured train on the line for its holder). Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter. Task forces let each side’s Commander send up to that share of its army, between attacks, to take outposts it can beat the defence at, or to save its own outposts from capture.',
       ),
     );
 
