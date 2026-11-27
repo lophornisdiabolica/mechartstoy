@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron';
 
 export interface GroundDef {
   id: GroundId;
@@ -114,10 +114,19 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0xb3a990,
     tint: 0.7,
   },
+  /** A landing field's concrete apron (see world/traits.ts): plain going, just paved. */
+  apron: {
+    id: 'apron',
+    label: 'Apron',
+    cost: {},
+    speed: {},
+    color: 0x9a9890,
+    tint: 0.8,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

@@ -13,7 +13,7 @@ import { defaultOrders, Stance } from './orders';
 import { Offensive, offensiveSystem } from './offensive';
 import { scrapSystem } from './scrap';
 import { Towns, townSystem } from './towns';
-import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
+import { buildOutpost, createOutposts, garrisonSystem, outpostSystem, outpostWorksSystem } from './outposts';
 import { raiseRelics, traitSystem, TraitState } from './traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -178,7 +178,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), outpostWorksSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
       targetingSystem(ctx),
       retreatSystem(ctx),
       aiSystem(ctx),
