@@ -102,8 +102,8 @@ export class Lanes {
     };
     this.field.outpostSites.forEach((o) => consider('outpost', o.index, o.x, o.z));
     this.field.townSites.forEach((t, i) => consider('town', i, t.x, t.z));
-    // (Not the fortified line: it runs right across, so every lane crosses it.)
-    this.field.traits.sites.forEach((t, i) => t.radius > 0 && consider('trait', i, t.x, t.z));
+    // (Not the fortified line: it runs right across, so every lane crosses it. Nor a citadel or landing field: they're outposts.)
+    this.field.traits.sites.forEach((t, i) => t.radius > 0 && t.kind !== 'citadel' && t.kind !== 'landing' && consider('trait', i, t.x, t.z));
     sites.sort((p, q) => p.detour - q.detour);
 
     // The centre lane; if a site sits on the straight line, the centre lane is its lane (a trait's first).

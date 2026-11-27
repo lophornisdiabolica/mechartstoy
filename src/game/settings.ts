@@ -3,7 +3,7 @@ import { TerrainStyle } from '../world/terrainStyles';
 import { MapOutline } from '../world/outlines';
 import { MapTrait } from '../world/traits';
 import { TownStyle } from '../world/biomes';
-import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
+import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
@@ -242,7 +242,8 @@ export interface BattleSettings {
  * (attacks set out sooner) belongs to the readiness rule that Commander AI
  * is going to replace.
  */
-export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = OUTPOST_KIND_IDS.filter((k) => k !== 'relay');
+// The newer kinds (shipyard, sensor station, repair yard, signal fire) are off by default, like the relay, so the usual battles stay as they were.
+export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'fuel', 'factory'];
 
 /** Town radius per size. */
 /** A city: none, one in place of the first town, or one over the whole map (see BattleSettings.map.city). */

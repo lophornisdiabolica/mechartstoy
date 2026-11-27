@@ -32,8 +32,8 @@ function weighted(rng: Rng, weights: Partial<Record<PropKind, number>>): PropKin
  * towns, outposts and bridges, with trees on gentle slopes and rocks on
  * steep ones. How much depends on the biome and the map's area.
  */
-/** Traits that clear the land's own scenery from their ground (see scatterProps). */
-const BARE_TRAITS: ReadonlySet<MapTrait> = new Set(['oil', 'ruins']);
+/** Traits that clear the land's own scenery from their ground (see scatterProps): the built-up ones. */
+const BARE_TRAITS: ReadonlySet<MapTrait> = new Set(['oil', 'ruins', 'citadel', 'landing']);
 
 export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
   const biome = BIOMES[field.config.biome];

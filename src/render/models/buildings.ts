@@ -503,6 +503,145 @@ registerModel('bld:ruinedFactory', (faction) => {
   return g;
 });
 
+/** A shipyard's slipway: a sloping ramp under a gantry crane, a boat hull on the ways, and a shed. */
+registerModel('bld:slipway', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.4, 0.25, 3.6, CONCRETE, 0, 0.12, 0));
+  const ramp = box(1.8, 0.2, 3.9, 0x6f6c66, 0.5, 0.3, 0.2);
+  ramp.rotation.x = -0.08;
+  g.add(ramp);
+  // The hull on the ways: a long box with a pointed bow.
+  g.add(box(0.9, 0.55, 2.2, 0x8a8f96, 0.5, 0.72, -0.1));
+  g.add(cylinder(0.01, 0.46, 0.7, 4, 0x8a8f96, 0.5, 0.71, 1.3).rotateX(Math.PI / 2).rotateY(Math.PI / 4));
+  g.add(box(0.5, 0.42, 0.7, primary, 0.5, 1.2, -0.5)); // wheelhouse
+  // The gantry over it.
+  for (const x of [-0.7, 1.7]) for (const z of [-1.2, 0.9]) g.add(box(0.16, 3.0, 0.16, secondary, x, 1.6, z));
+  for (const z of [-1.2, 0.9]) g.add(box(2.6, 0.18, 0.2, secondary, 0.5, 3.05, z));
+  g.add(box(0.3, 0.3, 2.4, DARK, 0.5, 2.85, -0.15));
+  g.add(box(1.3, 1.3, 1.5, WALLS[3], -1.5, 0.9, -0.9)); // shed
+  g.add(box(1.42, 0.14, 1.62, primary, -1.5, 1.6, -0.9));
+  return g;
+});
+
+/** A sensor station: a radome on a squat block, a small rotating radar beside it. */
+registerModel('bld:sensorStation', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.0, 0.25, 3.0, CONCRETE, 0, 0.12, 0));
+  g.add(box(1.8, 1.4, 1.8, WALLS[2], 0, 0.95, 0));
+  g.add(box(1.9, 0.14, 1.9, primary, 0, 1.7, 0));
+  dome(g, 0.85, 1.77, 0xe6e2d8);
+  g.add(box(0.14, 1.6, 0.14, DARK, 1.15, 1.05, 1.1));
+  const radar = new THREE.Group();
+  radar.position.set(1.15, 1.9, 1.1);
+  radar.add(box(1.0, 0.32, 0.08, secondary, 0, 0, 0.06));
+  g.add(radar);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      radar.rotation.y += dt * 1.4;
+    },
+  });
+});
+
+/** A repair yard: a gantry over an open bay with a vehicle lift, a workshop and stacked parts. */
+registerModel('bld:repairYard', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.6, 0.22, 4.0, 0x7d7a73, 0, 0.11, 0));
+  g.add(box(1.8, 0.12, 2.6, 0xd8b23a, 0.8, 0.27, 0.3)); // the lift, in warning yellow
+  for (const x of [-0.25, 1.85]) for (const z of [-1.1, 1.7]) g.add(box(0.18, 2.4, 0.18, secondary, x, 1.3, z));
+  for (const x of [-0.25, 1.85]) g.add(box(0.22, 0.2, 3.0, secondary, x, 2.5, 0.3));
+  g.add(box(2.3, 0.24, 0.24, primary, 0.8, 2.3, 0.3)); // crane beam
+  g.add(box(0.1, 0.8, 0.1, DARK, 0.8, 1.8, 0.3)); // hook
+  g.add(box(1.4, 1.5, 2.0, WALLS[1], -1.5, 0.95, -0.7)); // workshop
+  g.add(box(1.52, 0.14, 2.12, primary, -1.5, 1.75, -0.7));
+  g.add(box(0.05, 1.0, 1.0, DARK, -0.78, 0.75, -0.7));
+  for (const [x, z] of [[-1.9, 1.3], [-1.0, 1.6]]) g.add(cylinder(0.32, 0.32, 0.3, 10, DARK, x, 0.37, z)); // spare wheels
+  return g;
+});
+
+/** A signal fire: a stone beacon tower with a brazier on top, its flame burning in the holder's colour. */
+registerModel('bld:signalFire', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.3, 1.45, 0.5, 8, 0x8a857a, 0, 0.25, 0));
+  g.add(cylinder(0.85, 1.1, 2.6, 8, 0xa39d90, 0, 1.8, 0));
+  g.add(cylinder(1.05, 0.9, 0.3, 8, 0x8a857a, 0, 3.2, 0));
+  g.add(cylinder(0.7, 0.45, 0.5, 8, DARK, 0, 3.6, 0)); // brazier
+  const flame = glowBox(0.6, 0.7, 0.6, 0xffa040);
+  flame.position.set(0, 4.1, 0);
+  g.add(flame);
+  const tip = glowBox(0.3, 0.4, 0.3, primary);
+  tip.position.set(0, 4.55, 0);
+  g.add(tip);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      flame.userData.t = (flame.userData.t ?? Math.random() * 3) + dt;
+      const s = 1 + Math.sin(flame.userData.t * 9) * 0.12;
+      flame.scale.set(s, 2 - s, s);
+      tip.rotation.y += dt * 2;
+    },
+  });
+});
+
+/** A citadel's keep: a heavy square tower with crenellations, a gatehouse front and the holder's banner. */
+registerModel('bld:keep', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  const stone = 0x9a9486;
+  g.add(box(3.8, 0.3, 3.8, 0x7d786c, 0, 0.15, 0));
+  g.add(box(3.0, 3.6, 3.0, stone, 0, 2.05, 0));
+  g.add(box(3.24, 0.3, 3.24, 0x8a8477, 0, 3.95, 0));
+  for (let k = 0; k < 4; k++) {
+    for (const s of [-0.9, 0, 0.9]) {
+      const a = (k * Math.PI) / 2;
+      const m = box(0.4, 0.42, 0.3, stone, Math.cos(a) * 1.45 - Math.sin(a) * s, 4.3, Math.sin(a) * 1.45 + Math.cos(a) * s);
+      m.rotation.y = -a;
+      g.add(m);
+    }
+  }
+  g.add(box(0.1, 1.4, 1.1, DARK, 1.53, 1.0, 0)); // gate
+  g.add(box(0.12, 0.3, 1.5, primary, 1.56, 1.9, 0));
+  for (const z of [-0.8, 0.8]) g.add(box(0.06, 0.5, 0.22, DARK, 1.52, 2.9, z)); // arrow slits
+  g.add(box(0.1, 1.8, 0.1, DARK, -0.8, 5.0, -0.8));
+  g.add(box(0.05, 0.6, 0.9, secondary, -0.8, 5.5, -0.32));
+  return g;
+});
+
+/** A length of citadel wall: tall stone with a walkway lip and crenellations. */
+registerModel('bld:citadelWall', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(1.1, 0.3, 3.5, 0x7d786c, 0, 0.15, 0));
+  g.add(box(0.8, 1.6, 3.4, 0x9a9486, 0, 1.1, 0));
+  g.add(box(0.92, 0.12, 3.46, primary, 0, 1.96, 0));
+  for (const z of [-1.4, -0.7, 0, 0.7, 1.4]) g.add(box(0.3, 0.32, 0.4, 0x9a9486, 0.22, 2.17, z));
+  return g;
+});
+
+/** A landing field's flight tower: a glazed cab on a slim tower, a beacon on its roof and a windsock. */
+registerModel('bld:flightTower', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(2.6, 0.25, 2.6, CONCRETE, 0, 0.12, 0));
+  g.add(box(1.0, 3.4, 1.0, WALLS[0], 0, 1.95, 0));
+  g.add(box(1.7, 0.9, 1.7, 0x40525e, 0, 4.05, 0)); // the glazed cab
+  g.add(box(1.86, 0.16, 1.86, primary, 0, 4.58, 0));
+  g.add(box(1.8, 0.1, 1.8, secondary, 0, 3.55, 0));
+  const beacon = glowBox(0.2, 0.2, 0.2, 0x60ff80);
+  beacon.position.set(0, 4.8, 0);
+  g.add(beacon);
+  g.add(box(0.08, 1.8, 0.08, DARK, 1.05, 0.95, 1.05));
+  g.add(cylinder(0.08, 0.16, 0.6, 6, 0xf08a30, 1.05, 1.75, 1.35).rotateX(Math.PI / 2));
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beacon.userData.t = (beacon.userData.t ?? Math.random() * 2) + dt;
+      beacon.visible = beacon.userData.t % 1.6 < 0.4;
+    },
+  });
+});
+
 /**
  * How civilian buildings look on this map (see BiomeDef.town). Set by the
  * stage when a battle loads; faction buildings keep their own look.
