@@ -199,6 +199,12 @@ export class NavObstacles {
   readonly traffic: Float32Array;
   /** Always zero: what classes that don't queue see. */
   readonly calm: Float32Array;
+  /**
+   * Extra route cost per cell from danger on the ground that everyone keeps
+   * clear of: nobody's fire (see game/wildfire.ts). Whoever changes it
+   * records the change, so routes through it get re-planned.
+   */
+  readonly hazard: Float32Array;
 
   constructor(
     readonly cols: number,
@@ -209,6 +215,7 @@ export class NavObstacles {
     this.none = new Uint16Array(cols * rows);
     this.traffic = new Float32Array(cols * rows);
     this.calm = new Float32Array(cols * rows);
+    this.hazard = new Float32Array(cols * rows);
   }
 
   /** The obstacle counts a class with these rules is kept out by. */
@@ -267,6 +274,8 @@ export class NavGrid {
   private readonly occupied: Uint16Array;
   /** Extra cost per cell from busy narrow passages (NavObstacles.traffic), or zeros for a class that doesn't queue. */
   private readonly traffic: Float32Array;
+  /** Extra cost per cell from fire on the ground (NavObstacles.hazard), or zeros for a class that flies. */
+  private readonly hazard: Float32Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   /** Per cell, which of its 8 steps by a bridge deck have been read point by point (low byte) and are clear (high byte); see sideStep. */
@@ -317,6 +326,7 @@ export class NavGrid {
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.for(this.rules.over);
     this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
+    this.hazard = this.rules.flies ? this.obstacles.calm : this.obstacles.hazard;
     this.clearance = new Float32Array(n);
     this.sides = new Uint16Array(n);
     this.deckEdge = new Uint8Array(n);
@@ -807,7 +817,7 @@ export class NavGrid {
   costAt(x: number, z: number): number {
     const [i, j] = this.cellOf(x, z);
     const k = j * this.cols + i;
-    return this.cost[k] + this.traffic[k];
+    return this.cost[k] + this.traffic[k] + this.hazard[k];
   }
 
   /**
@@ -829,7 +839,7 @@ export class NavGrid {
       const [i, j] = this.cellOf(x, z);
       if (!this.fits(i, j, radius)) return false;
       const k = j * this.cols + i;
-      if (this.cost[k] + this.traffic[k] > maxCost + 1e-6) return false;
+      if (this.cost[k] + this.traffic[k] + this.hazard[k] > maxCost + 1e-6) return false;
       // Not over a bridge's railings, even where it's no dearer than the rest of the way.
       if (walls && k !== prev && this.overRail(prev, k)) return false;
       // Nor off a deck's side into water too deep to wade.
@@ -952,7 +962,7 @@ export class NavGrid {
     let closestH = Infinity;
     // The search's inner loop, with fits() and blocked() written out over the raw arrays (same answers, far fewer calls).
     const rows = this.rows;
-    const { terrain, occupied, clearance, cost, traffic, closed, stamp, g, f, parent, open } = this;
+    const { terrain, occupied, clearance, cost, traffic, hazard, closed, stamp, g, f, parent, open } = this;
     if (radius > 0) this.updateClearance();
     const need = radius + CLEARANCE_MARGIN;
     const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
@@ -989,7 +999,7 @@ export class NavGrid {
         if (closed[nk] === id) continue;
         if (walls && ((deck[k] === 1 && rail[nk] === 1) || (rail[k] === 1 && deck[nk] === 1))) continue;
         if (sides && deckEdge[k] + deckEdge[nk] > 0 && !this.sideStep(k, n, nk)) continue;
-        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
+        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk] + hazard[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
         g[nk] = ng;

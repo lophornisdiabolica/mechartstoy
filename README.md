@@ -352,6 +352,80 @@ off. *Island*, *Isthmus*, *Inland sea*, *Crescent bay* and *Peninsula* map
 styles use them. **Shape** now runs from 2.5× deeper (a long front between
 two sides) to 2.5× wider.
 
+**Traits** lay one or more special features over the map, each a headline for
+the battle, on contested ground between the sides. Nothing on the map is
+anyone's, and nobody aims at it, but its old walls, hulks and columns stop
+shots and block the way like any building, so they're cover for whoever gets
+there first, and fire slowly knocks them down.
+
+- *Old battlefield:* craters, junk and the burnt-out hulks of an earlier
+  fight, picked clean long ago.
+- *Fortified line:* a broken line of old walls and pillboxes across the
+  middle, with gaps wide enough for a tank.
+- *Crashed hulk:* the wreck of a giant machine at the end of the furrow it
+  ploughed. Huge cover, and the scrap round it never runs out while it
+  stands, so the scrap sides (Hive, Lodestar) feed on it.
+- *Oil field:* derricks over pools of crude. A shell or flame bursting on a
+  pool sets it alight, the fire running across it and burning everyone in it
+  under a pall of black smoke, until it burns dry. A derrick blows up when
+  it's destroyed and lights the pools round it, and while one stands the
+  pools by it fill back up.
+- *Geysers:* vents that blow steam every half minute or so, thick enough to
+  throw everyone's shots off for a few seconds and to hide stealthy units.
+- *Ancient ruins:* columns and broken temple walls on old paving. Soldiers in
+  the ruins take half a burst that lands outside them, as in a trench.
+- *Sacred grove:* a ring of giant trees round a clearing, with a few ways in.
+  Vehicles go round it, only super units push the giants over, and the
+  woodland sides' shots slip between the trunks.
+- *Citadel:* an outpost near the middle walled in like a fortress, with four
+  gates, a tower at each corner, two bunkers, a keep and twice the usual
+  garrison. Whoever takes it gets +20% production.
+- *Landing field:* an outpost on a paved apron with a flight tower. Its
+  holder's aircraft, and a drop side's drops, come 35% faster.
+- *Rail line:* a railway across no-man's land between the sides, on a graded
+  bed, through a town if one's in the way (its houses keep off the track).
+  An outpost the track runs past becomes a station, and a new station goes
+  a third of the way in from each end that has none, two in all. A minute
+  after a side takes a station, an armoured train comes out onto the line
+  for it, one train a side, and another a minute after it's lost. The train
+  runs only on the track and takes no orders: it heads for the enemy nearest
+  the line, stops to fight whatever's in range with its twin gun, and turns
+  back at the ends and short of another train.
+- *Tidal flats:* a sand bar across narrow water in no-man's land (two on a
+  big map), under the sea as the map is made. Fifty seconds in, the tide
+  goes out and uncovers it: a way across for foot, tracks and wheels (heavy
+  going on the wet sand), and a wall to boats. A minute later the tide
+  turns and comes back in over it for a minute, and so on, about every
+  three minutes. Everyone's warned: a bar about to turn against a unit
+  costs a lot to route over, so routes go round, and a unit on it gets off
+  the shortest way. Land units still on it when the sea's over it drown,
+  and boats over it when it dries run aground. Needs water: a dry map gets
+  none, and a rolled map style only deals it (or a dam or a frozen lake) to a wet map.
+- *Dam:* a low valley in no-man's land running down to the water, and up at
+  its head a reservoir, its water standing higher than the sea, held back by
+  a concrete dam across its mouth (where there's no room for a reservoir,
+  the dam stands in the water off the valley's shore instead), with a
+  *dam control* outpost (a sluice house) on high ground by it. If any stretch of the dam
+  is shot to pieces, or the side holding the sluice house opens the sluices
+  (it does, once, when at least five of its enemies are in the valley and
+  at most one of its own), the valley floods from the dam outward in
+  under a minute (the reservoir draining down into it) and stays flooded: routes over it are cut, and boats can get
+  in. Ground the water's about to reach costs a lot to route over, a unit in
+  its way drives out of the valley over dry land, and land units the water
+  catches out of their depth drown. Needs water by low ground.
+- *Frozen lake:* the most contested lake that doesn't reach the map's edge
+  is frozen over: a way across for everyone. Each patch of ice takes strain
+  from the weight on it (a soldier's nothing, a tank parked on it goes
+  through in about half a minute, a super unit in seconds) and from fire
+  and shells bursting on it, and gets over strain slowly. Too much and it
+  gives way, cracking the ice round it, and land units out of their depth
+  go through and drown. A hole freezes over again a minute and a half
+  later, once it's empty. Tanks and walkers go round the ice where they
+  can. Needs a lake.
+
+A map style re-roll gives most maps a trait or two (the link key is
+`traits=oil,ruins`).
+
 - **Eternal:** ruined buildings are rebuilt and the war never ends.
 - **Attacks:** *When ready* (default) has each side mass until its army can
   break the enemy base, attack, and fall back to regroup once the attack is
@@ -419,9 +493,13 @@ two sides) to 2.5× wider.
   so it's a slider. More sides
   make a bigger map.
 - **Map:** size and **shape** (wider or deeper, keeping the area), a
-  **biome** (temperate, desert, snow or forest: the ground's colours, the
-  trees and rocks, the water and sky, and the style towns are built in;
-  looks only, nothing moves differently), where the **bases** go (round the
+  **biome** (temperate, desert, snow, forest, jungle, steppe, tundra, ash
+  wastes, scrapland or crystal fields: the ground's colours, the trees,
+  rocks, junk or crystals, the water and sky, and the style towns are built
+  in; looks only, nothing moves differently), a **town style** (the biome's
+  own, or any of brick, adobe, alpine, timber, concrete, thatched stilt
+  houses, shanty, yurts or domes, so a desert can have concrete towns),
+  where the **bases** go (round the
   edge with allies side by side, round the edge with allies spread out, or
   teams in two lines facing each other), water and hills, and how many
   **towns** (none to four) and how big. Towns have districts: a harbour of
@@ -478,6 +556,21 @@ two sides) to 2.5× wider.
   from the light woods: they stop shots, so infantry find cover in them,
   and slow vehicles, which flatten the trees they drive into; shots and
   blasts knock them down too, and a cleared patch is open ground again.
+  **Wildfire** (a slider, off by default): fire that gets going in dense
+  forest (a flamer's, a burning wreck's, a burning oil pool's) catches the
+  trees. A stand burns for about half a minute under a pall of smoke that
+  throws shots off, creeping slowly on to the stands beside it (faster the
+  higher the slider, and in dry country: desert, steppe and ash burn
+  readily, jungle, snow and tundra barely), then the trees lie charred on
+  burnt ground, a little rough going. It's nobody's fire, so it burns
+  everyone in it. Ground burning with nobody's fire (a wildfire, a burning
+  oil field) costs a lot to route through, so units go round it, and one
+  caught in it gets out the shortest way.
+  **Bridges fall** (off by default): a map bridge takes a lot of punishment
+  but wears down under every shot that bursts on it or by it, whoever fired
+  it, and under heavy fire it comes down for good, taking whatever's on it
+  into the water. The crossing is cut, so routes go round, and the sides'
+  engineers bridge it again if the way round is long.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
   until it's cleared away four minutes later. **Wreckage:** a destroyed
@@ -1323,7 +1416,7 @@ outposts and the light scenery are still placed once, at the start.
   wears the colours of a faction not in the battle. A side takes one by
   having units inside the ring with no defenders there; more units take it
   faster, and two attacking teams at once stall each other. The towers and
-  bunker then switch sides. Each outpost is one of six kinds
+  bunker then switch sides. Each outpost is one of ten kinds
   (`OUTPOST_KINDS`; the setup screen picks which the map deals out), with
   a building of its own and a bonus for its holder (`OutpostBonus`; the
   Outposts bonus setting scales it): a *supply depot* (+10% production), an
@@ -1332,7 +1425,21 @@ outposts and the light scenery are still placed once, at the start.
   holder's team grows impatient 40% faster while massing, so its attacks
   set out sooner, and the mast spots for its guns), a *fuel depot* (+10%
   production, and its tanks blow up) and a *ruined factory* (turns out one
-  of the holder's factory batches every 75 seconds). Every outpost makes
+  of the holder's factory batches every 75 seconds). Five more are off by
+  default, so the usual battles stay as they were: a *shipyard* (dealt to
+  the outpost with the most water by it, it launches a missile boat for its
+  holder every 80 seconds, two afloat at most, even for a side with no
+  navy), a *sensor station* (a wide spotting ring that picks out stealthy
+  units for its holder's team), a *repair yard* (mends the holder's team's
+  vehicles and walkers that come by it, about 2.5% a second, and units that
+  fall back to mend use it) and a *signal fire* (every two minutes a relief
+  column of three of the holder's wave picks marches in from the nearest map
+  edge). A fifth, the *drawbridge* (dealt only to an outpost within 20 of a
+  map bridge, one per bridge), works that bridge for its holder: it swings
+  up, hinged at the end by the drawbridge house, when the holder's enemies come near it and nobody's on it, so they can't
+  cross there, and comes down again once they've gone; held by its garrison
+  it stays down. The clock on a shipyard or signal fire starts again when it changes
+  hands, so taking one doesn't pay out at once. Every outpost makes
   the ground round it the holder's territory (see below). A production bonus adds the same to
   every side (+10% of a normal side's rate), so a side boosted for uneven
   teams doesn't get three times as much from it. Attacking squads take any

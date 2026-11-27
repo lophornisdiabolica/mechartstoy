@@ -207,6 +207,9 @@ describe('scrap', () => {
   });
 });
 
+/** The first six kinds (the newer ones have tests of their own, in outpostWorks.test.ts). */
+const FIRST_KINDS = OUTPOST_KIND_IDS.slice(0, 6);
+
 describe('outpost kinds', () => {
   it('deals out every kind on a map with enough outposts, the gun on the highest', () => {
     const g = game(
@@ -214,12 +217,12 @@ describe('outpost kinds', () => {
       (s) => {
         s.map.size = 'large';
         s.map.outposts = 6;
-        s.map.outpostKinds = [...OUTPOST_KIND_IDS];
+        s.map.outpostKinds = [...FIRST_KINDS];
       },
       true,
     );
     const kinds = g.ctx.outposts.map((o) => o.kind.id).sort();
-    expect(kinds).toEqual([...OUTPOST_KIND_IDS].sort());
+    expect(kinds).toEqual([...FIRST_KINDS].sort());
     const height = (o: { x: number; z: number }) => g.field.heightAt(o.x, o.z);
     const gun = g.ctx.outposts.find((o) => o.kind.id === 'gun')!;
     for (const o of g.ctx.outposts) expect(height(gun)).toBeGreaterThanOrEqual(height(o) - 1e-6);
@@ -240,7 +243,7 @@ describe('outpost kinds', () => {
       (s) => {
         s.map.size = 'large';
         s.map.outposts = 6;
-        s.map.outpostKinds = [...OUTPOST_KIND_IDS];
+        s.map.outpostKinds = [...FIRST_KINDS];
       },
       true,
     );

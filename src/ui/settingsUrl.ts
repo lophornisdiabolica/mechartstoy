@@ -1,9 +1,10 @@
+import { MAP_TRAIT_IDS } from '../world/traits';
 import { isStyle } from '../game/commander/advice';
 import { DOCTRINE_IDS, isDoctrine } from '../game/doctrines';
 import { VARIETY_AFTER, VARIETY_KEYS } from '../game/variety';
 import { rollable } from '../game/rollables';
 import { BattleSettings, CITY_MODES, MapSpot, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, UNIT_IDS } from '../game/settings';
-import { isBiome } from '../world/biomes';
+import { isBiome, isTownStyle } from '../world/biomes';
 import { isTerrainStyle } from '../world/terrainStyles';
 import { isMapOutline } from '../world/outlines';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
@@ -23,6 +24,7 @@ const NUMBERS: { key: string; limit: keyof typeof LIMITS; get: (s: BattleSetting
   { key: 'cliff', limit: 'cliffs', get: (s) => s.map.cliffs, set: (s, v) => (s.map.cliffs = v) },
   { key: 'shape', limit: 'shape', get: (s) => s.map.shape, set: (s, v) => (s.map.shape = v) },
   { key: 'forest', limit: 'forest', get: (s) => s.map.forest, set: (s, v) => (s.map.forest = v) },
+  { key: 'wildfire', limit: 'wildfire', get: (s) => s.map.wildfire ?? 0, set: (s, v) => (s.map.wildfire = v) },
   { key: 'junk', limit: 'wreckage', get: (s) => s.map.wreckage, set: (s, v) => (s.map.wreckage = v) },
   { key: 'junklife', limit: 'wreckageLife', get: (s) => s.map.wreckageLife, set: (s, v) => (s.map.wreckageLife = v) },
   { key: 'towns', limit: 'towns', get: (s) => s.map.towns, set: (s, v) => (s.map.towns = Math.round(v)) },
@@ -81,6 +83,8 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.biome !== d.map.biome) p.set('biome', s.map.biome);
   if (s.map.terrain !== d.map.terrain) p.set('terrain', s.map.terrain);
   if (s.map.outline !== d.map.outline) p.set('outline', s.map.outline);
+  if (s.map.townStyle !== d.map.townStyle) p.set('townstyle', s.map.townStyle);
+  if (s.map.traits.length > 0) p.set('traits', s.map.traits.join(','));
   if (s.map.layout !== d.map.layout) p.set('layout', s.map.layout);
   if (s.map.townSize !== d.map.townSize) p.set('tsize', s.map.townSize);
   if (s.map.waterways !== d.map.waterways) p.set('ways', s.map.waterways ? '1' : '0');
@@ -88,6 +92,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.townLife !== d.map.townLife) p.set('folk', s.map.townLife ? '1' : '0');
   if (s.map.city !== d.map.city) p.set('city', String(CITY_MODES.indexOf(s.map.city)));
   if (s.map.craters !== d.map.craters) p.set('crater', s.map.craters ? '1' : '0');
+  if (s.map.bridgesFall) p.set('bfall', '1');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
   // Hand-placed spots: "x,z;x,z", in fractions of the map's half-width and half-depth.
@@ -166,6 +171,14 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (terrain && isTerrainStyle(terrain)) s.map.terrain = terrain;
   const outline = p.get('outline');
   if (outline && isMapOutline(outline)) s.map.outline = outline;
+  const townStyle = p.get('townstyle');
+  if (townStyle && (townStyle === 'biome' || isTownStyle(townStyle))) s.map.townStyle = townStyle;
+  // Map traits as a list, e.g. traits=oil,ruins (kept in the standard order; none is the usual map).
+  const traits = p.get('traits');
+  if (traits !== null) {
+    const listed = traits.split(',').map((k) => k.trim());
+    s.map.traits = MAP_TRAIT_IDS.filter((k) => listed.includes(k));
+  }
   const layout = p.get('layout');
   if (layout === 'ring' || layout === 'apart' || layout === 'lines') s.map.layout = layout;
   const tsize = p.get('tsize');
@@ -180,6 +193,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (city === '0' || city === '1' || city === '2') s.map.city = CITY_MODES[Number(city)];
   const crater = p.get('crater');
   if (crater === '0' || crater === '1') s.map.craters = crater === '1';
+  const bfall = p.get('bfall');
+  if (bfall === '0' || bfall === '1') s.map.bridgesFall = bfall === '1';
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));
