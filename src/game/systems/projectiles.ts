@@ -162,6 +162,10 @@ export function projectileSystem(ctx: SimContext): System {
         if ((w.splash > 0 || p.kind === 'flame') && ctx.traits.pools.length > 0 && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2) ctx.traits.strike(p.ex, p.ez, w.splash * 0.5);
         // An engineers' bridge it lands on, or bursts by, takes the hit too (see commander/engineers.ts).
         ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by, p.kind === 'flame');
+        // So does one of the map's bridges, if they can fall (see bridges.ts).
+        if (ctx.bridges.on) ctx.bridges.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by);
+        // And the ice on a frozen lake (see ice.ts).
+        if (ctx.ice && p.ey < ctx.field.seaLevel + 2) ctx.ice.blast(ctx, p.ex, p.ez, w.damage, w.splash);
         // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them, except from a side
         // at home in the woods, whose shots slip between them (see DoctrineDef.woodland).
         if (!woodland(ctx, p.faction)) ctx.field.woods.damage(p.ex, p.ez, p.ey, Math.max(w.splash, 0.6), w.damage, { x: p.sx, z: p.sz });

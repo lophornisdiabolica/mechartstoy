@@ -752,6 +752,15 @@ export class SetupScreen {
     cratersLabel.append(craters, document.createTextNode(' Super units leave craters'));
     row(map, 'Craters', cratersLabel);
     this.sync.push(() => (craters.checked = this.settings.map.craters));
+    const bfall = el('input', { type: 'checkbox', 'aria-label': 'Bridges fall' });
+    bfall.addEventListener('change', () => {
+      this.settings.map.bridgesFall = bfall.checked;
+      this.changed();
+    });
+    const bfallLabel = el('label', { class: 'check' });
+    bfallLabel.append(bfall, document.createTextNode(' Bridges come down under heavy fire'));
+    row(map, 'Bridges fall', bfallLabel);
+    this.sync.push(() => (bfall.checked = this.settings.map.bridgesFall ?? false));
     map.append(
       el(
         'p',
@@ -960,7 +969,7 @@ export class SetupScreen {
       el(
         'p',
         { class: 'hint' },
-        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. Off by default: a shipyard launches a missile boat now and then, a sensor station picks out stealthy units, a repair yard mends vehicles by it, and a signal fire calls in a relief column every couple of minutes. The map deals out the kinds that are on, the gun going to the highest outpost and a shipyard to one by water. The Citadel, Landing field and Rail line traits add outposts of their own (a rail station puts an armoured train on the line for its holder). Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter. Task forces let each side’s Commander send up to that share of its army, between attacks, to take outposts it can beat the defence at, or to save its own outposts from capture.',
+        'Small forts in no-man’s land with their own towers and guards, who fight everyone. A side takes one by getting units into it while nobody defends it, and it counts as the holder’s territory, where resting units heal and squads refill. Each kind gives its holder something more: a supply depot and a fuel depot speed up production (+10% at 1×), an airstrip makes room for 2 more aircraft, a comms relay (off by default) makes attacks set out sooner and spots for the guns, a hilltop gun shells the holder’s enemies, and a ruined factory turns out the odd vehicle. Off by default: a shipyard launches a missile boat now and then, a sensor station picks out stealthy units, a repair yard mends vehicles by it, a signal fire calls in a relief column every couple of minutes, and a drawbridge raises the bridge by it when its holder’s enemies come. The map deals out the kinds that are on, the gun going to the highest outpost, a shipyard to one by water and a drawbridge to one by a bridge. The Citadel, Landing field and Rail line traits add outposts of their own (a rail station puts an armoured train on the line for its holder). Attacks take the outposts on their way. Holding keeps that share of the squads on an outpost’s lane there between attacks, which leaves bases thinner and battles shorter. Task forces let each side’s Commander send up to that share of its army, between attacks, to take outposts it can beat the defence at, or to save its own outposts from capture.',
       ),
     );
 

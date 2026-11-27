@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import type { Battlefield } from './battlefield';
 import type { PropKind } from './biomes';
 import * as D from '../core/dmath';
+import { landReach } from './waterways';
 
 /**
  * Map traits: one or two special features laid over a map's style, each a
@@ -45,8 +46,13 @@ import * as D from '../core/dmath';
  *   graded bed, with a station (an outpost) a third of the way along from
  *   each end. Whoever holds a station gets an armoured train that runs up
  *   and down the line (see game/rail.ts).
+ * - Tidal flats: sand bars across the water, in no-man's land, where it's
+ *   narrow. Under the sea as the map is made; the tide goes out every few
+ *   minutes and uncovers them, a way across on foot or tracks until it
+ *   comes back in (see game/tides.ts). Boats can't cross them while they're
+ *   dry. Needs water: a dry map gets none.
  */
-export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail';
+export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen';
 
 export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   oldField: { label: 'Old battlefield', blurb: 'Craters, junk and the hulks of an earlier fight' },
@@ -59,6 +65,9 @@ export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   citadel: { label: 'Citadel', blurb: 'A walled fortress in the middle with a strong garrison: whoever cracks it builds faster' },
   landing: { label: 'Landing field', blurb: 'A big paved pad: aircraft and drops come faster for whoever holds it' },
   rail: { label: 'Rail line', blurb: 'A railway across no-man’s land with two stations: whoever holds one gets an armoured train on the line' },
+  frozen: { label: 'Frozen lake', blurb: 'A lake frozen over: a way across, until it gives way under heavy machines or melts under fire' },
+  dam: { label: 'Dam', blurb: 'A dam holding the water back from a low valley: break it, or open its sluices, and the valley floods' },
+  tidal: { label: 'Tidal flats', blurb: 'Sand bars across the water that the tide uncovers and drowns again: land bridges every few minutes' },
 };
 
 export const MAP_TRAIT_IDS = Object.keys(MAP_TRAITS) as MapTrait[];
@@ -68,7 +77,7 @@ export function isMapTrait(v: string): v is MapTrait {
 }
 
 /** The buildings traits leave standing (see game/buildings.ts). */
-export type RelicId = 'oldHulk' | 'oldWall' | 'pillbox' | 'crashedHulk' | 'derrick' | 'column' | 'ruinWall';
+export type RelicId = 'oldHulk' | 'oldWall' | 'pillbox' | 'crashedHulk' | 'derrick' | 'column' | 'ruinWall' | 'dam';
 
 /** One relic to put up when the battle starts: nobody's (see RELIC in game/components.ts). */
 export interface Relic {
@@ -120,10 +129,79 @@ export interface TraitLayout {
   vents: Vent[];
   props: TraitProp[];
   rail: RailLine | null;
+  flats: TidalFlat[];
+  flood: FloodPlain | null;
+  ice: IceSheet | null;
+}
+
+/**
+ * A frozen lake (the Frozen lake trait): the map vertices under its ice,
+ * with the lake bed's height under each (the ice is just above the sea).
+ * It breaks and refreezes during the battle (see game/ice.ts).
+ */
+export interface IceSheet {
+  verts: number[];
+  bed: number[];
+  /** The ice's height. */
+  level: number;
+}
+
+/**
+ * The low valley a dam holds the water back from (the Dam trait): the map
+ * vertices that flood when it goes, nearest the dam first, how far each is
+ * from it, and the height each sinks to (under the sea). The flood itself
+ * is in game/flood.ts.
+ */
+export interface FloodPlain {
+  /** The dam's middle. */
+  x: number;
+  z: number;
+  /** Indices into Battlefield.heights, nearest the dam first. */
+  verts: number[];
+  dist: number[];
+  to: number[];
+  /** The reservoir the dam holds back, if it has one (see reservoir): drawn above the sea until the dam goes, then draining down to it. */
+  pool?: Reservoir;
+}
+
+/**
+ * A reservoir held up behind a dam (see FloodPlain.pool): a round lake of
+ * this radius about (x, z), cut off on the dam's side where the dam's
+ * water face is, `cut` from the middle toward (-ux, -uz). Its water stands
+ * at `level` while the dam holds. Under it the bed is below the sea, so to
+ * everything but the eye it's water like any other.
+ */
+export interface Reservoir {
+  x: number;
+  z: number;
+  ux: number;
+  uz: number;
+  radius: number;
+  cut: number;
+  level: number;
+}
+
+/**
+ * A sand bar across the water (the Tidal flats trait): the map vertices it
+ * covers, with their heights at high tide (under water, as the map is made)
+ * and at low tide (just dry). The tide moves them between the two (see
+ * game/tides.ts).
+ */
+export interface TidalFlat {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  /** Half its width. */
+  half: number;
+  /** Indices into Battlefield.heights. */
+  verts: number[];
+  high: number[];
+  low: number[];
 }
 
 export function emptyTraits(): TraitLayout {
-  return { sites: [], relics: [], vents: [], props: [], rail: null };
+  return { sites: [], relics: [], vents: [], props: [], rail: null, flats: [], flood: null, ice: null };
 }
 
 /** Map area (in cells) sizes are per: a Medium map's. */
@@ -133,9 +211,9 @@ const TRIES = 90;
 /** Tree size at and above which a tree is one of a grove's giants (see woods.ts). */
 export const GIANT = 1.6;
 /** Each trait's own random stream, by its place here (so adding a trait leaves the others' layouts alone). */
-const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail'];
+const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail', 'tidal', 'dam', 'frozen'];
 /** Order traits are placed in: the outposts of their own, then the biggest first, the line across everything last. */
-const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
+const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'tidal', 'dam', 'frozen', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
 
 /** Room a trait plans round (the hill, say), given before anything else is placed. */
 export interface Taken {
@@ -151,14 +229,15 @@ export interface Taken {
  * a city: the city takes the middle, and the traits are placed last, round
  * it (see placeTraits). The fortified line and the rail line aren't
  * planned: they run across everything (the rail keeps off what's planned:
- * see railLine). A citadel or landing field (an outpost of its own) plans
+ * see railLine). Nor are the watery ones (tidal flats, dam, frozen lake),
+ * which go where the map's water is. A citadel or landing field (an outpost of its own) plans
  * first, the citadel taking the very middle.
  */
 export function planTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, taken: readonly Taken[]): TraitSite[] {
   const planned: TraitSite[] = [];
   const scale = traitScale(field);
   for (const kind of ORDER) {
-    if (!traits.includes(kind) || kind === 'fortLine' || kind === 'rail') continue;
+    if (!traits.includes(kind) || kind === 'fortLine' || kind === 'rail' || kind === 'tidal' || kind === 'dam' || kind === 'frozen') continue;
     const r = rng.fork(0x7400 + STREAMS.indexOf(kind));
     const at = kind === 'citadel' || kind === 'landing' ? heldSpot(field, planned, kind, r, taken) : spotFor(field, planned, kind, scale, r, taken);
     if (at) planned.push(at);
@@ -185,6 +264,18 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
       railLine(field, out, rng.fork(0x7400 + index), flatten, planned);
       continue;
     }
+    if (kind === 'tidal') {
+      tidalFlats(field, out, rng.fork(0x7400 + index), scale);
+      continue;
+    }
+    if (kind === 'dam') {
+      damFlood(field, out, rng.fork(0x7400 + index), flatten);
+      continue;
+    }
+    if (kind === 'frozen') {
+      frozenLake(field, out, rng.fork(0x7400 + index));
+      continue;
+    }
     const site = planned.find((p) => p.kind === kind) ?? spotFor(field, [...out.sites, ...planned], kind, scale, rng.fork(0x7400 + index), []);
     if (!site) continue;
     out.sites.push(site);
@@ -197,18 +288,21 @@ function traitScale(field: Battlefield): number {
 }
 
 /** A spot for a trait, smaller if it doesn't fit at full size (a crowded map, or a second trait). */
-function spotFor(field: Battlefield, sites: readonly TraitSite[], kind: Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail'>, scale: number, rng: Rng, taken: readonly Taken[]): TraitSite | null {
+function spotFor(field: Battlefield, sites: readonly TraitSite[], kind: SpotTrait, scale: number, rng: Rng, taken: readonly Taken[]): TraitSite | null {
   let radius = RADII[kind] * scale;
   let at = findSpot(field, sites, radius, rng, taken);
   if (!at) at = findSpot(field, sites, (radius *= 0.7), rng, taken);
   return at && { kind, x: at.x, z: at.z, radius };
 }
 
-const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
+/** The traits laid out round a spot of their own (the rest find their own way across the map: see placeTraits). */
+type SpotTrait = Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>;
+
+const RADII: Record<SpotTrait, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
 
 type Builder = (field: Battlefield, out: TraitLayout, x: number, z: number, radius: number, rng: Rng, scale: number) => void;
 
-const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail'>, Builder> = {
+const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>, Builder> = {
   oldField(field, out, x, z, radius, rng, scale) {
     // Craters first, so the hulks and junk sit in them.
     for (let n = Math.round(8 * scale); n > 0; n--) {
@@ -730,7 +824,7 @@ function relicNear(out: TraitLayout, x: number, z: number, r: number, gap = 0.4)
 }
 
 /** Relics' footprints (BuildingDef.radius), for spacing them at generation. */
-const RELIC_RADIUS: Record<RelicId, number> = { oldHulk: 1.3, oldWall: 1.3, pillbox: 1.6, crashedHulk: 5, derrick: 1.2, column: 0.5, ruinWall: 1.3 };
+const RELIC_RADIUS: Record<RelicId, number> = { oldHulk: 1.3, oldWall: 1.3, pillbox: 1.6, crashedHulk: 5, derrick: 1.2, column: 0.5, ruinWall: 1.3, dam: 1.6 };
 
 function dry(field: Battlefield, x: number, z: number): boolean {
   return field.heightAt(x, z) > field.seaLevel + 0.4 && field.deckAt(x, z) === null;
@@ -753,6 +847,670 @@ function scatter(field: Battlefield, out: TraitLayout, rng: Rng, x: number, z: n
 
 /** How far from a rail line's track traits leave the ground (its graded bed) alone. */
 const RAIL_CLEAR = 2.5;
+
+/** Tidal flats: how long a crossing can be, how wide a bar is, and how far apart two are. */
+const FLAT_MAX = 46;
+const FLAT_MIN = 6;
+const FLAT_HALF = 3.2;
+const FLAT_APART = 24;
+/** A bar's crest above the sea at low tide, and the water over its middle at high tide (deeper than a walker wades). */
+const FLAT_CREST = 0.3;
+const FLAT_DEPTH = 1.1;
+/** Ground this far above the sea is the shore a bar runs between. */
+const FLAT_SHORE = 0.2;
+/** How far up the shore at each end a bar reaches. */
+const FLAT_LANDING = 2;
+
+/** Lay sand bars across narrow water in no-man's land (one, or two on a big map). */
+function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: number): void {
+  if (field.baseSites.length < 2) return;
+  const want = scale > 1.3 ? 2 : 1;
+  const step = 0.5;
+  const shoreAt = (x: number, z: number, dx: number, dz: number): number => {
+    for (let t = step; t <= FLAT_MAX; t += step) {
+      const px = x + dx * t;
+      const pz = z + dz * t;
+      if (!field.contains(px, pz, 4)) return -1;
+      if (field.heightAt(px, pz) >= field.seaLevel + FLAT_SHORE) return t;
+    }
+    return -1;
+  };
+  const found: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  const hw = field.width / 2 - 6;
+  const hd = field.depth / 2 - 6;
+  for (let n = 0; n < 800; n++) {
+    const x = rng.range(-hw, hw);
+    const z = rng.range(-hd, hd);
+    const angle = rng.range(0, Math.PI);
+    if (!field.isWater(x, z) || field.deckAt(x, z) !== null) continue;
+    const dx = D.cos(angle);
+    const dz = D.sin(angle);
+    const fore = shoreAt(x, z, dx, dz);
+    const back = shoreAt(x, z, -dx, -dz);
+    if (fore < 0 || back < 0) continue;
+    const length = fore + back;
+    if (length < FLAT_MIN || length > FLAT_MAX) continue;
+    // Landing a little way up the shore, on gentle ground, not a cliff or a speck of rock.
+    const a = { x: x - dx * (back + FLAT_LANDING), z: z - dz * (back + FLAT_LANDING) };
+    const b = { x: x + dx * (fore + FLAT_LANDING), z: z + dz * (fore + FLAT_LANDING) };
+    if ([a, b].some((p) => !field.contains(p.x, p.z, 4) || field.heightAt(p.x, p.z) < field.seaLevel + FLAT_SHORE || field.slopeAt(p.x, p.z) > 0.9 || field.sheerAt(p.x, p.z))) continue;
+    // Clear of the bridges (a bar by a bridge is no use), bases, outposts and other bars.
+    let clear = true;
+    for (let t = 0; t <= 1 && clear; t += 0.1) {
+      const px = a.x + (b.x - a.x) * t;
+      const pz = a.z + (b.z - a.z) * t;
+      if (field.nearBridge(px, pz, FLAT_HALF + 6)) clear = false;
+      if (field.baseSites.some((s) => D.hypot(s.x - px, s.z - pz) < s.radius + 4)) clear = false;
+      if (field.outpostSites.some((o) => D.hypot(o.x - px, o.z - pz) < o.radius + FLAT_HALF)) clear = false;
+    }
+    if (!clear) continue;
+    const mx = (a.x + b.x) / 2;
+    const mz = (a.z + b.z) / 2;
+    // Contested, and short.
+    const d = field.baseSites.map((s) => D.hypot(s.x - mx, s.z - mz)).sort((p, q) => p - q);
+    found.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, score: Math.abs(d[0] - d[1]) + length * 0.4 + rng.range(0, 6) });
+  }
+  // Worth crossing: the way round by land is a long one, or there's none (not just across a pond). The longer the better.
+  found.sort((p, q) => p.score - q.score);
+  const worth: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  for (const c of found.slice(0, FLAT_CHECKED)) {
+    const length = D.hypot(c.bx - c.ax, c.bz - c.az);
+    const detour = landWalk(field, c.ax, c.az, c.bx, c.bz) / length;
+    if (detour >= FLAT_DETOUR) worth.push({ ...c, score: c.score - Math.min(detour, 8) * 6 });
+  }
+  worth.sort((p, q) => p.score - q.score);
+  const sea = field.seaLevel;
+  for (const c of worth) {
+    if (out.flats.length >= want) break;
+    const mx = (c.ax + c.bx) / 2;
+    const mz = (c.az + c.bz) / 2;
+    if (out.flats.some((f) => D.hypot((f.ax + f.bx) / 2 - mx, (f.az + f.bz) / 2 - mz) < FLAT_APART)) continue;
+    const flat: TidalFlat = { ax: c.ax, az: c.az, bx: c.bx, bz: c.bz, half: FLAT_HALF, verts: [], high: [], low: [] };
+    const length = D.hypot(c.bx - c.ax, c.bz - c.az);
+    const reach = length / 2 + FLAT_HALF + 1;
+    eachVertex(field, mx, mz, reach, (k, vx, vz) => {
+      const off = segmentDistance(vx, vz, c.ax, c.az, c.bx, c.bz);
+      const h = field.heights[k];
+      if (off > FLAT_HALF || h >= sea + FLAT_CREST) return;
+      const w = 1 - (off / FLAT_HALF) * (off / FLAT_HALF);
+      flat.verts.push(k);
+      flat.low.push(Math.max(h, sea + 0.05 + (FLAT_CREST - 0.05) * w));
+      // (The shore at either end, where the crossing was measured to, is left as it is at high tide.)
+      const along = ((vx - c.ax) * (c.bx - c.ax) + (vz - c.az) * (c.bz - c.az)) / length;
+      const shore = h >= sea + FLAT_SHORE || along < FLAT_LANDING || along > length - FLAT_LANDING;
+      flat.high.push(shore ? h : Math.min(h, sea - 0.25 - (FLAT_DEPTH - 0.25) * w));
+    });
+    if (flat.verts.length === 0) continue;
+    // The map's made at high tide.
+    flat.verts.forEach((k, n) => (field.heights[k] = flat.high[n]));
+    for (let t = 0; t <= 1; t += 0.5 / reach) field.paint(c.ax + (c.bx - c.ax) * t, c.az + (c.bz - c.az) * t, FLAT_HALF, 'flats', (g) => g === 'plain');
+    out.flats.push(flat);
+    out.sites.push({ kind: 'tidal', x: mx, z: mz, radius: 0 });
+  }
+}
+
+/** Frozen lake: the least and most of a lake to freeze (in map vertices), and the ice's height above the sea. */
+const ICE_LEAST = 40;
+const ICE_MOST = 4000;
+export const ICE_ABOVE = 0.06;
+
+/** Freeze a lake in no-man's land over: the most contested lake that doesn't reach the map's edge. */
+function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
+  if (field.baseSites.length < 2) return;
+  const { cols, rows } = field.config;
+  const stride = cols + 1;
+  const heights = field.heights;
+  const sea = field.seaLevel;
+  const seen = new Uint8Array(stride * (rows + 1));
+  let best: { verts: number[]; score: number } | null = null;
+  for (let k0 = 0; k0 < heights.length; k0++) {
+    if (seen[k0] || heights[k0] >= sea) continue;
+    const verts: number[] = [];
+    const queue = [k0];
+    seen[k0] = 1;
+    let edge = false;
+    while (queue.length > 0) {
+      const k = queue.pop()!;
+      verts.push(k);
+      const i = k % stride;
+      const j = (k - i) / stride;
+      if (i === 0 || j === 0 || i === cols || j === rows) edge = true;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+        const m = nj * stride + ni;
+        if (seen[m] || heights[m] >= sea) continue;
+        seen[m] = 1;
+        queue.push(m);
+      }
+    }
+    if (edge || verts.length < ICE_LEAST || verts.length > ICE_MOST) continue;
+    let cx = 0;
+    let cz = 0;
+    for (const k of verts) {
+      cx += field.vertexX(k % stride);
+      cz += field.vertexZ(Math.floor(k / stride));
+    }
+    cx /= verts.length;
+    cz /= verts.length;
+    const d = field.baseSites.map((b) => D.hypot(b.x - cx, b.z - cz)).sort((p, q) => p - q);
+    const score = Math.abs(d[0] - d[1]) - Math.min(verts.length, 600) * 0.02 + rng.range(0, 4);
+    if (!best || score < best.score) best = { verts, score };
+  }
+  if (!best) return;
+  const level = sea + ICE_ABOVE;
+  const sheet: IceSheet = { verts: best.verts, bed: best.verts.map((k) => heights[k]), level };
+  for (const k of best.verts) heights[k] = level;
+  // The ice's own ground on every cell it covers.
+  const cells = new Set<number>();
+  for (const k of best.verts) {
+    const i = k % stride;
+    const j = (k - i) / stride;
+    for (const [ci, cj] of [[i, j], [i - 1, j], [i, j - 1], [i - 1, j - 1]]) if (ci >= 0 && cj >= 0 && ci < cols && cj < rows) cells.add(cj * cols + ci);
+  }
+  field.setGround([...cells], 'ice');
+  offIce(field, new Set(best.verts));
+  out.ice = sheet;
+  let cx = 0;
+  let cz = 0;
+  for (const k of best.verts) {
+    cx += field.vertexX(k % stride);
+    cz += field.vertexZ(Math.floor(k / stride));
+  }
+  out.sites.push({ kind: 'frozen', x: cx / best.verts.length, z: cz / best.verts.length, radius: 0 });
+}
+
+/** How far clear of the ice (past a road's own half-width) what's left of a road over it stops. */
+const ICE_ROAD_CLEAR = 0.4;
+/** How far apart along a road it's checked for ice. */
+const ICE_ROAD_STEP = 0.5;
+
+/**
+ * Cut the roads off a lake that's frozen over (a city's alleys and streets
+ * run over its water, out of sight under it, and the ice would bring them up
+ * into view): each road keeps its stretches clear of the ice, as roads of
+ * their own, and loses the rest. A bridge over the lake comes down later as
+ * standing over dry ground (see battlefield.ts dropDryBridges), its road cut
+ * here with the rest.
+ */
+function offIce(field: Battlefield, ice: Set<number>): void {
+  const stride = field.config.cols + 1;
+  const cs = field.config.cellSize;
+  const onIce = (x: number, z: number, r: number) => {
+    const i0 = Math.floor((x - r - field.bounds.minX) / cs);
+    const i1 = Math.ceil((x + r - field.bounds.minX) / cs);
+    const j0 = Math.floor((z - r - field.bounds.minZ) / cs);
+    const j1 = Math.ceil((z + r - field.bounds.minZ) / cs);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        if (i < 0 || j < 0 || i >= stride || !ice.has(j * stride + i)) continue;
+        if (D.hypot(field.vertexX(i) - x, field.vertexZ(j) - z) <= r) return true;
+      }
+    }
+    return false;
+  };
+  const gone: number[] = [];
+  const count = field.roads.length;
+  for (let k = 0; k < count; k++) {
+    const road = field.roads[k];
+    const runs: { points: { x: number; z: number }[]; widths: number[] }[] = [];
+    let run: { points: { x: number; z: number }[]; widths: number[] } | null = null;
+    let cut = false;
+    // Along the road in short steps (a city's alley is one straight stretch, which can cross a corner of the lake between its ends).
+    const visit = (x: number, z: number, w: number, corner: boolean) => {
+      if (onIce(x, z, w / 2 + ICE_ROAD_CLEAR)) {
+        // The run ends at the last clear step before the ice.
+        if (run && last && !last.corner) {
+          run.points.push({ x: last.x, z: last.z });
+          run.widths.push(last.w);
+        }
+        run = null;
+        cut = true;
+        last = null;
+        return;
+      }
+      if (!run) {
+        run = { points: [], widths: [] };
+        runs.push(run);
+        if (!corner) {
+          run.points.push({ x, z });
+          run.widths.push(w);
+        }
+      }
+      if (corner) {
+        run.points.push({ x, z });
+        run.widths.push(w);
+      }
+      last = { x, z, w, corner };
+    };
+    let last: { x: number; z: number; w: number; corner: boolean } | null = null;
+    road.points.forEach((p, q) => {
+      const w = road.widths?.[q] ?? road.width;
+      if (q > 0) {
+        const o = road.points[q - 1];
+        const ow = road.widths?.[q - 1] ?? road.width;
+        const n = Math.ceil(D.hypot(p.x - o.x, p.z - o.z) / ICE_ROAD_STEP);
+        for (let t = 1; t < n; t++) visit(o.x + ((p.x - o.x) * t) / n, o.z + ((p.z - o.z) * t) / n, ow + ((w - ow) * t) / n, false);
+      }
+      visit(p.x, p.z, w, true);
+    });
+    if (!cut) continue;
+    const kept = runs.filter((r) => r.points.length >= 2);
+    const as = (r: { points: { x: number; z: number }[]; widths: number[] }) => (road.widths ? { ...road, points: r.points, widths: r.widths } : { ...road, points: r.points });
+    if (kept.length === 0) gone.push(k);
+    else field.roads[k] = as(kept[0]);
+    for (const r of kept.slice(1)) field.roads.push(as(r));
+  }
+  // Roads left with nothing taken out of the list, and the junctions on them with them.
+  for (const k of gone.reverse()) {
+    field.roads.splice(k, 1);
+    for (let n = field.junctions.length - 1; n >= 0; n--) {
+      const j = field.junctions[n];
+      if (j.roads.includes(k)) field.junctions.splice(n, 1);
+      else j.roads = j.roads.map((r) => (r > k ? r - 1 : r));
+    }
+  }
+}
+
+/** Dam: the highest ground (above the sea) that floods, the most and least of the valley (in map vertices), and the dam's length. */
+const FLOOD_TOP = 1.1;
+const FLOOD_MOST = 1600;
+const FLOOD_LEAST = 90;
+const DAM_SEGMENTS = 3;
+const DAM_STEP = 3.1;
+/** How far out into the water from the shore the dam stands. */
+const DAM_OFFSHORE = 2.2;
+/** The sluice house outpost: its radius, and how far from the dam it goes. */
+export const SLUICE_RADIUS = 6;
+const SLUICE_REACH = 24;
+
+/** A low valley by the water, a dam holding the water back from it, and the sluice house that controls the dam. */
+function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
+  if (field.baseSites.length < 2) return;
+  const { cols, rows } = field.config;
+  const stride = cols + 1;
+  const heights = field.heights;
+  const sea = field.seaLevel;
+  const top = sea + FLOOD_TOP;
+  const low = (k: number) => heights[k] >= sea && heights[k] < top;
+  const wetBy = (k: number) => {
+    const i = k % stride;
+    const j = (k - i) / stride;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => i + di >= 0 && j + dj >= 0 && i + di <= cols && j + dj <= rows && heights[(j + dj) * stride + i + di] < sea);
+  };
+  const tried = new Uint8Array(stride * (rows + 1));
+  const valleys: { region: number[]; shore: number; cx: number; cz: number; score: number }[] = [];
+  for (let n = 0; n < 160; n++) {
+    const start = rng.int(1, rows - 1) * stride + rng.int(1, cols - 1);
+    if (tried[start] || !low(start)) continue;
+    // The low ground joined to it.
+    const region: number[] = [];
+    const queue = [start];
+    tried[start] = 1;
+    while (queue.length > 0) {
+      const k = queue.pop()!;
+      region.push(k);
+      const i = k % stride;
+      const j = (k - i) / stride;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+        const m = nj * stride + ni;
+        if (tried[m] || !low(m)) continue;
+        tried[m] = 1;
+        queue.push(m);
+      }
+    }
+    if (region.length > FLOOD_MOST || region.length < FLOOD_LEAST) continue;
+    let cx = 0;
+    let cz = 0;
+    let fit = true;
+    for (const k of region) {
+      const x = field.vertexX(k % stride);
+      const z = field.vertexZ(Math.floor(k / stride));
+      cx += x;
+      cz += z;
+      if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + 6)) fit = false;
+      else if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + 1)) fit = false;
+      else if (field.inCity(x, z, 1) || field.townSites.some((t) => field.inTown(t, x, z))) fit = false;
+      if (!fit) break;
+    }
+    if (!fit) continue;
+    cx /= region.length;
+    cz /= region.length;
+    // The dam where the water's nearest the middle of the valley (it needs water by it).
+    let shore = -1;
+    let near = Infinity;
+    for (const k of region) {
+      if (!wetBy(k)) continue;
+      const d = D.hypot(field.vertexX(k % stride) - cx, field.vertexZ(Math.floor(k / stride)) - cz);
+      if (d < near) {
+        near = d;
+        shore = k;
+      }
+    }
+    if (shore < 0) continue;
+    const dists = field.baseSites.map((b) => D.hypot(b.x - cx, b.z - cz)).sort((p, q) => p - q);
+    const score = Math.abs(dists[0] - dists[1]) - Math.min(region.length, 900) * 0.02 + rng.range(0, 6);
+    valleys.push({ region, shore, cx, cz, score });
+  }
+  if (valleys.length === 0) return;
+  valleys.sort((p, q) => p.score - q.score);
+  // Best, a reservoir up the valley's head, held back by the dam across its mouth, the valley running from the
+  // dam down to the sea. Failing that, the dam stands just off the valley's shore, holding the sea back.
+  // The best few valleys tried in turn, each with the full-size reservoir and then a smaller one; the first that fits is used.
+  let best = valleys[0];
+  let pooled: ReturnType<typeof reservoir> = null;
+  for (const valley of valleys.slice(0, POOL_VALLEYS)) {
+    for (const radius of POOL_RADII) {
+      pooled = reservoir(field, valley.region, valley.shore, rng.fork(radius), radius);
+      if (pooled) break;
+    }
+    if (pooled) {
+      best = valley;
+      break;
+    }
+  }
+  let sx = field.vertexX(best.shore % stride);
+  let sz = field.vertexZ(Math.floor(best.shore / stride));
+  let plain = best.region;
+  if (pooled) {
+    sx = pooled.x;
+    sz = pooled.z;
+    plain = pooled.verts;
+    const along = D.atan2(pooled.pool.uz, pooled.pool.ux) + Math.PI / 2;
+    const dx = D.cos(along);
+    const dz = D.sin(along);
+    for (let n = 0; n < DAM_SEGMENTS; n++) {
+      const o = (n - (DAM_SEGMENTS - 1) / 2) * DAM_STEP;
+      // Its sluice gates (the model's -x side) toward the reservoir, as the shore dam's are toward the sea.
+      out.relics.push({ building: 'dam', x: sx + dx * o, z: sz + dz * o, heading: -D.atan2(dx, -dz) });
+    }
+  } else {
+    // Along the shore, standing in the water just off it (so it doesn't wall the valley's edge off): square to the way from the valley's middle to the water.
+    const toWater = D.atan2(sz - best.cz, sx - best.cx);
+    const along = toWater + Math.PI / 2;
+    const dx = D.cos(along);
+    const dz = D.sin(along);
+    const wx = sx + D.cos(toWater) * DAM_OFFSHORE;
+    const wz = sz + D.sin(toWater) * DAM_OFFSHORE;
+    for (let n = 0; n < DAM_SEGMENTS; n++) {
+      const o = (n - (DAM_SEGMENTS - 1) / 2) * DAM_STEP;
+      out.relics.push({ building: 'dam', x: wx + dx * o, z: wz + dz * o, heading: -D.atan2(dx, -dz) });
+    }
+  }
+  // The valley floods nearest the dam first, the lowest ground deepest.
+  const order = plain
+    .map((k) => ({ k, d: D.hypot(field.vertexX(k % stride) - sx, field.vertexZ(Math.floor(k / stride)) - sz) }))
+    .sort((p, q) => p.d - q.d || p.k - q.k);
+  out.flood = {
+    x: sx,
+    z: sz,
+    verts: order.map((v) => v.k),
+    dist: order.map((v) => v.d),
+    to: order.map((v) => sea - 0.4 - 0.8 * Math.min(1, (top - heights[v.k]) / FLOOD_TOP)),
+    ...(pooled ? { pool: pooled.pool } : {}),
+  };
+  out.sites.push({ kind: 'dam', x: sx, z: sz, radius: 0 });
+  // The sluice house: on dry ground above the valley, by the dam (and clear of the reservoir's banks, which its levelling would breach).
+  const inPlain = new Set(plain);
+  const pool = pooled?.pool;
+  let spot: { x: number; z: number } | null = null;
+  for (let r = SLUICE_RADIUS + 3; r <= SLUICE_REACH && !spot; r += 1.5) {
+    for (let a = 0; a < 24 && !spot; a++) {
+      const x = sx + D.cos((a / 24) * Math.PI * 2) * r;
+      const z = sz + D.sin((a / 24) * Math.PI * 2) * r;
+      if (!field.contains(x, z, SLUICE_RADIUS + 2) || field.heightAt(x, z) < sea + 0.5) continue;
+      let ok = true;
+      for (let b = 0; b < 8 && ok; b++) {
+        const px = x + D.cos((b / 8) * Math.PI * 2) * SLUICE_RADIUS;
+        const pz = z + D.sin((b / 8) * Math.PI * 2) * SLUICE_RADIUS;
+        const vi = Math.round((px - field.bounds.minX) / field.config.cellSize);
+        const vj = Math.round((pz - field.bounds.minZ) / field.config.cellSize);
+        if (field.heightAt(px, pz) < sea + 0.3 || inPlain.has(vj * stride + vi) || field.slopeAt(px, pz) > 0.9 || field.sheerAt(px, pz)) ok = false;
+      }
+      if (!ok || field.nearBridge(x, z, SLUICE_RADIUS + 2)) continue;
+      if (pool && D.hypot(pool.x - x, pool.z - z) < pool.radius * POOL_REACH + SLUICE_RADIUS + 1) continue;
+      // None of the valley under it: its levelling would be flooded.
+      if (plain.some((k) => D.hypot(field.vertexX(k % stride) - x, field.vertexZ(Math.floor(k / stride)) - z) < SLUICE_RADIUS * 1.3 + 1.5)) continue;
+      if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + SLUICE_RADIUS + 4)) continue;
+      if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + SLUICE_RADIUS + 4)) continue;
+      if (field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + SLUICE_RADIUS)) continue;
+      spot = { x, z };
+    }
+  }
+  if (spot) {
+    const height = Math.max(sea + 0.6, field.heightAt(spot.x, spot.z));
+    field.outpostSites.push({ index: field.outpostSites.length, kind: 'sluice', x: spot.x, z: spot.z, radius: SLUICE_RADIUS, height });
+    flatten(spot.x, spot.z, SLUICE_RADIUS, height);
+  }
+}
+
+/**
+ * A dam's reservoir: its radius; how far its water stands above the sea (as
+ * near the top of its banks as the ground round it allows, up to a little
+ * below the dam's top); how far its banks stand above that; and how far out
+ * its banks reach (in radii).
+ */
+const POOL_RADII = [8, 6];
+/** How many of the likeliest valleys are tried for a reservoir before the dam goes offshore. */
+const POOL_VALLEYS = 5;
+const POOL_RISE = 1.6;
+const POOL_RISE_MOST = 2.3;
+const POOL_BANK = 0.3;
+const POOL_REACH = 1.6;
+/** How much of the reservoir's round the dam cuts off (its water face this far in from the edge). */
+const POOL_CUT = 1.2;
+/** Half the dam's thickness (see bld:dam), and how far down the valley from it the ground is lowered to the valley floor. */
+const DAM_HALF = 0.7;
+const SPILLWAY = 8;
+/** Candidate dam spots tried, and of those the best few laid out (each checked for cutting anything off). */
+const POOL_TRIES = 48;
+const POOL_LAYOUTS = 4;
+
+/**
+ * Lay out a reservoir up at the head of a valley: a round lake dug into the
+ * higher ground beyond the valley's edge, its banks built up where they're
+ * too low to hold it, and the dam across its mouth, with a spillway down
+ * from the dam to the valley floor. The valley's end furthest from the sea
+ * is best, so the flood runs the length of it. Returns the dam's middle,
+ * the reservoir, and the valley's vertices (now with the spillway, less any
+ * ground the banks raised); or null (and the map as it was) if there's no
+ * room, or the reservoir would cut a base, outpost or town off.
+ */
+function reservoir(field: Battlefield, region: number[], shore: number, rng: Rng, radius: number): { x: number; z: number; pool: Reservoir; verts: number[] } | null {
+  const { cols, rows } = field.config;
+  const stride = cols + 1;
+  const heights = field.heights;
+  const sea = field.seaLevel;
+  const top = sea + FLOOD_TOP;
+  const vx = (k: number) => field.vertexX(k % stride);
+  const vz = (k: number) => field.vertexZ(Math.floor(k / stride));
+  const R = radius;
+  const cut = R - POOL_CUT;
+  const span = (DAM_SEGMENTS * DAM_STEP) / 2;
+  const reach = R * POOL_REACH;
+  const sx = vx(shore);
+  const sz = vz(shore);
+  const nearRoad = (x: number, z: number, margin: number) =>
+    field.roads.some((r) =>
+      r.points.some((p, q) => {
+        if (q === 0) return false;
+        const o = r.points[q - 1];
+        const dx = p.x - o.x;
+        const dz = p.z - o.z;
+        const t = Math.max(0, Math.min(1, ((x - o.x) * dx + (z - o.z) * dz) / Math.max(1e-6, dx * dx + dz * dz)));
+        return D.hypot(x - o.x - dx * t, z - o.z - dz * t) < margin + r.width / 2;
+      }),
+    );
+  // The valley's edge: its vertices beside higher ground.
+  const edge = region.filter((k) => {
+    const i = k % stride;
+    const j = (k - i) / stride;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => i + di >= 0 && j + dj >= 0 && i + di <= cols && j + dj <= rows && heights[(j + dj) * stride + i + di] >= top);
+  });
+  if (edge.length === 0) return null;
+  const options: { score: number; dx: number; dz: number; cx: number; cz: number; ux: number; uz: number; level: number }[] = [];
+  for (let n = 0; n < POOL_TRIES; n++) {
+    const k = edge[rng.int(0, edge.length - 1)];
+    const x = vx(k);
+    const z = vz(k);
+    // Up out of the valley: away from the valley ground round it.
+    let mx = 0;
+    let mz = 0;
+    let count = 0;
+    for (const m of region) {
+      const d = D.hypot(vx(m) - x, vz(m) - z);
+      if (d > 6) continue;
+      mx += vx(m);
+      mz += vz(m);
+      count++;
+    }
+    const ax = x - mx / count;
+    const az = z - mz / count;
+    const len = D.hypot(ax, az);
+    if (len < 0.3) continue;
+    const ux = ax / len;
+    const uz = az / len;
+    const dx = x + ux;
+    const dz = z + uz;
+    const cx = dx + ux * (DAM_HALF + cut);
+    const cz = dz + uz * (DAM_HALF + cut);
+    if (!field.contains(cx, cz, reach + 2)) continue;
+    const clear = (px: number, pz: number, room: number) =>
+      !field.baseSites.some((b) => D.hypot(b.x - px, b.z - pz) < b.radius + room) &&
+      !field.outpostSites.some((o) => D.hypot(o.x - px, o.z - pz) < o.radius + room) &&
+      !field.townSites.some((t) => D.hypot(t.x - px, t.z - pz) < t.radius + room) &&
+      !field.inCity(px, pz, room) &&
+      !field.nearBridge(px, pz, room) &&
+      !nearRoad(px, pz, room);
+    if (!clear(cx, cz, reach + 3) || !clear(dx, dz, span + 2)) continue;
+    // High ground to dig into, not more of the valley.
+    let low = 0;
+    let wet = 0;
+    const rims: number[] = [];
+    for (let a = 0; a < 16; a++) {
+      const ang = (a / 16) * Math.PI * 2;
+      const ca = D.cos(ang);
+      const sa = D.sin(ang);
+      for (const f of [0.3, 0.7]) if (field.heightAt(cx + ca * R * f, cz + sa * R * f) < sea + 0.4) low++;
+      const h = field.heightAt(cx + ca * R * 1.15, cz + sa * R * 1.15);
+      if (h < sea) wet++;
+      // The banks round it, but for the dam's side.
+      if (ca * ux + sa * uz > -0.6) rims.push(h);
+    }
+    if (low > 6 || wet > 0) continue;
+    // The water up near the top of the lowest bank (the rest is built up to hold it).
+    rims.sort((p, q) => p - q);
+    const level = Math.max(sea + POOL_RISE, Math.min(sea + POOL_RISE_MOST, rims[1] - POOL_BANK));
+    const built = rims.reduce((sum, h) => sum + Math.max(0, level + POOL_BANK - h), 0) / rims.length;
+    // Not dug deep into a hill, its water far down a pit.
+    const sunk = rims.reduce((sum, h) => sum + Math.max(0, h - level - 1.5), 0) / rims.length;
+    // The far end of the valley from the sea, so the flood runs its length, and banks that mostly stand already.
+    const score = -D.hypot(x - sx, z - sz) + built * 6 + sunk * 8;
+    options.push({ score, dx, dz, cx, cz, ux, uz, level });
+  }
+  options.sort((p, q) => p.score - q.score);
+  for (const o of options.slice(0, POOL_LAYOUTS)) {
+    const before = heights.slice();
+    const bank = o.level + POOL_BANK;
+    const vx0 = -o.uz;
+    const vz0 = o.ux;
+    const channel: number[] = [];
+    const i0 = Math.max(0, Math.floor((Math.min(o.cx, o.dx) - reach - SPILLWAY - field.bounds.minX) / field.config.cellSize));
+    const i1 = Math.min(cols, Math.ceil((Math.max(o.cx, o.dx) + reach + SPILLWAY - field.bounds.minX) / field.config.cellSize));
+    const j0 = Math.max(0, Math.floor((Math.min(o.cz, o.dz) - reach - SPILLWAY - field.bounds.minZ) / field.config.cellSize));
+    const j1 = Math.min(rows, Math.ceil((Math.max(o.cz, o.dz) + reach + SPILLWAY - field.bounds.minZ) / field.config.cellSize));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const k = j * stride + i;
+        const x = field.vertexX(i);
+        const z = field.vertexZ(j);
+        // The spillway: from the dam's water face down the valley, as wide as the dam, at the valley floor.
+        const s = (x - o.dx) * o.ux + (z - o.dz) * o.uz;
+        if (Math.abs((x - o.dx) * vx0 + (z - o.dz) * vz0) <= span && s <= DAM_HALF && s >= -SPILLWAY) {
+          heights[k] = Math.min(heights[k], sea + 0.55);
+          channel.push(k);
+          continue;
+        }
+        const e = D.hypot(x - o.cx, z - o.cz) / R;
+        const h = heights[k];
+        // The bed, under the sea (so it's water), deepest in the middle.
+        if (e < 1) heights[k] = Math.min(h, sea - 0.25 - (1 - e * e));
+        // The banks, built up to hold the water where the ground's too low, easing back down outside.
+        else if (e < 1.3) heights[k] = Math.max(h, bank);
+        else if (e < POOL_REACH && h < bank) {
+          const t = (e - 1.3) / (POOL_REACH - 1.3);
+          heights[k] = bank + (h - bank) * t * t * (3 - 2 * t);
+        }
+      }
+    }
+    // Nothing cut off by it: every base, outpost and town still in reach by land.
+    const reachable = landReach(field);
+    const at = (x: number, z: number) => Math.max(0, Math.min(rows, Math.round((z - field.bounds.minZ) / field.config.cellSize))) * stride + Math.max(0, Math.min(cols, Math.round((x - field.bounds.minX) / field.config.cellSize)));
+    if (![...field.baseSites, ...field.outpostSites, ...field.townSites].every((p) => reachable[at(p.x, p.z)])) {
+      heights.set(before);
+      continue;
+    }
+    const verts = [...new Set([...region, ...channel])].filter((k) => heights[k] >= sea && heights[k] < top);
+    // Most of the valley still there to flood (the banks haven't built over it).
+    if (verts.length < Math.max(FLOOD_LEAST, region.length * 0.8)) {
+      heights.set(before);
+      continue;
+    }
+    return { x: o.dx, z: o.dz, pool: { x: o.cx, z: o.cz, ux: o.ux, uz: o.uz, radius: R, cut, level: o.level }, verts };
+  }
+  return null;
+}
+
+/** How much further the way round by land (in steps across map cells, not as the crow flies) must be than a bar, for the bar to be worth laying; and how many crossings are measured. */
+const FLAT_DETOUR = 2;
+const FLAT_CHECKED = 150;
+
+/** How far it is to walk on dry land (or bridges) from one point to another, in map cells' widths; Infinity if there's no way. */
+function landWalk(field: Battlefield, ax: number, az: number, bx: number, bz: number): number {
+  const { cols, rows, cellSize } = field.config;
+  const [ai, aj] = field.cellAt(ax, az);
+  const [bi, bj] = field.cellAt(bx, bz);
+  const goal = bj * cols + bi;
+  const seen = new Int32Array(cols * rows).fill(-1);
+  const queue = new Int32Array(cols * rows);
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = aj * cols + ai;
+  seen[aj * cols + ai] = 0;
+  while (head < tail) {
+    const k = queue[head++];
+    if (k === goal) return seen[k] * cellSize;
+    const i = k % cols;
+    const j = (k - i) / cols;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di;
+      const nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+      const n = nj * cols + ni;
+      if (seen[n] >= 0) continue;
+      const x = field.bounds.minX + (ni + 0.5) * cellSize;
+      const z = field.bounds.minZ + (nj + 0.5) * cellSize;
+      if (n !== goal && field.heightAt(x, z) < field.seaLevel && field.deckAt(x, z) === null) continue;
+      if (field.sheerAt(x, z)) continue;
+      seen[n] = seen[k] + 1;
+      queue[tail++] = n;
+    }
+  }
+  return Infinity;
+}
+
+/** Distance from a point to the segment a-b. */
+function segmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / len2)) : 0;
+  return D.hypot(x - ax - dx * t, z - az - dz * t);
+}
 
 /** Each map vertex within `reach` of a point (a square round it). */
 function eachVertex(field: Battlefield, x: number, z: number, reach: number, visit: (k: number, vx: number, vz: number) => void): void {

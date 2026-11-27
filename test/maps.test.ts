@@ -430,6 +430,8 @@ describe('maps', () => {
       for (let seed = 1; seed <= 6; seed++) {
         const s = defaultSettings();
         s.map.traits = [trait];
+        // (Tidal flats need water to lay their bars across.)
+        if (trait === 'tidal') s.map.water = 0.7;
         const f = generateBattlefield(new Rng(seed * 101), battlefieldConfig(s));
         const reach = landReach(f);
         for (const b of f.baseSites) expect(reach[vertexAt(f, b.x, b.z)]).toBe(1);

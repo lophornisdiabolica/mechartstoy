@@ -92,6 +92,7 @@ export function settingsToParams(s: BattleSettings): URLSearchParams {
   if (s.map.townLife !== d.map.townLife) p.set('folk', s.map.townLife ? '1' : '0');
   if (s.map.city !== d.map.city) p.set('city', String(CITY_MODES.indexOf(s.map.city)));
   if (s.map.craters !== d.map.craters) p.set('crater', s.map.craters ? '1' : '0');
+  if (s.map.bridgesFall) p.set('bfall', '1');
   if (s.map.outposts !== d.map.outposts) p.set('outposts', String(s.map.outposts));
   if (s.map.outpostKinds.join(',') !== d.map.outpostKinds.join(',')) p.set('okinds', s.map.outpostKinds.join(',') || 'supply');
   // Hand-placed spots: "x,z;x,z", in fractions of the map's half-width and half-depth.
@@ -192,6 +193,8 @@ export function applyParams(s: BattleSettings, p: URLSearchParams): void {
   if (city === '0' || city === '1' || city === '2') s.map.city = CITY_MODES[Number(city)];
   const crater = p.get('crater');
   if (crater === '0' || crater === '1') s.map.craters = crater === '1';
+  const bfall = p.get('bfall');
+  if (bfall === '0' || bfall === '1') s.map.bridgesFall = bfall === '1';
   const outposts = p.get('outposts');
   if (outposts !== null && outposts !== 'auto' && outposts.trim() !== '' && Number.isFinite(Number(outposts))) {
     s.map.outposts = Math.round(clamp(Number(outposts), 'outposts'));

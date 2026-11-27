@@ -168,7 +168,7 @@ export function rollBattle(base: BattleSettings, rng: Rng): Roll {
     s.map.mountains = style.mountains ?? 0;
     s.map.cliffs = style.cliffs ?? 0;
     // Most maps get a trait or two for a headline (on a stream of their own, so the rest of the roll is as it was).
-    s.map.traits = rollTraits(rng.fork(0x74726169));
+    s.map.traits = rollTraits(rng.fork(0x74726169), s.map.water >= 0.5);
     s.map.towns = style.towns;
     s.map.townSize = style.townSize;
     // Always drawn, so the rest of the roll doesn't depend on the style.
@@ -276,11 +276,14 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
   return items;
 }
 
-/** Traits for a rolled map style: none about a third of the time, else one, now and then two. */
-export function rollTraits(rng: Rng): MapTrait[] {
+/** Traits that need water to be laid: only rolled for a wet map. */
+const WET_TRAITS: MapTrait[] = ['tidal', 'dam', 'frozen'];
+
+/** Traits for a rolled map style: none about a third of the time, else one, now and then two (the watery ones only on a wet map). */
+export function rollTraits(rng: Rng, wet = true): MapTrait[] {
   const roll = rng.next();
   const count = roll < 0.35 ? 0 : roll < 0.85 ? 1 : 2;
-  const pool = [...MAP_TRAIT_IDS];
+  const pool = MAP_TRAIT_IDS.filter((t) => wet || !WET_TRAITS.includes(t));
   const out: MapTrait[] = [];
   for (let n = 0; n < count; n++) out.push(...pool.splice(Math.floor(rng.next() * pool.length), 1));
   return MAP_TRAIT_IDS.filter((t) => out.includes(t));
