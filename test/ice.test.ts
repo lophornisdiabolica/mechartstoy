@@ -80,22 +80,30 @@ describe('frozen lake trait', () => {
     expect(game.ctx.navs.for('walker').costAt(p.x, p.z)).toBeGreaterThan(game.ctx.navs.for('foot').costAt(p.x, p.z));
   });
 
-  it('leaves a lake with a road or bridge over or beside it unfrozen', () => {
+  it("cuts a city's roads off a lake it freezes over, rather than leaving them across the ice", () => {
     let lakes = 0;
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
       const s = settings();
-      s.map.towns = 6;
+      s.map.city = 'sprawl';
       const field = generateBattlefield(new Rng(seed), battlefieldConfig(s));
       const sheet = field.traits.ice;
       if (!sheet) continue;
       lakes++;
       const stride = field.config.cols + 1;
-      for (const k of sheet.verts) {
-        const x = field.vertexX(k % stride);
-        const z = field.vertexZ(Math.floor(k / stride));
-        expect(field.nearBridge(x, z, 0.5)).toBe(false);
-        for (const r of field.roads) for (const p of r.points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThan(r.width / 2);
+      const ice = sheet.verts.map((k) => ({ x: field.vertexX(k % stride), z: field.vertexZ(Math.floor(k / stride)) }));
+      for (const r of field.roads) {
+        expect(r.points.length).toBeGreaterThanOrEqual(2);
+        for (let q = 1; q < r.points.length; q++) {
+          const a = r.points[q - 1];
+          const b = r.points[q];
+          for (let t = 0; t <= 1; t += 0.1) {
+            const x = a.x + (b.x - a.x) * t;
+            const z = a.z + (b.z - a.z) * t;
+            for (const v of ice) expect(Math.hypot(v.x - x, v.z - z)).toBeGreaterThan(r.width / 2);
+          }
+        }
       }
+      for (const j of field.junctions) for (const k of j.roads) expect(field.roads[k]).toBeDefined();
     }
     expect(lakes).toBeGreaterThan(2);
   });

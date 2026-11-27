@@ -877,28 +877,6 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
   const heights = field.heights;
   const sea = field.seaLevel;
   const seen = new Uint8Array(stride * (rows + 1));
-  // Vertices a road or bridge runs over or beside: a lake under one stays water (its bridge would come down over dry ice, leaving the road across it).
-  const used = new Uint8Array(stride * (rows + 1));
-  const mark = (x: number, z: number, r: number) => {
-    const cs = field.config.cellSize;
-    const i0 = Math.max(0, Math.floor((x - r - field.bounds.minX) / cs));
-    const i1 = Math.min(cols, Math.ceil((x + r - field.bounds.minX) / cs));
-    const j0 = Math.max(0, Math.floor((z - r - field.bounds.minZ) / cs));
-    const j1 = Math.min(rows, Math.ceil((z + r - field.bounds.minZ) / cs));
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) used[j * stride + i] = 1;
-  };
-  for (const r of field.roads) {
-    for (let q = 1; q < r.points.length; q++) {
-      const a = r.points[q - 1];
-      const b = r.points[q];
-      const n = Math.max(1, Math.ceil(D.hypot(b.x - a.x, b.z - a.z) / 0.75));
-      for (let t = 0; t <= n; t++) mark(a.x + ((b.x - a.x) * t) / n, a.z + ((b.z - a.z) * t) / n, r.width / 2 + 1);
-    }
-  }
-  for (const b of field.bridges) {
-    const n = Math.max(1, Math.ceil(D.hypot(b.bx - b.ax, b.bz - b.az) / 0.75));
-    for (let t = 0; t <= n; t++) mark(b.ax + ((b.bx - b.ax) * t) / n, b.az + ((b.bz - b.az) * t) / n, b.width / 2 + 1);
-  }
   let best: { verts: number[]; score: number } | null = null;
   for (let k0 = 0; k0 < heights.length; k0++) {
     if (seen[k0] || heights[k0] >= sea) continue;
@@ -909,7 +887,6 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
     while (queue.length > 0) {
       const k = queue.pop()!;
       verts.push(k);
-      if (used[k]) edge = true;
       const i = k % stride;
       const j = (k - i) / stride;
       if (i === 0 || j === 0 || i === cols || j === rows) edge = true;
@@ -923,7 +900,6 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
         queue.push(m);
       }
     }
-    // (Nor one reaching the map's edge, or with a road or bridge over it.)
     if (edge || verts.length < ICE_LEAST || verts.length > ICE_MOST) continue;
     let cx = 0;
     let cz = 0;
@@ -949,6 +925,7 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
     for (const [ci, cj] of [[i, j], [i - 1, j], [i, j - 1], [i - 1, j - 1]]) if (ci >= 0 && cj >= 0 && ci < cols && cj < rows) cells.add(cj * cols + ci);
   }
   field.setGround([...cells], 'ice');
+  offIce(field, new Set(best.verts));
   out.ice = sheet;
   let cx = 0;
   let cz = 0;
@@ -957,6 +934,98 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
     cz += field.vertexZ(Math.floor(k / stride));
   }
   out.sites.push({ kind: 'frozen', x: cx / best.verts.length, z: cz / best.verts.length, radius: 0 });
+}
+
+/** How far clear of the ice (past a road's own half-width) what's left of a road over it stops. */
+const ICE_ROAD_CLEAR = 0.4;
+/** How far apart along a road it's checked for ice. */
+const ICE_ROAD_STEP = 0.5;
+
+/**
+ * Cut the roads off a lake that's frozen over (a city's alleys and streets
+ * run over its water, out of sight under it, and the ice would bring them up
+ * into view): each road keeps its stretches clear of the ice, as roads of
+ * their own, and loses the rest. A bridge over the lake comes down later as
+ * standing over dry ground (see battlefield.ts dropDryBridges), its road cut
+ * here with the rest.
+ */
+function offIce(field: Battlefield, ice: Set<number>): void {
+  const stride = field.config.cols + 1;
+  const cs = field.config.cellSize;
+  const onIce = (x: number, z: number, r: number) => {
+    const i0 = Math.floor((x - r - field.bounds.minX) / cs);
+    const i1 = Math.ceil((x + r - field.bounds.minX) / cs);
+    const j0 = Math.floor((z - r - field.bounds.minZ) / cs);
+    const j1 = Math.ceil((z + r - field.bounds.minZ) / cs);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        if (i < 0 || j < 0 || i >= stride || !ice.has(j * stride + i)) continue;
+        if (D.hypot(field.vertexX(i) - x, field.vertexZ(j) - z) <= r) return true;
+      }
+    }
+    return false;
+  };
+  const gone: number[] = [];
+  const count = field.roads.length;
+  for (let k = 0; k < count; k++) {
+    const road = field.roads[k];
+    const runs: { points: { x: number; z: number }[]; widths: number[] }[] = [];
+    let run: { points: { x: number; z: number }[]; widths: number[] } | null = null;
+    let cut = false;
+    // Along the road in short steps (a city's alley is one straight stretch, which can cross a corner of the lake between its ends).
+    const visit = (x: number, z: number, w: number, corner: boolean) => {
+      if (onIce(x, z, w / 2 + ICE_ROAD_CLEAR)) {
+        // The run ends at the last clear step before the ice.
+        if (run && last && !last.corner) {
+          run.points.push({ x: last.x, z: last.z });
+          run.widths.push(last.w);
+        }
+        run = null;
+        cut = true;
+        last = null;
+        return;
+      }
+      if (!run) {
+        run = { points: [], widths: [] };
+        runs.push(run);
+        if (!corner) {
+          run.points.push({ x, z });
+          run.widths.push(w);
+        }
+      }
+      if (corner) {
+        run.points.push({ x, z });
+        run.widths.push(w);
+      }
+      last = { x, z, w, corner };
+    };
+    let last: { x: number; z: number; w: number; corner: boolean } | null = null;
+    road.points.forEach((p, q) => {
+      const w = road.widths?.[q] ?? road.width;
+      if (q > 0) {
+        const o = road.points[q - 1];
+        const ow = road.widths?.[q - 1] ?? road.width;
+        const n = Math.ceil(D.hypot(p.x - o.x, p.z - o.z) / ICE_ROAD_STEP);
+        for (let t = 1; t < n; t++) visit(o.x + ((p.x - o.x) * t) / n, o.z + ((p.z - o.z) * t) / n, ow + ((w - ow) * t) / n, false);
+      }
+      visit(p.x, p.z, w, true);
+    });
+    if (!cut) continue;
+    const kept = runs.filter((r) => r.points.length >= 2);
+    const as = (r: { points: { x: number; z: number }[]; widths: number[] }) => (road.widths ? { ...road, points: r.points, widths: r.widths } : { ...road, points: r.points });
+    if (kept.length === 0) gone.push(k);
+    else field.roads[k] = as(kept[0]);
+    for (const r of kept.slice(1)) field.roads.push(as(r));
+  }
+  // Roads left with nothing taken out of the list, and the junctions on them with them.
+  for (const k of gone.reverse()) {
+    field.roads.splice(k, 1);
+    for (let n = field.junctions.length - 1; n >= 0; n--) {
+      const j = field.junctions[n];
+      if (j.roads.includes(k)) field.junctions.splice(n, 1);
+      else j.roads = j.roads.map((r) => (r > k ? r - 1 : r));
+    }
+  }
 }
 
 /** Dam: the highest ground (above the sea) that floods, the most and least of the valley (in map vertices), and the dam's length. */
