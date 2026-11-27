@@ -2,6 +2,7 @@ import { createNoise2D } from 'simplex-noise';
 import { Rng } from '../core/rng';
 import type { Battlefield } from './battlefield';
 import { groundCode } from './ground';
+import { GIANT } from './traits';
 import * as D from '../core/dmath';
 
 /**
@@ -46,6 +47,8 @@ const WEAR = 0.06;
 const SINK_STEPS = 4;
 /** Trees per map cell of dense forest. */
 const PER_CELL = 2;
+/** Smallest footprint (radius) of a machine that pushes over a grove's giants (see traits.ts): super units. */
+const GIANT_CRUSHER = 1.8;
 
 export interface Tree {
   x: number;
@@ -82,7 +85,8 @@ export class Woods {
 
   add(x: number, z: number, size: number): void {
     const index = this.trees.length;
-    this.trees.push({ x, z, y: this.field.heightAt(x, z), hp: TREE_HP, fell: null, size, sunk: 0 });
+    // A grove's giants (see traits.ts) take far more felling.
+    this.trees.push({ x, z, y: this.field.heightAt(x, z), hp: size >= GIANT ? TREE_HP * size * size * 2 : TREE_HP, fell: null, size, sunk: 0 });
     const cell = this.cellOf(x, z);
     const list = this.byCell.get(cell);
     if (list) list.push(index);
@@ -229,6 +233,8 @@ export class Woods {
     for (const t of [...this.standingNear(x, z, radius)]) {
       const tree = this.trees[t];
       if (D.hypot(tree.x - x, tree.z - z) > radius + TREE_RADIUS) continue;
+      // Only the biggest machines push over a giant.
+      if (tree.size >= GIANT && radius < GIANT_CRUSHER) continue;
       this.fell(t, from);
       n++;
     }
@@ -258,8 +264,9 @@ export class Woods {
         const oz = tree.z - z;
         const along = ox * ux + oz * uz;
         const off2 = ox * ox + oz * oz - along * along;
-        if (off2 > TREE_RADIUS * TREE_RADIUS) continue;
-        const enter = along - Math.sqrt(TREE_RADIUS * TREE_RADIUS - off2);
+        const r = tree.size >= GIANT ? TREE_RADIUS * tree.size : TREE_RADIUS;
+        if (off2 > r * r) continue;
+        const enter = along - Math.sqrt(r * r - off2);
         if (enter < 0.3 || enter > end) continue;
         const y = yAt(enter);
         if (y < tree.y - 0.2 || y > tree.y + TREE_HEIGHT * tree.size) continue;
@@ -292,6 +299,7 @@ export function growWoods(field: Battlefield, rng: Rng, amount: number): void {
   // Noise is roughly normal round 0: this threshold leaves about `amount` of the cells above it.
   const threshold = 0.75 - amount * 1.2;
   const cells: number[] = [];
+  const traits = field.traits.sites.length > 0 || field.traits.relics.length > 0;
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const x = field.bounds.minX + (i + 0.5) * cellSize;
@@ -303,6 +311,8 @@ export function growWoods(field: Battlefield, rng: Rng, amount: number): void {
       if (field.baseSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 6)) continue;
       if (field.townSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
       if (field.outpostSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 3)) continue;
+      // Traits keep their ground (a grove grows its own trees).
+      if (traits && (field.traits.sites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius + 2) || field.traits.relics.some((r) => D.hypot(r.x - x, r.z - z) < 3))) continue;
       cells.push(j * cols + i);
       for (let k = 0; k < PER_CELL; k++) {
         // Spread round the cell, kept off its edges a little.

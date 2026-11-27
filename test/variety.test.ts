@@ -1,3 +1,4 @@
+import { BIOME_IDS } from '../src/world/biomes';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { DOCTRINE_IDS } from '../src/game/doctrines';
@@ -20,14 +21,14 @@ describe('variety between battles', () => {
     s.variety.roll.biome = true;
     s.map.water = 0.9;
     const seen = new Set<string>();
-    for (let k = 0; k < 40; k++) {
+    for (let k = 0; k < 80; k++) {
       const r = rollBattle(s, new Rng(k)).settings;
       seen.add(r.map.biome);
       expect(r.map.water).toBe(0.9);
       expect(r.map.size).toBe(s.map.size);
       expect(r.factions).toEqual(s.factions);
     }
-    expect(seen.size).toBe(4);
+    expect(seen.size).toBe(BIOME_IDS.length);
   });
 
   it('a locked side stays in every re-roll with its doctrine, name and colour', () => {

@@ -1,7 +1,7 @@
 import { Entity, System, World } from '../core/ecs';
 import { Battlefield } from '../world/battlefield';
 import { MOVE_RULES } from '../world/moveClasses';
-import { Armed, Arsenal, Building, Construction, Faction, Mover, Transform, Unit, Veiled } from './components';
+import { Armed, Arsenal, Building, Construction, Faction, Mover, NEUTRAL, Transform, Unit, Veiled } from './components';
 import { SimContext } from './context';
 import * as D from '../core/dmath';
 
@@ -139,6 +139,13 @@ export class SmokeField {
     return k >= 0 && this.smoke[k] >= THICK && ctx.sides.allied(this.owner[k], faction);
   }
 
+  /** Whether a point is in nobody's haze: a geyser's steam or an oil fire's smoke (see traits.ts), which hides anyone. */
+  nobodysAt(x: number, z: number): boolean {
+    if (this.active.length === 0) return false;
+    const k = this.cellAt(x, z);
+    return k >= 0 && this.smoke[k] >= THICK && this.owner[k] === NEUTRAL;
+  }
+
   thin(dt: number): void {
     if (this.active.length === 0) return;
     const next: number[] = [];
@@ -215,7 +222,7 @@ export function hazeSpread(ctx: SimContext, x0: number, z0: number, x1: number, 
 function inCover(world: World, ctx: SimContext, e: Entity, x: number, z: number): boolean {
   if (ctx.field.woods.hasTreesAt(x, z)) return true;
   const faction = world.req(e, Faction).id;
-  if (ctx.smoke.ownAt(ctx, x, z, faction)) return true;
+  if (ctx.smoke.ownAt(ctx, x, z, faction) || ctx.smoke.nobodysAt(x, z)) return true;
   let by = false;
   ctx.grid.forEachNear(x, z, BY_BUILDING + 6, (_other, d2, body) => {
     if (by || !body.building) return;

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { BIOMES } from '../world/biomes';
 import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
+import { groundCode } from '../world/ground';
 import { TREE_HEIGHT } from '../world/woods';
 import { cactusGeometry, Detail, pineGeometry, treeGeometry } from './propsMesh';
 import { PlantMesh, PlantShapes } from './plantLod';
@@ -41,14 +43,14 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const group = new THREE.Group();
   group.name = 'woods';
   const trees = field.woods.trees;
-  const biome = field.config.biome;
-  const desert = biome === 'desert';
-  const shape = (d: Detail) => (desert ? cactusGeometry(d) : biome === 'snow' ? pineGeometry(true, d) : biome === 'forest' || biome === 'temperate' ? pineGeometry(false, d) : treeGeometry(d));
+  const woods = BIOMES[field.config.biome].woods;
+  const desert = woods.plant === 'cactus';
+  const shape = (d: Detail) => (desert ? cactusGeometry(d) : woods.plant === 'snowPine' ? pineGeometry(true, d) : woods.plant === 'pine' ? pineGeometry(false, d) : treeGeometry(d));
   const shapes: PlantShapes = { near: shape('near'), far: shape('far'), shadow: shape('shadow') };
   /** Every square's mesh, for setFar. */
   const meshes: PlantMesh[] = [];
   let far = false;
-  const tint = desert ? 0x5f8a4a : biome === 'snow' || biome === 'forest' || biome === 'temperate' ? 0xc8d2c0 : 0x3f6a34;
+  const tint = woods.tint;
   const heightAtScale1 = desert ? CACTUS_HEIGHT : GEOMETRY_HEIGHT;
   const slim = desert ? 0.7 : 1;
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
@@ -56,6 +58,13 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const base = new THREE.Color(tint);
   // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki.
   const fallen = new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
+  // Trees a wildfire brought down lie charred on the burnt ground (see game/wildfire.ts).
+  const charred = new THREE.Color(0x2e2925);
+  const burnt = groundCode('burnt');
+  const downColour = (k: number) => {
+    const [i, j] = field.cellAt(trees[k].x, trees[k].z);
+    return field.ground[j * field.config.cols + i] === burnt ? charred : fallen;
+  };
   /** Per tree: the mesh its plants are in, and their instances there. */
   const drawn = new Map<number, { mesh: THREE.InstancedMesh; plants: Plant[]; instances: number[] }>();
   const { minX, minZ } = field.bounds;
@@ -112,7 +121,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
     const mesh = lod.mesh;
     plants.forEach((p, i) => {
       place(mesh, p, i);
-      mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : fallen);
+      mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : downColour(p.tree));
       let entry = drawn.get(p.tree);
       if (!entry) drawn.set(p.tree, (entry = { mesh, plants: [], instances: [] }));
       entry.plants.push(p);
@@ -132,7 +141,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       place(entry.mesh, p, i);
       markRange(entry.mesh.instanceMatrix, i * 16, 16);
       if (colour && entry.mesh.instanceColor) {
-        entry.mesh.setColorAt(i, fallen);
+        entry.mesh.setColorAt(i, downColour(k));
         markRange(entry.mesh.instanceColor, i * 3, 3);
       }
     });

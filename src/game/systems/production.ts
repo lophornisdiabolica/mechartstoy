@@ -103,6 +103,12 @@ function launchFlagship(world: World, ctx: SimContext, e: number, producer: Prod
   producer.flagshipTimer = producer.flagshipInterval!;
 }
 
+/** Whether a producer's batches are aircraft, or come down in drop pods (see zenith.ts). */
+function fliesOrDrops(ctx: SimContext, building: string, table: { unit: UnitId }[], faction: number): boolean {
+  if (table.some((p) => ctx.units[p.unit].category === 'air')) return true;
+  return faction >= 0 && (doctrineOf(ctx, faction).drops?.includes(building as never) ?? false);
+}
+
 /** The Commander's factor on a unit's production weight for a side. */
 function advice(ctx: SimContext, faction: number, unit: UnitId): number {
   const side = ctx.commander.sides[faction];
@@ -138,7 +144,10 @@ export function productionSystem(ctx: SimContext): System {
         const band = ctx.settings.mode !== 'eternal' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
         // An outpost adds the same to every side, not a share of a big side's boosted rate.
         const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
-        const rate = armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
+        // A landing field speeds up what flies or drops: aircraft factories and a drop side's drops.
+        const air = outpostBonus(ctx, faction, 'air');
+        const lift = air > 0 && fliesOrDrops(ctx, world.req(e, Building).def.id, producer.table, faction) ? 1 + air : 1;
+        const rate = armies.production * strength * lift * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
         producer.timer -= dt * rate;
         if (producer.flagship !== undefined && producer.flagshipTimer !== undefined) {
           producer.flagshipTimer -= dt * rate;
