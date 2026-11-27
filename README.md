@@ -896,7 +896,7 @@ src/
     mapPicture.ts    top-down map pictures as RGBA pixels (setup map, npm run map)
     woods.ts         dense forest: trees that stop shots, fall to them and get flattened by vehicles
     ground.ts        kinds of ground (plain, road, scrap, dense forest) and what they cost each movement class
-    waterways.ts     channels joining the bases' water, and bridges (fitted to their banks) wherever water cuts the land
+    waterways.ts     channels joining the bases' water, and bridges (fitted to their banks, sloping from a low bank up to a high one) wherever water cuts the land
     biomes.ts        biomes: colours, scenery mix and town style
     props.ts         scenery placement (the biome's trees, cacti, rocks...)
     settlements.ts   base and town layouts (building placements as data)

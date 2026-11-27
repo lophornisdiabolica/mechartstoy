@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { markRange } from './upload';
 import { RoadTops } from './roadTops';
 import { Rng } from '../core/rng';
-import { Battlefield, Bridge, RAMP_FLARE, Road } from '../world/battlefield';
+import { Battlefield, Bridge, Road } from '../world/battlefield';
 import { BIOMES } from '../world/biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS } from '../world/ground';
 
@@ -679,9 +679,15 @@ function liftOverGround(field: Battlefield, rows: THREE.Vector3[][]): void {
   }
 }
 
-/** A bridge deck's thickness, and how far its ends' aprons reach out to meet the ground ahead. */
+/**
+ * A bridge deck's thickness, and how far its ends' aprons reach out to meet
+ * the ground ahead: as far as it takes to come down to it no steeper than
+ * APRON_GRADE, between APRON_MIN and APRON.
+ */
 const SLAB = 0.35;
 const APRON = 1.2;
+const APRON_MIN = 0.3;
+const APRON_GRADE = 0.5;
 
 type P3 = [number, number, number];
 
@@ -748,11 +754,12 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   ts.add(Math.min(1, ea / length));
   ts.add(Math.max(0, 1 - eb / length));
   const stations = [...ts].sort((a, b) => a - b).filter((t, k, all) => k === 0 || t - all[k - 1] > 0.02 / length);
+  const [fa, fb] = field.rampFlares(bridge);
   const flareAt = (t: number) => {
     const sa = t * length;
     const sb = (1 - t) * length;
-    if (sa < ea) return RAMP_FLARE * (1 - sa / ea);
-    if (sb < eb) return RAMP_FLARE * (1 - sb / eb);
+    if (sa < ea) return fa * (1 - sa / ea);
+    if (sb < eb) return fb * (1 - sb / eb);
     return 0;
   };
   interface Station {
@@ -835,9 +842,11 @@ function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
     const forward: P3 = [ux * out, 0, uz * out];
     quad(under, end.edge[0], end.edge[1], end.foot[1], end.foot[0], forward);
     const line: P3[] = [end.wing[0], end.edge[0], end.edge[1], end.wing[1]];
+    const step = Math.max(...line.map((p) => p[1] - groundAt(p[0] + ux * out * APRON, p[2] + uz * out * APRON)));
+    const reach = Math.min(APRON, Math.max(APRON_MIN, step / APRON_GRADE));
     const ahead = line.map((p): P3 => {
-      const x = p[0] + ux * out * APRON;
-      const z = p[2] + uz * out * APRON;
+      const x = p[0] + ux * out * reach;
+      const z = p[2] + uz * out * reach;
       return [x, Math.min(p[1], groundAt(x, z)), z];
     });
     for (let k = 0; k + 1 < line.length; k++) {

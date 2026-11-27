@@ -1,5 +1,5 @@
 import { Entity, System, World } from '../core/ecs';
-import { distanceToSegment, mapBridgeNear } from '../world/battlefield';
+import { deckTop, distanceToSegment, mapBridgeNear } from '../world/battlefield';
 import { MOVE_RULES } from '../world/moveClasses';
 import { Faction, GroundFollow, Health, Hit, Mover, Targetable, Transform, Unit, Wreck } from './components';
 import { SimContext } from './context';
@@ -26,7 +26,7 @@ import * as D from '../core/dmath';
  */
 
 /** How much a map bridge takes before it comes down, and its armour. */
-const BRIDGE_HP = 1500;
+const BRIDGE_HP = 2500;
 const BRIDGE_ARMOR = 10;
 /** Seconds between drawbridge checks. */
 const TICK = 1;
@@ -51,7 +51,7 @@ export class BridgeWear {
       const b = bridges[k];
       if (b.gone || b.builtBy !== undefined) continue;
       const off = distanceToSegment(x, z, b.ax, b.az, b.bx, b.bz);
-      if (off > b.width / 2 + splash || y > b.level + 2 + splash) continue;
+      if (off > b.width / 2 + splash || y > deckTop(b) + 2 + splash) continue;
       const hp = (this.hp.get(k) ?? BRIDGE_HP) - damageThrough(damage * (off <= b.width / 2 ? 1 : 0.5), BRIDGE_ARMOR);
       this.hp.set(k, hp);
       if (hp <= 0) this.collapse(world, ctx, k, by);

@@ -1,4 +1,4 @@
-import { Battlefield, Bridge, BRIDGE_CLEARANCE, DECK_GRADE } from './battlefield';
+import { Battlefield, Bridge, BRIDGE_CLEARANCE, DECK_GRADE, deckLine } from './battlefield';
 import * as D from '../core/dmath';
 
 /**
@@ -34,6 +34,13 @@ const BRIDGE_LANDING = 2;
 const MAX_EXTEND = 8;
 /** Highest a deck is raised above the usual clearance to meet high banks; banks higher still are cut down to it. */
 const MAX_RAISE = 2.5;
+/**
+ * Steepest a deck slopes end to end (rise over run) to meet one bank higher
+ * than the other; a steeper crossing has the high bank cut down to it. Less
+ * of a slope than TILT_MIN and it just runs level.
+ */
+const MAX_TILT = 0.15;
+const TILT_MIN = 0.1;
 /** How far a cutting reaches back into a bank that rises above the deck, and how steeply it climbs back to the ground. */
 const APPROACH = 12;
 const APPROACH_GRADE = 0.3;
@@ -463,7 +470,8 @@ export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] 
  *   on dry ground, so a bridge that meets the shore at a corner doesn't stop
  *   half over the water;
  * - the deck sits at the usual clearance over the water, or a little higher
- *   to meet two high banks;
+ *   to meet high banks, each end at its own bank's height: so it slopes,
+ *   no steeper than MAX_TILT, from a low bank up to a high one;
  * - a bank that rises above the deck is cut down to it, with a cutting that
  *   climbs back to the ground no steeper than APPROACH_GRADE, so the deck
  *   never runs into a hillside and its ends are never steep.
@@ -499,7 +507,16 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
   const ga = field.heightAt(A.x, A.z);
   const gb = field.heightAt(B.x, B.z);
   const low = sea + BRIDGE_CLEARANCE;
-  const bridge: Bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, level: Math.max(low, Math.min(ga, gb, low + MAX_RAISE)), ...extra };
+  // Each end at its bank's height (in reason), the higher eased down to keep the slope gentle.
+  const fit = (g: number) => Math.max(low, Math.min(g, low + MAX_RAISE));
+  let la = fit(ga);
+  let lb = fit(gb);
+  const most = MAX_TILT * D.hypot(B.x - A.x, B.z - A.z);
+  if (lb - la > most) lb = la + most;
+  else if (la - lb > most) la = lb + most;
+  const sloped = Math.abs(lb - la) >= TILT_MIN;
+  const line = sloped ? { level: (la + lb) / 2, rise: lb - la } : { level: Math.min(la, lb) };
+  const bridge: Bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, ...line, ...extra };
   cutBanks(field, bridge);
   field.addBridge(bridge);
   return true;
@@ -513,15 +530,15 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
  * every bridge once towns and outposts have levelled their ground.
  */
 export function cutBanks(field: Battlefield, bridge: Bridge): void {
-  const { ax, az, bx, bz, level } = bridge;
+  const { ax, az, bx, bz } = bridge;
   const len = D.hypot(bx - ax, bz - az);
   const ux = (bx - ax) / len;
   const uz = (bz - az) / len;
   const half = bridge.width / 2;
   const sea = field.seaLevel;
-  const ha = Math.min(level, field.heightAt(ax, az));
-  const hb = Math.min(level, field.heightAt(bx, bz));
-  const deck = (s: number) => Math.min(level, ha + DECK_GRADE * s, hb + DECK_GRADE * (len - s));
+  const ha = Math.min(deckLine(bridge, 0), field.heightAt(ax, az));
+  const hb = Math.min(deckLine(bridge, 1), field.heightAt(bx, bz));
+  const deck = (s: number) => Math.min(deckLine(bridge, s / len), ha + DECK_GRADE * s, hb + DECK_GRADE * (len - s));
   const { cols, rows } = field.config;
   const reach = APPROACH + half + 3;
   const [i0, j0] = field.cellAt(Math.min(ax, bx) - reach, Math.min(az, bz) - reach);

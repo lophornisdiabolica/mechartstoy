@@ -8,6 +8,7 @@ import { canonicalDoctrine, doctrineOf, DoctrineId } from '../doctrines';
 import { settle } from '../god';
 import { MOVE_RULES, STEEP_SLOPE } from '../../world/moveClasses';
 import { placeBridge } from '../../world/waterways';
+import { deckTop } from '../../world/battlefield';
 import { damageThrough } from '../systems/projectiles';
 import { CellArea } from '../../world/ground';
 import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
@@ -1503,7 +1504,7 @@ export class Engineers {
       const b = ctx.field.bridges[span.index];
       if (!b || b.gone) continue;
       const off = distanceToSegment(x, z, { x: b.ax, z: b.az }, { x: b.bx, z: b.bz });
-      if (off > b.width / 2 + splash || y > b.level + 2 + splash) continue;
+      if (off > b.width / 2 + splash || y > deckTop(b) + 2 + splash) continue;
       // Flame melts an ice bridge fast.
       const melt = flame && b.ice ? ICE_FLAME : 1;
       span.hp -= damageThrough(damage * melt * (off <= b.width / 2 ? 1 : 0.5), SPAN_ARMOR);
