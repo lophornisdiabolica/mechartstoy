@@ -14,6 +14,7 @@ import { Offensive, offensiveSystem } from './offensive';
 import { scrapSystem } from './scrap';
 import { Towns, townSystem } from './towns';
 import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
+import { raiseRelics, traitSystem, TraitState } from './traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
 import { newSquad, spawnBuilding, spawnUnit } from './spawn';
@@ -155,6 +156,7 @@ export class Game {
       tangle: new FrostField(this.field, TANGLE_RULES),
       wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
+      traits: new TraitState({ field: this.field }, seed),
       strikes: new Strikes(),
       camps: [],
       groves: new Groves(),
@@ -194,6 +196,8 @@ export class Game {
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
       godSystem(ctx),
       projectileSystem(ctx),
+      // Oil fires, geysers and the like, only on a map with traits that do something.
+      ...(ctx.traits.active ? [traitSystem(ctx)] : []),
       fireSystem(ctx),
       frostSystem(ctx),
       smokeSystem(ctx),
@@ -331,6 +335,8 @@ export class Game {
     // Outposts on their own stream, so adding them doesn't reshuffle the bases and town.
     const outpostRng = new Rng(this.seed ^ 0x6f7574);
     for (const outpost of this.ctx.outposts) buildOutpost(this.world, this.ctx, outpost, outpostRng);
+    // Map traits' relics (old walls, hulks, columns), nobody's.
+    raiseRelics(this.world, this.ctx);
   }
 
   /** Opening armies form up where they'll mass for the first attack, so the first clash comes quickly. */

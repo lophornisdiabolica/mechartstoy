@@ -1,3 +1,4 @@
+import type { TraitState } from './traits';
 import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
@@ -200,6 +201,8 @@ export interface SimContext {
   wreckage: WreckageField;
   /** Drifting smoke (see smoke.ts). */
   smoke: SmokeField;
+  /** Map traits' oil pools and the like (see traits.ts). */
+  traits: TraitState;
   /** Orbital strikes on their way down (see zenith.ts). */
   strikes: Strikes;
   /** Nomad camps set up, for territory (see nomad.ts). */

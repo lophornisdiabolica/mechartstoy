@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving';
 
 export interface GroundDef {
   id: GroundId;
@@ -89,10 +89,35 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x4f4a30,
     tint: 0.45,
   },
+  /**
+   * An oil field's pool of crude (see game/traits.ts): slick going for wheels
+   * and tracks, and it goes up in flames when something bursts on it.
+   */
+  oil: {
+    id: 'oil',
+    label: 'Oil pool',
+    cost: { tracked: 1.5, amphibious: 1.5, hover: 1.2, foot: 1.2, walker: 1.1 },
+    speed: { tracked: 0.8, amphibious: 0.8, foot: 0.85, walker: 0.9 },
+    color: 0x141210,
+    tint: 0.9,
+  },
+  /**
+   * Ancient ruins' old paving, among the columns and broken walls: soldiers
+   * crouched in the rubble take half a burst that lands outside it (like a
+   * trench, see systems/projectiles.ts).
+   */
+  paving: {
+    id: 'paving',
+    label: 'Ruins',
+    cost: {},
+    speed: {},
+    color: 0xb3a990,
+    tint: 0.7,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

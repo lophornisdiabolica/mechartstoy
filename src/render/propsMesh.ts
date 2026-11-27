@@ -158,6 +158,22 @@ function junkGeometry(): THREE.BufferGeometry {
   ]);
 }
 
+/** A geyser's vent: a low mineral-crusted cone with a dark mouth and a pale rim (see world/traits.ts). */
+function ventGeometry(): THREE.BufferGeometry {
+  return mergeNonIndexed([
+    paint(new THREE.CylinderGeometry(0.55, 1.3, 0.35, 9).translate(0, 0.12, 0), 0xc9b98a),
+    paint(new THREE.CylinderGeometry(0.4, 0.55, 0.12, 9).translate(0, 0.33, 0), 0xe6dfc8),
+    paint(new THREE.CylinderGeometry(0.3, 0.3, 0.06, 9).translate(0, 0.4, 0), 0x2a2622),
+  ]);
+}
+
+/** An ancient column lying where it fell, in drums (see world/traits.ts). */
+function fallenColumnGeometry(): THREE.BufferGeometry {
+  const stone = 0xd8cfb8;
+  const drum = (x: number, turn: number) => paint(new THREE.CylinderGeometry(0.42, 0.42, 0.95, 10).rotateZ(Math.PI / 2).rotateY(turn).translate(x, 0.38, turn * 0.6), stone);
+  return mergeNonIndexed([drum(-1, 0), drum(0, 0.05), drum(1.05, 0.25), paint(new THREE.BoxGeometry(0.95, 0.3, 0.95).translate(-1.9, 0.15, -0.1), 0xc6bda6)]);
+}
+
 function rockGeometry(): THREE.BufferGeometry {
   const g = ensureNonIndexed(new THREE.DodecahedronGeometry(0.55, 0));
   g.scale(1, 0.65, 1);
@@ -206,6 +222,8 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     rock: () => ({ geometry: rockGeometry(), color: 0x8d877c, baseOffset: 0.1 }),
     crystal: () => ({ geometry: crystalGeometry(), color: 0xffffff, baseOffset: -0.1 }),
     junk: () => ({ geometry: junkGeometry(), color: 0xffffff, baseOffset: -0.05 }),
+    vent: () => ({ geometry: ventGeometry(), color: 0xffffff, baseOffset: -0.05 }),
+    fallenColumn: () => ({ geometry: fallenColumnGeometry(), color: 0xffffff, baseOffset: -0.1 }),
   };
   const group = new THREE.Group();
   group.name = 'props';

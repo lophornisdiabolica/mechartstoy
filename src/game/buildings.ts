@@ -899,6 +899,106 @@ export const BUILDING_DEFS = {
     rebuildDelay: 90,
     buildTime: 9,
   },
+
+  // Relics: what a map trait leaves standing (see world/traits.ts and game/traits.ts). Nobody's, nobody aims at
+  // them, and they stop shots and block the way like any building, so they're cover for whoever gets there first.
+  // Fire wears them down and they don't come back.
+
+  /** Old battlefield: the burnt-out hulk of a tank from an earlier fight, picked clean long ago. */
+  oldHulk: {
+    id: 'oldHulk',
+    name: 'Old Hulk',
+    model: 'bld:oldHulk',
+    hp: 900,
+    armor: 14,
+    radius: 1.3,
+    height: 1.4,
+    low: true,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Fortified line: a stretch of an old concrete wall, chipped and stained. */
+  oldWall: {
+    id: 'oldWall',
+    name: 'Old Wall',
+    model: 'bld:oldWall',
+    hp: 1100,
+    armor: 14,
+    radius: 1.3,
+    height: 1.3,
+    low: true,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Fortified line: an empty pillbox, its gun long gone. */
+  pillbox: {
+    id: 'pillbox',
+    name: 'Old Pillbox',
+    model: 'bld:pillbox',
+    hp: 1600,
+    armor: 18,
+    radius: 1.6,
+    height: 1.6,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Crashed hulk: the wreck of a giant machine, half buried where it came down. */
+  crashedHulk: {
+    id: 'crashedHulk',
+    name: 'Crashed Hulk',
+    model: 'bld:crashedHulk',
+    hp: 9000,
+    armor: 25,
+    radius: 5,
+    height: 5,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Oil field: a derrick over a well. It goes up in flames when it's destroyed, and sets the pools round it alight. */
+  derrick: {
+    id: 'derrick',
+    name: 'Oil Derrick',
+    model: 'bld:derrick',
+    hp: 500,
+    armor: 6,
+    radius: 1.2,
+    height: 5,
+    explodes: { damage: 60, radius: 5 },
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Ancient ruins: a standing column. */
+  column: {
+    id: 'column',
+    name: 'Ancient Column',
+    model: 'bld:column',
+    hp: 700,
+    armor: 16,
+    radius: 0.5,
+    height: 3.2,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
+  /** Ancient ruins: what's left of a temple wall. */
+  ruinWall: {
+    id: 'ruinWall',
+    name: 'Ruined Wall',
+    model: 'bld:ruinWall',
+    hp: 1000,
+    armor: 16,
+    radius: 1.3,
+    height: 1.5,
+    low: true,
+    field: true,
+    rebuildDelay: 0,
+    buildTime: 1,
+  },
 } satisfies Record<string, BuildingDef>;
 
 export type BuildingId = keyof typeof BUILDING_DEFS;

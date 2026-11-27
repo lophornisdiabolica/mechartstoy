@@ -9,6 +9,13 @@ import { hitDome } from '../shields';
 import { hack } from '../hacking';
 import { plantGrove, TANGLE_RADIUS } from '../verdant';
 
+/** Whether an infantryman is crouched in ancient ruins (paving, see world/traits.ts), and the burst at (x, z) is outside them. */
+function inRuins(world: World, ctx: SimContext, e: Entity, x: number, z: number): boolean {
+  if (world.get(e, Unit)?.def.class !== 'infantry') return false;
+  const t = world.req(e, Transform);
+  return ctx.field.groundAt(t.x, t.z).id === 'paving' && ctx.field.groundAt(x, z).id !== 'paving';
+}
+
 /** The least share of a hit that gets through armour, however thick: small arms still chip away, slowly. */
 export const MIN_DAMAGE_SHARE = 0.1;
 
@@ -138,7 +145,8 @@ export function projectileSystem(ctx: SimContext): System {
             const edge = D.hypot(Math.max(0, Math.sqrt(d2) - world.req(other, Collider).radius), dy);
             if (edge > w.splash) return;
             // Soldiers down in a trench take half a burst outside it (one that lands in the trench gets them all).
-            const cover = inTrench(world, ctx, other) && ctx.field.groundAt(p.ex, p.ez).id !== 'trench' ? TRENCH_SPLASH : 1;
+            // Likewise soldiers crouched in ancient ruins (see world/traits.ts), against a burst outside them.
+            const cover = (inTrench(world, ctx, other) && ctx.field.groundAt(p.ex, p.ez).id !== 'trench') || inRuins(world, ctx, other, p.ex, p.ez) ? TRENCH_SPLASH : 1;
             applyDamage(world, ctx, other, w.damage * (1 - 0.6 * (edge / w.splash)) * cover, by);
           });
         }
@@ -150,6 +158,8 @@ export function projectileSystem(ctx: SimContext): System {
         if (p.kind === 'flame' && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2 && !ctx.field.isWater(p.ex, p.ez)) {
           ctx.fire.add(p.ex, p.ez, w.splash, heatPerShot(w), p.faction, p.source);
         }
+        // A burst or flame on an oil pool sets it alight (see traits.ts).
+        if ((w.splash > 0 || p.kind === 'flame') && ctx.traits.pools.length > 0 && p.ey < ctx.field.surfaceAt(p.ex, p.ez) + 2) ctx.traits.strike(p.ex, p.ez, w.splash * 0.5);
         // An engineers' bridge it lands on, or bursts by, takes the hit too (see commander/engineers.ts).
         ctx.commander.engineers.blast(world, ctx, p.ex, p.ey, p.ez, w.damage, w.splash, by, p.kind === 'flame');
         // Trees in a dense forest take the hit too, whether the shot ran into one or burst among them, except from a side

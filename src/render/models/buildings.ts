@@ -1244,3 +1244,131 @@ registerModel('bld:shrine', (faction) => {
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:shrine', g, turret, [eyes]) });
 });
+
+// Relics: what map traits leave standing, nobody's (see world/traits.ts). Their colours are their own, not a side's.
+
+const RUST = 0x5a3c2e;
+const SOOT = 0x3a3532;
+const OLD_CONCRETE = 0x9c978a;
+const MARBLE = 0xddd5c2;
+
+/** An old tank hulk: a burnt-out, rusted hull, its turret knocked askew and its gun drooping, tracks gone. */
+registerModel('bld:oldHulk', () => {
+  const g = new THREE.Group();
+  const tilt = (Math.random() - 0.5) * 0.25;
+  const hull = new THREE.Group();
+  hull.add(box(2.3, 0.6, 1.5, RUST, 0, 0.35, 0));
+  hull.add(box(2.1, 0.35, 0.32, SOOT, 0, 0.2, 0.8));
+  hull.add(box(2.1, 0.35, 0.32, SOOT, 0, 0.2, -0.8));
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.45, 0.95, 0x4e3529, 0, 0, 0));
+  const gun = box(1.2, 0.12, 0.12, SOOT, 0.95, -0.08, 0);
+  gun.rotation.z = -0.25;
+  turret.add(gun);
+  turret.position.set(-0.15, 0.85, 0);
+  turret.rotation.y = (Math.random() - 0.5) * 1.6;
+  turret.rotation.z = (Math.random() - 0.5) * 0.3;
+  hull.add(turret);
+  hull.rotation.z = tilt;
+  hull.position.y = -0.1;
+  g.add(hull);
+  return g;
+});
+
+/** A stretch of an old concrete wall across the way it faces, chipped along the top, with a stain of rust. */
+registerModel('bld:oldWall', () => {
+  const g = new THREE.Group();
+  g.add(box(0.8, 0.2, 2.7, 0x878275, 0, 0.1, 0));
+  g.add(box(0.6, 1.1, 2.6, OLD_CONCRETE, 0, 0.65, 0));
+  // Chipped top: a few blocks missing.
+  for (const z of [-0.9, 0.1, 0.95]) if (Math.random() < 0.6) g.add(box(0.62, 0.25, stepped(0.3, 0.6, 3), OLD_CONCRETE, 0, 1.3, z));
+  g.add(box(0.66, 0.5, 0.18, RUST, 0, 0.75, stepped(-0.95, 0.95, 3)));
+  return g;
+});
+
+/** An old pillbox: a squat hexagonal concrete blockhouse, its slits empty and blackened. */
+registerModel('bld:pillbox', () => {
+  const g = new THREE.Group();
+  g.add(cylinder(1.45, 1.6, 1.3, 6, OLD_CONCRETE, 0, 0.65, 0));
+  g.add(cylinder(1.55, 1.55, 0.25, 6, 0x878275, 0, 1.38, 0));
+  for (const a of [0, Math.PI / 3, -Math.PI / 3]) {
+    const slit = box(0.12, 0.18, 0.7, SOOT, Math.cos(a) * 1.42, 0.95, -Math.sin(a) * 1.42);
+    slit.rotation.y = a;
+    g.add(slit);
+  }
+  return g;
+});
+
+/** A crashed giant machine: a huge armoured torso half buried on its side, a leg in the air, a broken arm, ribs showing. */
+registerModel('bld:crashedHulk', () => {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  body.add(box(6.5, 3.4, 4.2, 0x5d5a57, 0, 1.4, 0)); // torso, on its side
+  body.add(box(5.5, 0.6, 3.6, RUST, 0.2, 3.3, 0)); // armour plate, rusted
+  body.add(box(2.4, 2.0, 2.4, 0x4a4744, 3.9, 1.7, 0.4)); // head
+  body.add(glowBox(0.9, 0.3, 0.08, 0x5a1a10).translateX(5.05).translateY(2.1).translateZ(0.4)); // a dead eye, still faintly lit
+  // A leg sticking up at an angle, and a broken arm in the dirt.
+  const leg = new THREE.Group();
+  leg.add(box(1.3, 4.5, 1.3, 0x55524f, 0, 2.25, 0));
+  leg.add(box(1.8, 0.8, 2.2, SOOT, 0, 4.6, 0.3));
+  leg.position.set(-2.6, 2.2, -1.1);
+  leg.rotation.z = 0.7;
+  leg.rotation.x = -0.3;
+  body.add(leg);
+  const arm = box(4.2, 1.0, 1.0, 0x4f4c49, 0.5, 0.4, 3.0);
+  arm.rotation.y = 0.5;
+  body.add(arm);
+  // Torn ribs where the plating's gone.
+  for (let n = 0; n < 4; n++) body.add(box(0.18, 1.6, 0.18, SOOT, -1.6 + n * 0.8, 3.6, -1.4));
+  body.rotation.x = 0.12;
+  g.add(body);
+  return g;
+});
+
+/** An oil derrick: a lattice tower over the well, with a pumpjack nodding beside it (it keeps working, whoever's fighting round it). */
+registerModel('bld:derrick', () => {
+  const g = new THREE.Group();
+  g.add(box(2.0, 0.2, 2.0, 0x4a4540, 0, 0.1, 0));
+  const steel = 0x6b6258;
+  for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) {
+    const leg = box(0.12, 5.2, 0.12, steel, x * 0.6, 2.6, z * 0.6);
+    leg.rotation.x = z * 0.1;
+    leg.rotation.z = -x * 0.1;
+    g.add(leg);
+  }
+  for (const y of [1.2, 2.4, 3.6]) g.add(box(1.2 - y * 0.12, 0.08, 1.2 - y * 0.12, steel, 0, y, 0));
+  g.add(box(0.5, 0.3, 0.5, 0x3d3833, 0, 5.2, 0));
+  // The pumpjack.
+  const beam = new THREE.Group();
+  beam.add(box(1.6, 0.16, 0.16, 0x8a3a2a, 0, 0, 0));
+  beam.add(box(0.2, 0.45, 0.3, 0x8a3a2a, 0.8, -0.15, 0));
+  beam.position.set(1.0, 1.05, 0.9);
+  g.add(box(0.14, 0.9, 0.14, SOOT, 1.0, 0.5, 0.9));
+  g.add(beam);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beam.userData.t = (beam.userData.t ?? Math.random() * 10) + dt;
+      beam.rotation.z = Math.sin(beam.userData.t * 1.6) * 0.3;
+    },
+  });
+});
+
+/** An ancient column: a fluted shaft on a plinth, its capital weathered, the odd one snapped short. */
+registerModel('bld:column', () => {
+  const g = new THREE.Group();
+  const snapped = Math.random() < 0.3;
+  const shaft = snapped ? stepped(1.4, 2.2, 3) : 2.7;
+  g.add(box(1.0, 0.25, 1.0, 0xcfc6b0, 0, 0.12, 0));
+  g.add(cylinder(0.38, 0.44, shaft, 10, MARBLE, 0, 0.25 + shaft / 2, 0));
+  if (!snapped) g.add(box(0.95, 0.25, 0.95, 0xcfc6b0, 0, 3.05, 0));
+  return g;
+});
+
+/** What's left of a temple wall: big stone blocks, stepped down where the top has fallen. */
+registerModel('bld:ruinWall', () => {
+  const g = new THREE.Group();
+  g.add(box(0.8, 0.6, 2.6, 0xcfc6b0, 0, 0.3, 0));
+  g.add(box(0.7, 0.55, stepped(1.4, 2.4, 3), MARBLE, 0, 0.85, -0.05));
+  if (Math.random() < 0.6) g.add(box(0.7, 0.45, stepped(0.6, 1.2, 3), 0xd6cdb8, 0, 1.35, -0.5));
+  return g;
+});
