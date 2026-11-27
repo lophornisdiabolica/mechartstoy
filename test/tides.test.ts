@@ -67,6 +67,43 @@ describe('tidal flats trait', () => {
     for (let n = 0; n < 200; n++) expect(rollTraits(new Rng(n), false)).not.toContain('tidal');
   });
 
+  it("takes the place of the map bridge most on the way between the bases, leaving the bases joined by land", () => {
+    let replaced = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const s = settings(0.5);
+      s.map.terrain = 'river';
+      const plain = { ...s, map: { ...s.map, traits: [] } };
+      const before = generateBattlefield(new Rng(seed), battlefieldConfig(plain));
+      const field = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      const bar = field.traits.flats[0];
+      if (!bar || field.bridges.length >= before.bridges.length) continue;
+      replaced++;
+      // Where a bridge was: one of the plain map's bridges ran along the bar.
+      const m = middle(bar);
+      expect(before.bridges.some((b) => Math.hypot((b.ax + b.bx) / 2 - m.x, (b.az + b.bz) / 2 - m.z) < 3)).toBe(true);
+      // And that one's gone, with no bridge left by the bar.
+      expect(field.nearBridge(m.x, m.z, 10)).toBe(false);
+      // At high tide the bases still reach each other by land (over the other bridge).
+      const game = new Game(seed, { settings: s, populate: false, autoSpawn: false });
+      const [a, b] = game.field.baseSites;
+      expect(game.ctx.navs.land.findPath({ x: a.x, z: a.z }, { x: b.x, z: b.z }, 1)).not.toBeNull();
+    }
+    expect(replaced).toBeGreaterThan(3);
+  });
+
+  it("keeps engineers from bridging round a bar", () => {
+    const game = tidalGame();
+    const tide = game.ctx.tidal!;
+    const m = middle(tide.flats[0]);
+    expect(tide.noBridging(m.x, m.z)).toBe(true);
+    const len = Math.hypot(tide.flats[0].bx - tide.flats[0].ax, tide.flats[0].bz - tide.flats[0].az);
+    const ux = (tide.flats[0].bx - tide.flats[0].ax) / len;
+    const uz = (tide.flats[0].bz - tide.flats[0].az) / len;
+    // Just beside it, up or down the water.
+    expect(tide.noBridging(m.x - uz * 15, m.z + ux * 15)).toBe(true);
+    expect(tide.noBridging(m.x - uz * 40, m.z + ux * 40)).toBe(false);
+  });
+
   it('the tide goes out and uncovers it, a way across for land units and not for boats, and comes back in', () => {
     const game = tidalGame();
     const tide = game.ctx.tidal!;

@@ -121,7 +121,7 @@ export class Shortcuts {
 
   private choose(world: World, ctx: SimContext, side: number, enemy: number, current: ShortcutPick | null): ShortcutPick | null {
     const { field, lanes } = ctx;
-    const places = this.places(ctx).filter((s) => !field.nearBridge(s.x, s.z, BRIDGED) && stillOpen(ctx, s));
+    const places = this.places(ctx).filter((s) => !field.nearBridge(s.x, s.z, BRIDGED) && !ctx.tidal?.noBridging(s.x, s.z) && stillOpen(ctx, s));
     if (places.length === 0) return null;
     const nav = ctx.navs.land;
     const home = field.baseSites[side];
