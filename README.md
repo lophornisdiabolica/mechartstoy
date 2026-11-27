@@ -525,6 +525,16 @@ A map style re-roll gives most maps a trait or two (the link key is
   from the light woods: they stop shots, so infantry find cover in them,
   and slow vehicles, which flatten the trees they drive into; shots and
   blasts knock them down too, and a cleared patch is open ground again.
+  **Wildfire** (a slider, off by default): fire that gets going in dense
+  forest (a flamer's, a burning wreck's, a burning oil pool's) catches the
+  trees. A stand burns for about half a minute under a pall of smoke that
+  throws shots off, creeping slowly on to the stands beside it (faster the
+  higher the slider, and in dry country: desert, steppe and ash burn
+  readily, jungle, snow and tundra barely), then the trees lie charred on
+  burnt ground, a little rough going. It's nobody's fire, so it burns
+  everyone in it. Ground burning with nobody's fire (a wildfire, a burning
+  oil field) costs a lot to route through, so units go round it, and one
+  caught in it gets out the shortest way.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
   until it's cleared away four minutes later. **Wreckage:** a destroyed

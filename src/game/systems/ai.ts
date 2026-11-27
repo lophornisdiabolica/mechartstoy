@@ -11,6 +11,7 @@ import { threatKindOf } from '../commander/threats';
 import type { Earthwork } from '../commander/engineers';
 import * as D from '../../core/dmath';
 import { escapeFrom, strikeDanger } from '../zenith';
+import { fireEscape } from '../wildfire';
 import { campSpot } from '../nomad';
 import { mendingPlace } from '../retreat';
 import { presenting } from '../alternate';
@@ -101,6 +102,17 @@ export function aiSystem(ctx: SimContext): System {
           const strike = strikeDanger(ctx, faction, t.x, t.z, world.time);
           if (strike) {
             const out = escapeFrom(strike, t.x, t.z);
+            mover.targetX = out.x;
+            mover.targetZ = out.z;
+            mover.faceX = out.x;
+            mover.faceZ = out.z;
+            continue;
+          }
+        }
+        // Caught in nobody's fire (a wildfire, a burning oil field): out of it the shortest way (see wildfire.ts).
+        if (ctx.fire.count > 0 && !MOVE_RULES[mover.move].flies) {
+          const out = fireEscape(ctx, faction, t.x, t.z);
+          if (out) {
             mover.targetX = out.x;
             mover.targetZ = out.z;
             mover.faceX = out.x;
