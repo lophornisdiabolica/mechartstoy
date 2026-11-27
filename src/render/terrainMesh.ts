@@ -190,7 +190,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
   // A rail line's track (see world/traits.ts), redrawn where the ground under it moves.
   const rail = field.traits.rail;
-  let track = rail ? buildTrack(field) : null;
+  let track = rail ? buildTrack(field, tops) : null;
   if (track) group.add(track);
 
   let drawnBridges = field.bridges.length;
@@ -237,7 +237,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       if (rail.points.some((p) => p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1)) {
         group.remove(track);
         for (const m of track.children) (m as THREE.InstancedMesh).dispose();
-        track = buildTrack(field);
+        track = buildTrack(field, tops);
         group.add(track);
       }
     }
@@ -253,15 +253,20 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
 
 const SLEEPER = new THREE.BoxGeometry(0.34, 0.12, 1.9);
 const RAIL = new THREE.BoxGeometry(1, 0.1, 0.09);
-const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3b2e, flatShading: true, roughness: 0.95 });
-const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7c8086, flatShading: true, roughness: 0.5, metalness: 0.4 });
+// Drawn over the roads where the line crosses one: after them, and pulled further toward the camera than their
+// paving (see roadMaterial), whose own pull would otherwise win at some zooms and not others.
+const TRACK_OFFSET = -6;
+const TRACK_ORDER = 3;
+const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3b2e, flatShading: true, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: TRACK_OFFSET, polygonOffsetUnits: TRACK_OFFSET });
+const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7c8086, flatShading: true, roughness: 0.5, metalness: 0.4, polygonOffset: true, polygonOffsetFactor: TRACK_OFFSET, polygonOffsetUnits: TRACK_OFFSET });
 /** Sleepers' spacing along the track, and the rails' gauge (centre to centre). */
 const SLEEPER_EVERY = 0.75;
 const GAUGE = 1.3;
 
-/** A rail line's sleepers and rails on its graded bed, as two instanced meshes. */
-function buildTrack(field: Battlefield): THREE.Group {
+/** A rail line's sleepers and rails on its graded bed, as two instanced meshes; over the top of any road it crosses. */
+function buildTrack(field: Battlefield, tops: RoadTops): THREE.Group {
   const rail = field.traits.rail!;
+  const ground = (x: number, z: number) => Math.max(meshHeightAt(field, x, z), tops.at(x, z));
   const pts = rail.points;
   const g = new THREE.Group();
   const length = (pts.length - 1) * rail.step;
@@ -284,7 +289,10 @@ function buildTrack(field: Battlefield): THREE.Group {
   for (let s = 0; s <= length; s += SLEEPER_EVERY) {
     const p = at(s);
     q.setFromAxisAngle(up, p.a);
-    pos.set(p.x, meshHeightAt(field, p.x, p.z) + 0.07, p.z);
+    // Its ends too, so one reaching over a road's edge isn't half buried in it.
+    const ex = Math.sin(p.a) * 0.9;
+    const ez = Math.cos(p.a) * 0.9;
+    pos.set(p.x, Math.max(meshHeightAt(field, p.x, p.z), Math.max(tops.at(p.x, p.z), tops.at(p.x + ex, p.z + ez), tops.at(p.x - ex, p.z - ez)) - 0.02) + 0.07, p.z);
     sleepers.setMatrixAt(n++, m.compose(pos, q, scale));
   }
   sleepers.count = n;
@@ -303,8 +311,8 @@ function buildTrack(field: Battlefield): THREE.Group {
       const z0 = p.z + oz;
       const x1 = r.x + ox;
       const z1 = r.z + oz;
-      const y0 = meshHeightAt(field, x0, z0);
-      const y1 = meshHeightAt(field, x1, z1);
+      const y0 = ground(x0, z0);
+      const y1 = ground(x1, z1);
       // Pitched along the slope, a touch longer than the step so the joins don't gap.
       q.setFromEuler(new THREE.Euler(0, a, Math.atan2(y1 - y0, len), 'YXZ'));
       pos.set((x0 + x1) / 2, Math.max(y0, y1) * 0.5 + Math.min(y0, y1) * 0.5 + 0.18, (z0 + z1) / 2);
@@ -316,6 +324,7 @@ function buildTrack(field: Battlefield): THREE.Group {
   for (const mesh of [sleepers, rails]) {
     mesh.castShadow = false;
     mesh.receiveShadow = true;
+    mesh.renderOrder = TRACK_ORDER;
     mesh.instanceMatrix.needsUpdate = true;
     g.add(mesh);
   }
