@@ -19,6 +19,7 @@ import { railSystem } from './rail';
 import { wildfireOn, wildfireSystem } from './wildfire';
 import { BridgeWear, drawbridgeSystem, sinkingSystem } from './bridges';
 import { Tide, tideSystem } from './tides';
+import { Flood, floodSystem } from './flood';
 import { nearRail } from '../world/traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -168,6 +169,7 @@ export class Game {
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
       bridges: new BridgeWear(!!settings.map.bridgesFall),
       tidal: this.field.traits.flats.length > 0 ? new Tide(this.field.traits.flats) : null,
+      flood: this.field.traits.flood ? new Flood(this.field.traits.flood, this.field.config.cols, this.field.config.rows) : null,
       traffic: new Traffic(nav),
     };
 
@@ -208,7 +210,8 @@ export class Game {
       ...(ctx.field.traits.rail ? [railSystem(ctx)] : []),
       ...(ctx.outposts.some((o) => o.kind.draws) ? [drawbridgeSystem(ctx)] : []),
       ...(ctx.tidal ? [tideSystem(ctx)] : []),
-      ...(ctx.bridges.on || ctx.tidal ? [sinkingSystem(ctx)] : []),
+      ...(ctx.flood ? [floodSystem(ctx)] : []),
+      ...(ctx.bridges.on || ctx.tidal || ctx.flood ? [sinkingSystem(ctx)] : []),
       // Nobody's fire: wildfire in the woods, and everyone keeping clear of it and of burning oil.
       ...(wildfireOn(ctx) || ctx.traits.pools.length > 0 ? [wildfireSystem(ctx, seed)] : []),
       fireSystem(ctx),
