@@ -1,7 +1,7 @@
 import { woodland } from '../doctrines';
 import { Entity, System, World } from '../../core/ecs';
 import { Battlefield } from '../../world/battlefield';
-import { MOVE_RULES, MoveClass, MoveRules } from '../../world/moveClasses';
+import { MOVE_RULES, MoveClass, MoveRules, STEEP_SLOPE } from '../../world/moveClasses';
 import { BuildingDef } from '../buildings';
 import { Ai, Building, Collider, Faction, GroundFollow, Health, Mover, NavState, Transform, Unit } from '../components';
 import { NavGrid } from '../../world/navGrid';
@@ -381,6 +381,8 @@ export function movementSystem(ctx: SimContext): System {
         // A side at home in the woods walks through dense forest as if it were open ground (see DoctrineDef.woodland).
         const sylvan = woods && ground.id === 'thicket';
         let speed = rules.flies ? pace : wet ? pace * rules.waterSpeed : sylvan ? pace : pace * (ground.speed[m.move] ?? 1);
+        // Wheels labour up steep ground.
+        if (rules.steepSpeed !== 1 && !wet && field.slopeAt(t.x, t.z) > STEEP_SLOPE) speed *= rules.steepSpeed;
         // An enemy's frost underfoot (or frozen water under a boat) slows it right down (see frost.ts).
         if (!rules.flies && ctx.frost.count > 0) speed *= ctx.frost.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
         if (!rules.flies && ctx.tangle.count > 0) speed *= ctx.tangle.paceAt(ctx, t.x, t.z, world.get(e, Faction)?.id ?? -1);
@@ -485,7 +487,7 @@ function cruise(ctx: SimContext, world: World, e: Entity, t: Transform, m: Mover
 }
 
 /** Movement classes that knock trees flat by driving into them (infantry and spiders slip between them; walkers only if they're big). */
-const CRUSHERS = new Set<MoveClass>(['tracked', 'amphibious', 'hover', 'walker']);
+const CRUSHERS = new Set<MoveClass>(['tracked', 'wheeled', 'amphibious', 'hover', 'walker']);
 
 /** Keeps the nav grid's building obstacles in sync as buildings fall and rise. */
 export function navObstacleSystem(ctx: SimContext): System {

@@ -133,8 +133,9 @@ describe('cities', () => {
   it('runs a city battle with no vehicle wedged in an alley', () => {
     const s = defaultSettings();
     s.map.city = 'district';
-    // Seed 5: on seed 4, after the roster balance pass, a tank sent after a target deep among the
-    // buildings takes the half-width fallback route into an alley and sticks there (see findPath).
+    // On seed 4 (after the roster balance pass) and seed 5 (once trucks got their own class), a big vehicle sent
+    // after a target deep among the buildings used to take the any-open-cell fallback route down an alley and
+    // stick there; now it settles for the nearest spot on the avenues (see findPath).
     const game = new Game(5, { settings: s });
     const nav = game.ctx.navs.for('tracked');
     let wedged = 0;

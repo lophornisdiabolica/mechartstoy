@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { Ai, Armed, Mover, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
+import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { effectiveRange } from '../src/game/systems/targeting';
 import { UNIT_DEFS, UnitDef } from '../src/game/units';
@@ -161,6 +162,40 @@ describe('roles', () => {
     const lt = game.world.req(lead, Transform);
     const et = game.world.req(escort, Transform);
     expect(Math.hypot(lt.x - et.x, lt.z - et.z)).toBeLessThan(8);
+  });
+
+  it('runs wheeled vehicles faster than tanks on roads, but slower over scrap and up slopes', () => {
+    const TRUCK: UnitDef = { ...UNIT_DEFS.tank, id: 'testTruck', move: 'wheeled' };
+    /** How far each unit gets in 3 seconds, heading east across ground painted `ground` (or left as it is). */
+    const drive = (def: UnitDef, ground: 'plain' | 'road' | 'scrap'): number => {
+      const s = defaultSettings();
+      s.map = { ...s.map, terrain: 'flats', water: 0, towns: 0, forest: 0, outposts: 0 };
+      const game = new Game(3, { settings: s, populate: false, autoSpawn: false });
+      const f = game.field;
+      const [x, z] = [-20, 0];
+      const cells: number[] = [];
+      for (let j = 0; j < f.config.rows; j++) for (let i = 0; i < f.config.cols; i++) cells.push(j * f.config.cols + i);
+      f.setGround(cells, ground);
+      const e = spawnUnit(game.world, game.ctx, def, 0, x, z);
+      game.world.remove(e, Ai);
+      const t = game.world.req(e, Transform);
+      t.heading = 0;
+      const m = game.world.req(e, Mover);
+      m.targetX = x + 40;
+      m.targetZ = z;
+      run(game, 3);
+      return t.x - x;
+    };
+    const ratio = (def: UnitDef, ground: 'road' | 'scrap') => drive(def, ground) / drive(def, 'plain');
+    expect(ratio(TRUCK, 'road')).toBeGreaterThan(ratio(UNIT_DEFS.tank, 'road') + 0.08);
+    expect(ratio(TRUCK, 'scrap')).toBeLessThan(ratio(UNIT_DEFS.tank, 'scrap') - 0.05);
+    const { wheeled, tracked } = MOVE_RULES;
+    expect(wheeled.steepSpeed).toBeLessThan(tracked.steepSpeed);
+    expect(wheeled.steep).toBeGreaterThan(tracked.steep);
+    expect(wheeled.town).toBeLessThan(tracked.town);
+    // The trucks, buggies and carts are wheeled; tanks stay tracked.
+    for (const id of ['mgTruck', 'buggy', 'rocketTruck', 'hackVan', 'chariot', 'trebuchet'] as const) expect(UNIT_DEFS[id].move).toBe('wheeled');
+    for (const id of ['tank', 'lightTank', 'flakTank', 'fabricator'] as const) expect(UNIT_DEFS[id].move).toBe('tracked');
   });
 
   it('gives weapons on high ground a little more reach', () => {
