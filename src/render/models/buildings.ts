@@ -519,7 +519,22 @@ const TOWN_COLORS: Record<TownStyle, { walls: number[]; roofs: number[]; trim: n
   adobe: { walls: [0xe2c99c, 0xd8b787, 0xeedbb8, 0xcfa978], roofs: [0xc9a06c, 0xb98a58, 0x8fa3a8], trim: 0xb08a5c },
   alpine: { walls: [0x6e4c35, 0x80593c, 0xe6ddcc, 0x5c4030], roofs: [0xeef2f5, 0xe2e8ec], trim: 0x4a3426 },
   timber: { walls: [0x9a7650, 0xb08a5c, 0xd9cfbd, 0x8c6a46], roofs: [0x4f6b3a, 0x6b4a32, 0x7a5a3a, 0x5d6b4a], trim: 0x5b4030 },
+  concrete: { walls: [0xa8a8a2, 0x9c9e9c, 0xb8b6ae, 0x8e9294], roofs: [0x6e7072, 0x7c7e80, 0x5e6466], trim: 0x6a6c6e },
+  thatch: { walls: [0xa8865a, 0x8f6e48, 0xc2a070, 0x7a5c3c], roofs: [0xc8a860, 0xb8964e, 0xd4b46c], trim: 0x5a4028 },
+  shanty: { walls: [0x7a6a5a, 0x8a7a64, 0x6d7b86, 0x9a6a4a, 0x5e6a5e], roofs: [0x9a5a3a, 0x8a7a6a, 0x6d7b86, 0xa8743e], trim: 0x4a4440 },
+  yurt: { walls: [0xe6dcc6, 0xd8ccb2, 0xeae2d2, 0xc8b89a], roofs: [0xb05a3a, 0x3a6a8a, 0xc89a4a, 0x8a4a5a], trim: 0x7a5a3a },
+  dome: { walls: [0xeef0f2, 0xe2e6ea, 0xd6dce2], roofs: [0xf6f8fa, 0x9ad0e0, 0xe8eef2], trim: 0x8aa0b0 },
 };
+
+/** Town styles built like halls (a big roof over timber or felt walls) rather than flat-roofed blocks. */
+const HALLS: ReadonlySet<TownStyle> = new Set<TownStyle>(['alpine', 'timber', 'thatch', 'yurt', 'shanty']);
+
+/** A low dome: three stacked rings narrowing to a point, sitting on a footprint of this radius at height y. */
+function dome(g: THREE.Group, radius: number, y: number, color: number): void {
+  g.add(cylinder(radius * 0.72, radius, radius * 0.32, 10, color, 0, y + radius * 0.16, 0));
+  g.add(cylinder(radius * 0.3, radius * 0.72, radius * 0.3, 10, color, 0, y + radius * 0.47, 0));
+  g.add(cylinder(0.02, radius * 0.3, radius * 0.16, 10, color, 0, y + radius * 0.7, 0));
+}
 
 /** A civilian building's wall colour, or the usual walls for faction buildings. */
 function wallColor(faction: number): number {
@@ -539,19 +554,60 @@ function styledRoof(faction: number): number {
 function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number): void {
   const style = faction < 0 ? townStyle : 'brick';
   const color = styledRoof(faction);
-  if (style === 'adobe') {
+  if (style === 'shanty') {
+    // A sheet of corrugated iron, laid on a slant.
+    const sheet = box(w + 0.3, 0.08, d + 0.3, color, 0, h + 0.2, 0);
+    sheet.rotation.x = 0.2;
+    g.add(sheet);
+    return;
+  }
+  if (style === 'dome') {
+    g.add(box(w + 0.06, 0.1, d + 0.06, TOWN_COLORS.dome.trim, 0, h + 0.05, 0));
+    dome(g, Math.min(w, d) * 0.45, h + 0.1, color);
+    return;
+  }
+  if (style === 'adobe' || style === 'concrete') {
     g.add(box(w + 0.08, 0.12, d + 0.08, color, 0, h + 0.06, 0));
     g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, d / 2));
     g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -d / 2));
     return;
   }
-  const pitch = style === 'alpine' ? 1.15 : style === 'timber' ? 0.8 : 0.7;
-  g.add(gableRoof(w + 0.2, d + 0.25, pitch, color, h));
+  const pitch = style === 'alpine' ? 1.15 : style === 'thatch' ? 1.05 : style === 'timber' ? 0.8 : style === 'yurt' ? 0.5 : 0.7;
+  // Thatch hangs well past the walls.
+  const eaves = style === 'thatch' ? 0.6 : 0.2;
+  g.add(gableRoof(w + eaves, d + eaves + 0.05, pitch, color, h));
 }
 
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
   const walls = wallColor(faction);
+  if (faction < 0 && townStyle === 'yurt') {
+    // A round felt tent under a shallow cone, a coloured band round it.
+    g.add(cylinder(0.95, 0.95, 0.9, 10, walls, 0, 0.45, 0));
+    g.add(cylinder(0.97, 0.97, 0.12, 10, styledRoof(faction), 0, 0.62, 0));
+    g.add(cylinder(0.12, 1.05, 0.6, 10, walls, 0, 1.2, 0));
+    g.add(box(0.05, 0.55, 0.35, styledRoof(faction), 0.95, 0.28, 0));
+    return g;
+  }
+  if (faction < 0 && townStyle === 'dome') {
+    // A domed habitat on a low ring wall.
+    g.add(cylinder(0.95, 1.0, 0.45, 10, walls, 0, 0.22, 0));
+    dome(g, 0.95, 0.45, pick(TOWN_COLORS.dome.roofs));
+    g.add(box(0.05, 0.4, 0.35, WINDOW, 0.97, 0.22, 0));
+    return g;
+  }
+  if (faction < 0 && townStyle === 'thatch') {
+    // Up on stilts, out of the wet.
+    for (const [x, z] of [[-0.85, -0.65], [0.85, -0.65], [-0.85, 0.65], [0.85, 0.65]]) g.add(box(0.12, 0.45, 0.12, TOWN_COLORS.thatch.trim, x, 0.22, z));
+    const hut = new THREE.Group();
+    hut.position.y = 0.4;
+    const h = stepped(0.8, 1.0, 3);
+    hut.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
+    roofOn(hut, 1.9, 1.5, h, faction);
+    hut.add(box(0.05, 0.55, 0.4, DARK, 0.96, 0.3, 0));
+    g.add(hut);
+    return g;
+  }
   const h = stepped(0.9, 1.3);
   g.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
   roofOn(g, 1.9, 1.5, h, faction);
@@ -582,7 +638,7 @@ registerModel('bld:block', (faction) => {
     g.add(box(0.06, 0.7, 0.5, DARK, 1.26, 0.35, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (HALLS.has(style)) {
     // A tall hall: two storeys under a big roof.
     const h = 2.2;
     g.add(box(2.4, h, 2.2, walls, 0, h / 2, 0));
@@ -623,7 +679,15 @@ registerModel('bld:spire', (faction) => {
     g.add(cylinder(0.02, 0.36, 0.6, 8, accent, 0, 5.5, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (style === 'dome') {
+    // A slim tower with a domed lookout.
+    g.add(cylinder(0.75, 0.85, 0.5, 10, wallColor(faction), 0, 0.25, 0));
+    g.add(cylinder(0.35, 0.45, 4.2, 10, wallColor(faction), 0, 2.6, 0));
+    g.add(cylinder(0.75, 0.6, 0.5, 10, TOWN_COLORS.dome.trim, 0, 4.9, 0));
+    dome(g, 0.75, 5.15, accent);
+    return g;
+  }
+  if (HALLS.has(style)) {
     // A steeple: a square tower with a pointed cap.
     g.add(box(1.4, 3.8, 1.4, wallColor(faction), 0, 1.9, 0));
     g.add(box(0.5, 0.6, 0.06, WINDOW, 0.71, 3.1, 0));
@@ -645,7 +709,14 @@ registerModel('bld:spire', (faction) => {
 registerModel('bld:silo', (faction) => {
   const g = new THREE.Group();
   const accent = faction < 0 ? pick(TOWN_COLORS[townStyle].roofs) : factionColors(faction).primary;
-  const body = faction < 0 && townStyle === 'adobe' ? pick([0xd8c4a0, 0xcbb38a]) : faction < 0 && townStyle === 'timber' ? pick([0x9a7650, 0xb08a5c]) : pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]);
+  const body =
+    faction < 0 && townStyle === 'adobe'
+      ? pick([0xd8c4a0, 0xcbb38a])
+      : faction < 0 && (townStyle === 'timber' || townStyle === 'thatch')
+        ? pick([0x9a7650, 0xb08a5c])
+        : faction < 0 && townStyle === 'shanty'
+          ? pick([0x8a5a3a, 0x7a6a5a])
+          : pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]);
   g.add(cylinder(0.85, 0.85, 2.4, 8, body, 0, 1.2, 0));
   g.add(cylinder(0.05, 0.9, 0.7, 8, accent, 0, 2.75, 0));
   g.add(box(0.1, 2.4, 0.1, METAL, 0.9, 1.2, 0)); // ladder
@@ -702,7 +773,7 @@ registerModel('bld:tenement', (faction) => {
     g.add(box(0.06, 0.7, 0.5, DARK, 1.41, 0.35, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (HALLS.has(style)) {
     const floors = 3 + Math.floor(Math.random() * 2);
     const h = floors * 0.8;
     g.add(box(2.7, h, 2.7, walls, 0, h / 2, 0));
@@ -739,8 +810,8 @@ registerModel('bld:warehouse', (faction) => {
   const g = new THREE.Group();
   const walls = faction < 0 && townStyle === 'brick' ? pick([0xa9a49a, 0xb7b0a2, 0x9aa0a4]) : wallColor(faction);
   g.add(box(3.4, 1.4, 2.0, walls, 0, 0.7, 0));
-  if (faction < 0 && townStyle === 'adobe') g.add(box(3.5, 0.14, 2.1, styledRoof(faction), 0, 1.47, 0));
-  else g.add(gableRoof(3.55, 2.2, townStyle === 'alpine' ? 0.9 : 0.45, faction < 0 && townStyle === 'brick' ? pick([0x6d7b86, 0x7a7e85, 0x8c4a3a]) : styledRoof(faction), 1.4));
+  if (faction < 0 && (townStyle === 'adobe' || townStyle === 'concrete' || townStyle === 'dome')) g.add(box(3.5, 0.14, 2.1, styledRoof(faction), 0, 1.47, 0));
+  else g.add(gableRoof(3.55, 2.2, townStyle === 'alpine' || townStyle === 'thatch' ? 0.9 : 0.45, faction < 0 && townStyle === 'brick' ? pick([0x6d7b86, 0x7a7e85, 0x8c4a3a]) : styledRoof(faction), 1.4));
   g.add(box(0.06, 1.0, 1.0, DARK, 1.71, 0.5, 0)); // loading door
   g.add(box(0.8, 0.5, 0.6, pick([0x8a5a38, 0x6d7b86, 0xb5654a]), 2.2, 0.25, 0.4)); // crates outside
   return g;

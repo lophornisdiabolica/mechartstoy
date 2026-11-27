@@ -1,6 +1,6 @@
 import { AttackTiming, BaseLayout, CityMode, BattleMode, rampMode, SuperGrowth, BattleSettings, cloneSettings, compactTeams, placementsInUse, defaultFaction, defaultSettings, LIMITS, MAP_SIZES, MapSize, MAX_FACTIONS, TOWN_SIZES, TownSize, tunedUnits, UNIT_IDS, UnitTuning } from '../game/settings';
 import { weaponsOf } from '../game/arsenal';
-import { BIOME_IDS, BIOMES, BiomeId } from '../world/biomes';
+import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS, TOWN_STYLES, TownStyle } from '../world/biomes';
 import { TERRAIN_STYLE_IDS, TERRAIN_STYLES, TerrainStyle } from '../world/terrainStyles';
 import { MAP_OUTLINE_IDS, MAP_OUTLINES, MapOutline } from '../world/outlines';
 import { OUTPOST_KIND_IDS } from '../world/battlefield';
@@ -50,6 +50,7 @@ const ROW_ROLL: Record<string, string> = {
   Mode: 'mode',
   Size: 'size',
   Biome: 'biome',
+  'Town style': 'townstyle',
   Terrain: 'terrain',
   Outline: 'outline',
   Bases: 'layout',
@@ -71,7 +72,7 @@ const ROW_ROLL: Record<string, string> = {
 
 const VARIETY_LABELS: Record<VarietyKey, { label: string; title: string }> = {
   size: { label: 'Map size', title: 'Small, medium or large, sometimes wider or deeper than usual (Huge and Vast only by hand)' },
-  biome: { label: 'Biome', title: 'Temperate, desert, snow or forest' },
+  biome: { label: 'Biome', title: 'The look of the land: ground and water colours, scenery, and the style of its towns' },
   style: { label: 'Map style', title: 'Terrain, outline, water, hills, mountains, cliffs, dense forest, towns and cities together, from one of the map styles (other styles with towns make the first one a city now and then)' },
   sides: { label: 'Sides', title: 'How many sides, and how they split into teams' },
   doctrines: { label: 'Doctrines', title: 'Which doctrine each side fields, from the ones picked below' },
@@ -654,6 +655,15 @@ export class SetupScreen {
     );
     row(map, 'Biome', biome.row);
     this.sync.push(() => biome.set(this.settings.map.biome));
+    const townStyle = segmented<TownStyle | 'biome'>(
+      [{ label: 'Biome’s own', value: 'biome' as const, title: 'The style that goes with the biome' }, ...TOWN_STYLE_IDS.map((t) => ({ label: TOWN_STYLES[t].label, value: t, title: TOWN_STYLES[t].blurb }))],
+      (v) => {
+        this.settings.map.townStyle = v;
+        this.changed();
+      },
+    );
+    row(map, 'Town style', townStyle.row);
+    this.sync.push(() => townStyle.set(this.settings.map.townStyle));
     map.append(el('p', { class: 'hint' }, 'The look of the land, its trees and its towns. It doesn’t change how anything moves.'));
     const terrain = segmented<TerrainStyle>(
       TERRAIN_STYLE_IDS.map((t) => ({ label: TERRAIN_STYLES[t].label, value: t, title: TERRAIN_STYLES[t].blurb })),

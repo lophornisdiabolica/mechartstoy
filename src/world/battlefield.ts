@@ -1,6 +1,6 @@
 import { createNoise2D } from 'simplex-noise';
 import { Rng } from '../core/rng';
-import { BiomeId } from './biomes';
+import { BiomeId, TownStyle } from './biomes';
 import { CellArea, GROUND_DEFS, GROUND_IDS, GroundDef, GroundId, groundCode } from './ground';
 import { connectTowns } from './roads';
 import { CITY_CELL, CityPlan, inCityPlan, planCity, snapToCell } from './city';
@@ -85,6 +85,8 @@ export interface BattlefieldConfig {
   terrain: TerrainStyle;
   /** The outline of the land, sea beyond (see outlines.ts): 'full' for land edge to edge. */
   outline: MapOutline;
+  /** How civilian buildings look: the biome's own style, or another (looks only). */
+  townStyle: TownStyle | 'biome';
 }
 
 export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
@@ -112,6 +114,7 @@ export const DEFAULT_BATTLEFIELD: BattlefieldConfig = {
   cliffs: 0,
   terrain: 'rolling',
   outline: 'full',
+  townStyle: 'biome',
 };
 
 /** Width of town streets and the roads between towns. */
