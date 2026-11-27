@@ -151,6 +151,7 @@ export class Stage {
   private battle: THREE.Group | null = null;
   /** Stops the terrain redrawing for the battle being replaced (see buildTerrain). */
   private stopTerrain: (() => void) | undefined;
+  private updateTerrain: ((dt: number) => void) | undefined;
   /** Stops the dense forest's trees following the battle being replaced (see buildWoods). */
   private stopWoods: (() => void) | undefined;
   private stopProps: (() => void) | undefined;
@@ -295,6 +296,7 @@ export class Stage {
     const visualRng = new Rng(game.seed ^ 0x5eed);
     const terrain = buildTerrain(field, visualRng);
     this.stopTerrain = terrain.userData.dispose;
+    this.updateTerrain = terrain.userData.update;
     this.ground = terrain.getObjectByName('ground')!;
     const biome = BIOMES[field.config.biome];
     (this.scene.background as THREE.Color).set(biome.sky);
@@ -544,6 +546,7 @@ export class Stage {
     this.frontLines.update(frameSeconds);
     this.debugOverlay.update(frameSeconds);
     p?.lap('overlays');
+    this.updateTerrain?.(simSeconds);
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
     this.tangleGround.update(simSeconds);

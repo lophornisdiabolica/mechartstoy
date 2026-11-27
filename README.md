@@ -401,13 +401,15 @@ there first, and fire slowly knocks them down.
   the shortest way. Land units still on it when the sea's over it drown,
   and boats over it when it dries run aground. Needs water: a dry map gets
   none, and a rolled map style only deals it (or a dam or a frozen lake) to a wet map.
-- *Dam:* a concrete dam standing in the water off the shore of a low valley
-  in no-man's land, holding the water back from it, with a *dam control*
-  outpost (a sluice house) on high ground by it. If any stretch of the dam
+- *Dam:* a low valley in no-man's land running down to the water, and up at
+  its head a reservoir, its water standing higher than the sea, held back by
+  a concrete dam across its mouth (where there's no room for a reservoir,
+  the dam stands in the water off the valley's shore instead), with a
+  *dam control* outpost (a sluice house) on high ground by it. If any stretch of the dam
   is shot to pieces, or the side holding the sluice house opens the sluices
   (it does, once, when at least five of its enemies are in the valley and
-  at most one of its own), the valley floods from the dam outward over a
-  minute or so and stays flooded: routes over it are cut, and boats can get
+  at most one of its own), the valley floods from the dam outward in
+  under a minute (the reservoir draining down into it) and stays flooded: routes over it are cut, and boats can get
   in. Ground the water's about to reach costs a lot to route over, a unit in
   its way drives out of the valley over dry land, and land units the water
   catches out of their depth drown. Needs water by low ground.
@@ -1433,8 +1435,8 @@ outposts and the light scenery are still placed once, at the start.
   fall back to mend use it) and a *signal fire* (every two minutes a relief
   column of three of the holder's wave picks marches in from the nearest map
   edge). A fifth, the *drawbridge* (dealt only to an outpost within 20 of a
-  map bridge, one per bridge), works that bridge for its holder: it goes up
-  when the holder's enemies come near it and nobody's on it, so they can't
+  map bridge, one per bridge), works that bridge for its holder: it swings
+  up, hinged at the end by the drawbridge house, when the holder's enemies come near it and nobody's on it, so they can't
   cross there, and comes down again once they've gone; held by its garrison
   it stays down. The clock on a shipyard or signal fire starts again when it changes
   hands, so taking one doesn't pay out at once. Every outpost makes

@@ -11,7 +11,7 @@ import * as D from '../core/dmath';
  * world/traits.ts). The dam holds the water back from a low valley until
  * it breaks: any stretch of it shot to pieces, or its sluices opened by
  * whoever holds the dam control outpost by it (the sluice house). Then the
- * valley floods, from the dam outward, over a minute or so, and stays
+ * valley floods, from the dam outward, in under a minute, and stays
  * flooded: the ground there sinks under the sea, so routes over it are cut
  * and boats can get in.
  *
@@ -29,8 +29,8 @@ import * as D from '../core/dmath';
 const TICK = 0.5;
 const WATCH = 2;
 /** How fast the water spreads from the dam (at least), and in how many seconds it fills any valley. */
-const LEAST_SPEED = 0.35;
-const FILL_TIME = 70;
+const LEAST_SPEED = 0.5;
+const FILL_TIME = 45;
 /** How far behind the front the ground's sunk all the way. */
 const RAMP = 4;
 /** How far ahead of the front ground costs a lot to route over, and is to be got out of. */
