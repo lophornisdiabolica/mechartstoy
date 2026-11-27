@@ -103,10 +103,20 @@ function launchFlagship(world: World, ctx: SimContext, e: number, producer: Prod
   producer.flagshipTimer = producer.flagshipInterval!;
 }
 
-/** Whether a producer's batches are aircraft, or come down in drop pods (see zenith.ts). */
-function fliesOrDrops(ctx: SimContext, building: string, table: { unit: UnitId }[], faction: number): boolean {
-  if (table.some((p) => ctx.units[p.unit].category === 'air')) return true;
-  return faction >= 0 && (doctrineOf(ctx, faction).drops?.includes(building as never) ?? false);
+/**
+ * How much of a producer's output a landing field speeds up (see the `air` outpost bonus): all
+ * of it for a drop side's drop buildings (see zenith.ts), otherwise the share of its picks that
+ * fly (an airpad's all of them, a vehicle factory's scout drones a tenth or so).
+ */
+export function airShare(ctx: SimContext, building: string, table: readonly { unit: UnitId; weight: number }[], faction: number): number {
+  if (faction >= 0 && doctrineOf(ctx, faction).drops?.includes(building as never)) return 1;
+  let all = 0;
+  let air = 0;
+  for (const p of table) {
+    all += p.weight;
+    if (ctx.units[p.unit].category === 'air') air += p.weight;
+  }
+  return all > 0 ? air / all : 0;
 }
 
 /** The Commander's factor on a unit's production weight for a side. */
@@ -144,20 +154,23 @@ export function productionSystem(ctx: SimContext): System {
         const band = ctx.settings.mode !== 'eternal' ? 1 : Math.min(1.8, Math.max(0.75, ratio));
         // An outpost adds the same to every side, not a share of a big side's boosted rate.
         const strength = ctx.sides.strength[faction] + outpostBonus(ctx, faction, 'production');
-        // A landing field speeds up what flies or drops: aircraft factories and a drop side's drops.
+        // A landing field speeds up what flies or drops, and only that: a factory that turns out the odd
+        // scout drone works that much faster, with its drones that much likelier, so it makes
+        // `air` more drones and as many of everything else as before.
         const air = outpostBonus(ctx, faction, 'air');
-        const lift = air > 0 && fliesOrDrops(ctx, world.req(e, Building).def.id, producer.table, faction) ? 1 + air : 1;
-        const rate = armies.production * strength * lift * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
-        producer.timer -= dt * rate;
+        const share = air > 0 ? airShare(ctx, world.req(e, Building).def.id, producer.table, faction) : 0;
+        const lift = 1 + air * share;
+        const rate = armies.production * strength * band * tide(world.time, ctx.sides.phase[faction], ctx.tide, ctx.escalation.tide) * ctx.god.production(faction, world.time);
+        producer.timer -= dt * rate * lift;
         if (producer.flagship !== undefined && producer.flagshipTimer !== undefined) {
-          producer.flagshipTimer -= dt * rate;
+          producer.flagshipTimer -= dt * rate * (share >= 1 ? lift : 1);
           if (producer.flagshipTimer <= 0) launchFlagship(world, ctx, e, producer, faction, flagships);
         }
         if (producer.timer > 0) continue;
         producer.timer = producer.interval * ctx.rng.range(0.9, 1.1);
 
         // The Commander leans the doctrine's table toward what the battle needs (see commander/advice.ts).
-        const weights = producer.table.map((p) => p.weight * advice(ctx, faction, p.unit));
+        const weights = producer.table.map((p) => p.weight * advice(ctx, faction, p.unit) * (share > 0 && share < 1 && ctx.units[p.unit].category === 'air' ? 1 + air : 1));
         const total = weights.reduce((s, w) => s + w, 0);
         let roll = ctx.rng.range(0, total);
         const entry = producer.table.find((_, i) => (roll -= weights[i]) <= 0) ?? producer.table[0];

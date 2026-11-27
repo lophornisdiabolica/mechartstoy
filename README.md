@@ -381,7 +381,9 @@ there first, and fire slowly knocks them down.
   gates, a tower at each corner, two bunkers, a keep and twice the usual
   garrison. Whoever takes it gets +20% production.
 - *Landing field:* an outpost on a paved apron with a flight tower. Its
-  holder's aircraft, and a drop side's drops, come 35% faster.
+  holder's aircraft, and a drop side's drops, come 35% faster. That's only
+  the aircraft: a vehicle factory's scout drones come 35% faster, and its
+  tanks no faster than before.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).
