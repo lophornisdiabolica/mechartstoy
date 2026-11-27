@@ -384,6 +384,15 @@ there first, and fire slowly knocks them down.
   holder's aircraft, and a drop side's drops, come 35% faster. That's only
   the aircraft: a vehicle factory's scout drones come 35% faster, and its
   tanks no faster than before.
+- *Rail line:* a railway across no-man's land between the sides, on a graded
+  bed, through a town if one's in the way (its houses keep off the track).
+  An outpost the track runs past becomes a station, and a new station goes
+  a third of the way in from each end that has none, two in all. A minute
+  after a side takes a station, an armoured train comes out onto the line
+  for it, one train a side, and another a minute after it's lost. The train
+  runs only on the track and takes no orders: it heads for the enemy nearest
+  the line, stops to fight whatever's in range with its twin gun, and turns
+  back at the ends and short of another train.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).
@@ -518,6 +527,16 @@ A map style re-roll gives most maps a trait or two (the link key is
   from the light woods: they stop shots, so infantry find cover in them,
   and slow vehicles, which flatten the trees they drive into; shots and
   blasts knock them down too, and a cleared patch is open ground again.
+  **Wildfire** (a slider, off by default): fire that gets going in dense
+  forest (a flamer's, a burning wreck's, a burning oil pool's) catches the
+  trees. A stand burns for about half a minute under a pall of smoke that
+  throws shots off, creeping slowly on to the stands beside it (faster the
+  higher the slider, and in dry country: desert, steppe and ash burn
+  readily, jungle, snow and tundra barely), then the trees lie charred on
+  burnt ground, a little rough going. It's nobody's fire, so it burns
+  everyone in it. Ground burning with nobody's fire (a wildfire, a burning
+  oil field) costs a lot to route through, so units go round it, and one
+  caught in it gets out the shortest way.
   **Scrap** (on by default): where enough vehicles are wrecked, the ground
   turns to scrap, a slog for tracks and hovers and easy for long legs,
   until it's cleared away four minutes later. **Wreckage:** a destroyed
