@@ -2,6 +2,7 @@ import type { TraitState } from './traits';
 import type { BridgeWear } from './bridges';
 import type { Tide } from './tides';
 import type { Flood } from './flood';
+import type { Ice } from './ice';
 import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
@@ -70,6 +71,8 @@ export type GameEvents = {
   tide: { phase: 'ebbing' | 'turning'; x: number; z: number };
   /** The dam broke (faction -1) or a side opened its sluices, and the valley's flooding (see flood.ts). */
   flood: { faction: number; x: number; z: number };
+  /** The ice on a frozen lake gave way, and units went through (see ice.ts). */
+  iceBroke: { x: number; z: number; drowned: number };
   /** A drawbridge outpost's holder raised (up) or lowered its bridge (see bridges.ts). */
   drawbridge: { outpost: number; faction: number; up: boolean; x: number; z: number };
   /** A rail station put an armoured train on the line for whoever holds it (see rail.ts). */
@@ -236,6 +239,8 @@ export interface SimContext {
   tidal: Tide | null;
   /** The Dam trait's valley and its flood, or null without one (see flood.ts). */
   flood: Flood | null;
+  /** The Frozen lake trait's ice, or null without one (see ice.ts). */
+  ice: Ice | null;
   /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */
   traffic: Traffic;
 }

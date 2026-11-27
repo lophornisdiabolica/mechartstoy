@@ -49,7 +49,7 @@ import * as D from '../core/dmath';
  *   comes back in (see game/tides.ts). Boats can't cross them while they're
  *   dry. Needs water: a dry map gets none.
  */
-export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam';
+export type MapTrait = 'oldField' | 'fortLine' | 'hulk' | 'oil' | 'geysers' | 'ruins' | 'grove' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen';
 
 export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   oldField: { label: 'Old battlefield', blurb: 'Craters, junk and the hulks of an earlier fight' },
@@ -62,6 +62,7 @@ export const MAP_TRAITS: Record<MapTrait, { label: string; blurb: string }> = {
   citadel: { label: 'Citadel', blurb: 'A walled fortress in the middle with a strong garrison: whoever cracks it builds faster' },
   landing: { label: 'Landing field', blurb: 'A big paved pad: aircraft and drops come faster for whoever holds it' },
   rail: { label: 'Rail line', blurb: 'A railway across no-man’s land with two stations: whoever holds one gets an armoured train on the line' },
+  frozen: { label: 'Frozen lake', blurb: 'A lake frozen over: a way across, until it gives way under heavy machines or melts under fire' },
   dam: { label: 'Dam', blurb: 'A dam holding the water back from a low valley: break it, or open its sluices, and the valley floods' },
   tidal: { label: 'Tidal flats', blurb: 'Sand bars across the water that the tide uncovers and drowns again: land bridges every few minutes' },
 };
@@ -127,6 +128,19 @@ export interface TraitLayout {
   rail: RailLine | null;
   flats: TidalFlat[];
   flood: FloodPlain | null;
+  ice: IceSheet | null;
+}
+
+/**
+ * A frozen lake (the Frozen lake trait): the map vertices under its ice,
+ * with the lake bed's height under each (the ice is just above the sea).
+ * It breaks and refreezes during the battle (see game/ice.ts).
+ */
+export interface IceSheet {
+  verts: number[];
+  bed: number[];
+  /** The ice's height. */
+  level: number;
 }
 
 /**
@@ -165,7 +179,7 @@ export interface TidalFlat {
 }
 
 export function emptyTraits(): TraitLayout {
-  return { sites: [], relics: [], vents: [], props: [], rail: null, flats: [], flood: null };
+  return { sites: [], relics: [], vents: [], props: [], rail: null, flats: [], flood: null, ice: null };
 }
 
 /** Map area (in cells) sizes are per: a Medium map's. */
@@ -175,9 +189,9 @@ const TRIES = 90;
 /** Tree size at and above which a tree is one of a grove's giants (see woods.ts). */
 export const GIANT = 1.6;
 /** Each trait's own random stream, by its place here (so adding a trait leaves the others' layouts alone). */
-const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail', 'tidal', 'dam'];
+const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine', 'citadel', 'landing', 'rail', 'tidal', 'dam', 'frozen'];
 /** Order traits are placed in: the outposts of their own, then the biggest first, the line across everything last. */
-const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'tidal', 'dam', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
+const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'tidal', 'dam', 'frozen', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
 
 /** Lay out the traits on a finished map (see generateBattlefield). */
 export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
@@ -206,6 +220,10 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
       damFlood(field, out, r, flatten);
       continue;
     }
+    if (kind === 'frozen') {
+      frozenLake(field, out, r);
+      continue;
+    }
     // Smaller if it doesn't fit (a crowded map, or a second trait).
     let radius = RADII[kind] * scale;
     let at = findSpot(field, out, radius, r);
@@ -216,11 +234,11 @@ export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng
   }
 }
 
-const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
+const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
 
 type Builder = (field: Battlefield, out: TraitLayout, x: number, z: number, radius: number, rng: Rng, scale: number) => void;
 
-const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam'>, Builder> = {
+const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>, Builder> = {
   oldField(field, out, x, z, radius, rng, scale) {
     // Craters first, so the hulks and junk sit in them.
     for (let n = Math.round(8 * scale); n > 0; n--) {
@@ -843,6 +861,170 @@ function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: numbe
     for (let t = 0; t <= 1; t += 0.5 / reach) field.paint(c.ax + (c.bx - c.ax) * t, c.az + (c.bz - c.az) * t, FLAT_HALF, 'flats', (g) => g === 'plain');
     out.flats.push(flat);
     out.sites.push({ kind: 'tidal', x: mx, z: mz, radius: 0 });
+  }
+}
+
+/** Frozen lake: the least and most of a lake to freeze (in map vertices), and the ice's height above the sea. */
+const ICE_LEAST = 40;
+const ICE_MOST = 4000;
+export const ICE_ABOVE = 0.06;
+
+/** Freeze a lake in no-man's land over: the most contested lake that doesn't reach the map's edge. */
+function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
+  if (field.baseSites.length < 2) return;
+  const { cols, rows } = field.config;
+  const stride = cols + 1;
+  const heights = field.heights;
+  const sea = field.seaLevel;
+  const seen = new Uint8Array(stride * (rows + 1));
+  let best: { verts: number[]; score: number } | null = null;
+  for (let k0 = 0; k0 < heights.length; k0++) {
+    if (seen[k0] || heights[k0] >= sea) continue;
+    const verts: number[] = [];
+    const queue = [k0];
+    seen[k0] = 1;
+    let edge = false;
+    while (queue.length > 0) {
+      const k = queue.pop()!;
+      verts.push(k);
+      const i = k % stride;
+      const j = (k - i) / stride;
+      if (i === 0 || j === 0 || i === cols || j === rows) edge = true;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (ni < 0 || nj < 0 || ni > cols || nj > rows) continue;
+        const m = nj * stride + ni;
+        if (seen[m] || heights[m] >= sea) continue;
+        seen[m] = 1;
+        queue.push(m);
+      }
+    }
+    if (edge || verts.length < ICE_LEAST || verts.length > ICE_MOST) continue;
+    let cx = 0;
+    let cz = 0;
+    for (const k of verts) {
+      cx += field.vertexX(k % stride);
+      cz += field.vertexZ(Math.floor(k / stride));
+    }
+    cx /= verts.length;
+    cz /= verts.length;
+    const d = field.baseSites.map((b) => D.hypot(b.x - cx, b.z - cz)).sort((p, q) => p - q);
+    const score = Math.abs(d[0] - d[1]) - Math.min(verts.length, 600) * 0.02 + rng.range(0, 4);
+    if (!best || score < best.score) best = { verts, score };
+  }
+  if (!best) return;
+  const level = sea + ICE_ABOVE;
+  const sheet: IceSheet = { verts: best.verts, bed: best.verts.map((k) => heights[k]), level };
+  for (const k of best.verts) heights[k] = level;
+  // The ice's own ground on every cell it covers.
+  const cells = new Set<number>();
+  for (const k of best.verts) {
+    const i = k % stride;
+    const j = (k - i) / stride;
+    for (const [ci, cj] of [[i, j], [i - 1, j], [i, j - 1], [i - 1, j - 1]]) if (ci >= 0 && cj >= 0 && ci < cols && cj < rows) cells.add(cj * cols + ci);
+  }
+  field.setGround([...cells], 'ice');
+  offIce(field, new Set(best.verts));
+  out.ice = sheet;
+  let cx = 0;
+  let cz = 0;
+  for (const k of best.verts) {
+    cx += field.vertexX(k % stride);
+    cz += field.vertexZ(Math.floor(k / stride));
+  }
+  out.sites.push({ kind: 'frozen', x: cx / best.verts.length, z: cz / best.verts.length, radius: 0 });
+}
+
+/** How far clear of the ice (past a road's own half-width) what's left of a road over it stops. */
+const ICE_ROAD_CLEAR = 0.4;
+/** How far apart along a road it's checked for ice. */
+const ICE_ROAD_STEP = 0.5;
+
+/**
+ * Cut the roads off a lake that's frozen over (a city's alleys and streets
+ * run over its water, out of sight under it, and the ice would bring them up
+ * into view): each road keeps its stretches clear of the ice, as roads of
+ * their own, and loses the rest. A bridge over the lake comes down later as
+ * standing over dry ground (see battlefield.ts dropDryBridges), its road cut
+ * here with the rest.
+ */
+function offIce(field: Battlefield, ice: Set<number>): void {
+  const stride = field.config.cols + 1;
+  const cs = field.config.cellSize;
+  const onIce = (x: number, z: number, r: number) => {
+    const i0 = Math.floor((x - r - field.bounds.minX) / cs);
+    const i1 = Math.ceil((x + r - field.bounds.minX) / cs);
+    const j0 = Math.floor((z - r - field.bounds.minZ) / cs);
+    const j1 = Math.ceil((z + r - field.bounds.minZ) / cs);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        if (i < 0 || j < 0 || i >= stride || !ice.has(j * stride + i)) continue;
+        if (D.hypot(field.vertexX(i) - x, field.vertexZ(j) - z) <= r) return true;
+      }
+    }
+    return false;
+  };
+  const gone: number[] = [];
+  const count = field.roads.length;
+  for (let k = 0; k < count; k++) {
+    const road = field.roads[k];
+    const runs: { points: { x: number; z: number }[]; widths: number[] }[] = [];
+    let run: { points: { x: number; z: number }[]; widths: number[] } | null = null;
+    let cut = false;
+    // Along the road in short steps (a city's alley is one straight stretch, which can cross a corner of the lake between its ends).
+    const visit = (x: number, z: number, w: number, corner: boolean) => {
+      if (onIce(x, z, w / 2 + ICE_ROAD_CLEAR)) {
+        // The run ends at the last clear step before the ice.
+        if (run && last && !last.corner) {
+          run.points.push({ x: last.x, z: last.z });
+          run.widths.push(last.w);
+        }
+        run = null;
+        cut = true;
+        last = null;
+        return;
+      }
+      if (!run) {
+        run = { points: [], widths: [] };
+        runs.push(run);
+        if (!corner) {
+          run.points.push({ x, z });
+          run.widths.push(w);
+        }
+      }
+      if (corner) {
+        run.points.push({ x, z });
+        run.widths.push(w);
+      }
+      last = { x, z, w, corner };
+    };
+    let last: { x: number; z: number; w: number; corner: boolean } | null = null;
+    road.points.forEach((p, q) => {
+      const w = road.widths?.[q] ?? road.width;
+      if (q > 0) {
+        const o = road.points[q - 1];
+        const ow = road.widths?.[q - 1] ?? road.width;
+        const n = Math.ceil(D.hypot(p.x - o.x, p.z - o.z) / ICE_ROAD_STEP);
+        for (let t = 1; t < n; t++) visit(o.x + ((p.x - o.x) * t) / n, o.z + ((p.z - o.z) * t) / n, ow + ((w - ow) * t) / n, false);
+      }
+      visit(p.x, p.z, w, true);
+    });
+    if (!cut) continue;
+    const kept = runs.filter((r) => r.points.length >= 2);
+    const as = (r: { points: { x: number; z: number }[]; widths: number[] }) => (road.widths ? { ...road, points: r.points, widths: r.widths } : { ...road, points: r.points });
+    if (kept.length === 0) gone.push(k);
+    else field.roads[k] = as(kept[0]);
+    for (const r of kept.slice(1)) field.roads.push(as(r));
+  }
+  // Roads left with nothing taken out of the list, and the junctions on them with them.
+  for (const k of gone.reverse()) {
+    field.roads.splice(k, 1);
+    for (let n = field.junctions.length - 1; n >= 0; n--) {
+      const j = field.junctions[n];
+      if (j.roads.includes(k)) field.junctions.splice(n, 1);
+      else j.roads = j.roads.map((r) => (r > k ? r - 1 : r));
+    }
   }
 }
 

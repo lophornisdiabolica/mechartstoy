@@ -72,6 +72,7 @@ const EVENT_TYPES: Record<keyof GameEvents, true> = {
   drawbridge: true,
   tide: true,
   flood: true,
+  iceBroke: true,
   squadDropped: true,
   sideEliminated: true,
   battleOver: true,

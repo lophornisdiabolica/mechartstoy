@@ -400,7 +400,7 @@ there first, and fire slowly knocks them down.
   costs a lot to route over, so routes go round, and a unit on it gets off
   the shortest way. Land units still on it when the sea's over it drown,
   and boats over it when it dries run aground. Needs water: a dry map gets
-  none, and a rolled map style only deals it to a wet map.
+  none, and a rolled map style only deals it (or a dam or a frozen lake) to a wet map.
 - *Dam:* a concrete dam standing in the water off the shore of a low valley
   in no-man's land, holding the water back from it, with a *dam control*
   outpost (a sluice house) on high ground by it. If any stretch of the dam
@@ -411,6 +411,15 @@ there first, and fire slowly knocks them down.
   in. Ground the water's about to reach costs a lot to route over, a unit in
   its way drives out of the valley over dry land, and land units the water
   catches out of their depth drown. Needs water by low ground.
+- *Frozen lake:* the most contested lake that doesn't reach the map's edge
+  is frozen over: a way across for everyone. Each patch of ice takes strain
+  from the weight on it (a soldier's nothing, a tank parked on it goes
+  through in about half a minute, a super unit in seconds) and from fire
+  and shells bursting on it, and gets over strain slowly. Too much and it
+  gives way, cracking the ice round it, and land units out of their depth
+  go through and drown. A hole freezes over again a minute and a half
+  later, once it's empty. Tanks and walkers go round the ice where they
+  can. Needs a lake.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).
