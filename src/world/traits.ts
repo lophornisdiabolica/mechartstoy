@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import type { Battlefield } from './battlefield';
 import type { PropKind } from './biomes';
 import * as D from '../core/dmath';
+import { landReach } from './waterways';
 
 /**
  * Map traits: one or two special features laid over a map's style, each a
@@ -157,6 +158,25 @@ export interface FloodPlain {
   verts: number[];
   dist: number[];
   to: number[];
+  /** The reservoir the dam holds back, if it has one (see reservoir): drawn above the sea until the dam goes, then draining down to it. */
+  pool?: Reservoir;
+}
+
+/**
+ * A reservoir held up behind a dam (see FloodPlain.pool): a round lake of
+ * this radius about (x, z), cut off on the dam's side where the dam's
+ * water face is, `cut` from the middle toward (-ux, -uz). Its water stands
+ * at `level` while the dam holds. Under it the bed is below the sea, so to
+ * everything but the eye it's water like any other.
+ */
+export interface Reservoir {
+  x: number;
+  z: number;
+  ux: number;
+  uz: number;
+  radius: number;
+  cut: number;
+  level: number;
 }
 
 /**
@@ -1019,21 +1039,39 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     if (!best || score < best.score) best = { region, shore, cx, cz, score };
   }
   if (!best) return;
-  const sx = field.vertexX(best.shore % stride);
-  const sz = field.vertexZ(Math.floor(best.shore / stride));
-  // Along the shore, standing in the water just off it (so it doesn't wall the valley's edge off): square to the way from the valley's middle to the water.
-  const toWater = D.atan2(sz - best.cz, sx - best.cx);
-  const along = toWater + Math.PI / 2;
-  const dx = D.cos(along);
-  const dz = D.sin(along);
-  const wx = sx + D.cos(toWater) * DAM_OFFSHORE;
-  const wz = sz + D.sin(toWater) * DAM_OFFSHORE;
-  for (let n = 0; n < DAM_SEGMENTS; n++) {
-    const o = (n - (DAM_SEGMENTS - 1) / 2) * DAM_STEP;
-    out.relics.push({ building: 'dam', x: wx + dx * o, z: wz + dz * o, heading: -D.atan2(dx, -dz) });
+  // Best, a reservoir up the valley's head, held back by the dam across its mouth, the valley running from the
+  // dam down to the sea. Failing that, the dam stands just off the valley's shore, holding the sea back.
+  const pooled = reservoir(field, best.region, best.shore, rng);
+  let sx = field.vertexX(best.shore % stride);
+  let sz = field.vertexZ(Math.floor(best.shore / stride));
+  let plain = best.region;
+  if (pooled) {
+    sx = pooled.x;
+    sz = pooled.z;
+    plain = pooled.verts;
+    const along = D.atan2(pooled.pool.uz, pooled.pool.ux) + Math.PI / 2;
+    const dx = D.cos(along);
+    const dz = D.sin(along);
+    for (let n = 0; n < DAM_SEGMENTS; n++) {
+      const o = (n - (DAM_SEGMENTS - 1) / 2) * DAM_STEP;
+      // Its sluice gates (the model's -x side) toward the reservoir, as the shore dam's are toward the sea.
+      out.relics.push({ building: 'dam', x: sx + dx * o, z: sz + dz * o, heading: -D.atan2(dx, -dz) });
+    }
+  } else {
+    // Along the shore, standing in the water just off it (so it doesn't wall the valley's edge off): square to the way from the valley's middle to the water.
+    const toWater = D.atan2(sz - best.cz, sx - best.cx);
+    const along = toWater + Math.PI / 2;
+    const dx = D.cos(along);
+    const dz = D.sin(along);
+    const wx = sx + D.cos(toWater) * DAM_OFFSHORE;
+    const wz = sz + D.sin(toWater) * DAM_OFFSHORE;
+    for (let n = 0; n < DAM_SEGMENTS; n++) {
+      const o = (n - (DAM_SEGMENTS - 1) / 2) * DAM_STEP;
+      out.relics.push({ building: 'dam', x: wx + dx * o, z: wz + dz * o, heading: -D.atan2(dx, -dz) });
+    }
   }
   // The valley floods nearest the dam first, the lowest ground deepest.
-  const order = best.region
+  const order = plain
     .map((k) => ({ k, d: D.hypot(field.vertexX(k % stride) - sx, field.vertexZ(Math.floor(k / stride)) - sz) }))
     .sort((p, q) => p.d - q.d || p.k - q.k);
   out.flood = {
@@ -1042,10 +1080,12 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     verts: order.map((v) => v.k),
     dist: order.map((v) => v.d),
     to: order.map((v) => sea - 0.4 - 0.8 * Math.min(1, (top - heights[v.k]) / FLOOD_TOP)),
+    ...(pooled ? { pool: pooled.pool } : {}),
   };
   out.sites.push({ kind: 'dam', x: sx, z: sz, radius: 0 });
-  // The sluice house: on dry ground above the valley, by the dam.
-  const inPlain = new Set(best.region);
+  // The sluice house: on dry ground above the valley, by the dam (and clear of the reservoir's banks, which its levelling would breach).
+  const inPlain = new Set(plain);
+  const pool = pooled?.pool;
   let spot: { x: number; z: number } | null = null;
   for (let r = SLUICE_RADIUS + 3; r <= SLUICE_REACH && !spot; r += 1.5) {
     for (let a = 0; a < 24 && !spot; a++) {
@@ -1061,8 +1101,9 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
         if (field.heightAt(px, pz) < sea + 0.3 || inPlain.has(vj * stride + vi) || field.slopeAt(px, pz) > 0.9 || field.sheerAt(px, pz)) ok = false;
       }
       if (!ok || field.nearBridge(x, z, SLUICE_RADIUS + 2)) continue;
+      if (pool && D.hypot(pool.x - x, pool.z - z) < pool.radius * POOL_REACH + SLUICE_RADIUS + 1) continue;
       // None of the valley under it: its levelling would be flooded.
-      if (best.region.some((k) => D.hypot(field.vertexX(k % stride) - x, field.vertexZ(Math.floor(k / stride)) - z) < SLUICE_RADIUS * 1.3 + 1.5)) continue;
+      if (plain.some((k) => D.hypot(field.vertexX(k % stride) - x, field.vertexZ(Math.floor(k / stride)) - z) < SLUICE_RADIUS * 1.3 + 1.5)) continue;
       if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + SLUICE_RADIUS + 4)) continue;
       if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius + SLUICE_RADIUS + 4)) continue;
       if (field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + SLUICE_RADIUS)) continue;
@@ -1074,6 +1115,181 @@ function damFlood(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     field.outpostSites.push({ index: field.outpostSites.length, kind: 'sluice', x: spot.x, z: spot.z, radius: SLUICE_RADIUS, height });
     flatten(spot.x, spot.z, SLUICE_RADIUS, height);
   }
+}
+
+/**
+ * A dam's reservoir: its radius; how far its water stands above the sea (as
+ * near the top of its banks as the ground round it allows, up to a little
+ * below the dam's top); how far its banks stand above that; and how far out
+ * its banks reach (in radii).
+ */
+const POOL_RADIUS = 8;
+const POOL_RISE = 1.6;
+const POOL_RISE_MOST = 2.3;
+const POOL_BANK = 0.3;
+const POOL_REACH = 1.6;
+/** How much of the reservoir's round the dam cuts off (its water face this far in from the edge). */
+const POOL_CUT = 1.2;
+/** Half the dam's thickness (see bld:dam), and how far down the valley from it the ground is lowered to the valley floor. */
+const DAM_HALF = 0.7;
+const SPILLWAY = 8;
+/** Candidate dam spots tried, and of those the best few laid out (each checked for cutting anything off). */
+const POOL_TRIES = 48;
+const POOL_LAYOUTS = 4;
+
+/**
+ * Lay out a reservoir up at the head of a valley: a round lake dug into the
+ * higher ground beyond the valley's edge, its banks built up where they're
+ * too low to hold it, and the dam across its mouth, with a spillway down
+ * from the dam to the valley floor. The valley's end furthest from the sea
+ * is best, so the flood runs the length of it. Returns the dam's middle,
+ * the reservoir, and the valley's vertices (now with the spillway, less any
+ * ground the banks raised); or null (and the map as it was) if there's no
+ * room, or the reservoir would cut a base, outpost or town off.
+ */
+function reservoir(field: Battlefield, region: number[], shore: number, rng: Rng): { x: number; z: number; pool: Reservoir; verts: number[] } | null {
+  const { cols, rows } = field.config;
+  const stride = cols + 1;
+  const heights = field.heights;
+  const sea = field.seaLevel;
+  const top = sea + FLOOD_TOP;
+  const vx = (k: number) => field.vertexX(k % stride);
+  const vz = (k: number) => field.vertexZ(Math.floor(k / stride));
+  const R = POOL_RADIUS;
+  const cut = R - POOL_CUT;
+  const span = (DAM_SEGMENTS * DAM_STEP) / 2;
+  const reach = R * POOL_REACH;
+  const sx = vx(shore);
+  const sz = vz(shore);
+  const nearRoad = (x: number, z: number, margin: number) =>
+    field.roads.some((r) =>
+      r.points.some((p, q) => {
+        if (q === 0) return false;
+        const o = r.points[q - 1];
+        const dx = p.x - o.x;
+        const dz = p.z - o.z;
+        const t = Math.max(0, Math.min(1, ((x - o.x) * dx + (z - o.z) * dz) / Math.max(1e-6, dx * dx + dz * dz)));
+        return D.hypot(x - o.x - dx * t, z - o.z - dz * t) < margin + r.width / 2;
+      }),
+    );
+  // The valley's edge: its vertices beside higher ground.
+  const edge = region.filter((k) => {
+    const i = k % stride;
+    const j = (k - i) / stride;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => i + di >= 0 && j + dj >= 0 && i + di <= cols && j + dj <= rows && heights[(j + dj) * stride + i + di] >= top);
+  });
+  if (edge.length === 0) return null;
+  const options: { score: number; dx: number; dz: number; cx: number; cz: number; ux: number; uz: number; level: number }[] = [];
+  for (let n = 0; n < POOL_TRIES; n++) {
+    const k = edge[rng.int(0, edge.length - 1)];
+    const x = vx(k);
+    const z = vz(k);
+    // Up out of the valley: away from the valley ground round it.
+    let mx = 0;
+    let mz = 0;
+    let count = 0;
+    for (const m of region) {
+      const d = D.hypot(vx(m) - x, vz(m) - z);
+      if (d > 6) continue;
+      mx += vx(m);
+      mz += vz(m);
+      count++;
+    }
+    const ax = x - mx / count;
+    const az = z - mz / count;
+    const len = D.hypot(ax, az);
+    if (len < 0.3) continue;
+    const ux = ax / len;
+    const uz = az / len;
+    const dx = x + ux;
+    const dz = z + uz;
+    const cx = dx + ux * (DAM_HALF + cut);
+    const cz = dz + uz * (DAM_HALF + cut);
+    if (!field.contains(cx, cz, reach + 2)) continue;
+    const clear = (px: number, pz: number, room: number) =>
+      !field.baseSites.some((b) => D.hypot(b.x - px, b.z - pz) < b.radius + room) &&
+      !field.outpostSites.some((o) => D.hypot(o.x - px, o.z - pz) < o.radius + room) &&
+      !field.townSites.some((t) => D.hypot(t.x - px, t.z - pz) < t.radius + room) &&
+      !field.inCity(px, pz, room) &&
+      !field.nearBridge(px, pz, room) &&
+      !nearRoad(px, pz, room);
+    if (!clear(cx, cz, reach + 3) || !clear(dx, dz, span + 2)) continue;
+    // High ground to dig into, not more of the valley.
+    let low = 0;
+    let wet = 0;
+    const rims: number[] = [];
+    for (let a = 0; a < 16; a++) {
+      const ang = (a / 16) * Math.PI * 2;
+      const ca = D.cos(ang);
+      const sa = D.sin(ang);
+      for (const f of [0.3, 0.7]) if (field.heightAt(cx + ca * R * f, cz + sa * R * f) < sea + 0.4) low++;
+      const h = field.heightAt(cx + ca * R * 1.15, cz + sa * R * 1.15);
+      if (h < sea) wet++;
+      // The banks round it, but for the dam's side.
+      if (ca * ux + sa * uz > -0.6) rims.push(h);
+    }
+    if (low > 6 || wet > 0) continue;
+    // The water up near the top of the lowest bank (the rest is built up to hold it).
+    rims.sort((p, q) => p - q);
+    const level = Math.max(sea + POOL_RISE, Math.min(sea + POOL_RISE_MOST, rims[1] - POOL_BANK));
+    const built = rims.reduce((sum, h) => sum + Math.max(0, level + POOL_BANK - h), 0) / rims.length;
+    // Not dug deep into a hill, its water far down a pit.
+    const sunk = rims.reduce((sum, h) => sum + Math.max(0, h - level - 1.5), 0) / rims.length;
+    // The far end of the valley from the sea, so the flood runs its length, and banks that mostly stand already.
+    const score = -D.hypot(x - sx, z - sz) + built * 6 + sunk * 8;
+    options.push({ score, dx, dz, cx, cz, ux, uz, level });
+  }
+  options.sort((p, q) => p.score - q.score);
+  for (const o of options.slice(0, POOL_LAYOUTS)) {
+    const before = heights.slice();
+    const bank = o.level + POOL_BANK;
+    const vx0 = -o.uz;
+    const vz0 = o.ux;
+    const channel: number[] = [];
+    const i0 = Math.max(0, Math.floor((Math.min(o.cx, o.dx) - reach - SPILLWAY - field.bounds.minX) / field.config.cellSize));
+    const i1 = Math.min(cols, Math.ceil((Math.max(o.cx, o.dx) + reach + SPILLWAY - field.bounds.minX) / field.config.cellSize));
+    const j0 = Math.max(0, Math.floor((Math.min(o.cz, o.dz) - reach - SPILLWAY - field.bounds.minZ) / field.config.cellSize));
+    const j1 = Math.min(rows, Math.ceil((Math.max(o.cz, o.dz) + reach + SPILLWAY - field.bounds.minZ) / field.config.cellSize));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const k = j * stride + i;
+        const x = field.vertexX(i);
+        const z = field.vertexZ(j);
+        // The spillway: from the dam's water face down the valley, as wide as the dam, at the valley floor.
+        const s = (x - o.dx) * o.ux + (z - o.dz) * o.uz;
+        if (Math.abs((x - o.dx) * vx0 + (z - o.dz) * vz0) <= span && s <= DAM_HALF && s >= -SPILLWAY) {
+          heights[k] = Math.min(heights[k], sea + 0.55);
+          channel.push(k);
+          continue;
+        }
+        const e = D.hypot(x - o.cx, z - o.cz) / R;
+        const h = heights[k];
+        // The bed, under the sea (so it's water), deepest in the middle.
+        if (e < 1) heights[k] = Math.min(h, sea - 0.25 - (1 - e * e));
+        // The banks, built up to hold the water where the ground's too low, easing back down outside.
+        else if (e < 1.3) heights[k] = Math.max(h, bank);
+        else if (e < POOL_REACH && h < bank) {
+          const t = (e - 1.3) / (POOL_REACH - 1.3);
+          heights[k] = bank + (h - bank) * t * t * (3 - 2 * t);
+        }
+      }
+    }
+    // Nothing cut off by it: every base, outpost and town still in reach by land.
+    const reachable = landReach(field);
+    const at = (x: number, z: number) => Math.max(0, Math.min(rows, Math.round((z - field.bounds.minZ) / field.config.cellSize))) * stride + Math.max(0, Math.min(cols, Math.round((x - field.bounds.minX) / field.config.cellSize)));
+    if (![...field.baseSites, ...field.outpostSites, ...field.townSites].every((p) => reachable[at(p.x, p.z)])) {
+      heights.set(before);
+      continue;
+    }
+    const verts = [...new Set([...region, ...channel])].filter((k) => heights[k] >= sea && heights[k] < top);
+    // Most of the valley still there to flood (the banks haven't built over it).
+    if (verts.length < Math.max(FLOOD_LEAST, region.length * 0.8)) {
+      heights.set(before);
+      continue;
+    }
+    return { x: o.dx, z: o.dz, pool: { x: o.cx, z: o.cz, ux: o.ux, uz: o.uz, radius: R, cut, level: o.level }, verts };
+  }
+  return null;
 }
 
 /** How much further the way round by land (in steps across map cells, not as the crow flies) must be than a bar, for the bar to be worth laying; and how many crossings are measured. */

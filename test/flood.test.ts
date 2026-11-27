@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Building, Faction, Health, Transform } from '../src/game/components';
+import { Ai, Building, Faction, Health, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
 import { capture } from '../src/game/outposts';
 import { BattleSettings, battlefieldConfig, defaultFaction, defaultSettings } from '../src/game/settings';
@@ -72,6 +72,35 @@ describe('dam trait', () => {
     expect(generateBattlefield(new Rng(1), battlefieldConfig(defaultSettings())).traits.flood).toBeNull();
   });
 
+  it('on a big enough map, holds a reservoir up behind the dam, higher than the sea, its banks holding it', () => {
+    let pools = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const s = settings();
+      s.map.size = 'large';
+      const field = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      const p = field.traits.flood;
+      const pool = p?.pool;
+      if (!p || !pool) continue;
+      pools++;
+      const sea = field.seaLevel;
+      expect(pool.level).toBeGreaterThan(sea + 1);
+      // Water (to everything but the eye) in the middle; banks above its level all round but the dam's side.
+      expect(field.isWater(pool.x, pool.z)).toBe(true);
+      for (let a = 0; a < 24; a++) {
+        const ang = (a / 24) * Math.PI * 2;
+        if (Math.cos(ang) * pool.ux + Math.sin(ang) * pool.uz < -0.5) continue;
+        expect(field.heightAt(pool.x + Math.cos(ang) * pool.radius * 1.15, pool.z + Math.sin(ang) * pool.radius * 1.15)).toBeGreaterThanOrEqual(pool.level);
+      }
+      // The dam across its mouth, between it and the valley, which floods from the dam outward.
+      const dams = field.traits.relics.filter((r) => r.building === 'dam');
+      expect(dams.length).toBe(3);
+      for (const d of dams) expect(Math.hypot(d.x - (pool.x - pool.ux * (pool.cut + 0.7)), d.z - (pool.z - pool.uz * (pool.cut + 0.7)))).toBeLessThan(3.5);
+      expect(Math.hypot(p.x - pool.x, p.z - pool.z)).toBeLessThan(pool.radius);
+      for (let n = 0; n < p.verts.length; n++) expect(field.heights[p.verts[n]]).toBeGreaterThanOrEqual(sea);
+    }
+    expect(pools).toBeGreaterThan(2);
+  });
+
   it('shot to pieces, the dam breaks and the valley floods from the dam outward, for good', () => {
     const game = damGame();
     const flood = game.ctx.flood!;
@@ -127,7 +156,8 @@ describe('dam trait', () => {
     game.events.on('flood', (e) => floods.push(e.faction));
     // Its own in the valley: it holds.
     capture(game.world, game.ctx, house, 0);
-    for (let n = 0; n < 6; n++) spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, spot.x + (n % 3) - 1, spot.z + Math.floor(n / 3));
+    // Parked there (left to themselves they'd drive off for the enemy base).
+    for (let n = 0; n < 6; n++) game.world.remove(spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, spot.x + (n % 3) - 1, spot.z + Math.floor(n / 3)), Ai);
     run(game, 3);
     expect(flood.state).toBe('held');
     // Enemies in it and hardly any of its own: it opens them.

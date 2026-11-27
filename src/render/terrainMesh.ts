@@ -118,11 +118,21 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   group.name = 'terrain';
   const bridges = new THREE.Group();
   bridges.name = 'bridges';
-  for (const bridge of field.bridges) {
-    const mesh = buildBridge(field, bridge);
-    showBridge(mesh, bridge);
-    bridges.add(mesh);
-  }
+  // Drawbridges as they swing (see showBridge), by bridge.
+  const leaves = new Map<number, Leaf>();
+  const showBridge = (k: number) => {
+    const mesh = bridges.children[k];
+    const bridge = field.bridges[k];
+    if (!mesh) return;
+    mesh.visible = !bridge?.gone || bridge.raised === true;
+    let leaf = leaves.get(k);
+    if (bridge?.raised && !leaf) leaves.set(k, (leaf = drawbridgeLeaf(field, bridge, mesh)));
+    if (leaf) leaf.target = bridge?.raised ? DRAWBRIDGE_TILT : 0;
+  };
+  field.bridges.forEach((bridge, k) => {
+    bridges.add(buildBridge(field, bridge));
+    showBridge(k);
+  });
   const roads = new THREE.Group();
   roads.name = 'roads';
   // Roads are drawn merged, a map square at a time: a city has hundreds of streets, and a mesh
@@ -188,6 +198,9 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   field.roads.forEach((_, k) => drawRoad(k));
   drawTiles();
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
+  // A dam's reservoir, standing above the sea until the dam goes.
+  const pool = buildPool(field);
+  if (pool) group.add(pool.mesh);
   // A rail line's track (see world/traits.ts), redrawn where the ground under it moves.
   const rail = field.traits.rail;
   let track = rail ? buildTrack(field) : null;
@@ -209,7 +222,8 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     }
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
     // Engineers' bridges come down, map bridges fall (see game/bridges.ts), and drawbridges go up and down again.
-    for (let k = 0; k < drawnBridges; k++) showBridge(bridges.children[k], field.bridges[k]);
+    for (let k = 0; k < drawnBridges; k++) showBridge(k);
+    pool?.update();
     // Roads follow the ground, so redraw any the ground under moved (and draw new ones).
     field.roads.forEach((r, k) => {
       // (Along the whole road, not just its points: a city avenue is one long straight.)
@@ -248,6 +262,10 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
     pavingMaterial.dispose();
   };
   group.userData.roadTops = tops;
+  /** Swings the drawbridges going up or down; call each frame with the battle seconds gone by. */
+  group.userData.update = (dt: number) => {
+    for (const leaf of leaves.values()) swingLeaf(leaf, dt);
+  };
   return group;
 }
 
@@ -692,14 +710,43 @@ type P3 = [number, number, number];
  * have wings sloping down to the ground at the sides, wide at the foot and
  * narrowing to nothing where the railing starts, and an apron at each end.
  */
-/** How high a raised drawbridge is lifted. */
-const DRAWBRIDGE_LIFT = 4.5;
+/** How far a raised drawbridge tips up from flat (radians), and how fast it swings (radians a second). */
+const DRAWBRIDGE_TILT = 1.25;
+const DRAWBRIDGE_SWING = 0.45;
 
-/** A bridge drawn as it stands: gone, raised (a drawbridge, lifted clear of the water) or there. */
-function showBridge(mesh: THREE.Object3D | undefined, bridge: Bridge | undefined): void {
-  if (!mesh) return;
-  mesh.visible = !bridge?.gone || bridge.raised === true;
-  mesh.position.y = bridge?.raised ? DRAWBRIDGE_LIFT : 0;
+/** A drawbridge's deck as one leaf, hinged at the end by its drawbridge house: how far it's tipped up, and how far it's going. */
+interface Leaf {
+  mesh: THREE.Object3D;
+  /** The hinge, and the axis it turns about (across the deck, so the far end goes up). */
+  hinge: THREE.Vector3;
+  axis: THREE.Vector3;
+  angle: number;
+  target: number;
+}
+
+/** A drawbridge's leaf, hinged at its end nearer the drawbridge house (the outpost that works it). */
+function drawbridgeLeaf(field: Battlefield, bridge: Bridge, mesh: THREE.Object3D): Leaf {
+  const houses = field.outpostSites.filter((o) => o.kind === 'drawbridge');
+  const near = (x: number, z: number) => Math.min(Infinity, ...houses.map((o) => Math.hypot(o.x - x, o.z - z)));
+  const fromA = near(bridge.ax, bridge.az) <= near(bridge.bx, bridge.bz);
+  const [hx, hz, fx, fz] = fromA ? [bridge.ax, bridge.az, bridge.bx, bridge.bz] : [bridge.bx, bridge.bz, bridge.ax, bridge.az];
+  const len = Math.hypot(fx - hx, fz - hz);
+  // Along the deck toward its far end, crossed with up: turning about it lifts the far end.
+  const axis = new THREE.Vector3(-(fz - hz) / len, 0, (fx - hx) / len);
+  return { mesh, hinge: new THREE.Vector3(hx, bridge.level, hz), axis, angle: 0, target: 0 };
+}
+
+const turn = new THREE.Vector3();
+
+/** Swing a drawbridge's leaf on toward up or down. */
+function swingLeaf(leaf: Leaf, dt: number): void {
+  if (leaf.angle === leaf.target) return;
+  const step = DRAWBRIDGE_SWING * dt;
+  leaf.angle = leaf.angle < leaf.target ? Math.min(leaf.target, leaf.angle + step) : Math.max(leaf.target, leaf.angle - step);
+  // The mesh is built in map coordinates: turn it about the hinge.
+  leaf.mesh.quaternion.setFromAxisAngle(leaf.axis, leaf.angle);
+  turn.copy(leaf.hinge).applyQuaternion(leaf.mesh.quaternion);
+  leaf.mesh.position.copy(leaf.hinge).sub(turn);
 }
 
 function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
@@ -908,6 +955,60 @@ function buildSkirt(field: Battlefield): THREE.Mesh {
     geo,
     new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide }),
   );
+}
+
+/**
+ * A dam's reservoir (see world/traits.ts, Reservoir): its water as a flat
+ * round sheet cut off along the dam's water face, tucked into the banks at
+ * its edge, standing at the reservoir's level while the dam holds. Once the
+ * dam goes it drains down to the sea as the valley floods (`update`, when
+ * the ground changes), and then it's just more of the sea.
+ */
+function buildPool(field: Battlefield): { mesh: THREE.Mesh; update(): void } | null {
+  const plain = field.traits.flood;
+  const pool = plain?.pool;
+  if (!plain || !pool) return null;
+  const sea = field.seaLevel;
+  const r = pool.radius + 0.6;
+  const n = 48;
+  const ring: [number, number][] = [];
+  for (let a = 0; a < n; a++) {
+    const ang = (a / n) * Math.PI * 2;
+    let x = Math.cos(ang) * r;
+    let z = Math.sin(ang) * r;
+    // Onto the dam's water face, where the round would reach past it.
+    const d = x * pool.ux + z * pool.uz;
+    if (d < -pool.cut) {
+      x -= pool.ux * (d + pool.cut);
+      z -= pool.uz * (d + pool.cut);
+    }
+    ring.push([pool.x + x, pool.z + z]);
+  }
+  const pos: number[] = [];
+  for (let a = 0; a < n; a++) {
+    const [x1, z1] = ring[a];
+    const [x2, z2] = ring[(a + 1) % n];
+    pos.push(pool.x, 0, pool.z, x2, 0, z2, x1, 0, z1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: BIOMES[field.config.biome].water, transparent: true, opacity: 0.78, roughness: 0.25, metalness: 0.1 }),
+  );
+  mesh.name = 'reservoir';
+  mesh.receiveShadow = true;
+  const update = () => {
+    // Drained as far as the valley's flooded.
+    let under = 0;
+    for (const k of plain.verts) if (field.heights[k] < sea) under++;
+    const level = sea + (pool.level - sea) * (1 - under / Math.max(1, plain.verts.length));
+    mesh.position.y = level;
+    mesh.visible = level > sea + 0.03;
+  };
+  update();
+  return { mesh, update };
 }
 
 function buildWater(field: Battlefield): THREE.Mesh {
