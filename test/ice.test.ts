@@ -80,6 +80,26 @@ describe('frozen lake trait', () => {
     expect(game.ctx.navs.for('walker').costAt(p.x, p.z)).toBeGreaterThan(game.ctx.navs.for('foot').costAt(p.x, p.z));
   });
 
+  it('leaves a lake with a road or bridge over or beside it unfrozen', () => {
+    let lakes = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const s = settings();
+      s.map.towns = 6;
+      const field = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      const sheet = field.traits.ice;
+      if (!sheet) continue;
+      lakes++;
+      const stride = field.config.cols + 1;
+      for (const k of sheet.verts) {
+        const x = field.vertexX(k % stride);
+        const z = field.vertexZ(Math.floor(k / stride));
+        expect(field.nearBridge(x, z, 0.5)).toBe(false);
+        for (const r of field.roads) for (const p of r.points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThan(r.width / 2);
+      }
+    }
+    expect(lakes).toBeGreaterThan(2);
+  });
+
   it("holds soldiers, gives way under a heavy machine standing on it, and freezes over again", () => {
     const game = iceGame();
     const ice = game.ctx.ice!;

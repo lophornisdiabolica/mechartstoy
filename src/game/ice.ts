@@ -24,7 +24,7 @@ import { LIT } from './fire';
 /** Seconds between ice updates. */
 const TICK = 0.5;
 /** Strain a patch takes before it gives way, and how fast it gets over strain (a second). */
-const STRENGTH = 8;
+export const STRENGTH = 8;
 const RECOVER = 1;
 /** Strain a burning patch takes a second (it melts), and per point of a shell's damage bursting on it. */
 const MELT = 5;

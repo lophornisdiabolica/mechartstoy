@@ -877,6 +877,28 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
   const heights = field.heights;
   const sea = field.seaLevel;
   const seen = new Uint8Array(stride * (rows + 1));
+  // Vertices a road or bridge runs over or beside: a lake under one stays water (its bridge would come down over dry ice, leaving the road across it).
+  const used = new Uint8Array(stride * (rows + 1));
+  const mark = (x: number, z: number, r: number) => {
+    const cs = field.config.cellSize;
+    const i0 = Math.max(0, Math.floor((x - r - field.bounds.minX) / cs));
+    const i1 = Math.min(cols, Math.ceil((x + r - field.bounds.minX) / cs));
+    const j0 = Math.max(0, Math.floor((z - r - field.bounds.minZ) / cs));
+    const j1 = Math.min(rows, Math.ceil((z + r - field.bounds.minZ) / cs));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) used[j * stride + i] = 1;
+  };
+  for (const r of field.roads) {
+    for (let q = 1; q < r.points.length; q++) {
+      const a = r.points[q - 1];
+      const b = r.points[q];
+      const n = Math.max(1, Math.ceil(D.hypot(b.x - a.x, b.z - a.z) / 0.75));
+      for (let t = 0; t <= n; t++) mark(a.x + ((b.x - a.x) * t) / n, a.z + ((b.z - a.z) * t) / n, r.width / 2 + 1);
+    }
+  }
+  for (const b of field.bridges) {
+    const n = Math.max(1, Math.ceil(D.hypot(b.bx - b.ax, b.bz - b.az) / 0.75));
+    for (let t = 0; t <= n; t++) mark(b.ax + ((b.bx - b.ax) * t) / n, b.az + ((b.bz - b.az) * t) / n, b.width / 2 + 1);
+  }
   let best: { verts: number[]; score: number } | null = null;
   for (let k0 = 0; k0 < heights.length; k0++) {
     if (seen[k0] || heights[k0] >= sea) continue;
@@ -887,6 +909,7 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
     while (queue.length > 0) {
       const k = queue.pop()!;
       verts.push(k);
+      if (used[k]) edge = true;
       const i = k % stride;
       const j = (k - i) / stride;
       if (i === 0 || j === 0 || i === cols || j === rows) edge = true;
@@ -900,6 +923,7 @@ function frozenLake(field: Battlefield, out: TraitLayout, rng: Rng): void {
         queue.push(m);
       }
     }
+    // (Nor one reaching the map's edge, or with a road or bridge over it.)
     if (edge || verts.length < ICE_LEAST || verts.length > ICE_MOST) continue;
     let cx = 0;
     let cz = 0;
