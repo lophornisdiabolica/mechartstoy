@@ -2,6 +2,7 @@ import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { NavGrid, Point } from '../world/navGrid';
 import * as D from '../core/dmath';
+import type { MapTrait } from '../world/traits';
 
 /**
  * Lanes are the routes armies attack along: one straight from base to base,
@@ -49,6 +50,8 @@ const ON_CENTRE = 9;
 const MAX_SITE_LANES = 4;
 /** A map trait counts as this much more direct than it is, so lanes go through it ahead of towns and outposts. */
 const TRAIT_PULL = 0.2;
+/** Traits that aren't lane sites of their own: outposts already, or a line right across. */
+const NOT_SITES: ReadonlySet<MapTrait> = new Set(['citadel', 'landing', 'rail']);
 
 /**
  * The lanes between every pair of bases. Routes are worked out the first
@@ -102,8 +105,8 @@ export class Lanes {
     };
     this.field.outpostSites.forEach((o) => consider('outpost', o.index, o.x, o.z));
     this.field.townSites.forEach((t, i) => consider('town', i, t.x, t.z));
-    // (Not the fortified line: it runs right across, so every lane crosses it. Nor a citadel or landing field: they're outposts.)
-    this.field.traits.sites.forEach((t, i) => t.radius > 0 && t.kind !== 'citadel' && t.kind !== 'landing' && consider('trait', i, t.x, t.z));
+    // (Not the fortified line or the rail line: they run right across, so every lane crosses them. Nor a citadel or landing field: they're outposts.)
+    this.field.traits.sites.forEach((t, i) => t.radius > 0 && !NOT_SITES.has(t.kind) && consider('trait', i, t.x, t.z));
     sites.sort((p, q) => p.detour - q.detour);
 
     // The centre lane; if a site sits on the straight line, the centre lane is its lane (a trait's first).

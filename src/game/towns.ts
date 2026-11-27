@@ -28,6 +28,7 @@ import { TownSite } from '../world/battlefield';
 import { MOVE_RULES } from '../world/moveClasses';
 import { cityNorm, cityOut } from '../world/city';
 import { cityBuilding } from '../world/settlements';
+import { nearRail } from '../world/traits';
 
 /*
  * Town life (the map's townsfolk setting): each civilian town has a few
@@ -458,6 +459,7 @@ export class Towns {
     if (field.roadCell[field.cellAt(x, z)[1] * field.config.cols + field.cellAt(x, z)[0]]) return false;
     for (const b of field.baseSites) if (D.hypot(b.x - x, b.z - z) < b.radius + r + 4) return false;
     for (const o of field.outpostSites) if (D.hypot(o.x - x, o.z - z) < o.radius + r + 3) return false;
+    if (field.traits.rail && nearRail(field, x, z, r + 1.5)) return false;
     return true;
   }
 

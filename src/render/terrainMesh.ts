@@ -188,6 +188,10 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   field.roads.forEach((_, k) => drawRoad(k));
   drawTiles();
   group.add(groundMesh, buildSkirt(field), buildWater(field), bridges, roads);
+  // A rail line's track (see world/traits.ts), redrawn where the ground under it moves.
+  const rail = field.traits.rail;
+  let track = rail ? buildTrack(field, tops) : null;
+  if (track) group.add(track);
 
   let drawnBridges = field.bridges.length;
   const { cellSize } = field.config;
@@ -225,6 +229,18 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       roadStrips.pop();
     }
     drawTiles();
+    if (rail && track) {
+      const x0 = field.bounds.minX + (area.i0 - 2) * cellSize;
+      const x1 = field.bounds.minX + (area.i1 + 3) * cellSize;
+      const z0 = field.bounds.minZ + (area.j0 - 2) * cellSize;
+      const z1 = field.bounds.minZ + (area.j1 + 3) * cellSize;
+      if (rail.points.some((p) => p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1)) {
+        group.remove(track);
+        for (const m of track.children) (m as THREE.InstancedMesh).dispose();
+        track = buildTrack(field, tops);
+        group.add(track);
+      }
+    }
   });
   group.userData.dispose = () => {
     stop();
@@ -233,6 +249,86 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   };
   group.userData.roadTops = tops;
   return group;
+}
+
+const SLEEPER = new THREE.BoxGeometry(0.34, 0.12, 1.9);
+const RAIL = new THREE.BoxGeometry(1, 0.1, 0.09);
+// Drawn over the roads where the line crosses one: after them, and pulled further toward the camera than their
+// paving (see roadMaterial), whose own pull would otherwise win at some zooms and not others.
+const TRACK_OFFSET = -6;
+const TRACK_ORDER = 3;
+const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3b2e, flatShading: true, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: TRACK_OFFSET, polygonOffsetUnits: TRACK_OFFSET });
+const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7c8086, flatShading: true, roughness: 0.5, metalness: 0.4, polygonOffset: true, polygonOffsetFactor: TRACK_OFFSET, polygonOffsetUnits: TRACK_OFFSET });
+/** Sleepers' spacing along the track, and the rails' gauge (centre to centre). */
+const SLEEPER_EVERY = 0.75;
+const GAUGE = 1.3;
+
+/** A rail line's sleepers and rails on its graded bed, as two instanced meshes; over the top of any road it crosses. */
+function buildTrack(field: Battlefield, tops: RoadTops): THREE.Group {
+  const rail = field.traits.rail!;
+  const ground = (x: number, z: number) => Math.max(meshHeightAt(field, x, z), tops.at(x, z));
+  const pts = rail.points;
+  const g = new THREE.Group();
+  const length = (pts.length - 1) * rail.step;
+  const at = (s: number) => {
+    const f = Math.max(0, Math.min(pts.length - 1.001, s / rail.step));
+    const k = Math.floor(f);
+    const t = f - k;
+    const p = pts[k];
+    const q = pts[k + 1];
+    return { x: p.x + (q.x - p.x) * t, z: p.z + (q.z - p.z) * t, a: Math.atan2(-(q.z - p.z), q.x - p.x) };
+  };
+  const sleepers = new THREE.InstancedMesh(SLEEPER, sleeperMaterial, Math.floor(length / SLEEPER_EVERY) + 1);
+  const rails = new THREE.InstancedMesh(RAIL, railMaterial, (pts.length - 1) * 2);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const pos = new THREE.Vector3();
+  const scale = new THREE.Vector3(1, 1, 1);
+  let n = 0;
+  for (let s = 0; s <= length; s += SLEEPER_EVERY) {
+    const p = at(s);
+    q.setFromAxisAngle(up, p.a);
+    // Its ends too, so one reaching over a road's edge isn't half buried in it.
+    const ex = Math.sin(p.a) * 0.9;
+    const ez = Math.cos(p.a) * 0.9;
+    pos.set(p.x, Math.max(meshHeightAt(field, p.x, p.z), Math.max(tops.at(p.x, p.z), tops.at(p.x + ex, p.z + ez), tops.at(p.x - ex, p.z - ez)) - 0.02) + 0.07, p.z);
+    sleepers.setMatrixAt(n++, m.compose(pos, q, scale));
+  }
+  sleepers.count = n;
+  n = 0;
+  for (let k = 0; k < pts.length - 1; k++) {
+    const p = pts[k];
+    const r = pts[k + 1];
+    const dx = r.x - p.x;
+    const dz = r.z - p.z;
+    const len = Math.hypot(dx, dz);
+    const a = Math.atan2(-dz, dx);
+    for (const side of [-1, 1]) {
+      const ox = (-dz / len) * GAUGE * 0.5 * side;
+      const oz = (dx / len) * GAUGE * 0.5 * side;
+      const x0 = p.x + ox;
+      const z0 = p.z + oz;
+      const x1 = r.x + ox;
+      const z1 = r.z + oz;
+      const y0 = ground(x0, z0);
+      const y1 = ground(x1, z1);
+      // Pitched along the slope, a touch longer than the step so the joins don't gap.
+      q.setFromEuler(new THREE.Euler(0, a, Math.atan2(y1 - y0, len), 'YXZ'));
+      pos.set((x0 + x1) / 2, Math.max(y0, y1) * 0.5 + Math.min(y0, y1) * 0.5 + 0.18, (z0 + z1) / 2);
+      rails.setMatrixAt(n++, m.compose(pos, q, scale.set(len * 1.04, 1, 1)));
+      scale.set(1, 1, 1);
+    }
+  }
+  rails.count = n;
+  for (const mesh of [sleepers, rails]) {
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = TRACK_ORDER;
+    mesh.instanceMatrix.needsUpdate = true;
+    g.add(mesh);
+  }
+  return g;
 }
 
 /** The ground mesh's own height at a point: the plane of the triangle it's in (heightAt blends the four corners, which isn't quite the same). */

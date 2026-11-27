@@ -888,6 +888,17 @@ export const BUILDING_DEFS = {
     rebuildDelay: 50,
     buildTime: 8,
   },
+  stationHouse: {
+    id: 'stationHouse',
+    name: 'Station House',
+    model: 'bld:stationHouse',
+    hp: 600,
+    armor: 6,
+    radius: 2.0,
+    height: 2.6,
+    rebuildDelay: 45,
+    buildTime: 10,
+  },
   flightTower: {
     id: 'flightTower',
     name: 'Flight Tower',

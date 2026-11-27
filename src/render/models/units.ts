@@ -358,6 +358,25 @@ registerModel('rocketTruck', (faction) => {
 });
 
 // The Land-train: an armoured tractor hauling two armoured cars, rocket batteries on the first.
+/** The rail line's armoured train: a long armoured car on bogies, a gun turret amidships, an MG cupola and a cowcatcher at each end. */
+registerModel('armouredTrain', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const root = new THREE.Group();
+  for (const x of [-1.6, 1.6]) root.add(box(1.2, 0.36, 1.1, DARK, x, 0.2, 0)); // bogies
+  root.add(box(4.6, 0.9, 1.5, primary, 0, 0.83, 0)); // armoured body
+  root.add(box(4.0, 0.14, 1.36, secondary, 0, 1.35, 0)); // roof
+  for (const x of [-2.42, 2.42]) root.add(box(0.24, 0.3, 1.2, METAL, x, 0.33, 0)); // cowcatchers
+  for (const z of [-0.77, 0.77]) root.add(box(3.4, 0.16, 0.06, DARK, 0, 0.95, z)); // vision slits
+  root.add(box(0.5, 0.36, 0.5, secondary, -1.5, 1.58, 0)); // MG cupola
+  const turret = new THREE.Group();
+  turret.position.set(0.2, 1.3, 0);
+  turret.add(box(1.2, 0.5, 1.1, primary, 0, 0.25, 0));
+  const gun = barrelPivot('armouredTrain', turret);
+  for (const z of [-0.17, 0.17]) gun.add(box(1.0, 0.12, 0.12, DARK, 0.75, 0, z));
+  root.add(turret);
+  return setRig(root, { turret, ...mounted('armouredTrain', root, turret, [gun]) });
+});
+
 registerModel('landTrain', (faction) => {
   const { primary, secondary } = factionColors(faction);
   const root = new THREE.Group();

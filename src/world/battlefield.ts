@@ -183,10 +183,10 @@ export interface TownSite {
  * The kinds of outpost (what each one gives is in game/outposts.ts): a supply
  * depot, an airstrip, a hilltop gun, a comms relay, a fuel depot, a ruined
  * factory, a shipyard, a sensor station, a repair yard or a signal fire. The
- * hill, the citadel and the landing field are placed on their own (king of
- * the hill, and map traits: see traits.ts).
+ * hill, the citadel, the landing field and rail stations are placed on
+ * their own (king of the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station';
 /** The kinds a map deals out to ordinary outposts. */
 export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal'];
 
@@ -1050,9 +1050,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   // Map traits (an oil field, ruins...) pick their spots next, near the middle where the lanes run, and the
   // towns and outposts keep round them; on their own stream, so a map with none doesn't change. A city
   // takes the middle instead, and the traits fit round it at the end.
-  const traitRng = rng.fork(0x74726169);
   const cityMap = config.citySprawl || (config.cityRadius > 0 && config.towns > 0);
-  const traitSites: TraitSite[] = config.traits.length > 0 && !cityMap ? planTraits(field, config.traits, traitRng, hill ? [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }] : []) : [];
+  const traitSites: TraitSite[] = config.traits.length > 0 && !cityMap ? planTraits(field, config.traits, rng.fork(0x74726169), hill ? [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }] : []) : [];
   // (A citadel or landing field keeps well clear of the other outposts; the rest can have one by them.)
   const traitRoom = traitSites.map((t) => ({ x: t.x, z: t.z, r: t.kind === 'citadel' || t.kind === 'landing' ? t.radius + 1 : t.radius * 0.5 }));
 
@@ -1246,7 +1245,8 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   });
   // The traits are built last of all, round everything else (at the spots they picked, if they did).
   const traitOutposts = field.outpostSites.length;
-  if (config.traits.length > 0) placeTraits(field, config.traits, traitRng, flatten, traitSites);
+  // (Their random stream forks here, as it always has, so a trait that planned nothing, the rail line say, comes out as before.)
+  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten, traitSites);
   // Outposts that traits added (a citadel, a landing field...) get bridged out to if they're cut off.
   const held = field.outpostSites.slice(traitOutposts);
   // Levelling towns and outposts may have filled in the water under a bridge: take it away
