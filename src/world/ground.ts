@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron' | 'ballast' | 'burnt' | 'flats';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron' | 'ballast' | 'burnt' | 'flats' | 'ice';
 
 export interface GroundDef {
   id: GroundId;
@@ -150,10 +150,23 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x9c8a68,
     tint: 0.75,
   },
+  /**
+   * A frozen lake's ice (see world/traits.ts): smooth going, but heavy
+   * machines keep off it where they can, since it gives way under them
+   * (see game/ice.ts).
+   */
+  ice: {
+    id: 'ice',
+    label: 'Ice',
+    cost: { tracked: 1.8, amphibious: 1.2, walker: 3 },
+    speed: { tracked: 0.9, walker: 0.9, foot: 0.95 },
+    color: 0xcfe2ee,
+    tint: 0.9,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron', 'ballast', 'burnt', 'flats'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron', 'ballast', 'burnt', 'flats', 'ice'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

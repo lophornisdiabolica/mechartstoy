@@ -276,11 +276,14 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
   return items;
 }
 
-/** Traits for a rolled map style: none about a third of the time, else one, now and then two (tidal flats only on a wet map). */
+/** Traits that need water to be laid: only rolled for a wet map. */
+const WET_TRAITS: MapTrait[] = ['tidal', 'dam', 'frozen'];
+
+/** Traits for a rolled map style: none about a third of the time, else one, now and then two (the watery ones only on a wet map). */
 export function rollTraits(rng: Rng, wet = true): MapTrait[] {
   const roll = rng.next();
   const count = roll < 0.35 ? 0 : roll < 0.85 ? 1 : 2;
-  const pool = MAP_TRAIT_IDS.filter((t) => wet || t !== 'tidal');
+  const pool = MAP_TRAIT_IDS.filter((t) => wet || !WET_TRAITS.includes(t));
   const out: MapTrait[] = [];
   for (let n = 0; n < count; n++) out.push(...pool.splice(Math.floor(rng.next() * pool.length), 1));
   return MAP_TRAIT_IDS.filter((t) => out.includes(t));

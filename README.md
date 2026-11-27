@@ -400,7 +400,28 @@ there first, and fire slowly knocks them down.
   costs a lot to route over, so routes go round, and a unit on it gets off
   the shortest way. Land units still on it when the sea's over it drown,
   and boats over it when it dries run aground. Needs water: a dry map gets
-  none, and a rolled map style only deals it to a wet map.
+  none, and a rolled map style only deals it (or a dam or a frozen lake) to a wet map.
+- *Dam:* a low valley in no-man's land running down to the water, and up at
+  its head a reservoir, its water standing higher than the sea, held back by
+  a concrete dam across its mouth (where there's no room for a reservoir,
+  the dam stands in the water off the valley's shore instead), with a
+  *dam control* outpost (a sluice house) on high ground by it. If any stretch of the dam
+  is shot to pieces, or the side holding the sluice house opens the sluices
+  (it does, once, when at least five of its enemies are in the valley and
+  at most one of its own), the valley floods from the dam outward in
+  under a minute (the reservoir draining down into it) and stays flooded: routes over it are cut, and boats can get
+  in. Ground the water's about to reach costs a lot to route over, a unit in
+  its way drives out of the valley over dry land, and land units the water
+  catches out of their depth drown. Needs water by low ground.
+- *Frozen lake:* the most contested lake that doesn't reach the map's edge
+  is frozen over: a way across for everyone. Each patch of ice takes strain
+  from the weight on it (a soldier's nothing, a tank parked on it goes
+  through in about half a minute, a super unit in seconds) and from fire
+  and shells bursting on it, and gets over strain slowly. Too much and it
+  gives way, cracking the ice round it, and land units out of their depth
+  go through and drown. A hole freezes over again a minute and a half
+  later, once it's empty. Tanks and walkers go round the ice where they
+  can. Needs a lake.
 
 A map style re-roll gives most maps a trait or two (the link key is
 `traits=oil,ruins`).
@@ -1414,8 +1435,8 @@ outposts and the light scenery are still placed once, at the start.
   fall back to mend use it) and a *signal fire* (every two minutes a relief
   column of three of the holder's wave picks marches in from the nearest map
   edge). A fifth, the *drawbridge* (dealt only to an outpost within 20 of a
-  map bridge, one per bridge), works that bridge for its holder: it goes up
-  when the holder's enemies come near it and nobody's on it, so they can't
+  map bridge, one per bridge), works that bridge for its holder: it swings
+  up, hinged at the end by the drawbridge house, when the holder's enemies come near it and nobody's on it, so they can't
   cross there, and comes down again once they've gone; held by its garrison
   it stays down. The clock on a shipyard or signal fire starts again when it changes
   hands, so taking one doesn't pay out at once. Every outpost makes

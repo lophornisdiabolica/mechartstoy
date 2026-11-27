@@ -18,6 +18,7 @@ import { CommanderOverlay } from './commanderOverlay';
 import { FrontLines } from './frontLines';
 import { FireGround } from './fireGround';
 import { FrostGround, TANGLE_LOOK } from './frostGround';
+import { IceStrain } from './iceStrain';
 import { WreckageGround } from './wreckageGround';
 import { SmokeClouds } from './smokeClouds';
 import { StrikeMarks } from './strikeMarks';
@@ -102,6 +103,7 @@ export class Stage {
   private fireGround!: FireGround;
   private frostGround!: FrostGround;
   private tangleGround!: FrostGround;
+  private iceStrain!: IceStrain;
   /** Heaps of junk where wrecks fell apart (see WreckageGround). */
   wreckage!: WreckageGround;
   private smokeClouds!: SmokeClouds;
@@ -149,6 +151,7 @@ export class Stage {
   private battle: THREE.Group | null = null;
   /** Stops the terrain redrawing for the battle being replaced (see buildTerrain). */
   private stopTerrain: (() => void) | undefined;
+  private updateTerrain: ((dt: number) => void) | undefined;
   /** Stops the dense forest's trees following the battle being replaced (see buildWoods). */
   private stopWoods: (() => void) | undefined;
   private stopProps: (() => void) | undefined;
@@ -275,6 +278,7 @@ export class Stage {
       this.fireGround.dispose();
       this.frostGround.dispose();
       this.tangleGround.dispose();
+      this.iceStrain.dispose();
       this.wreckage.dispose();
       this.smokeClouds.dispose();
       this.strikeMarks.dispose();
@@ -292,6 +296,7 @@ export class Stage {
     const visualRng = new Rng(game.seed ^ 0x5eed);
     const terrain = buildTerrain(field, visualRng);
     this.stopTerrain = terrain.userData.dispose;
+    this.updateTerrain = terrain.userData.update;
     this.ground = terrain.getObjectByName('ground')!;
     const biome = BIOMES[field.config.biome];
     (this.scene.background as THREE.Color).set(biome.sky);
@@ -325,6 +330,8 @@ export class Stage {
     battle.add(this.frostGround.root);
     this.tangleGround = new FrostGround(game, TANGLE_LOOK);
     battle.add(this.tangleGround.root);
+    this.iceStrain = new IceStrain(game);
+    battle.add(this.iceStrain.root);
     this.wreckage = new WreckageGround(game);
     battle.add(this.wreckage.root);
     this.smokeClouds = new SmokeClouds(game);
@@ -539,9 +546,11 @@ export class Stage {
     this.frontLines.update(frameSeconds);
     this.debugOverlay.update(frameSeconds);
     p?.lap('overlays');
+    this.updateTerrain?.(simSeconds);
     this.fireGround.update(simSeconds);
     this.frostGround.update(simSeconds);
     this.tangleGround.update(simSeconds);
+    this.iceStrain.update(simSeconds);
     this.smokeClouds.update(simSeconds);
     this.strikeMarks.update(simSeconds);
     this.domes.update(simSeconds);
