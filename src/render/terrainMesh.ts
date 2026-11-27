@@ -120,7 +120,7 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
   bridges.name = 'bridges';
   for (const bridge of field.bridges) {
     const mesh = buildBridge(field, bridge);
-    mesh.visible = !bridge.gone;
+    showBridge(mesh, bridge);
     bridges.add(mesh);
   }
   const roads = new THREE.Group();
@@ -208,8 +208,8 @@ export function buildTerrain(field: Battlefield, _rng: Rng): THREE.Group {
       for (const attr of [posAttr, colAttr, normAttr]) markRange(attr, start, count);
     }
     for (; drawnBridges < field.bridges.length; drawnBridges++) bridges.add(buildBridge(field, field.bridges[drawnBridges]));
-    // Engineers' bridges come down.
-    for (let k = 0; k < drawnBridges; k++) if (field.bridges[k]?.gone && bridges.children[k]?.visible) bridges.children[k].visible = false;
+    // Engineers' bridges come down, map bridges fall (see game/bridges.ts), and drawbridges go up and down again.
+    for (let k = 0; k < drawnBridges; k++) showBridge(bridges.children[k], field.bridges[k]);
     // Roads follow the ground, so redraw any the ground under moved (and draw new ones).
     field.roads.forEach((r, k) => {
       // (Along the whole road, not just its points: a city avenue is one long straight.)
@@ -701,6 +701,16 @@ type P3 = [number, number, number];
  * have wings sloping down to the ground at the sides, wide at the foot and
  * narrowing to nothing where the railing starts, and an apron at each end.
  */
+/** How high a raised drawbridge is lifted. */
+const DRAWBRIDGE_LIFT = 4.5;
+
+/** A bridge drawn as it stands: gone, raised (a drawbridge, lifted clear of the water) or there. */
+function showBridge(mesh: THREE.Object3D | undefined, bridge: Bridge | undefined): void {
+  if (!mesh) return;
+  mesh.visible = !bridge?.gone || bridge.raised === true;
+  mesh.position.y = bridge?.raised ? DRAWBRIDGE_LIFT : 0;
+}
+
 function buildBridge(field: Battlefield, bridge: Bridge): THREE.Group {
   const g = new THREE.Group();
   const dx = bridge.bx - bridge.ax;

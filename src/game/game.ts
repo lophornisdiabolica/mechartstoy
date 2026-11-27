@@ -17,6 +17,7 @@ import { buildOutpost, createOutposts, garrisonSystem, outpostSystem, outpostWor
 import { raiseRelics, traitSystem, TraitState } from './traits';
 import { railSystem } from './rail';
 import { wildfireOn, wildfireSystem } from './wildfire';
+import { BridgeWear, drawbridgeSystem, sinkingSystem } from './bridges';
 import { nearRail } from '../world/traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
@@ -164,6 +165,7 @@ export class Game {
       camps: [],
       groves: new Groves(),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
+      bridges: new BridgeWear(!!settings.map.bridgesFall),
       traffic: new Traffic(nav),
     };
 
@@ -202,6 +204,8 @@ export class Game {
       // Oil fires, geysers and the like, only on a map with traits that do something.
       ...(ctx.traits.active ? [traitSystem(ctx)] : []),
       ...(ctx.field.traits.rail ? [railSystem(ctx)] : []),
+      ...(ctx.outposts.some((o) => o.kind.draws) ? [drawbridgeSystem(ctx)] : []),
+      ...(ctx.bridges.on ? [sinkingSystem(ctx)] : []),
       // Nobody's fire: wildfire in the woods, and everyone keeping clear of it and of burning oil.
       ...(wildfireOn(ctx) || ctx.traits.pools.length > 0 ? [wildfireSystem(ctx, seed)] : []),
       fireSystem(ctx),

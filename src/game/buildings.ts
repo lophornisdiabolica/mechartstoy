@@ -888,6 +888,17 @@ export const BUILDING_DEFS = {
     rebuildDelay: 50,
     buildTime: 8,
   },
+  winchHouse: {
+    id: 'winchHouse',
+    name: 'Winch House',
+    model: 'bld:winchHouse',
+    hp: 600,
+    armor: 7,
+    radius: 1.6,
+    height: 3.2,
+    rebuildDelay: 45,
+    buildTime: 10,
+  },
   stationHouse: {
     id: 'stationHouse',
     name: 'Station House',

@@ -105,6 +105,11 @@ export class Ticker {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length || !e.down) return;
       this.say([this.side(e.faction), `'s bridge came down`, this.direction(e.x, e.z, ' in the ')]);
     });
+    events.on('bridgeFell', (e) => this.game === game && this.say([`A bridge${this.direction(e.x, e.z, ' in the ')} came down under the fire, and everything on it went into the water`]));
+    events.on('drawbridge', (e) => {
+      if (this.game !== game || !e.up || e.faction < 0 || e.faction >= this.factions.length) return;
+      this.say([this.side(e.faction), ' raised the drawbridge', this.direction(e.x, e.z, ' in the ')]);
+    });
     events.on('militia', (e) => {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([`The townsfolk${this.direction(e.x, e.z, ' in the ')} take up arms against `, this.side(e.faction)]);

@@ -58,6 +58,8 @@ export interface OutpostKindDef {
   relief?: number;
   /** Repair yard: mends the holder's (and allies') vehicles within REPAIR_REACH, this share of their health a second. */
   repairs?: number;
+  /** Drawbridge: its holder raises the bridge by it against enemies, and lowers it for its own (see bridges.ts). */
+  draws?: boolean;
   /** Rail station: puts an armoured train on the line for its holder this long after it's taken, and again this long after the train's lost (see rail.ts). */
   trains?: number;
 }
@@ -75,6 +77,7 @@ export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
   signal: { id: 'signal', name: 'Signal fire', blurb: 'Calls in a relief column for its holder every couple of minutes', bonus: null, building: 'signalFire', relief: 120 },
   hill: { id: 'hill', name: 'The hill', blurb: 'King of the hill: the first team to hold it long enough wins', bonus: null, building: 'hillBeacon' },
   citadel: { id: 'citadel', name: 'Citadel', blurb: 'A walled fortress with a strong garrison: faster production for whoever cracks it', bonus: { kind: 'production', amount: 0.2 }, building: 'keep', guards: 8 },
+  drawbridge: { id: 'drawbridge', name: 'Drawbridge', blurb: 'Its holder raises the bridge by it when enemies come, and lowers it for its own', bonus: null, building: 'winchHouse', draws: true },
   station: { id: 'station', name: 'Rail station', blurb: 'Puts an armoured train on the line for its holder', bonus: null, building: 'stationHouse', trains: 60 },
   landing: { id: 'landing', name: 'Landing field', blurb: 'Aircraft and drops come faster for its holder', bonus: { kind: 'air', amount: 0.35 }, building: 'flightTower' },
 };

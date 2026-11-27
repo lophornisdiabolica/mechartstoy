@@ -150,6 +150,8 @@ export interface BattleSettings {
     wreckageLife: number;
     /** Super units leave a small crater where they blow up, so long battles slowly reshape the ground (see craters.ts). */
     craters: boolean;
+    /** The map's bridges come down under heavy fire, for good (see bridges.ts). Missing in settings saved before it existed. */
+    bridgesFall?: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
     /** The kinds of outpost to deal out (see OUTPOST_KINDS in outposts.ts); empty means supply depots only. */
