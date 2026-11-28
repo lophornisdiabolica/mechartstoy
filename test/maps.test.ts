@@ -8,6 +8,7 @@ import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 import { generateBattlefield } from '../src/world/battlefield';
 import { hashSeed, Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
+import { MOVE_RULES, MoveClass } from '../src/world/moveClasses';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
 import { GIANT, MAP_TRAIT_IDS } from '../src/world/traits';
@@ -15,6 +16,7 @@ import { landReach, vertexAt } from '../src/world/waterways';
 import { groundCode } from '../src/world/ground';
 import { Building, Faction, Health, RELIC } from '../src/game/components';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
+import { BRIDGE_REACH } from '../src/world/waterways';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
 
 const DT = 1 / 30;
@@ -263,18 +265,30 @@ describe('maps', () => {
     const off = cells.find((c) => Math.hypot(c.x - face.x, c.z - face.z) < 3 && tracked.terrainAllowsAt(c.x, c.z));
     expect(off && tracked.offCliff(face.x, face.z, off.x, off.z)).toBe(true);
 
-    // Without mountains or cliffs, even the steepest hills (and the tallest) are only slow going.
+    // Without mountains or cliffs there are no sheer cliffs, but a slope too steep for a class at
+    // a large scale still stops it: tanks least of all, then walkers, then infantry; spiders never.
     const hilly = emptyGame(11, (s) => ((s.map.hills = 3), (s.map.water = 0)));
     const g = hilly.field;
     expect(g.cliffs).toBe(false);
     expect(g.sheer.every((v) => v === 0)).toBe(true);
-    let steepest = 0;
+    const stopped: Record<string, number> = { tracked: 0, walker: 0, foot: 0, climber: 0 };
+    let bumps = 0;
     for (const c of cells) {
       if (!g.contains(c.x, c.z)) continue;
-      steepest = Math.max(steepest, g.slopeAt(c.x, c.z));
-      expect(hilly.ctx.navs.for('tracked').terrainAllowsAt(c.x, c.z)).toBe(true);
+      for (const cls of Object.keys(stopped)) if (!hilly.ctx.navs.for(cls as MoveClass).terrainAllowsAt(c.x, c.z)) stopped[cls]++;
+      // A short steep bank, steeper than tanks climb at a large scale, they still roll over.
+      if (g.slopeAt(c.x, c.z) > MOVE_RULES.tracked.climb && hilly.ctx.navs.for('tracked').terrainAllowsAt(c.x, c.z)) bumps++;
     }
-    expect(steepest).toBeGreaterThan(2);
+    expect(stopped.tracked).toBeGreaterThan(stopped.walker);
+    expect(stopped.walker).toBeGreaterThan(stopped.foot);
+    expect(stopped.foot).toBeGreaterThan(0);
+    expect(stopped.climber).toBe(0);
+    expect(bumps).toBeGreaterThan(0);
+    // However steep, every base is still in reach of everything on the ground.
+    for (const cls of ['tracked', 'walker', 'foot', 'hover'] as const) {
+      const nav = hilly.ctx.navs.for(cls);
+      for (const p of [...g.baseSites, ...g.townSites, ...g.outpostSites]) expect(nav.connected(g.baseSites[0], p)).toBe(true);
+    }
   });
 
   it('mountains and mesas keep every base, town and outpost in reach, and mesa tops reachable', () => {
@@ -399,6 +413,25 @@ describe('maps', () => {
     const game = emptyGame(8, (s) => ((s.map.outline = 'ring'), (s.map.water = 0)));
     expect(game.field.isWater(0, 0)).toBe(true);
     expect(settingsFromParams(new URLSearchParams('outline=crescent')).map.outline).toBe('crescent');
+  });
+
+  it('joins an archipelago with chains of short bridges, island to island, not one across the sea', () => {
+    let longest = 0;
+    let bridges = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const game = emptyGame(seed * 53 + 11, (s) => {
+        s.map = { ...s.map, size: 'huge', terrain: 'islands', towns: 2 };
+        s.factions = Array.from({ length: seed % 2 ? 2 : 4 }, (_, i) => defaultFaction(i));
+      });
+      const f = game.field;
+      for (const b of f.bridges) longest = Math.max(longest, Math.hypot(b.bx - b.ax, b.bz - b.az));
+      bridges += f.bridges.length;
+      const nav = game.ctx.navs.for('tracked');
+      for (const p of [...f.baseSites, ...f.townSites]) expect(nav.connected(f.baseSites[0], p)).toBe(true);
+    }
+    // Before, a huge archipelago's bases were often joined by one bridge 100-170 long.
+    expect(longest).toBeLessThan(BRIDGE_REACH * 2);
+    expect(bridges).toBeGreaterThan(6 * 3);
   });
 
   it('a bridge out to cut-off land starts clear of the bridges already there, not from one’s side', () => {

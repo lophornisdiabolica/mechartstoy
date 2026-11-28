@@ -626,7 +626,7 @@ function nearestFrontline(world: World, ctx: SimContext, e: Entity, faction: num
 function outreaches(a: MoveClass, b: MoveClass): boolean {
   const ra = MOVE_RULES[a];
   const rb = MOVE_RULES[b];
-  return (ra.flies && !rb.flies) || ra.maxDepth > rb.maxDepth || (ra.scales && !rb.scales);
+  return (ra.flies && !rb.flies) || ra.maxDepth > rb.maxDepth || (ra.scales && !rb.scales) || ra.climb > rb.climb || ra.climbHeight > rb.climbHeight;
 }
 
 /**

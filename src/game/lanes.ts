@@ -121,7 +121,10 @@ export class Lanes {
       const next = k === kept.length - 1 ? b : kept[k + 1];
       const direct = by(prev, next);
       const own = site !== null && D.hypot(kept[k].x - site.x, kept[k].z - site.z) < SITE_KEPT;
-      if (!own && Number.isFinite(direct) && by(kept[k], next) >= direct) kept.splice(k, 1);
+      // Out in the water, on no land either base is on (a station on the straight line across a sound
+      // with no bridge under it): it only draws squads to the shore nearest it.
+      const adrift = !this.nav.connected(a, kept[k]) && !this.nav.connected(b, kept[k]);
+      if (!own && (adrift || (Number.isFinite(direct) && by(kept[k], next) >= direct))) kept.splice(k, 1);
       else k++;
     }
     return kept.length > 0 ? kept : points.slice(-1);
