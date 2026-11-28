@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Rng } from '../src/core/rng';
+import { hashSeed, Rng } from '../src/core/rng';
+import { settingsFromParams } from '../src/ui/settingsUrl';
 import { battlefieldConfig, defaultSettings } from '../src/game/settings';
 import { Ai, Armed, Mover, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
@@ -162,6 +163,49 @@ describe('roles', () => {
     const lt = game.world.req(lead, Transform);
     const et = game.world.req(escort, Transform);
     expect(Math.hypot(lt.x - et.x, lt.z - et.z)).toBeLessThan(8);
+  });
+
+  it("support trucks don't trail spiders to the water's edge, and rally points keep off the shore", () => {
+    // The islands map where Hive's fabricators used to pile up against the shore by their base.
+    const q = 'seed=druaqc&mode=conquest&size=small&terrain=islands&tsize=small&water=0.46&hills=0.92&forest=0.24&towns=2&sides=3&doc1=hive&doc2=mirage&team3=1';
+    const s = settingsFromParams(new URLSearchParams(q));
+    const game = new Game(hashSeed(s.seed), { settings: s, populate: false, autoSpawn: false });
+    const f = game.field;
+    const land = game.ctx.navs.land;
+    // Every side's rally points have dry ground all round them that its tanks can get to.
+    for (let from = 0; from < f.baseSites.length; from++) {
+      for (let to = 0; to < f.baseSites.length; to++) {
+        if (to === from) continue;
+        game.ctx.lanes.lanes(from, to).forEach((_l, lane) => {
+          const r = game.ctx.lanes.rally(from, to, lane);
+          expect(land.connected(f.baseSites[from], r)).toBe(true);
+          for (let a = 0; a < 8; a++) expect(land.terrainAllowsAt(r.x + Math.cos((a / 8) * Math.PI * 2) * 4.5, r.z + Math.sin((a / 8) * Math.PI * 2) * 4.5)).toBe(true);
+        });
+      }
+    }
+    // A spot on the shore near the first base, and one well inland.
+    const home = f.baseSites[0];
+    let shore: { x: number; z: number } | null = null;
+    for (let r = home.radius + 2; r < 40 && !shore; r += 1) {
+      for (let a = 0; a < 64 && !shore; a++) {
+        const x = home.x + Math.cos((a / 64) * Math.PI * 2) * r;
+        const z = home.z + Math.sin((a / 64) * Math.PI * 2) * r;
+        if (!f.contains(x, z, 4) || !land.terrainAllowsAt(x, z) || !land.connected(home, { x, z })) continue;
+        if ([0, 1, 2, 3, 4, 5, 6, 7].some((k) => f.isWater(x + Math.cos(k * 0.785) * 2, z + Math.sin(k * 0.785) * 2))) shore = { x, z };
+      }
+    }
+    expect(shore).not.toBeNull();
+    const mite = spawnUnit(game.world, game.ctx, UNIT_DEFS.mite, 0, shore!.x, shore!.z);
+    game.world.remove(mite, Ai);
+    const fab = spawnUnit(game.world, game.ctx, UNIT_DEFS.fabricator, 0, home.x, home.z);
+    run(game, 1);
+    expect(game.world.req(fab, Ai).escort).not.toBe(mite);
+    // Well inland, it's a lead like any other.
+    const mt = game.world.req(mite, Transform);
+    mt.x = home.x + 3;
+    mt.z = home.z;
+    run(game, 1);
+    expect(game.world.req(fab, Ai).escort).toBe(mite);
   });
 
   it('gives weapons on high ground a little more reach', () => {
