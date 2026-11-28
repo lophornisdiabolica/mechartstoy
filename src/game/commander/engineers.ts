@@ -1316,7 +1316,7 @@ export class Engineers {
       const w = canals[k];
       const mx = (w.ax + w.bx) / 2;
       const mz = (w.az + w.bz) / 2;
-      if (!field.isWater(mx, mz) || field.nearBridge(mx, mz, SPAN_APART)) continue;
+      if (!field.isWater(mx, mz) || field.nearBridge(mx, mz, SPAN_APART) || ctx.tidal?.noBridging(mx, mz)) continue;
       const len = Math.max(1e-3, D.hypot(w.bx - w.ax, w.bz - w.az));
       const nx = -(w.bz - w.az) / len;
       const nz = (w.bx - w.ax) / len;
@@ -1566,7 +1566,7 @@ export class Engineers {
     const b = { x: gap.wetTo.x + ux * 2, z: gap.wetTo.z + uz * 2 };
     const x = (a.x + b.x) / 2;
     const z = (a.z + b.z) / 2;
-    if (wet > GAP_SPAN || field.nearBridge(x, z, SPAN_APART)) return null;
+    if (wet > GAP_SPAN || field.nearBridge(x, z, SPAN_APART) || ctx.tidal?.noBridging(x, z)) return null;
     const stand = { x: a.x - ux * 1.5, z: a.z - uz * 1.5 };
     if (!ctx.navs.for('foot').terrainAllowsAt(stand.x, stand.z) || !this.safe(world, ctx, side, stand.x, stand.z)) return null;
     const job: BridgeJob = { kind: 'bridge', ax: a.x, az: a.z, bx: b.x, bz: b.z, x, z, standX: stand.x, standZ: stand.z, urgent: true, crossing: true };
@@ -1779,7 +1779,7 @@ export class Engineers {
         if (work < SPAN_BUILD * (ice ? ICE_BUILD : 1)) continue;
         this.spanWork.delete(key);
         this.jobs.delete(e);
-        if (this.spansOf(side) >= spansMost(ctx, side) || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
+        if (this.spansOf(side) >= spansMost(ctx, side) || ctx.field.nearBridge(job.x, job.z, SPAN_APART) || ctx.tidal?.noBridging(job.x, job.z)) continue;
         if (job.shortcut) this.shortcuts.drop(side);
         const placed = job.chasm
           ? spanChasm(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, { builtBy: side })

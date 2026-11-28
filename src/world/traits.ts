@@ -796,7 +796,17 @@ const FLAT_SHORE = 0.2;
 /** How far up the shore at each end a bar reaches. */
 const FLAT_LANDING = 2;
 
-/** Lay sand bars across narrow water in no-man's land (one, or two on a big map). */
+type FlatLine = { ax: number; az: number; bx: number; bz: number; score: number };
+type Point = { x: number; z: number };
+
+/**
+ * Lay sand bars across narrow water in no-man's land (one, or two on a big
+ * map), on the way between the bases. The first takes the place of the map
+ * bridge most on that way, if the bases can still reach each other by land
+ * (or other bridges) without it: so the tide, not the bridge, decides when
+ * that crossing is open. The rest go where the water's narrow, contested
+ * and between the bases.
+ */
 function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: number): void {
   if (field.baseSites.length < 2) return;
   const want = scale > 1.3 ? 2 : 1;
@@ -810,7 +820,30 @@ function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: numbe
     }
     return -1;
   };
-  const found: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  // A crossing from water at x, z along an angle, shore to shore, landing a little way up each: null where there's none to lay a bar on.
+  const crossing = (x: number, z: number, dx: number, dz: number): { a: Point; b: Point; length: number } | null => {
+    const fore = shoreAt(x, z, dx, dz);
+    const back = shoreAt(x, z, -dx, -dz);
+    if (fore < 0 || back < 0) return null;
+    const length = fore + back;
+    if (length < FLAT_MIN || length > FLAT_MAX) return null;
+    // Landing a little way up the shore, on gentle ground, not a cliff or a speck of rock.
+    const a = { x: x - dx * (back + FLAT_LANDING), z: z - dz * (back + FLAT_LANDING) };
+    const b = { x: x + dx * (fore + FLAT_LANDING), z: z + dz * (fore + FLAT_LANDING) };
+    if ([a, b].some((p) => !field.contains(p.x, p.z, 4) || field.heightAt(p.x, p.z) < field.seaLevel + FLAT_SHORE || field.slopeAt(p.x, p.z) > 0.9 || field.sheerAt(p.x, p.z))) return null;
+    return { a, b, length };
+  };
+  // How far off the way between the two nearest bases a point is, and how uneven its distances to them (0 for right in the middle of the way).
+  const offWay = (x: number, z: number): number => {
+    const near = [...field.baseSites].sort((p, q) => D.hypot(p.x - x, p.z - z) - D.hypot(q.x - x, q.z - z));
+    const [p, q] = near;
+    return Math.abs(D.hypot(p.x - x, p.z - z) - D.hypot(q.x - x, q.z - z)) + FLAT_OFF_WAY * segmentDistance(x, z, p.x, p.z, q.x, q.z);
+  };
+  const laneBar = laneBridgeBar(field, crossing, offWay);
+  if (laneBar) layFlat(field, out, laneBar);
+  if (out.flats.length >= want) return;
+
+  const found: FlatLine[] = [];
   const hw = field.width / 2 - 6;
   const hd = field.depth / 2 - 6;
   for (let n = 0; n < 800; n++) {
@@ -818,17 +851,9 @@ function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: numbe
     const z = rng.range(-hd, hd);
     const angle = rng.range(0, Math.PI);
     if (!field.isWater(x, z) || field.deckAt(x, z) !== null) continue;
-    const dx = D.cos(angle);
-    const dz = D.sin(angle);
-    const fore = shoreAt(x, z, dx, dz);
-    const back = shoreAt(x, z, -dx, -dz);
-    if (fore < 0 || back < 0) continue;
-    const length = fore + back;
-    if (length < FLAT_MIN || length > FLAT_MAX) continue;
-    // Landing a little way up the shore, on gentle ground, not a cliff or a speck of rock.
-    const a = { x: x - dx * (back + FLAT_LANDING), z: z - dz * (back + FLAT_LANDING) };
-    const b = { x: x + dx * (fore + FLAT_LANDING), z: z + dz * (fore + FLAT_LANDING) };
-    if ([a, b].some((p) => !field.contains(p.x, p.z, 4) || field.heightAt(p.x, p.z) < field.seaLevel + FLAT_SHORE || field.slopeAt(p.x, p.z) > 0.9 || field.sheerAt(p.x, p.z))) continue;
+    const across = crossing(x, z, D.cos(angle), D.sin(angle));
+    if (!across) continue;
+    const { a, b, length } = across;
     // Clear of the bridges (a bar by a bridge is no use), bases, outposts and other bars.
     let clear = true;
     for (let t = 0; t <= 1 && clear; t += 0.1) {
@@ -839,49 +864,100 @@ function tidalFlats(field: Battlefield, out: TraitLayout, rng: Rng, scale: numbe
       if (field.outpostSites.some((o) => D.hypot(o.x - px, o.z - pz) < o.radius + FLAT_HALF)) clear = false;
     }
     if (!clear) continue;
-    const mx = (a.x + b.x) / 2;
-    const mz = (a.z + b.z) / 2;
-    // Contested, and short.
-    const d = field.baseSites.map((s) => D.hypot(s.x - mx, s.z - mz)).sort((p, q) => p - q);
-    found.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, score: Math.abs(d[0] - d[1]) + length * 0.4 + rng.range(0, 6) });
+    // On the way between the bases, contested, and short.
+    found.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, score: offWay((a.x + b.x) / 2, (a.z + b.z) / 2) + length * 0.4 + rng.range(0, 6) });
   }
   // Worth crossing: the way round by land is a long one, or there's none (not just across a pond). The longer the better.
   found.sort((p, q) => p.score - q.score);
-  const worth: { ax: number; az: number; bx: number; bz: number; score: number }[] = [];
+  const worth: FlatLine[] = [];
   for (const c of found.slice(0, FLAT_CHECKED)) {
     const length = D.hypot(c.bx - c.ax, c.bz - c.az);
     const detour = landWalk(field, c.ax, c.az, c.bx, c.bz) / length;
     if (detour >= FLAT_DETOUR) worth.push({ ...c, score: c.score - Math.min(detour, 8) * 6 });
   }
   worth.sort((p, q) => p.score - q.score);
-  const sea = field.seaLevel;
   for (const c of worth) {
     if (out.flats.length >= want) break;
     const mx = (c.ax + c.bx) / 2;
     const mz = (c.az + c.bz) / 2;
     if (out.flats.some((f) => D.hypot((f.ax + f.bx) / 2 - mx, (f.az + f.bz) / 2 - mz) < FLAT_APART)) continue;
-    const flat: TidalFlat = { ax: c.ax, az: c.az, bx: c.bx, bz: c.bz, half: FLAT_HALF, verts: [], high: [], low: [] };
-    const length = D.hypot(c.bx - c.ax, c.bz - c.az);
-    const reach = length / 2 + FLAT_HALF + 1;
-    eachVertex(field, mx, mz, reach, (k, vx, vz) => {
-      const off = segmentDistance(vx, vz, c.ax, c.az, c.bx, c.bz);
-      const h = field.heights[k];
-      if (off > FLAT_HALF || h >= sea + FLAT_CREST) return;
-      const w = 1 - (off / FLAT_HALF) * (off / FLAT_HALF);
-      flat.verts.push(k);
-      flat.low.push(Math.max(h, sea + 0.05 + (FLAT_CREST - 0.05) * w));
-      // (The shore at either end, where the crossing was measured to, is left as it is at high tide.)
-      const along = ((vx - c.ax) * (c.bx - c.ax) + (vz - c.az) * (c.bz - c.az)) / length;
-      const shore = h >= sea + FLAT_SHORE || along < FLAT_LANDING || along > length - FLAT_LANDING;
-      flat.high.push(shore ? h : Math.min(h, sea - 0.25 - (FLAT_DEPTH - 0.25) * w));
-    });
-    if (flat.verts.length === 0) continue;
-    // The map's made at high tide.
-    flat.verts.forEach((k, n) => (field.heights[k] = flat.high[n]));
-    for (let t = 0; t <= 1; t += 0.5 / reach) field.paint(c.ax + (c.bx - c.ax) * t, c.az + (c.bz - c.az) * t, FLAT_HALF, 'flats', (g) => g === 'plain');
-    out.flats.push(flat);
-    out.sites.push({ kind: 'tidal', x: mx, z: mz, radius: 0 });
+    layFlat(field, out, c);
   }
+}
+
+/** How much being off the line between the two nearest bases counts against a bar's spot, against being nearer one than the other. */
+const FLAT_OFF_WAY = 0.6;
+
+/**
+ * The map bridge most on the way between the bases that a bar can take the
+ * place of (see tidalFlats), taken off the map, and the bar's line: null if
+ * there's none, or none whose loss would leave a base, or a town that could
+ * be reached, cut off. A bridge hopping several waters (an archipelago's)
+ * stays.
+ */
+function laneBridgeBar(field: Battlefield, crossing: (x: number, z: number, dx: number, dz: number) => { a: Point; b: Point; length: number } | null, offWay: (x: number, z: number) => number): FlatLine | null {
+  const options: { k: number; line: FlatLine }[] = [];
+  field.bridges.forEach((b, k) => {
+    if (b.gone || b.builtBy !== undefined) return;
+    const len = D.hypot(b.bx - b.ax, b.bz - b.az);
+    const mx = (b.ax + b.bx) / 2;
+    const mz = (b.az + b.bz) / 2;
+    if (!field.isWater(mx, mz)) return;
+    const across = crossing(mx, mz, (b.bx - b.ax) / len, (b.bz - b.az) / len);
+    if (!across) return;
+    // The bar covers the whole of the water the bridge did, not one of several.
+    const { a, b: e } = across;
+    const span = D.hypot(e.x - a.x, e.z - a.z);
+    for (let t = 0; t <= 1; t += 0.5 / len) {
+      const px = b.ax + (b.bx - b.ax) * t;
+      const pz = b.az + (b.bz - b.az) * t;
+      const along = ((px - a.x) * (e.x - a.x) + (pz - a.z) * (e.z - a.z)) / span;
+      if (field.isWater(px, pz) && (along < 0 || along > span)) return;
+    }
+    if (field.baseSites.some((s) => segmentDistance(s.x, s.z, a.x, a.z, e.x, e.z) < s.radius + 4)) return;
+    options.push({ k, line: { ax: a.x, az: a.z, bx: e.x, bz: e.z, score: offWay(mx, mz) } });
+  });
+  options.sort((p, q) => p.line.score - q.line.score);
+  const home = field.baseSites[0];
+  const places = [...field.baseSites.slice(1), ...field.townSites];
+  for (const { k, line } of options) {
+    const reached = places.map((p) => landWalk(field, home.x, home.z, p.x, p.z) < Infinity);
+    field.removeBridge(k);
+    if (places.every((p, n) => !reached[n] || landWalk(field, home.x, home.z, p.x, p.z) < Infinity)) {
+      field.dropBridge(k);
+      return line;
+    }
+    field.restoreBridge(k);
+  }
+  return null;
+}
+
+/** Lay a sand bar along a line, made at high tide (under the sea). */
+function layFlat(field: Battlefield, out: TraitLayout, c: FlatLine): void {
+  const sea = field.seaLevel;
+  const mx = (c.ax + c.bx) / 2;
+  const mz = (c.az + c.bz) / 2;
+  const flat: TidalFlat = { ax: c.ax, az: c.az, bx: c.bx, bz: c.bz, half: FLAT_HALF, verts: [], high: [], low: [] };
+  const length = D.hypot(c.bx - c.ax, c.bz - c.az);
+  const reach = length / 2 + FLAT_HALF + 1;
+  eachVertex(field, mx, mz, reach, (k, vx, vz) => {
+    const off = segmentDistance(vx, vz, c.ax, c.az, c.bx, c.bz);
+    const h = field.heights[k];
+    if (off > FLAT_HALF || h >= sea + FLAT_CREST) return;
+    const w = 1 - (off / FLAT_HALF) * (off / FLAT_HALF);
+    flat.verts.push(k);
+    flat.low.push(Math.max(h, sea + 0.05 + (FLAT_CREST - 0.05) * w));
+    // (The shore at either end, where the crossing was measured to, is left as it is at high tide.)
+    const along = ((vx - c.ax) * (c.bx - c.ax) + (vz - c.az) * (c.bz - c.az)) / length;
+    const shore = h >= sea + FLAT_SHORE || along < FLAT_LANDING || along > length - FLAT_LANDING;
+    flat.high.push(shore ? h : Math.min(h, sea - 0.25 - (FLAT_DEPTH - 0.25) * w));
+  });
+  if (flat.verts.length === 0) return;
+  // The map's made at high tide.
+  flat.verts.forEach((k, n) => (field.heights[k] = flat.high[n]));
+  for (let t = 0; t <= 1; t += 0.5 / reach) field.paint(c.ax + (c.bx - c.ax) * t, c.az + (c.bz - c.az) * t, FLAT_HALF, 'flats', (g) => g === 'plain');
+  out.flats.push(flat);
+  out.sites.push({ kind: 'tidal', x: mx, z: mz, radius: 0 });
 }
 
 /** Frozen lake: the least and most of a lake to freeze (in map vertices), and the ice's height above the sea. */

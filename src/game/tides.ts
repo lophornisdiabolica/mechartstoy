@@ -39,6 +39,8 @@ const FIRST_EBB = 50;
 const EBB_WARNING = 10;
 /** Route cost of a bar that's about to turn (open ground is 1): high enough that almost any way round is better. */
 const HAZARD = 40;
+/** How far either side of a bar engineers don't throw bridges (see Tide.noBridging). */
+const BRIDGE_KEEP = 24;
 
 /**
  * Where the tide is: high (the bars under the sea), ebbing (going out),
@@ -64,6 +66,14 @@ export class Tide {
   /** Whether they're a danger to boats (the tide's about to go out, or going out). */
   boatDanger(): boolean {
     return (this.phase === 'high' && this.left <= EBB_WARNING) || this.phase === 'ebbing';
+  }
+
+  /**
+   * Whether engineers keep from bridging at a point: within BRIDGE_KEEP of a
+   * bar, where a bridge would only take the tide's say over the crossing away.
+   */
+  noBridging(x: number, z: number): boolean {
+    return this.flatAt(x, z, BRIDGE_KEEP) !== null;
   }
 
   /** The bar a point's on (within its width), or null. */
