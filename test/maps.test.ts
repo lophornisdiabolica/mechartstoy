@@ -6,7 +6,7 @@ import { Transform } from '../src/game/components';
 import { UNIT_DEFS } from '../src/game/units';
 import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 import { generateBattlefield } from '../src/world/battlefield';
-import { Rng } from '../src/core/rng';
+import { hashSeed, Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
@@ -422,6 +422,26 @@ describe('maps', () => {
       }
     }
     expect(bridges).toBeGreaterThan(16);
+  });
+  it('never puts a town on top of a base, even on a small map crowded with sides', () => {
+    // A small map with three sides: one base sits on the middle line, where the first town goes.
+    const q = 'seed=aw52vo&size=small&biome=steppe&water=0&hills=1.46&shape=0.76&forest=0&towns=2&sides=3';
+    const game = new Game(hashSeed('aw52vo'), { settings: settingsFromParams(new URLSearchParams(q)), populate: false, autoSpawn: false });
+    let towns = game.field.townSites.length;
+    const clear = (f: typeof game.field) => {
+      for (const t of f.townSites) for (const b of f.baseSites) expect(Math.hypot(t.x - b.x, t.z - b.z)).toBeGreaterThanOrEqual(t.radius + b.radius);
+    };
+    clear(game.field);
+    for (let seed = 0; seed < 16; seed++) {
+      const s = defaultSettings();
+      s.map = { ...s.map, size: 'small', towns: 2 };
+      s.factions = Array.from({ length: 3 + (seed % 3) }, (_, i) => defaultFaction(i));
+      const f = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      clear(f);
+      towns += f.townSites.length;
+    }
+    // Most still get their towns, clear of the bases.
+    expect(towns).toBeGreaterThan(16);
   });
 
   it('every map trait lays out its features on contested ground, and keeps the bases in reach', () => {
