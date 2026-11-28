@@ -503,6 +503,206 @@ registerModel('bld:ruinedFactory', (faction) => {
   return g;
 });
 
+/** A shipyard's slipway: a sloping ramp under a gantry crane, a boat hull on the ways, and a shed. */
+registerModel('bld:slipway', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.4, 0.25, 3.6, CONCRETE, 0, 0.12, 0));
+  const ramp = box(1.8, 0.2, 3.9, 0x6f6c66, 0.5, 0.3, 0.2);
+  ramp.rotation.x = -0.08;
+  g.add(ramp);
+  // The hull on the ways: a long box with a pointed bow.
+  g.add(box(0.9, 0.55, 2.2, 0x8a8f96, 0.5, 0.72, -0.1));
+  g.add(cylinder(0.01, 0.46, 0.7, 4, 0x8a8f96, 0.5, 0.71, 1.3).rotateX(Math.PI / 2).rotateY(Math.PI / 4));
+  g.add(box(0.5, 0.42, 0.7, primary, 0.5, 1.2, -0.5)); // wheelhouse
+  // The gantry over it.
+  for (const x of [-0.7, 1.7]) for (const z of [-1.2, 0.9]) g.add(box(0.16, 3.0, 0.16, secondary, x, 1.6, z));
+  for (const z of [-1.2, 0.9]) g.add(box(2.6, 0.18, 0.2, secondary, 0.5, 3.05, z));
+  g.add(box(0.3, 0.3, 2.4, DARK, 0.5, 2.85, -0.15));
+  g.add(box(1.3, 1.3, 1.5, WALLS[3], -1.5, 0.9, -0.9)); // shed
+  g.add(box(1.42, 0.14, 1.62, primary, -1.5, 1.6, -0.9));
+  return g;
+});
+
+/** A sensor station: a radome on a squat block, a small rotating radar beside it. */
+registerModel('bld:sensorStation', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.0, 0.25, 3.0, CONCRETE, 0, 0.12, 0));
+  g.add(box(1.8, 1.4, 1.8, WALLS[2], 0, 0.95, 0));
+  g.add(box(1.9, 0.14, 1.9, primary, 0, 1.7, 0));
+  dome(g, 0.85, 1.77, 0xe6e2d8);
+  g.add(box(0.14, 1.6, 0.14, DARK, 1.15, 1.05, 1.1));
+  const radar = new THREE.Group();
+  radar.position.set(1.15, 1.9, 1.1);
+  radar.add(box(1.0, 0.32, 0.08, secondary, 0, 0, 0.06));
+  g.add(radar);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      radar.rotation.y += dt * 1.4;
+    },
+  });
+});
+
+/** A repair yard: a gantry over an open bay with a vehicle lift, a workshop and stacked parts. */
+registerModel('bld:repairYard', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.6, 0.22, 4.0, 0x7d7a73, 0, 0.11, 0));
+  g.add(box(1.8, 0.12, 2.6, 0xd8b23a, 0.8, 0.27, 0.3)); // the lift, in warning yellow
+  for (const x of [-0.25, 1.85]) for (const z of [-1.1, 1.7]) g.add(box(0.18, 2.4, 0.18, secondary, x, 1.3, z));
+  for (const x of [-0.25, 1.85]) g.add(box(0.22, 0.2, 3.0, secondary, x, 2.5, 0.3));
+  g.add(box(2.3, 0.24, 0.24, primary, 0.8, 2.3, 0.3)); // crane beam
+  g.add(box(0.1, 0.8, 0.1, DARK, 0.8, 1.8, 0.3)); // hook
+  g.add(box(1.4, 1.5, 2.0, WALLS[1], -1.5, 0.95, -0.7)); // workshop
+  g.add(box(1.52, 0.14, 2.12, primary, -1.5, 1.75, -0.7));
+  g.add(box(0.05, 1.0, 1.0, DARK, -0.78, 0.75, -0.7));
+  for (const [x, z] of [[-1.9, 1.3], [-1.0, 1.6]]) g.add(cylinder(0.32, 0.32, 0.3, 10, DARK, x, 0.37, z)); // spare wheels
+  return g;
+});
+
+/** A signal fire: a stone beacon tower with a brazier on top, its flame burning in the holder's colour. */
+registerModel('bld:signalFire', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(cylinder(1.3, 1.45, 0.5, 8, 0x8a857a, 0, 0.25, 0));
+  g.add(cylinder(0.85, 1.1, 2.6, 8, 0xa39d90, 0, 1.8, 0));
+  g.add(cylinder(1.05, 0.9, 0.3, 8, 0x8a857a, 0, 3.2, 0));
+  g.add(cylinder(0.7, 0.45, 0.5, 8, DARK, 0, 3.6, 0)); // brazier
+  const flame = glowBox(0.6, 0.7, 0.6, 0xffa040);
+  flame.position.set(0, 4.1, 0);
+  g.add(flame);
+  const tip = glowBox(0.3, 0.4, 0.3, primary);
+  tip.position.set(0, 4.55, 0);
+  g.add(tip);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      flame.userData.t = (flame.userData.t ?? Math.random() * 3) + dt;
+      const s = 1 + Math.sin(flame.userData.t * 9) * 0.12;
+      flame.scale.set(s, 2 - s, s);
+      tip.rotation.y += dt * 2;
+    },
+  });
+});
+
+/** A citadel's keep: a heavy square tower with crenellations, a gatehouse front and the holder's banner. */
+registerModel('bld:keep', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  const stone = 0x9a9486;
+  g.add(box(3.8, 0.3, 3.8, 0x7d786c, 0, 0.15, 0));
+  g.add(box(3.0, 3.6, 3.0, stone, 0, 2.05, 0));
+  g.add(box(3.24, 0.3, 3.24, 0x8a8477, 0, 3.95, 0));
+  for (let k = 0; k < 4; k++) {
+    for (const s of [-0.9, 0, 0.9]) {
+      const a = (k * Math.PI) / 2;
+      const m = box(0.4, 0.42, 0.3, stone, Math.cos(a) * 1.45 - Math.sin(a) * s, 4.3, Math.sin(a) * 1.45 + Math.cos(a) * s);
+      m.rotation.y = -a;
+      g.add(m);
+    }
+  }
+  g.add(box(0.1, 1.4, 1.1, DARK, 1.53, 1.0, 0)); // gate
+  g.add(box(0.12, 0.3, 1.5, primary, 1.56, 1.9, 0));
+  for (const z of [-0.8, 0.8]) g.add(box(0.06, 0.5, 0.22, DARK, 1.52, 2.9, z)); // arrow slits
+  g.add(box(0.1, 1.8, 0.1, DARK, -0.8, 5.0, -0.8));
+  g.add(box(0.05, 0.6, 0.9, secondary, -0.8, 5.5, -0.32));
+  return g;
+});
+
+/** A length of citadel wall: tall stone with a walkway lip and crenellations. */
+registerModel('bld:citadelWall', (faction) => {
+  const { primary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(1.1, 0.3, 3.5, 0x7d786c, 0, 0.15, 0));
+  g.add(box(0.8, 1.6, 3.4, 0x9a9486, 0, 1.1, 0));
+  g.add(box(0.92, 0.12, 3.46, primary, 0, 1.96, 0));
+  for (const z of [-1.4, -0.7, 0, 0.7, 1.4]) g.add(box(0.3, 0.32, 0.4, 0x9a9486, 0.22, 2.17, z));
+  return g;
+});
+
+/** A rail station's house: a brick booking hall under a pitched roof, a platform canopy along the track side and a water tower. */
+registerModel('bld:stationHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(4.0, 0.3, 3.0, CONCRETE, 0, 0.15, 0)); // platform
+  g.add(box(2.4, 1.5, 1.5, 0x8a5a44, -0.4, 1.05, -0.5)); // booking hall
+  g.add(gableRoof(2.6, 1.7, 0.6, primary, 1.8).translateX(-0.4).translateZ(-0.5));
+  g.add(box(0.05, 0.9, 0.6, DARK, -0.4, 0.75, 0.26)); // door
+  for (const x of [-1.6, 0.8]) g.add(box(0.12, 1.5, 0.12, DARK, x, 1.05, 1.1)); // canopy posts
+  g.add(box(2.8, 0.1, 1.0, secondary, -0.4, 1.86, 0.95));
+  g.add(cylinder(0.45, 0.45, 0.9, 10, 0x6d6a64, 1.4, 2.25, -0.6)); // water tower
+  for (const [x, z] of [[1.15, -0.85], [1.65, -0.35]]) g.add(box(0.1, 1.6, 0.1, DARK, x, 1.0, z));
+  return g;
+});
+
+/** A drawbridge's winch house: a squat stone tower with a timber roof, the big winch drum on its side and chains running down to the bridge. */
+registerModel('bld:winchHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  const stone = 0x948e80;
+  g.add(box(3.0, 0.3, 3.0, 0x7d786c, 0, 0.15, 0));
+  g.add(box(2.2, 2.4, 2.2, stone, 0, 1.5, 0));
+  g.add(box(2.44, 0.2, 2.44, 0x857f72, 0, 2.8, 0));
+  g.add(gableRoof(2.3, 2.3, 0.7, 0x6b4a32, 2.9));
+  g.add(box(0.05, 1.1, 0.7, DARK, 1.13, 0.85, 0)); // door
+  g.add(box(0.08, 0.26, 1.3, primary, 1.15, 1.6, 0));
+  // The winch: a drum on two cheeks, with its crank wheel.
+  for (const z of [-0.75, 0.75]) g.add(box(0.5, 0.9, 0.16, DARK, -1.3, 1.25, z));
+  g.add(cylinder(0.36, 0.36, 1.3, 12, 0x5a4a3a, -1.35, 1.5, 0).rotateX(Math.PI / 2));
+  g.add(cylinder(0.5, 0.5, 0.08, 10, secondary, -1.35, 1.5, 0.92).rotateX(Math.PI / 2));
+  // Chains off the drum.
+  for (const z of [-0.35, 0.35]) g.add(box(0.08, 0.08, 0.08, DARK, -1.75, 1.5, z), box(0.07, 1.2, 0.07, DARK, -1.75, 0.9, z));
+  return g;
+});
+
+/** A stretch of a dam: a thick concrete wall with a walkway, its sluice gates on the water side. */
+registerModel('bld:dam', () => {
+  const g = new THREE.Group();
+  g.add(box(1.8, 0.3, 3.3, 0x8a877e, 0, 0.15, 0));
+  g.add(box(1.4, 1.9, 3.2, 0xa8a59c, 0, 1.25, 0));
+  g.add(box(1.6, 0.14, 3.24, 0x8f8c84, 0, 2.27, 0));
+  for (const z of [-0.9, 0.9]) g.add(box(0.12, 1.1, 0.8, 0x5a6670, -0.76, 1.0, z)); // sluice gates
+  for (const z of [-1.5, 1.5]) g.add(box(0.1, 0.5, 0.1, DARK, 0.6, 2.58, z)); // railing posts
+  g.add(box(0.06, 0.06, 2.96, DARK, 0.6, 2.75, 0));
+  return g;
+});
+
+/** A dam control outpost's sluice house: a small concrete control room with the big gate wheel on its roof. */
+registerModel('bld:sluiceHouse', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(3.2, 0.25, 3.2, CONCRETE, 0, 0.12, 0));
+  g.add(box(2.4, 1.8, 2.0, 0xa8a59c, 0, 1.15, 0));
+  g.add(box(2.6, 0.16, 2.2, primary, 0, 2.13, 0));
+  g.add(box(0.05, 1.0, 0.6, DARK, 1.23, 0.75, 0)); // door
+  g.add(box(0.06, 0.4, 1.2, 0x40525e, -1.23, 1.4, 0)); // window
+  g.add(cylinder(0.08, 0.08, 0.5, 6, DARK, 0, 2.46, 0));
+  g.add(cylinder(0.55, 0.55, 0.08, 12, secondary, 0, 2.75, 0).rotateX(Math.PI / 2));
+  return g;
+});
+
+/** A landing field's flight tower: a glazed cab on a slim tower, a beacon on its roof and a windsock. */
+registerModel('bld:flightTower', (faction) => {
+  const { primary, secondary } = factionColors(faction);
+  const g = new THREE.Group();
+  g.add(box(2.6, 0.25, 2.6, CONCRETE, 0, 0.12, 0));
+  g.add(box(1.0, 3.4, 1.0, WALLS[0], 0, 1.95, 0));
+  g.add(box(1.7, 0.9, 1.7, 0x40525e, 0, 4.05, 0)); // the glazed cab
+  g.add(box(1.86, 0.16, 1.86, primary, 0, 4.58, 0));
+  g.add(box(1.8, 0.1, 1.8, secondary, 0, 3.55, 0));
+  const beacon = glowBox(0.2, 0.2, 0.2, 0x60ff80);
+  beacon.position.set(0, 4.8, 0);
+  g.add(beacon);
+  g.add(box(0.08, 1.8, 0.08, DARK, 1.05, 0.95, 1.05));
+  g.add(cylinder(0.08, 0.16, 0.6, 6, 0xf08a30, 1.05, 1.75, 1.35).rotateX(Math.PI / 2));
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beacon.userData.t = (beacon.userData.t ?? Math.random() * 2) + dt;
+      beacon.visible = beacon.userData.t % 1.6 < 0.4;
+    },
+  });
+});
+
 /**
  * How civilian buildings look on this map (see BiomeDef.town). Set by the
  * stage when a battle loads; faction buildings keep their own look.
@@ -519,7 +719,22 @@ const TOWN_COLORS: Record<TownStyle, { walls: number[]; roofs: number[]; trim: n
   adobe: { walls: [0xe2c99c, 0xd8b787, 0xeedbb8, 0xcfa978], roofs: [0xc9a06c, 0xb98a58, 0x8fa3a8], trim: 0xb08a5c },
   alpine: { walls: [0x6e4c35, 0x80593c, 0xe6ddcc, 0x5c4030], roofs: [0xeef2f5, 0xe2e8ec], trim: 0x4a3426 },
   timber: { walls: [0x9a7650, 0xb08a5c, 0xd9cfbd, 0x8c6a46], roofs: [0x4f6b3a, 0x6b4a32, 0x7a5a3a, 0x5d6b4a], trim: 0x5b4030 },
+  concrete: { walls: [0xa8a8a2, 0x9c9e9c, 0xb8b6ae, 0x8e9294], roofs: [0x6e7072, 0x7c7e80, 0x5e6466], trim: 0x6a6c6e },
+  thatch: { walls: [0xa8865a, 0x8f6e48, 0xc2a070, 0x7a5c3c], roofs: [0xc8a860, 0xb8964e, 0xd4b46c], trim: 0x5a4028 },
+  shanty: { walls: [0x7a6a5a, 0x8a7a64, 0x6d7b86, 0x9a6a4a, 0x5e6a5e], roofs: [0x9a5a3a, 0x8a7a6a, 0x6d7b86, 0xa8743e], trim: 0x4a4440 },
+  yurt: { walls: [0xe6dcc6, 0xd8ccb2, 0xeae2d2, 0xc8b89a], roofs: [0xb05a3a, 0x3a6a8a, 0xc89a4a, 0x8a4a5a], trim: 0x7a5a3a },
+  dome: { walls: [0xeef0f2, 0xe2e6ea, 0xd6dce2], roofs: [0xf6f8fa, 0x9ad0e0, 0xe8eef2], trim: 0x8aa0b0 },
 };
+
+/** Town styles built like halls (a big roof over timber or felt walls) rather than flat-roofed blocks. */
+const HALLS: ReadonlySet<TownStyle> = new Set<TownStyle>(['alpine', 'timber', 'thatch', 'yurt', 'shanty']);
+
+/** A low dome: three stacked rings narrowing to a point, sitting on a footprint of this radius at height y. */
+function dome(g: THREE.Group, radius: number, y: number, color: number): void {
+  g.add(cylinder(radius * 0.72, radius, radius * 0.32, 10, color, 0, y + radius * 0.16, 0));
+  g.add(cylinder(radius * 0.3, radius * 0.72, radius * 0.3, 10, color, 0, y + radius * 0.47, 0));
+  g.add(cylinder(0.02, radius * 0.3, radius * 0.16, 10, color, 0, y + radius * 0.7, 0));
+}
 
 /** A civilian building's wall colour, or the usual walls for faction buildings. */
 function wallColor(faction: number): number {
@@ -534,24 +749,87 @@ function styledRoof(faction: number): number {
 /**
  * The roof on a box of the given footprint whose walls end at `h`: a gable
  * (steep and deep in alpine towns, with snow on it), or a flat roof with a
- * parapet in adobe towns.
+ * parapet in adobe towns. `tight`: a house in a row (see bld:terrace), whose
+ * roof stops at its own side walls (z) instead of overhanging next door's.
  */
-function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number): void {
+function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number, tight = false): void {
   const style = faction < 0 ? townStyle : 'brick';
   const color = styledRoof(faction);
-  if (style === 'adobe') {
-    g.add(box(w + 0.08, 0.12, d + 0.08, color, 0, h + 0.06, 0));
-    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, d / 2));
-    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -d / 2));
+  /** How far past the side walls (z) a roof reaches, against the usual. */
+  const sides = (usual: number) => (tight ? d - 0.01 : d + usual);
+  if (style === 'shanty') {
+    // A sheet of corrugated iron, laid on a slant from front to back, high enough that its low
+    // edge clears the top of the wall (a big block's sheet drops further over its depth).
+    const run = w + 0.3;
+    const lift = h + (w / 2) * Math.tan(SHEET_TILT) + 0.06;
+    const sheet = box(run, SHEET_THICK, sides(0.3), color, 0, lift, 0);
+    sheet.rotation.z = SHEET_TILT;
+    g.add(sheet);
+    // Propped up on the high side (+x) by a post at each corner, from the wall top to just under
+    // the sheet: the underside's height over the post's lower edge, so the post never pokes through.
+    const x = w / 2 - SHEET_POST / 2;
+    const under = lift + (x - SHEET_POST / 2 - (SHEET_THICK / 2) * Math.sin(SHEET_TILT)) * Math.tan(SHEET_TILT) - (SHEET_THICK / 2) * Math.cos(SHEET_TILT) - 0.01;
+    const tall = under - h;
+    if (tall > 0.05) {
+      const edge = d / 2 - SHEET_POST / 2;
+      for (const z of [edge, -edge]) g.add(box(SHEET_POST, tall, SHEET_POST, TOWN_COLORS.shanty.trim, x, h + tall / 2, z));
+    }
     return;
   }
-  const pitch = style === 'alpine' ? 1.15 : style === 'timber' ? 0.8 : 0.7;
-  g.add(gableRoof(w + 0.2, d + 0.25, pitch, color, h));
+  if (style === 'dome') {
+    g.add(box(w + 0.06, 0.1, sides(0.06), TOWN_COLORS.dome.trim, 0, h + 0.05, 0));
+    dome(g, Math.min(w, d) * 0.45, h + 0.1, color);
+    return;
+  }
+  if (style === 'adobe' || style === 'concrete') {
+    g.add(box(w + 0.08, 0.12, sides(0.08), color, 0, h + 0.06, 0));
+    // The parapets along the sides, inside the walls in a row.
+    const edge = tight ? d / 2 - 0.06 : d / 2;
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, edge));
+    g.add(box(w + 0.1, 0.18, 0.1, color, 0, h + 0.15, -edge));
+    return;
+  }
+  const pitch = style === 'alpine' ? 1.15 : style === 'thatch' ? 1.05 : style === 'timber' ? 0.8 : style === 'yurt' ? 0.5 : 0.7;
+  // Thatch hangs well past the walls.
+  const eaves = style === 'thatch' ? 0.6 : 0.2;
+  g.add(gableRoof(w + eaves, sides(eaves + 0.05), pitch, color, h));
 }
+
+/** How steeply a shanty's iron sheet roof slants, radians, how thick the sheet is, and how thick the posts propping its high side are. */
+const SHEET_TILT = 0.2;
+const SHEET_THICK = 0.08;
+const SHEET_POST = 0.08;
 
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
   const walls = wallColor(faction);
+  if (faction < 0 && townStyle === 'yurt') {
+    // A round felt tent under a shallow cone, a coloured band round it.
+    g.add(cylinder(0.95, 0.95, 0.9, 10, walls, 0, 0.45, 0));
+    g.add(cylinder(0.97, 0.97, 0.12, 10, styledRoof(faction), 0, 0.62, 0));
+    g.add(cylinder(0.12, 1.05, 0.6, 10, walls, 0, 1.2, 0));
+    g.add(box(0.05, 0.55, 0.35, styledRoof(faction), 0.95, 0.28, 0));
+    return g;
+  }
+  if (faction < 0 && townStyle === 'dome') {
+    // A domed habitat on a low ring wall.
+    g.add(cylinder(0.95, 1.0, 0.45, 10, walls, 0, 0.22, 0));
+    dome(g, 0.95, 0.45, pick(TOWN_COLORS.dome.roofs));
+    g.add(box(0.05, 0.4, 0.35, WINDOW, 0.97, 0.22, 0));
+    return g;
+  }
+  if (faction < 0 && townStyle === 'thatch') {
+    // Up on stilts, out of the wet.
+    for (const [x, z] of [[-0.85, -0.65], [0.85, -0.65], [-0.85, 0.65], [0.85, 0.65]]) g.add(box(0.12, 0.45, 0.12, TOWN_COLORS.thatch.trim, x, 0.22, z));
+    const hut = new THREE.Group();
+    hut.position.y = 0.4;
+    const h = stepped(0.8, 1.0, 3);
+    hut.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
+    roofOn(hut, 1.9, 1.5, h, faction);
+    hut.add(box(0.05, 0.55, 0.4, DARK, 0.96, 0.3, 0));
+    g.add(hut);
+    return g;
+  }
   const h = stepped(0.9, 1.3);
   g.add(box(1.9, h, 1.5, walls, 0, h / 2, 0));
   roofOn(g, 1.9, 1.5, h, faction);
@@ -582,7 +860,7 @@ registerModel('bld:block', (faction) => {
     g.add(box(0.06, 0.7, 0.5, DARK, 1.26, 0.35, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (HALLS.has(style)) {
     // A tall hall: two storeys under a big roof.
     const h = 2.2;
     g.add(box(2.4, h, 2.2, walls, 0, h / 2, 0));
@@ -623,7 +901,15 @@ registerModel('bld:spire', (faction) => {
     g.add(cylinder(0.02, 0.36, 0.6, 8, accent, 0, 5.5, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (style === 'dome') {
+    // A slim tower with a domed lookout.
+    g.add(cylinder(0.75, 0.85, 0.5, 10, wallColor(faction), 0, 0.25, 0));
+    g.add(cylinder(0.35, 0.45, 4.2, 10, wallColor(faction), 0, 2.6, 0));
+    g.add(cylinder(0.75, 0.6, 0.5, 10, TOWN_COLORS.dome.trim, 0, 4.9, 0));
+    dome(g, 0.75, 5.15, accent);
+    return g;
+  }
+  if (HALLS.has(style)) {
     // A steeple: a square tower with a pointed cap.
     g.add(box(1.4, 3.8, 1.4, wallColor(faction), 0, 1.9, 0));
     g.add(box(0.5, 0.6, 0.06, WINDOW, 0.71, 3.1, 0));
@@ -645,7 +931,14 @@ registerModel('bld:spire', (faction) => {
 registerModel('bld:silo', (faction) => {
   const g = new THREE.Group();
   const accent = faction < 0 ? pick(TOWN_COLORS[townStyle].roofs) : factionColors(faction).primary;
-  const body = faction < 0 && townStyle === 'adobe' ? pick([0xd8c4a0, 0xcbb38a]) : faction < 0 && townStyle === 'timber' ? pick([0x9a7650, 0xb08a5c]) : pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]);
+  const body =
+    faction < 0 && townStyle === 'adobe'
+      ? pick([0xd8c4a0, 0xcbb38a])
+      : faction < 0 && (townStyle === 'timber' || townStyle === 'thatch')
+        ? pick([0x9a7650, 0xb08a5c])
+        : faction < 0 && townStyle === 'shanty'
+          ? pick([0x8a5a3a, 0x7a6a5a])
+          : pick([0xd8d4cc, 0xc4c0b6, 0xb8c4c8]);
   g.add(cylinder(0.85, 0.85, 2.4, 8, body, 0, 1.2, 0));
   g.add(cylinder(0.05, 0.9, 0.7, 8, accent, 0, 2.75, 0));
   g.add(box(0.1, 2.4, 0.1, METAL, 0.9, 1.2, 0)); // ladder
@@ -675,7 +968,7 @@ registerModel('bld:terrace', (faction) => {
     const deep = k % 2 === 0 ? 2.7 : 2.56;
     const face = deep / 2;
     house.add(box(deep, h, w - 0.04, wallColor(faction), 0, h / 2, 0));
-    roofOn(house, deep, w - 0.04, h, faction);
+    roofOn(house, deep, w - 0.04, h, faction, true);
     house.add(box(0.05, 0.6, 0.3, DARK, face + 0.025, 0.3, 0)); // door (proud of the windows above it)
     for (const y of [h * 0.45, h * 0.8].filter((y) => y < h - 0.25)) {
       house.add(box(0.05, 0.28, 0.32, WINDOW, face + 0.01, y, 0));
@@ -702,7 +995,7 @@ registerModel('bld:tenement', (faction) => {
     g.add(box(0.06, 0.7, 0.5, DARK, 1.41, 0.35, 0));
     return g;
   }
-  if (style === 'alpine' || style === 'timber') {
+  if (HALLS.has(style)) {
     const floors = 3 + Math.floor(Math.random() * 2);
     const h = floors * 0.8;
     g.add(box(2.7, h, 2.7, walls, 0, h / 2, 0));
@@ -739,8 +1032,8 @@ registerModel('bld:warehouse', (faction) => {
   const g = new THREE.Group();
   const walls = faction < 0 && townStyle === 'brick' ? pick([0xa9a49a, 0xb7b0a2, 0x9aa0a4]) : wallColor(faction);
   g.add(box(3.4, 1.4, 2.0, walls, 0, 0.7, 0));
-  if (faction < 0 && townStyle === 'adobe') g.add(box(3.5, 0.14, 2.1, styledRoof(faction), 0, 1.47, 0));
-  else g.add(gableRoof(3.55, 2.2, townStyle === 'alpine' ? 0.9 : 0.45, faction < 0 && townStyle === 'brick' ? pick([0x6d7b86, 0x7a7e85, 0x8c4a3a]) : styledRoof(faction), 1.4));
+  if (faction < 0 && (townStyle === 'adobe' || townStyle === 'concrete' || townStyle === 'dome')) g.add(box(3.5, 0.14, 2.1, styledRoof(faction), 0, 1.47, 0));
+  else g.add(gableRoof(3.55, 2.2, townStyle === 'alpine' || townStyle === 'thatch' ? 0.9 : 0.45, faction < 0 && townStyle === 'brick' ? pick([0x6d7b86, 0x7a7e85, 0x8c4a3a]) : styledRoof(faction), 1.4));
   g.add(box(0.06, 1.0, 1.0, DARK, 1.71, 0.5, 0)); // loading door
   g.add(box(0.8, 0.5, 0.6, pick([0x8a5a38, 0x6d7b86, 0xb5654a]), 2.2, 0.25, 0.4)); // crates outside
   return g;
@@ -1172,4 +1465,132 @@ registerModel('bld:shrine', (faction) => {
   }
   g.add(turret);
   return setRig(g, { turret, ...mounted('bld:shrine', g, turret, [eyes]) });
+});
+
+// Relics: what map traits leave standing, nobody's (see world/traits.ts). Their colours are their own, not a side's.
+
+const RUST = 0x5a3c2e;
+const SOOT = 0x3a3532;
+const OLD_CONCRETE = 0x9c978a;
+const MARBLE = 0xddd5c2;
+
+/** An old tank hulk: a burnt-out, rusted hull, its turret knocked askew and its gun drooping, tracks gone. */
+registerModel('bld:oldHulk', () => {
+  const g = new THREE.Group();
+  const tilt = (Math.random() - 0.5) * 0.25;
+  const hull = new THREE.Group();
+  hull.add(box(2.3, 0.6, 1.5, RUST, 0, 0.35, 0));
+  hull.add(box(2.1, 0.35, 0.32, SOOT, 0, 0.2, 0.8));
+  hull.add(box(2.1, 0.35, 0.32, SOOT, 0, 0.2, -0.8));
+  const turret = new THREE.Group();
+  turret.add(box(1.0, 0.45, 0.95, 0x4e3529, 0, 0, 0));
+  const gun = box(1.2, 0.12, 0.12, SOOT, 0.95, -0.08, 0);
+  gun.rotation.z = -0.25;
+  turret.add(gun);
+  turret.position.set(-0.15, 0.85, 0);
+  turret.rotation.y = (Math.random() - 0.5) * 1.6;
+  turret.rotation.z = (Math.random() - 0.5) * 0.3;
+  hull.add(turret);
+  hull.rotation.z = tilt;
+  hull.position.y = -0.1;
+  g.add(hull);
+  return g;
+});
+
+/** A stretch of an old concrete wall across the way it faces, chipped along the top, with a stain of rust. */
+registerModel('bld:oldWall', () => {
+  const g = new THREE.Group();
+  g.add(box(0.8, 0.2, 2.7, 0x878275, 0, 0.1, 0));
+  g.add(box(0.6, 1.1, 2.6, OLD_CONCRETE, 0, 0.65, 0));
+  // Chipped top: a few blocks missing.
+  for (const z of [-0.9, 0.1, 0.95]) if (Math.random() < 0.6) g.add(box(0.62, 0.25, stepped(0.3, 0.6, 3), OLD_CONCRETE, 0, 1.3, z));
+  g.add(box(0.66, 0.5, 0.18, RUST, 0, 0.75, stepped(-0.95, 0.95, 3)));
+  return g;
+});
+
+/** An old pillbox: a squat hexagonal concrete blockhouse, its slits empty and blackened. */
+registerModel('bld:pillbox', () => {
+  const g = new THREE.Group();
+  g.add(cylinder(1.45, 1.6, 1.3, 6, OLD_CONCRETE, 0, 0.65, 0));
+  g.add(cylinder(1.55, 1.55, 0.25, 6, 0x878275, 0, 1.38, 0));
+  for (const a of [0, Math.PI / 3, -Math.PI / 3]) {
+    const slit = box(0.12, 0.18, 0.7, SOOT, Math.cos(a) * 1.42, 0.95, -Math.sin(a) * 1.42);
+    slit.rotation.y = a;
+    g.add(slit);
+  }
+  return g;
+});
+
+/** A crashed giant machine: a huge armoured torso half buried on its side, a leg in the air, a broken arm, ribs showing. */
+registerModel('bld:crashedHulk', () => {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  body.add(box(6.5, 3.4, 4.2, 0x5d5a57, 0, 1.4, 0)); // torso, on its side
+  body.add(box(5.5, 0.6, 3.6, RUST, 0.2, 3.3, 0)); // armour plate, rusted
+  body.add(box(2.4, 2.0, 2.4, 0x4a4744, 3.9, 1.7, 0.4)); // head
+  body.add(glowBox(0.9, 0.3, 0.08, 0x5a1a10).translateX(5.05).translateY(2.1).translateZ(0.4)); // a dead eye, still faintly lit
+  // A leg sticking up at an angle, and a broken arm in the dirt.
+  const leg = new THREE.Group();
+  leg.add(box(1.3, 4.5, 1.3, 0x55524f, 0, 2.25, 0));
+  leg.add(box(1.8, 0.8, 2.2, SOOT, 0, 4.6, 0.3));
+  leg.position.set(-2.6, 2.2, -1.1);
+  leg.rotation.z = 0.7;
+  leg.rotation.x = -0.3;
+  body.add(leg);
+  const arm = box(4.2, 1.0, 1.0, 0x4f4c49, 0.5, 0.4, 3.0);
+  arm.rotation.y = 0.5;
+  body.add(arm);
+  // Torn ribs where the plating's gone.
+  for (let n = 0; n < 4; n++) body.add(box(0.18, 1.6, 0.18, SOOT, -1.6 + n * 0.8, 3.6, -1.4));
+  body.rotation.x = 0.12;
+  g.add(body);
+  return g;
+});
+
+/** An oil derrick: a lattice tower over the well, with a pumpjack nodding beside it (it keeps working, whoever's fighting round it). */
+registerModel('bld:derrick', () => {
+  const g = new THREE.Group();
+  g.add(box(2.0, 0.2, 2.0, 0x4a4540, 0, 0.1, 0));
+  const steel = 0x6b6258;
+  for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) {
+    const leg = box(0.12, 5.2, 0.12, steel, x * 0.6, 2.6, z * 0.6);
+    leg.rotation.x = z * 0.1;
+    leg.rotation.z = -x * 0.1;
+    g.add(leg);
+  }
+  for (const y of [1.2, 2.4, 3.6]) g.add(box(1.2 - y * 0.12, 0.08, 1.2 - y * 0.12, steel, 0, y, 0));
+  g.add(box(0.5, 0.3, 0.5, 0x3d3833, 0, 5.2, 0));
+  // The pumpjack.
+  const beam = new THREE.Group();
+  beam.add(box(1.6, 0.16, 0.16, 0x8a3a2a, 0, 0, 0));
+  beam.add(box(0.2, 0.45, 0.3, 0x8a3a2a, 0.8, -0.15, 0));
+  beam.position.set(1.0, 1.05, 0.9);
+  g.add(box(0.14, 0.9, 0.14, SOOT, 1.0, 0.5, 0.9));
+  g.add(beam);
+  return setRig(g, {
+    animate: ({ dt }) => {
+      beam.userData.t = (beam.userData.t ?? Math.random() * 10) + dt;
+      beam.rotation.z = Math.sin(beam.userData.t * 1.6) * 0.3;
+    },
+  });
+});
+
+/** An ancient column: a fluted shaft on a plinth, its capital weathered, the odd one snapped short. */
+registerModel('bld:column', () => {
+  const g = new THREE.Group();
+  const snapped = Math.random() < 0.3;
+  const shaft = snapped ? stepped(1.4, 2.2, 3) : 2.7;
+  g.add(box(1.0, 0.25, 1.0, 0xcfc6b0, 0, 0.12, 0));
+  g.add(cylinder(0.38, 0.44, shaft, 10, MARBLE, 0, 0.25 + shaft / 2, 0));
+  if (!snapped) g.add(box(0.95, 0.25, 0.95, 0xcfc6b0, 0, 3.05, 0));
+  return g;
+});
+
+/** What's left of a temple wall: big stone blocks, stepped down where the top has fallen. */
+registerModel('bld:ruinWall', () => {
+  const g = new THREE.Group();
+  g.add(box(0.8, 0.6, 2.6, 0xcfc6b0, 0, 0.3, 0));
+  g.add(box(0.7, 0.55, stepped(1.4, 2.4, 3), MARBLE, 0, 0.85, -0.05));
+  if (Math.random() < 0.6) g.add(box(0.7, 0.45, stepped(0.6, 1.2, 3), 0xd6cdb8, 0, 1.35, -0.5));
+  return g;
 });

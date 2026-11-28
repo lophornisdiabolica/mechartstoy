@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { BIOMES } from '../world/biomes';
 import { markRange } from './upload';
 import { Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
+import { groundCode } from '../world/ground';
 import { TREE_HEIGHT } from '../world/woods';
-import { cactusGeometry, Detail, pineGeometry, treeGeometry } from './propsMesh';
+import { cactusGeometry, Detail, jungleTreeGeometry, monolithGeometry, pineGeometry, treeGeometry } from './propsMesh';
 import { PlantMesh, PlantShapes } from './plantLod';
 
 /** Height of the tree geometries (pine and broadleaf both come out about this tall at scale 1). */
@@ -24,7 +26,15 @@ interface Plant {
   dz: number;
   scale: number;
   spin: number;
+  /** Drawn this much bigger or smaller than the tree is, so a canopy isn't all one height (looks only). */
+  grow?: number;
 }
+
+/** How much the forest's trees vary in drawn size, either way: a jungle canopy most, so it doesn't read as one flat roof. */
+const GROW_VARY = 0.12;
+const JUNGLE_GROW = [0.72, 1.32] as const;
+/** Jungle trees are tinted part way toward one of these (sunlit yellow-green, deep shade, fresh lime), so the canopy's patchy. */
+const JUNGLE_TINTS = [0xfff09a, 0x7a9a80, 0xd8ff90, 0xa8b870, 0xd2dcc8];
 
 /**
  * The dense forest's trees (see woods.ts), as one instanced mesh: bigger
@@ -41,21 +51,51 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   const group = new THREE.Group();
   group.name = 'woods';
   const trees = field.woods.trees;
-  const biome = field.config.biome;
-  const desert = biome === 'desert';
-  const shape = (d: Detail) => (desert ? cactusGeometry(d) : biome === 'snow' ? pineGeometry(true, d) : biome === 'forest' || biome === 'temperate' ? pineGeometry(false, d) : treeGeometry(d));
+  const woods = BIOMES[field.config.biome].woods;
+  const desert = woods.plant === 'cactus';
+  const shape = (d: Detail) => {
+    switch (woods.plant) {
+      case 'cactus':
+        return cactusGeometry(d);
+      case 'snowPine':
+        return pineGeometry(true, d);
+      case 'pine':
+        return pineGeometry(false, d);
+      case 'jungle':
+        return jungleTreeGeometry(d);
+      case 'monolith':
+        return monolithGeometry(d);
+      default:
+        return treeGeometry(d);
+    }
+  };
   const shapes: PlantShapes = { near: shape('near'), far: shape('far'), shadow: shape('shadow') };
   /** Every square's mesh, for setFar. */
   const meshes: PlantMesh[] = [];
   let far = false;
-  const tint = desert ? 0x5f8a4a : biome === 'snow' || biome === 'forest' || biome === 'temperate' ? 0xc8d2c0 : 0x3f6a34;
+  const tint = woods.tint;
   const heightAtScale1 = desert ? CACTUS_HEIGHT : GEOMETRY_HEIGHT;
   const slim = desert ? 0.7 : 1;
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
   const dummy = new THREE.Object3D();
   const base = new THREE.Color(tint);
-  // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki.
-  const fallen = new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
+  // Fallen trees go darker, like dead wood; fallen cacti dry out to a pale khaki; toppled crystal dulls.
+  const fallen = woods.plant === 'monolith' ? base.clone().multiplyScalar(0.6) : new THREE.Color(desert ? 0xa89a62 : 0xe8c49a);
+  // Trees a wildfire brought down lie charred on the burnt ground (see game/wildfire.ts).
+  const charred = new THREE.Color(0x2e2925);
+  const burnt = groundCode('burnt');
+  const downColour = (k: number) => {
+    const [i, j] = field.cellAt(trees[k].x, trees[k].z);
+    return field.ground[j * field.config.cols + i] === burnt ? charred : fallen;
+  };
+  const jungle = woods.plant === 'jungle';
+  const jungleTints = JUNGLE_TINTS.map((c) => new THREE.Color(c));
+  /** A standing tree's colour: the biome's, a little lighter or darker, and in the jungle a good deal more mixed. */
+  const standing = () => {
+    if (!jungle) return base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03));
+    const toward = jungleTints[Math.floor(rng.range(0, jungleTints.length)) % jungleTints.length];
+    return base.clone().lerp(toward, rng.range(0.4, 1)).offsetHSL(rng.range(-0.03, 0.03), 0, rng.range(-0.14, 0.05));
+  };
   /** Per tree: the mesh its plants are in, and their instances there. */
   const drawn = new Map<number, { mesh: THREE.InstancedMesh; plants: Plant[]; instances: number[] }>();
   const { minX, minZ } = field.bounds;
@@ -63,7 +103,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
 
   const place = (mesh: THREE.InstancedMesh, p: Plant, i: number) => {
     const t = trees[p.tree];
-    const scale = (TREE_HEIGHT / heightAtScale1) * t.size * p.scale;
+    const scale = (TREE_HEIGHT / heightAtScale1) * t.size * p.scale * (p.grow ?? 1);
     // On the ground as it is now (a god power may have moved it since the tree was planted).
     const foot = field.heightAt(t.x, t.z);
     if (t.fell === null) {
@@ -106,13 +146,15 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
   };
   const addTile = (indices: number[]) => {
     if (indices.length === 0) return;
-    const plants = desert ? cactusClumps(indices, rng) : indices.map((k) => ({ tree: k, dx: 0, dz: 0, scale: 1, spin: rng.range(0, Math.PI * 2) }));
+    const plants = desert
+      ? cactusClumps(indices, rng)
+      : indices.map((k) => ({ tree: k, dx: 0, dz: 0, scale: 1, spin: rng.range(0, Math.PI * 2), grow: jungle ? rng.range(JUNGLE_GROW[0], JUNGLE_GROW[1]) : rng.range(1 - GROW_VARY, 1 + GROW_VARY) }));
     const lod = new PlantMesh(shapes, material, plants.length);
     lod.setFar(far);
     const mesh = lod.mesh;
     plants.forEach((p, i) => {
       place(mesh, p, i);
-      mesh.setColorAt(i, trees[p.tree].fell === null ? base.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.07, 0.03)) : fallen);
+      mesh.setColorAt(i, trees[p.tree].fell === null ? standing() : downColour(p.tree));
       let entry = drawn.get(p.tree);
       if (!entry) drawn.set(p.tree, (entry = { mesh, plants: [], instances: [] }));
       entry.plants.push(p);
@@ -132,7 +174,7 @@ export function buildWoods(field: Battlefield, rng: Rng): THREE.Group {
       place(entry.mesh, p, i);
       markRange(entry.mesh.instanceMatrix, i * 16, 16);
       if (colour && entry.mesh.instanceColor) {
-        entry.mesh.setColorAt(i, fallen);
+        entry.mesh.setColorAt(i, downColour(k));
         markRange(entry.mesh.instanceColor, i * 3, 3);
       }
     });

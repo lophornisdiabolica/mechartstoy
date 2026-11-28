@@ -37,6 +37,41 @@ export function treeGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
   return mergeNonIndexed([paint(canopy, 0xffffff), paint(trunk, 0x6b4a32)]).scale(0.65, 0.65, 0.65);
 }
 
+/**
+ * A jungle tree: a tall bare trunk under a broad, lumpy crown of three
+ * flattened blobs, the big one on top and two lower ones off to the sides,
+ * so a jungle reads as a canopy rather than a stand of cones. Coloured here
+ * (so its instance colour is near white, as a pine's), so the trunk stays brown. Far off and in its shadow, the two side
+ * blobs go and the top one has fewer facets.
+ */
+export function jungleTreeGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  const trunk = paint(new THREE.CylinderGeometry(0.1, 0.16, 1.5, near ? 5 : 3, 1, !near).translate(0, 0.75, 0), 0x6b4a32);
+  const blob = (r: number, x: number, y: number, z: number, spin: number) =>
+    paint(new THREE.IcosahedronGeometry(r, 0).scale(1, 0.55, 1).rotateY(spin).translate(x, y, z), 0x3f7f34);
+  const parts = [trunk, blob(0.8, 0, 1.75, 0, 0.3)];
+  if (near) parts.push(blob(0.5, 0.42, 1.38, 0.2, 1.1), blob(0.46, -0.36, 1.42, -0.3, 2.3));
+  return mergeNonIndexed(parts).scale(0.65, 0.65, 0.65);
+}
+
+/**
+ * A crystal monolith: a tall six-sided spire with a pointed tip, leaning a
+ * little, and two shorter ones leaning out from its foot. Crystal fields'
+ * "trees". Coloured by its instance colour. Far off and in its shadow, just
+ * the big spire.
+ */
+export function monolithGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  const spire = (r: number, h: number, tilt: number, turn: number, x: number, z: number) => {
+    const body = paint(new THREE.CylinderGeometry(r, r * 1.1, h, 6, 1, true).translate(0, h / 2, 0), 0xffffff);
+    const tip = paint(new THREE.ConeGeometry(r, r * 1.6, 6, 1, true).translate(0, h + r * 0.8, 0), 0xffffff);
+    return mergeNonIndexed([body, tip]).rotateZ(tilt).rotateY(turn).translate(x, -0.05, z);
+  };
+  const parts = [spire(0.34, 1.55, 0.08, 0.2, 0, 0)];
+  if (near) parts.push(spire(0.2, 0.75, 0.45, 0.9, 0.3, 0.15), spire(0.17, 0.6, -0.5, 2.6, -0.25, -0.2));
+  return mergeNonIndexed(parts).scale(0.65, 0.65, 0.65);
+}
+
 /** Bake one colour into a geometry's vertex colours, so merged parts keep their own colours in one instanced mesh. */
 function paint(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   g = ensureNonIndexed(g);
@@ -133,6 +168,47 @@ function deadTreeGeometry(): THREE.BufferGeometry {
   ]).scale(0.75, 0.75, 0.75);
 }
 
+/** A cluster of crystals: long six-sided prisms with pointed tips, leaning out from one root, faintly lit from within. */
+function crystalGeometry(): THREE.BufferGeometry {
+  const shard = (len: number, r: number, tiltX: number, tiltZ: number, hex: number) => {
+    const body = new THREE.CylinderGeometry(r, r, len, 6).translate(0, len / 2, 0);
+    const tip = new THREE.ConeGeometry(r, r * 2.2, 6).translate(0, len + r * 1.1, 0);
+    return [paint(body.rotateX(tiltX).rotateZ(tiltZ), hex), paint(tip.rotateX(tiltX).rotateZ(tiltZ), hex)];
+  };
+  return mergeNonIndexed([
+    ...shard(1.3, 0.16, 0, 0, 0xd8c8ff),
+    ...shard(0.9, 0.13, 0.45, 0.2, 0xb8a8f0),
+    ...shard(0.7, 0.11, -0.35, -0.4, 0xe6dcff),
+    ...shard(0.5, 0.1, 0.1, 0.6, 0xa898e8),
+  ]);
+}
+
+/** A heap of junk: a rusted panel, a drum and a girder, half buried. */
+function junkGeometry(): THREE.BufferGeometry {
+  return mergeNonIndexed([
+    paint(new THREE.BoxGeometry(0.9, 0.12, 0.6).rotateZ(0.35).translate(0, 0.2, 0), 0x9a5a3a),
+    paint(new THREE.CylinderGeometry(0.2, 0.2, 0.5, 7).rotateX(Math.PI / 2).translate(0.35, 0.18, 0.25), 0x6d7b86),
+    paint(new THREE.BoxGeometry(1.1, 0.12, 0.12).rotateY(0.7).translate(-0.15, 0.1, -0.2), 0x5a524a),
+    paint(new THREE.BoxGeometry(0.35, 0.3, 0.35).rotateY(0.3).translate(-0.35, 0.15, 0.25), 0x8a6a4a),
+  ]);
+}
+
+/** A geyser's vent: a low mineral-crusted cone with a dark mouth and a pale rim (see world/traits.ts). */
+function ventGeometry(): THREE.BufferGeometry {
+  return mergeNonIndexed([
+    paint(new THREE.CylinderGeometry(0.55, 1.3, 0.35, 9).translate(0, 0.12, 0), 0xc9b98a),
+    paint(new THREE.CylinderGeometry(0.4, 0.55, 0.12, 9).translate(0, 0.33, 0), 0xe6dfc8),
+    paint(new THREE.CylinderGeometry(0.3, 0.3, 0.06, 9).translate(0, 0.4, 0), 0x2a2622),
+  ]);
+}
+
+/** An ancient column lying where it fell, in drums (see world/traits.ts). */
+function fallenColumnGeometry(): THREE.BufferGeometry {
+  const stone = 0xd8cfb8;
+  const drum = (x: number, turn: number) => paint(new THREE.CylinderGeometry(0.42, 0.42, 0.95, 10).rotateZ(Math.PI / 2).rotateY(turn).translate(x, 0.38, turn * 0.6), stone);
+  return mergeNonIndexed([drum(-1, 0), drum(0, 0.05), drum(1.05, 0.25), paint(new THREE.BoxGeometry(0.95, 0.3, 0.95).translate(-1.9, 0.15, -0.1), 0xc6bda6)]);
+}
+
 function rockGeometry(): THREE.BufferGeometry {
   const g = ensureNonIndexed(new THREE.DodecahedronGeometry(0.55, 0));
   g.scale(1, 0.65, 1);
@@ -179,6 +255,10 @@ export function buildProps(field: Battlefield, props: Prop[], rng: Rng): THREE.G
     shrub: () => ({ geometry: shrubGeometry(), color: 0x8a8a52, baseOffset: 0 }),
     deadTree: () => ({ geometry: deadTreeGeometry(), color: 0x7a6250, baseOffset: -0.05 }),
     rock: () => ({ geometry: rockGeometry(), color: 0x8d877c, baseOffset: 0.1 }),
+    crystal: () => ({ geometry: crystalGeometry(), color: 0xffffff, baseOffset: -0.1 }),
+    junk: () => ({ geometry: junkGeometry(), color: 0xffffff, baseOffset: -0.05 }),
+    vent: () => ({ geometry: ventGeometry(), color: 0xffffff, baseOffset: -0.05 }),
+    fallenColumn: () => ({ geometry: fallenColumnGeometry(), color: 0xffffff, baseOffset: -0.1 }),
   };
   const group = new THREE.Group();
   group.name = 'props';

@@ -12,6 +12,14 @@ import * as D from '../../core/dmath';
  * timber bridges over it meanwhile (see Engineers.crossingJobs), so a
  * battle can't be walled into a stalemate.
  *
+ * Dry ground too steep and tall to drive up (see NavGrid.tooSteep) is a gap
+ * as well: a crater's rim in a canyon pass, or the pass itself fallen in.
+ * Engineers grade a ramp through it, cutting the high side down and raising
+ * the low, or bridge it where it's a chasm between two rims. A way that's
+ * there but too narrow for the biggest units (walled in by steep ground) is
+ * only widened later in a battle (see WIDEN_AFTER), so a canyon's narrow
+ * passes are still the map's for a while.
+ *
  * Only water that wasn't there when the map was made is filled however
  * deep (and never a Tidewater canal); the map's own sea, lakes and rivers
  * only where they're shallows. Only the terrain counts (buildings and walls
@@ -35,16 +43,24 @@ const COST_OPEN = 1;
 const COST_TIGHT = 4;
 const COST_FILL = 12;
 const COST_DEPTH = 20;
+/** What a cell of dry ground too steep to drive up costs to grade, plus this much per unit of slope (rise over run). */
+const COST_GRADE = 14;
+const COST_SLOPE = 6;
 /** Comfortable stretches this short (in cells) inside a gap are counted as part of it. */
 const GAP_JOIN = 2;
+/** Battle time (s) after which a way across that's only too narrow (walled in by steep ground) is widened. */
+export const WIDEN_AFTER = 900;
 
 /** Where the way across is cut: the cells to fill (their centres, home side first), whether any is water, and the open ground either side. */
 export interface Gap {
   points: Point[];
   water: boolean;
+  /** Whether any of it is dry ground too steep to get up (graded, or bridged if it's a chasm), or it's only too narrow there (`narrow`) between steep sides. */
+  dry: boolean;
+  narrow?: boolean;
   before: Point;
   after: Point;
-  /** The first and last cells of it that are water (a bridge goes from just before one to just past the other). */
+  /** The first and last cells of it that are cut (a bridge goes from just before one to just past the other). */
   wetFrom: Point;
   wetTo: Point;
 }
@@ -66,6 +82,8 @@ interface Terrain {
   land: number;
   naval: number;
   blocked: Uint8Array;
+  /** 1 where a blocked cell is dry ground that grading would open. */
+  steep: Uint8Array;
   cost: Float32Array;
 }
 
@@ -85,18 +103,18 @@ export class Crossings {
    * it, the cut is looked for where filling costs least once the danger at
    * each cell is added.
    */
-  gap(ctx: SimContext, a: Point, b: Point, danger?: Danger): Gap | null {
-    const key = `${Math.round(a.x)},${Math.round(a.z)}>${Math.round(b.x)},${Math.round(b.z)}`;
+  gap(ctx: SimContext, a: Point, b: Point, danger?: Danger, widen = false): Gap | null {
+    const key = `${Math.round(a.x)},${Math.round(a.z)}>${Math.round(b.x)},${Math.round(b.z)}${widen ? '+' : ''}`;
     const land = ctx.navs.land.passableVersion;
     const naval = ctx.navs.for('naval').passableVersion;
     let was = this.known.get(key);
     if (!was || was.land !== land || was.naval !== naval) {
-      was = { land, naval, gap: findGap(ctx, a, b, this.terrain(ctx)) };
+      was = { land, naval, gap: findGap(ctx, a, b, this.terrain(ctx), undefined, widen) };
       this.known.set(key, was);
     }
     // Whether there's a gap at all doesn't depend on the danger; where it's best crossed does.
     if (!was.gap || !danger) return was.gap;
-    return findGap(ctx, a, b, this.terrain(ctx), danger) ?? was.gap;
+    return findGap(ctx, a, b, this.terrain(ctx), danger, widen) ?? was.gap;
   }
 
   /** What's blocked for big land units and what filling each cell costs, for the current terrain. */
@@ -125,6 +143,7 @@ export class Crossings {
     const room = clearance(blocked, cols, rows, cellSize);
     // What each cell costs a way through it: Infinity where filling can't help (the map's deep water, canals, map bridges' rivers).
     const cost = new Float32Array(n);
+    const steep = new Uint8Array(n);
     for (let k = 0; k < n; k++) {
       if (!blocked[k]) {
         cost[k] = room[k] >= COMFORT ? COST_OPEN : COST_TIGHT;
@@ -132,6 +151,13 @@ export class Crossings {
       }
       const c = centre(k);
       const depth = field.seaLevel - field.heightAt(c.x, c.z);
+      if (depth <= 0) {
+        // Dry and still blocked: too steep (and tall) a slope. Graded through, unless it's a base's pad or under a map bridge.
+        const gradeable = field.contains(c.x, c.z, 2) && field.deckAt(c.x, c.z) === null && !field.baseSites.some((s) => D.hypot(s.x - c.x, s.z - c.z) < s.radius + 1);
+        steep[k] = gradeable ? 1 : 0;
+        cost[k] = gradeable ? COST_GRADE + COST_SLOPE * field.slopeAt(c.x, c.z) : Infinity;
+        continue;
+      }
       const made = !field.wasWater(c.x, c.z);
       const fillable =
         depth > 0 &&
@@ -140,7 +166,7 @@ export class Crossings {
         (field.deckAt(c.x, c.z) === null || field.bridges[field.bridgeAt(c.x, c.z)].builtBy !== undefined);
       cost[k] = fillable ? COST_FILL + depth * COST_DEPTH : Infinity;
     }
-    this.terrainNow = { land, naval, blocked, cost };
+    this.terrainNow = { land, naval, blocked, steep, cost };
     return this.terrainNow;
   }
 
@@ -200,12 +226,12 @@ function distanceToSegment(x: number, z: number, w: KeptWater): number {
   return D.hypot(x - (w.ax + dx * t), z - (w.az + dz * t));
 }
 
-function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?: Danger): Gap | null {
+function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?: Danger, widen = false): Gap | null {
   const nav = ctx.navs.land;
   const { cols, rows } = nav;
   const n = cols * rows;
   const centre = (k: number) => nav.center(k % cols, Math.floor(k / cols));
-  const { blocked } = terrain;
+  const { blocked, steep } = terrain;
   let cost = terrain.cost;
   if (danger) {
     cost = cost.slice();
@@ -224,7 +250,9 @@ function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?:
   // First the easy question: is there a comfortable way at all?
   if (reaches(terrain.cost, cols, rows, start, goal)) return null;
 
-  // Then the cheapest way to make one (Dijkstra, 8-way, no corner cutting through what can't be filled).
+  // Then the cheapest way to make one (Dijkstra, 8-way, no corner cutting past anything blocked: the regions a
+  // route keeps to are joined square-wise, so a diagonal between two blocked cells is no way through, and
+  // the cells to fill or grade have to be on the way).
   const g = new Float32Array(n).fill(Infinity);
   const from = new Int32Array(n).fill(-1);
   const heap = new Heap(g);
@@ -244,7 +272,7 @@ function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?:
       if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
       const nk = nj * cols + ni;
       if (done[nk] || !Number.isFinite(cost[nk])) continue;
-      if (di !== 0 && dj !== 0 && (!Number.isFinite(cost[j * cols + ni]) || !Number.isFinite(cost[nj * cols + i]))) continue;
+      if (di !== 0 && dj !== 0 && (blocked[j * cols + ni] || blocked[nj * cols + i] || !Number.isFinite(cost[j * cols + ni]) || !Number.isFinite(cost[nj * cols + i]))) continue;
       const ng = g[k] + step * cost[nk];
       if (ng >= g[nk]) continue;
       g[nk] = ng;
@@ -270,21 +298,39 @@ function findGap(ctx: SimContext, a: Point, b: Point, terrain: Terrain, danger?:
       e++;
     }
     const run = path.slice(s, gapEnd + 1);
-    const wet = run.filter((k) => blocked[k]);
-    if (wet.length > 0) {
+    const cut = run.filter((k) => blocked[k]);
+    const ends = { before: centre(path[Math.max(0, s - 1)]), after: centre(path[Math.min(path.length - 1, gapEnd + 1)]) };
+    if (cut.length > 0) {
       return {
         points: run.map(centre),
-        water: true,
-        wetFrom: centre(wet[0]),
-        wetTo: centre(wet[wet.length - 1]),
-        before: centre(path[Math.max(0, s - 1)]),
-        after: centre(path[Math.min(path.length - 1, gapEnd + 1)]),
+        water: cut.some((k) => !steep[k]),
+        dry: cut.some((k) => steep[k] === 1),
+        wetFrom: centre(cut[0]),
+        wetTo: centre(cut[cut.length - 1]),
+        ...ends,
       };
     }
-    // Only tight, with no water in it to fill (between deep water, say): nothing engineers can do here.
+    // Only tight: widened late in a battle if it's steep ground that walls it in (not deep water, say, which nothing can be done about).
+    if (widen && run.some((k) => steepBeside(steep, cols, rows, k, Math.ceil(COMFORT / nav.cellSize)))) {
+      return { points: run.map(centre), water: false, dry: true, narrow: true, wetFrom: centre(run[0]), wetTo: centre(run[run.length - 1]), ...ends };
+    }
     s = gapEnd + 1;
   }
   return null;
+}
+
+/** Whether there's gradeable steep ground within `reach` cells of a cell. */
+function steepBeside(steep: Uint8Array, cols: number, rows: number, k: number, reach: number): boolean {
+  const i = k % cols;
+  const j = (k - i) / cols;
+  for (let dj = -reach; dj <= reach; dj++) {
+    for (let di = -reach; di <= reach; di++) {
+      const ni = i + di;
+      const nj = j + dj;
+      if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && steep[nj * cols + ni] === 1) return true;
+    }
+  }
+  return false;
 }
 
 const STEPS: [number, number, number][] = [

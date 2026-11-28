@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron' | 'ballast' | 'burnt' | 'flats' | 'ice';
 
 export interface GroundDef {
   id: GroundId;
@@ -89,10 +89,84 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x4f4a30,
     tint: 0.45,
   },
+  /**
+   * An oil field's pool of crude (see game/traits.ts): slick going for wheels
+   * and tracks, and it goes up in flames when something bursts on it.
+   */
+  oil: {
+    id: 'oil',
+    label: 'Oil pool',
+    cost: { tracked: 1.5, amphibious: 1.5, hover: 1.2, foot: 1.2, walker: 1.1 },
+    speed: { tracked: 0.8, amphibious: 0.8, foot: 0.85, walker: 0.9 },
+    color: 0x141210,
+    tint: 0.9,
+  },
+  /**
+   * Ancient ruins' old paving, among the columns and broken walls: soldiers
+   * crouched in the rubble take half a burst that lands outside it (like a
+   * trench, see systems/projectiles.ts).
+   */
+  paving: {
+    id: 'paving',
+    label: 'Ruins',
+    cost: {},
+    speed: {},
+    color: 0xb3a990,
+    tint: 0.7,
+  },
+  /** A landing field's concrete apron (see world/traits.ts): plain going, just paved. */
+  apron: {
+    id: 'apron',
+    label: 'Apron',
+    cost: {},
+    speed: {},
+    color: 0x9a9890,
+    tint: 0.8,
+  },
+  /** Woods a wildfire's burned through (see game/wildfire.ts): ash and charred trunks, a little rough going. */
+  burnt: {
+    id: 'burnt',
+    label: 'Burnt forest',
+    cost: { tracked: 1.3, amphibious: 1.3, hover: 1.4, walker: 1.1 },
+    speed: { tracked: 0.88, amphibious: 0.88, hover: 0.85, walker: 0.97 },
+    color: 0x2c2724,
+    tint: 0.7,
+  },
+  /** A rail line's bed of stones (see world/traits.ts): plain going. */
+  ballast: {
+    id: 'ballast',
+    label: 'Rail bed',
+    cost: {},
+    speed: {},
+    color: 0x7a6f62,
+    tint: 0.75,
+  },
+  /** Tidal flats' wet sand and mud (see world/traits.ts), under the sea at high tide: heavy going for wheels and tracks. */
+  flats: {
+    id: 'flats',
+    label: 'Tidal flats',
+    cost: { tracked: 1.4, amphibious: 1.2, walker: 1.1, foot: 1.2 },
+    speed: { tracked: 0.8, amphibious: 0.9, walker: 0.95, foot: 0.85 },
+    color: 0x9c8a68,
+    tint: 0.75,
+  },
+  /**
+   * A frozen lake's ice (see world/traits.ts): smooth going, but heavy
+   * machines keep off it where they can, since it gives way under them
+   * (see game/ice.ts).
+   */
+  ice: {
+    id: 'ice',
+    label: 'Ice',
+    cost: { tracked: 1.8, amphibious: 1.2, walker: 3 },
+    speed: { tracked: 0.9, walker: 0.9, foot: 0.95 },
+    color: 0xcfe2ee,
+    tint: 0.9,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron', 'ballast', 'burnt', 'flats', 'ice'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

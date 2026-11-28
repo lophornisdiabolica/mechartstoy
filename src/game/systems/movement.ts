@@ -393,7 +393,7 @@ export function movementSystem(ctx: SimContext): System {
         // No going over a bridge's railings; wriggling free of being wedged on a deck may drop off its side, but nothing climbs up one.
         const detouring = world.time < m.nav.detourUntil;
         const canStep = (x: number, z: number) =>
-          (grid.terrainAllowsAt(x, z) || grid.offCliff(t.x, t.z, x, z)) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
+          (grid.standsAt(x, z) || grid.offCliff(t.x, t.z, x, z) || grid.outOfWater(t.x, t.z, x, z)) && !(detouring ? grid.railBoarding(t.x, t.z, x, z) : grid.railCrossing(t.x, t.z, x, z));
         let go = rules.flies || canStep(nx, nz);
         let [gx, gz] = [nx, nz];
         // Nosed into the corner where a ramp's railing starts (cutting across it for the deck): slide on up
@@ -403,6 +403,21 @@ export function movementSystem(ctx: SimContext): System {
           const sz = nz - t.z;
           for (const [x, z] of Math.abs(sx) >= Math.abs(sz) ? [[nx, t.z], [t.x, nz]] : [[t.x, nz], [nx, t.z]]) {
             if ((x !== t.x || z !== t.z) && towardDeck(field, t.x, t.z, x, z) && canStep(x, z)) {
+              [gx, gz] = [x, z];
+              go = true;
+              break;
+            }
+          }
+        }
+        // Nosed into the corner of ground it can't be on (a shore, a cliff foot, a puddle between dry cells):
+        // slide along the edge, the way it was mostly going, rather than grind there until the unsticking kicks in.
+        // (Not on or by a bridge: hulls on a deck ease back to its middle instead, see Traffic.keepOn,
+        // and get on by the ramps, not along the railings.)
+        if (!go && !rules.flies && !grid.standsAt(nx, nz) && field.deckAt(t.x, t.z) === null && (field.bridges.length === 0 || (field.railKind(nx, nz) === 0 && field.deckAt(nx, nz) === null))) {
+          const sx = nx - t.x;
+          const sz = nz - t.z;
+          for (const [x, z] of Math.abs(sx) >= Math.abs(sz) ? [[nx, t.z], [t.x, nz]] : [[t.x, nz], [nx, t.z]]) {
+            if ((x !== t.x || z !== t.z) && canStep(x, z)) {
               [gx, gz] = [x, z];
               go = true;
               break;
@@ -588,7 +603,7 @@ export function separationSystem(ctx: SimContext): System {
           const nx = t.x + (t.x - ot.x) * push;
           const nz = t.z + (t.z - ot.z) * push;
           // Shoved or not, vehicles don't go over a bridge's railings.
-          if (flying || (terrain.terrainAllowsAt(nx, nz) && !terrain.railCrossing(t.x, t.z, nx, nz))) {
+          if (flying || (terrain.standsAt(nx, nz) && !terrain.railCrossing(t.x, t.z, nx, nz))) {
             t.x = nx;
             t.z = nz;
           }

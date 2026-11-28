@@ -5,7 +5,7 @@ import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
 import { blastCrater, CRATER_FLOOR } from '../src/game/craters';
-import { Crossings } from '../src/game/commander/crossings';
+import { Crossings, WIDEN_AFTER } from '../src/game/commander/crossings';
 
 const DT = 1 / 30;
 /** How far from an enemy camp a crossing is chosen, at least. */
@@ -182,6 +182,85 @@ describe('deep crossings', () => {
     run(game, 2);
     expect(world.req(theirs, Armed).target).not.toBe(ours);
     expect(world.req(ours, Armed).target).not.toBe(theirs);
+  });
+});
+
+/** Raise a wall of steep ground right across the map between the bases, `height` tall and `half` wide on top, with a gap `pass` wide through it at z = 0 (none if 0). */
+function ridge(game: Game, height: number, half = 1.5, pass = 0): void {
+  const f = game.field;
+  for (let z = f.bounds.minZ; z <= f.bounds.maxZ; z += 0.5) {
+    if (pass > 0 && Math.abs(z) < pass / 2 + half) continue;
+    f.reshape(0, z, half + 1.5, (h, d) => Math.max(h, d <= half ? height : height * (1 - (d - half) / 1.5)));
+  }
+}
+
+/** Cut a chasm right across the map, `depth` deep and `half` wide, its walls sheer, with the map lifted first so its floor is dry. */
+function chasm(game: Game, depth: number, half: number): void {
+  const f = game.field;
+  const lift = depth + 1;
+  for (let k = 0; k < f.heights.length; k++) f.heights[k] += lift;
+  f.changed({ i0: 0, j0: 0, i1: f.config.cols - 1, j1: f.config.rows - 1 });
+  for (let z = f.bounds.minZ; z <= f.bounds.maxZ; z += 0.5) f.reshape(0, z, half, () => lift - depth);
+}
+
+describe('steep crossings', () => {
+  it('a wall of steep ground right across the way is a dry gap, and engineers grade a ramp through it', () => {
+    const game = flatGame();
+    const { world, ctx, field } = game;
+    ridge(game, 4);
+    const [a, b] = field.baseSites;
+    const gap = new Crossings().gap(ctx, a, b);
+    expect(gap).not.toBeNull();
+    expect(gap!.dry).toBe(true);
+    expect(gap!.water).toBe(false);
+    for (const dz of [-1, 0, 1]) spawnUnit(world, ctx, UNIT_DEFS.engineer, 0, a.x + 20, a.z + dz);
+    const eng = ctx.commander.engineers;
+    const across = () => eng.crossings.gap(ctx, a, b);
+    for (let t = 0; t < 900 && across(); t += 10) run(game, 10);
+    expect(across()).toBeNull();
+    expect(ctx.navs.land.connected(a, b)).toBe(true);
+    expect(eng.works.some((w) => w.kind === 'grade' && w.side === 0)).toBe(true);
+    // A ramp, not a hole: nothing graded went under the sea.
+    for (let z = field.bounds.minZ + 2; z < field.bounds.maxZ - 2; z += 1) expect(field.heightAt(0, z)).toBeGreaterThanOrEqual(field.seaLevel);
+  }, 300000);
+
+  it('engineers bridge a dry chasm from rim to rim, and the bridge stays up', () => {
+    const game = flatGame();
+    const { world, ctx, field } = game;
+    chasm(game, 4, 3);
+    const [a, b] = field.baseSites;
+    const gap = new Crossings().gap(ctx, a, b);
+    expect(gap?.dry).toBe(true);
+    for (const dz of [-1, 1]) spawnUnit(world, ctx, UNIT_DEFS.engineer, 0, a.x + 20, a.z + dz);
+    const eng = ctx.commander.engineers;
+    for (let t = 0; t < 300 && eng.crossings.gap(ctx, a, b); t += 5) run(game, 5);
+    expect(eng.crossings.gap(ctx, a, b)).toBeNull();
+    const span = field.bridges.find((br) => br.builtBy === 0 && !br.gone);
+    expect(span).toBeDefined();
+    // Level with the rims, high over the chasm's floor.
+    expect(span!.level).toBeGreaterThan(4.5);
+    // Nothing was graded: the bridge did it.
+    expect(eng.works.some((w) => w.kind === 'grade')).toBe(false);
+    // Past an ordinary engineers' bridge's lifetime, it's still there.
+    run(game, 700);
+    expect(field.bridges.some((br) => br.builtBy === 0 && !br.gone)).toBe(true);
+  }, 300000);
+
+  it('a pass too narrow for the biggest units is only widened late in a battle', () => {
+    const game = flatGame();
+    const { ctx, field } = game;
+    ridge(game, 4, 1.5, 6);
+    const [a, b] = field.baseSites;
+    const crossings = new Crossings();
+    // There's a way, just a tight one: left alone early on...
+    expect(game.ctx.navs.land.connected(a, b)).toBe(true);
+    expect(crossings.gap(ctx, a, b)).toBeNull();
+    // ...and widened once the battle has gone on long enough.
+    const late = crossings.gap(ctx, a, b, undefined, true);
+    expect(late?.narrow).toBe(true);
+    expect(late?.dry).toBe(true);
+    expect(Math.abs(late!.points[0].z)).toBeLessThan(3);
+    expect(WIDEN_AFTER).toBeGreaterThan(600);
   });
 });
 

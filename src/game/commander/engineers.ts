@@ -7,13 +7,14 @@ import { BuildingDef } from '../buildings';
 import { canonicalDoctrine, doctrineOf, DoctrineId } from '../doctrines';
 import { settle } from '../god';
 import { MOVE_RULES, STEEP_SLOPE } from '../../world/moveClasses';
-import { placeBridge } from '../../world/waterways';
+import { placeBridge, spanChasm } from '../../world/waterways';
+import type { Battlefield } from '../../world/battlefield';
 import { damageThrough } from '../systems/projectiles';
 import { CellArea } from '../../world/ground';
 import { deepWaterArea, DOCK_DEPTH, findShore } from '../../world/settlements';
 import { Heap, Point } from '../../world/navGrid';
 import * as D from '../../core/dmath';
-import { Crossings, Danger, Gap } from './crossings';
+import { Crossings, Danger, Gap, WIDEN_AFTER } from './crossings';
 import { Shortcuts } from './shortcuts';
 
 /*
@@ -265,6 +266,24 @@ const FILL_DEEP_RISE = 0.04;
 /** Longest gap a bridge is thrown over while it's filled in. */
 const GAP_SPAN = 12;
 /**
+ * Grading a ramp through ground too steep to get up (see crossings.ts): one
+ * stretch's length, the steepest the ramp runs (rise over run, well inside
+ * what tracked vehicles climb), how far one pulse cuts the high side down,
+ * and how steep the cutting's sides are and the raised ground's shoulders.
+ */
+const GRADE_STEP = 3;
+const GRADE_MOST = 0.45;
+const GRADE_CUT = 0.15;
+const GRADE_BANK = 0.8;
+const GRADE_SHOULDER = 0.45;
+/** How far past the ramp's half-width its cutting sides and shoulders reach (within dig's pad). */
+const GRADE_SIDE = 2.4;
+/** Where a ramp would run under the sea, it runs this far above it instead. */
+const GRADE_DRY = 0.2;
+/** A dry gap is a chasm, and bridged rim to rim instead of graded, where its floor drops this far below the lower rim and the rims are within CHASM_STEP of each other. */
+const CHASM_DROP = 1.5;
+const CHASM_STEP = 1.2;
+/**
  * Choosing where to cross (see crossings.ts Danger): how far units count;
  * what each enemy unit that near adds to filling a cell, and the most; what
  * each of the side's own takes off, and the most; what ground this near an
@@ -320,6 +339,8 @@ export interface BridgeJob {
   crossing?: boolean;
   /** A shortcut the side's Commander chose (see shortcuts.ts). */
   shortcut?: boolean;
+  /** Over a dry chasm, rim to rim (see chasmBridge). */
+  chasm?: boolean;
 }
 
 /** An engineers' bridge standing: the field's bridge index, whose it is, its health, and when it comes down of itself. */
@@ -334,15 +355,17 @@ interface Span {
 
 /** A stretch of ground being dug or raised: a canal, a trench, or a berm. */
 export interface Earthwork {
-  kind: 'canal' | 'trench' | 'berm' | 'fill';
+  kind: 'canal' | 'trench' | 'berm' | 'fill' | 'grade';
   side: number;
   /** The stretch's centre line. */
   ax: number;
   az: number;
   bx: number;
   bz: number;
-  /** The ground level it's dug down from or raised above (for a canal, unused; for a fill, what it's raised to). */
+  /** The ground level it's dug down from or raised above (for a canal, unused; for a fill, what it's raised to; for a grade, the ramp's height at a). */
   level: number;
+  /** A grade's ramp height at b (it runs straight from level at a). */
+  to?: number;
   /** Seconds of work put in toward the next pulse. */
   effort: number;
   done: boolean;
@@ -671,8 +694,45 @@ export class Engineers {
     const nav = ctx.navs.land;
     if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) return null;
     if (!this.safe(world, ctx, side, x, z)) return null;
+    if (this.seals(ctx, side, def, x, z)) return null;
     return { kind: 'build', def, x, z, heading, standX: x - dx * STAND_BACK, standZ: z - dz * STAND_BACK };
   }
+
+  /**
+   * Whether a building here would cut the side's base off by land from
+   * another base, an outpost, a town or a waypoint of its lanes it can
+   * reach now (see NavGrid.sealsOff): a wall line across
+   * a neck of land with buildings either side, or a tower in the one gap
+   * left. Remembered until a building goes up or down or the ground changes.
+   */
+  private seals(ctx: SimContext, side: number, def: BuildingDef, x: number, z: number): boolean {
+    const nav = ctx.navs.land;
+    const foot = ctx.navs.for('foot');
+    const version = (nav.obstacles.blockVersion * 100003 + nav.passableVersion) * 7919 + foot.passableVersion;
+    if (this.sealedAt !== version) {
+      this.sealed.clear();
+      this.sealedAt = version;
+    }
+    const key = `${side}:${def.radius}:${Math.round(x * 4)},${Math.round(z * 4)}`;
+    let seals = this.sealed.get(key);
+    if (seals === undefined) {
+      const { baseSites, outpostSites, townSites } = ctx.field;
+      // And the side's own lanes: a wall across the neck of land its flank lane goes out by sends the squads down it to the water's edge.
+      const lanes = baseSites.flatMap((_, k) => (k === side ? [] : ctx.lanes.lanes(side, k).flat()));
+      const places = [...baseSites.filter((_, k) => k !== side), ...outpostSites, ...townSites, ...lanes];
+      // Infantry and vehicles get through different gaps (shallows, slopes): neither may be shut in.
+      // Not counting a way round over an engineer's bridge that comes down again: walls outlast it.
+      const fleeting = new Set(this.spans.filter((sp) => Number.isFinite(sp.until)).map((sp) => sp.index));
+      const gone = fleeting.size > 0 ? (px: number, pz: number) => fleeting.has(ctx.field.bridgeAt(px, pz)) : undefined;
+      seals = nav.sealsOff(x, z, def.radius, baseSites[side], places, gone) || foot.sealsOff(x, z, def.radius, baseSites[side], places, gone);
+      this.sealed.set(key, seals);
+    }
+    return seals;
+  }
+
+  /** Spots looked at by seals, and the obstacles' and ground's version they were looked at for. */
+  private readonly sealed = new Map<string, boolean>();
+  private sealedAt = -1;
 
   /** The places a side fortifies, best first: choke points, held outposts out front, behind a push, then the rally points. */
   private sites(world: World, ctx: SimContext, side: number): Site[] {
@@ -1315,7 +1375,9 @@ export class Engineers {
     const gap = this.crossingFor(world, ctx, side);
     if (!gap) return [];
     const out: EngineerJob[] = [];
-    const fill = this.planFill(ctx, side, gap);
+    const chasm = gap.dry ? this.chasmBridge(world, ctx, side, gap) : null;
+    if (chasm) return [chasm];
+    const fill = gap.dry ? this.planGrade(ctx, side, gap) : this.planFill(ctx, side, gap);
     if (fill) {
       const len = Math.max(1e-3, D.hypot(fill.bx - fill.ax, fill.bz - fill.az));
       const stand = { x: gap.before.x - ((fill.bx - fill.ax) / len) * 1.5, z: gap.before.z - ((fill.bz - fill.az) / len) * 1.5 };
@@ -1344,7 +1406,7 @@ export class Engineers {
     if (was && world.time < was.until && was.land === land && was.naval === naval) return was.gap;
     // Canals and harbour basins are never filled in.
     this.crossings.kept = this.works.filter((w) => w.kind === 'canal').map((w) => ({ ax: w.ax, az: w.az, bx: w.bx, bz: w.bz, half: w.half ?? CANAL_HALF }));
-    const gap = this.crossings.gap(ctx, field.baseSites[side], field.baseSites[enemy], this.dangerFor(world, ctx, side, was?.gap ?? null));
+    const gap = this.crossings.gap(ctx, field.baseSites[side], field.baseSites[enemy], this.dangerFor(world, ctx, side, was?.gap ?? null), world.time >= WIDEN_AFTER);
     this.crossingAt[side] = { gap, until: world.time + CROSSING_REPLAN, land, naval };
     return gap;
   }
@@ -1420,8 +1482,76 @@ export class Engineers {
   }
 
   /** A timber bridge over a gap with water in it, while it's filled in, if it's short enough and there's a bridge to spare. */
+  /**
+   * The next stretch of ramp to grade through a dry gap: from the open
+   * ground before it, GRADE_STEP on, its height running straight from the
+   * ground there toward the ground after the gap, no steeper than GRADE_MOST
+   * (and never down into the water, see GRADE_DRY). Null once that stretch is done.
+   */
+  private planGrade(ctx: SimContext, side: number, gap: Gap): Earthwork | null {
+    const { field } = ctx;
+    const a = gap.before;
+    const last = gap.points[gap.points.length - 1];
+    let b = last;
+    for (const p of gap.points) {
+      if (D.hypot(p.x - a.x, p.z - a.z) >= GRADE_STEP) {
+        b = p;
+        break;
+      }
+    }
+    // A short gap is graded in one go, through to the open ground past it.
+    if (b === last) b = gap.after;
+    const run = D.hypot(b.x - a.x, b.z - a.z);
+    const whole = Math.max(run, D.hypot(gap.after.x - a.x, gap.after.z - a.z));
+    // Kept out of the water: open ground at or under the sea counts as a little above it.
+    const dry = (h: number) => (h < field.seaLevel ? field.seaLevel + GRADE_DRY : h);
+    const from = dry(field.heightAt(a.x, a.z));
+    const far = dry(field.heightAt(gap.after.x, gap.after.z));
+    const rise = Math.max(-GRADE_MOST, Math.min(GRADE_MOST, (far - from) / Math.max(1e-3, whole)));
+    const to = dry(from + rise * run);
+    const key = `g${Math.round(a.x * 2)},${Math.round(a.z * 2)}>${Math.round(b.x * 2)},${Math.round(b.z * 2)}`;
+    const known = this.fills.get(key);
+    if (known) return known.done ? null : known;
+    const work: Earthwork = { kind: 'grade', side, ax: a.x, az: a.z, bx: b.x, bz: b.z, level: from, to, effort: 0, done: false, half: FILL_HALF };
+    this.fills.set(key, work);
+    this.works.push(work);
+    return work;
+  }
+
+  /**
+   * A timber bridge from rim to rim over a chasm in the way across: a dry
+   * gap whose floor drops well below both its rims, with the rims near level
+   * with each other and near enough together. It stands until it's knocked
+   * down (no ground's coming to fill in under it).
+   */
+  private chasmBridge(world: World, ctx: SimContext, side: number, gap: Gap): BridgeJob | null {
+    if (gap.water || gap.narrow || this.spansOf(side) >= spansMost(ctx, side)) return null;
+    const { field } = ctx;
+    const going = this.gapSpans[side];
+    if (going?.chasm && gap.points.some((p) => D.hypot(p.x - going.x, p.z - going.z) < 6) && !field.nearBridge(going.x, going.z, SPAN_APART)) return going;
+    const a = gap.before;
+    const b = gap.after;
+    const len = D.hypot(b.x - a.x, b.z - a.z);
+    if (len > GAP_SPAN + 4) return null;
+    const ha = field.heightAt(a.x, a.z);
+    const hb = field.heightAt(b.x, b.z);
+    const lowest = Math.min(...gap.points.map((p) => field.heightAt(p.x, p.z)));
+    if (Math.abs(ha - hb) > CHASM_STEP || lowest > Math.min(ha, hb) - CHASM_DROP) return null;
+    const ux = (b.x - a.x) / Math.max(1e-3, len);
+    const uz = (b.z - a.z) / Math.max(1e-3, len);
+    const x = (a.x + b.x) / 2;
+    const z = (a.z + b.z) / 2;
+    if (field.nearBridge(x, z, SPAN_APART)) return null;
+    const stand = { x: a.x - ux * 1.5, z: a.z - uz * 1.5 };
+    if (!ctx.navs.for('foot').terrainAllowsAt(stand.x, stand.z) || !this.safe(world, ctx, side, stand.x, stand.z)) return null;
+    // Ends a little onto each rim.
+    const job: BridgeJob = { kind: 'bridge', ax: a.x - ux, az: a.z - uz, bx: b.x + ux, bz: b.z + uz, x, z, standX: stand.x, standZ: stand.z, urgent: true, crossing: true, chasm: true };
+    this.gapSpans[side] = job;
+    return job;
+  }
+
   private gapBridge(world: World, ctx: SimContext, side: number, gap: Gap): BridgeJob | null {
-    if (!gap.water || this.spansOf(side) >= spansMost(ctx, side)) return null;
+    if (!gap.water || gap.dry || this.spansOf(side) >= spansMost(ctx, side)) return null;
     // The one already going up, while the gap's still there.
     const going = this.gapSpans[side];
     if (going && gap.points.some((p) => D.hypot(p.x - going.x, p.z - going.z) < 6) && !ctx.field.nearBridge(going.x, going.z, SPAN_APART)) return going;
@@ -1651,8 +1781,13 @@ export class Engineers {
         this.jobs.delete(e);
         if (this.spansOf(side) >= spansMost(ctx, side) || ctx.field.nearBridge(job.x, job.z, SPAN_APART)) continue;
         if (job.shortcut) this.shortcuts.drop(side);
-        if (placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, ice ? { builtBy: side, ice } : { builtBy: side })) {
-          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + (ice ? ICE_LASTS : SPAN_LASTS), shortcut: job.shortcut });
+        const placed = job.chasm
+          ? spanChasm(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, { builtBy: side })
+          : placeBridge(ctx.field, { x: job.ax, z: job.az }, { x: job.bx, z: job.bz }, false, ice ? { builtBy: side, ice } : { builtBy: side });
+        if (placed) {
+          // Over a chasm, a bridge stands till it's knocked down: nothing will fill in under it.
+          const lasts = job.chasm ? Infinity : ice ? ICE_LASTS : SPAN_LASTS;
+          this.spans.push({ index: ctx.field.bridges.length - 1, side, hp: SPAN_HP, until: world.time + lasts, shortcut: job.shortcut });
           ctx.events.emit('span', { faction: side, x: job.x, z: job.z, down: false });
         }
         this.open[side] = Math.max(0, this.open[side] - 1);
@@ -1684,7 +1819,8 @@ export class Engineers {
                 : job.def.lasts
                   ? this.walls[side] >= WALLS_MOST
                   : false;
-      if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
+      // Looked at again as it goes up: the rest of its line may have gone up since it was planned.
+      if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius) || this.seals(ctx, side, job.def, job.x, job.z)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
       if (isFieldTower(id)) this.towers[side]++;
@@ -1765,7 +1901,7 @@ export function layGround(ctx: SimContext, w: Earthwork): void {
   if (w.kind === 'canal') return;
   const { field } = ctx;
   // The trench floor gets trench ground (cover), the berm fresh earth.
-  const reach = w.kind === 'trench' ? TRENCH_HALF + 0.3 : w.kind === 'fill' ? (w.half ?? FILL_HALF) : BERM_HALF;
+  const reach = w.kind === 'trench' ? TRENCH_HALF + 0.3 : w.kind === 'fill' || w.kind === 'grade' ? (w.half ?? FILL_HALF) : BERM_HALF;
   const { cols } = field.config;
   const area = field.areaAround((w.ax + w.bx) / 2, (w.az + w.bz) / 2, D.hypot(w.bx - w.ax, w.bz - w.az) / 2 + 2);
   const cells: number[] = [];
@@ -1810,6 +1946,46 @@ function shapeOf(field: { seaLevel: number }, w: Earthwork, d: number): { h: num
   return { h: w.level + BERM_HEIGHT * (1 - (d / BERM_HALF) * (d / BERM_HALF)), down: false };
 }
 
+/**
+ * One pulse of grading a ramp (see planGrade): along the stretch, the ground
+ * is cut down toward the ramp's line or raised up to it; beside it, a
+ * cutting's sides rise GRADE_BANK per metre out and raised ground's
+ * shoulders fall GRADE_SHOULDER, so only what stands out of that is moved.
+ * Base pads are left alone. Whether anything moved.
+ */
+function grade(field: Battlefield, w: Earthwork, i0: number, i1: number, j0: number, j1: number): boolean {
+  const { cols } = field.config;
+  const half = w.half ?? FILL_HALF;
+  const dx = w.bx - w.ax;
+  const dz = w.bz - w.az;
+  const len2 = Math.max(1e-6, dx * dx + dz * dz);
+  const to = w.to ?? w.level;
+  let moved = false;
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const x = field.vertexX(i);
+      const z = field.vertexZ(j);
+      const along = ((x - w.ax) * dx + (z - w.az) * dz) / len2;
+      const t = Math.max(0, Math.min(1, along));
+      const out = Math.max(0, D.hypot(x - (w.ax + dx * t), z - (w.az + dz * t)) - half);
+      if (out > GRADE_SIDE) continue;
+      if (field.baseSites.some((s) => D.hypot(s.x - x, s.z - z) < s.radius)) continue;
+      const line = w.level + (to - w.level) * t;
+      const k = j * (cols + 1) + i;
+      const h = field.heights[k];
+      const hi = Math.fround(line + out * GRADE_BANK);
+      const lo = Math.fround(line - out * GRADE_SHOULDER);
+      let next = h;
+      if (h > hi) next = Math.fround(Math.max(hi, h - GRADE_CUT));
+      else if (h < lo) next = Math.fround(Math.min(lo, h + Math.max(FILL_RISE, (lo - h) * FILL_DEEP_RISE)));
+      if (next === h) continue;
+      field.heights[k] = next;
+      moved = true;
+    }
+  }
+  return moved;
+}
+
 /** One pulse of digging (or heaping up) a stretch: moves its ground a step toward its shape. Returns whether anything moved. */
 export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
   const field = ctx.field;
@@ -1827,9 +2003,10 @@ export function dig(world: World, ctx: SimContext, w: Earthwork): boolean {
   const a = { x: w.ax, z: w.az };
   const b = { x: w.bx, z: w.bz };
   let moved = false;
+  if (w.kind === 'grade') moved = grade(field, w, i0, i1, j0, j1);
   // Filling in is slow work: there's a lot of earth to bring.
   const rise = w.kind === 'fill' ? FILL_RISE : DIG_STEP;
-  for (let j = j0; j <= j1; j++) {
+  for (let j = j0; j <= j1 && w.kind !== 'grade'; j++) {
     for (let i = i0; i <= i1; i++) {
       const shape = shapeOf(field, w, distanceToSegment(field.vertexX(i), field.vertexZ(j), a, b));
       if (!shape) continue;

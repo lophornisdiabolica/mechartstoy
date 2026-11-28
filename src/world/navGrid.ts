@@ -1,6 +1,6 @@
 import { Battlefield } from './battlefield';
 import { CellArea, GroundDef } from './ground';
-import { MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows } from './moveClasses';
+import { climbLimited, MOVE_RULES, MoveClass, MoveRules, RAIL_WALL, STEEP_SLOPE, terrainAllows, terrainAllowsFace } from './moveClasses';
 import * as D from '../core/dmath';
 
 export interface Point {
@@ -10,16 +10,35 @@ export interface Point {
 
 /** Cap on A* node expansions per search, so a hopeless search can't stall a tick. */
 const MAX_EXPANSIONS = 8000;
+/** A wide unit that can't fit all the way to its goal settles for getting this near (see findPath). */
+const NEAR_ENOUGH = 8;
+/**
+ * How much more room than its radius a big unit (wider than a cell) looks
+ * for first: the clearance map measures to the middles of blocked cells,
+ * and a big unit routed down a street with only its radius to spare grinds
+ * along the buildings either side (they push it out by its whole radius).
+ */
+const BIG_SLACK = 0.6;
 /**
  * Extra room a unit wants beyond its radius, measured from the centre of the
  * nearest blocked cell. Obstacles are already marked a little larger than
  * the buildings, so this stays small.
  */
 const CLEARANCE_MARGIN = 0.1;
+/** How much deeper than a land class may go it still can, in a cell it can be in (see standsAt). */
+const PUDDLE = 0.3;
 /** Route cost multiplier on a bridge deck's edge cells, for vehicles: they keep to the middle. */
 const DECK_EDGE = 1.6;
 /** How finely offSideClear reads the ground between a deck and the strip beside it. */
 const SIDE_STEP = 0.1;
+/**
+ * How many cells round a map change a grid re-reads (see NavGrid.refresh):
+ * a slope's face (see Battlefield.faceHeight) runs a long way, so a crater
+ * at its foot changes how tall it is further up.
+ */
+const FACE_REFRESH = 3;
+/** What a cell too steep for a class costs per unit of slope, when openRamps looks for the easiest way up. */
+const RAMP_COST = 10;
 
 const SQRT2 = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
@@ -199,6 +218,12 @@ export class NavObstacles {
   readonly traffic: Float32Array;
   /** Always zero: what classes that don't queue see. */
   readonly calm: Float32Array;
+  /**
+   * Extra route cost per cell from danger on the ground that everyone keeps
+   * clear of: nobody's fire (see game/wildfire.ts). Whoever changes it
+   * records the change, so routes through it get re-planned.
+   */
+  readonly hazard: Float32Array;
 
   constructor(
     readonly cols: number,
@@ -209,6 +234,7 @@ export class NavObstacles {
     this.none = new Uint16Array(cols * rows);
     this.traffic = new Float32Array(cols * rows);
     this.calm = new Float32Array(cols * rows);
+    this.hazard = new Float32Array(cols * rows);
   }
 
   /** The obstacle counts a class with these rules is kept out by. */
@@ -263,10 +289,24 @@ export class NavGrid {
   private readonly samples: CellSamples;
   /** 1 where the terrain itself is off limits to this class (whatever buildings do). */
   private readonly terrain: Uint8Array;
+  /**
+   * 1 where the only thing keeping this class out is the slope: steeper
+   * than it climbs, and too tall a face of it to get over (see
+   * terrainAllowsFace). Part of terrain.
+   */
+  private readonly face: Uint8Array;
+  /**
+   * 1 where a way up a slope too steep for this class was opened (see
+   * openRamps), so a base, town or outpost walled in by steep slopes can
+   * still be reached: the track up.
+   */
+  private readonly ramp: Uint8Array;
   private readonly cost: Float32Array;
   private readonly occupied: Uint16Array;
   /** Extra cost per cell from busy narrow passages (NavObstacles.traffic), or zeros for a class that doesn't queue. */
   private readonly traffic: Float32Array;
+  /** Extra cost per cell from fire on the ground (NavObstacles.hazard), or zeros for a class that flies. */
+  private readonly hazard: Float32Array;
   /** Distance from each cell centre to the nearest blocked cell centre (or the map edge). */
   private readonly clearance: Float32Array;
   /** Per cell, which of its 8 steps by a bridge deck have been read point by point (low byte) and are clear (high byte); see sideStep. */
@@ -314,15 +354,19 @@ export class NavGrid {
     this.obstacles = obstacles ?? new NavObstacles(this.cols, this.rows);
     const n = this.cols * this.rows;
     this.terrain = new Uint8Array(n);
+    this.face = new Uint8Array(n);
+    this.ramp = new Uint8Array(n);
     this.cost = new Float32Array(n);
     this.occupied = this.obstacles.for(this.rules.over);
     this.traffic = this.rules.queues ? this.obstacles.traffic : this.obstacles.calm;
+    this.hazard = this.rules.flies ? this.obstacles.calm : this.obstacles.hazard;
     this.clearance = new Float32Array(n);
     this.sides = new Uint16Array(n);
     this.deckEdge = new Uint8Array(n);
     this.samples = CellSamples.of(field, this.cols, this.rows, cellSize);
     for (let k = 0; k < n; k++) this.computeCell(k);
     this.region = this.labelRegions();
+    this.openRamps();
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
     this.parent = new Int32Array(n);
@@ -343,7 +387,9 @@ export class NavGrid {
     const onDeck = !rules.flies && rules.minDepth === 0 && samples.deck[k] === 1;
     const depth = onDeck ? 0 : samples.depth[k];
     const slope = onDeck ? 0 : samples.slope[k];
-    this.terrain[k] = terrainAllows(rules, depth, slope, samples.sheer[k] === 1) ? 0 : 1;
+    const allowed = terrainAllows(rules, depth, slope, samples.sheer[k] === 1);
+    this.face[k] = allowed && depth <= 0 && this.tooSteep(k, slope) ? 1 : 0;
+    this.terrain[k] = allowed && this.face[k] === 0 ? 0 : 1;
     let cost = 1;
     if (onDeck) cost *= rules.bridge;
     // Beside a deck, over its railings: vehicles take the ramps instead,
@@ -358,6 +404,101 @@ export class NavGrid {
     if (!rules.flies && depth <= 0 && !(this.woodland && samples.ground[k].id === 'thicket')) cost *= samples.ground[k].cost[this.move] ?? 1;
     this.cost[k] = cost;
     this.deckEdge[k] = samples.rail[k] !== 0 || (samples.deck[k] === 1 && this.offDeckBeside(k)) ? 1 : 0;
+  }
+
+  /** Whether a dry cell's slope is too tall a face of too steep ground for this class to get over (see terrainAllowsFace). */
+  private tooSteep(k: number, slope: number): boolean {
+    const rules = this.rules;
+    if (!climbLimited(rules) || slope <= rules.climb || this.ramp[k] === 1) return false;
+    const { x, z } = this.center(k % this.cols, Math.floor(k / this.cols));
+    return !terrainAllowsFace(rules, slope, this.field.faceHeight(x, z, rules.climb, rules.climbHeight));
+  }
+
+  /**
+   * Open a way up (see ramp) to every base, town and outpost that slopes too
+   * steep for this class cut off from the first base, where it could get
+   * there but for them: the way over the fewest, least steep such cells. A
+   * side whose base tanks can't leave, or a town they can never take,
+   * would make no sense of a battle. Most maps never need one.
+   */
+  private openRamps(): void {
+    if (!this.face.includes(1)) return;
+    const f = this.field;
+    if (f.baseSites.length === 0) return;
+    const cellAt = (p: Point) => {
+      const [i, j] = this.cellOf(p.x, p.z);
+      return j * this.cols + i;
+    };
+    const home = cellAt(f.baseSites[0]);
+    // Where it could go if no slope stopped it.
+    const open = this.labelRegions(this.terrain.map((t, k) => (t === 1 && this.face[k] === 0 ? 1 : 0)));
+    for (const place of [...f.baseSites, ...f.townSites, ...f.outpostSites]) {
+      const k = cellAt(place);
+      if (open[k] < 0 || open[k] !== open[home] || (this.region[k] >= 0 && this.region[k] === this.region[home])) continue;
+      if (!this.carveRamp(k, home)) continue;
+      for (let c = 0; c < this.terrain.length; c++) if (this.ramp[c] === 1 && this.face[c] === 1) this.computeCell(c);
+      this.region = this.labelRegions();
+    }
+  }
+
+  /**
+   * Mark the way from a cell to the region of another (see openRamps) as a
+   * ramp, three cells wide so big units fit up it. Whether there was one.
+   */
+  private carveRamp(from: number, to: number): boolean {
+    const { cols, rows, terrain, face } = this;
+    const target = this.region[to];
+    const n = cols * rows;
+    const g = new Float32Array(n).fill(Infinity);
+    const back = new Int32Array(n).fill(-1);
+    const done = new Uint8Array(n);
+    const heap = new Heap(g);
+    g[from] = 0;
+    heap.push(from);
+    let end = -1;
+    while (heap.size > 0) {
+      const k = heap.pop();
+      if (done[k]) continue;
+      done[k] = 1;
+      if (k === to || (target >= 0 && this.region[k] === target)) {
+        end = k;
+        break;
+      }
+      const i = k % cols;
+      const j = (k - i) / cols;
+      // Square steps only (the first four), as regions are joined: a diagonal between two cliffs is no way up.
+      for (let d = 0; d < 4; d++) {
+        const ni = i + NEIGHBOUR_DI[d];
+        const nj = j + NEIGHBOUR_DJ[d];
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const nk = nj * cols + ni;
+        if (done[nk] || (terrain[nk] === 1 && face[nk] === 0)) continue;
+        const ng = g[k] + NEIGHBOUR_STEP[d] * (face[nk] === 1 ? RAMP_COST * this.samples.slope[nk] : 1);
+        if (ng < g[nk]) {
+          g[nk] = ng;
+          back[nk] = k;
+          heap.push(nk);
+        }
+      }
+    }
+    if (end < 0) return false;
+    for (let k = end; k >= 0; k = back[k]) {
+      const i = k % cols;
+      const j = (k - i) / cols;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const ni = i + di;
+          const nj = j + dj;
+          if (ni >= 0 && nj >= 0 && ni < cols && nj < rows && face[nj * cols + ni] === 1) this.ramp[nj * cols + ni] = 1;
+        }
+      }
+    }
+    return true;
+  }
+
+  /** How many cells of ways up too steep slopes this grid opened (see openRamps). */
+  get rampCells(): number {
+    return this.ramp.reduce((a, v) => a + v, 0);
   }
 
   /** Whether a cell has a cell off the deck next to it. */
@@ -396,10 +537,11 @@ export class NavGrid {
    * version so routes planned on the old map get re-planned.
    */
   refresh(area: CellArea): void {
-    const i0 = Math.max(0, area.i0 - 1);
-    const j0 = Math.max(0, area.j0 - 1);
-    const i1 = Math.min(this.cols - 1, area.i1 + 1);
-    const j1 = Math.min(this.rows - 1, area.j1 + 1);
+    const reach = climbLimited(this.rules) ? FACE_REFRESH : 1;
+    const i0 = Math.max(0, area.i0 - reach);
+    const j0 = Math.max(0, area.j0 - reach);
+    const i1 = Math.min(this.cols - 1, area.i1 + reach);
+    const j1 = Math.min(this.rows - 1, area.j1 + reach);
     let terrainChanged = false;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
@@ -465,9 +607,8 @@ export class NavGrid {
   }
 
   /** Flood-fill the passable terrain into connected regions. Buildings come and go, so only terrain counts. */
-  private labelRegions(): Int32Array {
+  private labelRegions(terrain: Uint8Array = this.terrain): Int32Array {
     const { cols, rows } = this;
-    const terrain = this.terrain;
     const region = new Int32Array(cols * rows).fill(-1);
     let next = 0;
     // Each cell is pushed at most once, so the stack never needs more room than the grid.
@@ -541,6 +682,59 @@ export class NavGrid {
     return this.obstacles.version;
   }
 
+  /**
+   * Whether a building of this radius at (x, z) would cut `from` off from
+   * any of `to` that it can get to now, round the buildings already up: a
+   * wall across the only neck of land out of a base, say. Flood fills over
+   * the cells this class can be in, square-wise, with the buildings in.
+   * Cells `fleeting` says are going away (an engineer's bridge that comes
+   * down in a minute or two) don't count as a way round.
+   */
+  sealsOff(x: number, z: number, radius: number, from: Point, to: Point[], fleeting?: (x: number, z: number) => boolean): boolean {
+    const { cols, rows, cellSize, terrain, occupied } = this;
+    const under = (k: number) => {
+      const c = this.center(k % cols, Math.floor(k / cols));
+      return Math.abs(c.x - x) <= radius + cellSize * 0.5 && Math.abs(c.z - z) <= radius + cellSize * 0.5 && D.hypot(c.x - x, c.z - z) <= radius + cellSize * 0.71;
+    };
+    const gone = (k: number) => {
+      if (!fleeting) return false;
+      const c = this.center(k % cols, Math.floor(k / cols));
+      return fleeting(c.x, c.z);
+    };
+    const fill = (without: boolean): Uint8Array => {
+      const seen = new Uint8Array(cols * rows);
+      // From the nearest open cell (a base's middle is its HQ).
+      const open = this.nearestOpen(from.x, from.z);
+      if (!open) return seen;
+      const start = open[1] * cols + open[0];
+      if (without && under(start)) return seen;
+      const stack = [start];
+      seen[start] = 1;
+      while (stack.length > 0) {
+        const k = stack.pop()!;
+        const i = k % cols;
+        const j = (k - i) / cols;
+        for (const nk of [i + 1 < cols ? k + 1 : -1, i > 0 ? k - 1 : -1, j + 1 < rows ? k + cols : -1, j > 0 ? k - cols : -1]) {
+          if (nk < 0 || seen[nk] || terrain[nk] === 1 || occupied[nk] > 0 || (without && under(nk)) || gone(nk)) continue;
+          seen[nk] = 1;
+          stack.push(nk);
+        }
+      }
+      return seen;
+    };
+    // A place counts as reached when the fill gets within a cell of it (it may sit in a building itself, a base's HQ say).
+    const reached = (seen: Uint8Array, p: Point) => {
+      const [pi, pj] = this.cellOf(p.x, p.z);
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (pi + di >= 0 && pj + dj >= 0 && pi + di < cols && pj + dj < rows && seen[(pj + dj) * cols + pi + di]) return true;
+      return false;
+    };
+    const now = fill(false);
+    const goals = to.filter((p) => reached(now, p));
+    if (goals.length === 0) return false;
+    const then = fill(true);
+    return goals.some((p) => !reached(then, p));
+  }
+
   /** True if passable terrain connects the two points (ignoring buildings). */
   connected(a: Point, b: Point): boolean {
     const [ai, aj] = this.cellOf(a.x, a.z);
@@ -585,19 +779,58 @@ export class NavGrid {
     // Land units can be anywhere on a bridge deck.
     if (!this.rules.flies && this.rules.minDepth === 0 && f.deckAt(x, z) !== null) return true;
     const sheer = f.sheerAt(x, z);
-    return terrainAllows(this.rules, f.seaLevel - f.heightAt(x, z), this.rules.steep === Infinity || sheer ? f.slopeAt(x, z) : 0, sheer);
+    const depth = f.seaLevel - f.heightAt(x, z);
+    if (!terrainAllows(this.rules, depth, sheer ? f.slopeAt(x, z) : 0, sheer)) return false;
+    // Too steep a slope to get up, read at the cell like routes (a face's height takes a while to follow).
+    return depth > 0 || !this.faceAt(x, z);
+  }
+
+  /** Whether a point's cell is too steep a face for this class (see tooSteep). */
+  private faceAt(x: number, z: number): boolean {
+    const [i, j] = this.cellOf(x, z);
+    return this.face[j * this.cols + i] === 1;
   }
 
   /**
-   * Whether a step from a to b gets a mover down off a cliff face it's
-   * stuck on (shoved there, or the ground reshaped under it): anywhere it
-   * could be but for the slope, no steeper than where it is.
+   * Whether a mover of this class may stand at a point (what movement and
+   * shoves go by): where terrainAllowsAt says, and for land classes also
+   * the shallow edge of any cell its routes go through, so that a dip just
+   * under the sea between two dry cell middles doesn't box infantry into a
+   * sliver of shore. Not by a bridge deck's sides, which are read strictly
+   * point by point (see offSideClear).
+   */
+  standsAt(x: number, z: number): boolean {
+    if (this.terrainAllowsAt(x, z)) return true;
+    const f = this.field;
+    if (this.rules.flies || this.rules.minDepth > 0 || !f.contains(x, z) || f.seaLevel - f.heightAt(x, z) > this.rules.maxDepth + PUDDLE || f.sheerAt(x, z)) return false;
+    const [i, j] = this.cellOf(x, z);
+    const k = j * this.cols + i;
+    return this.terrain[k] === 0 && this.face[k] === 0 && this.deckEdge[k] === 0;
+  }
+
+  /**
+   * Whether a step from a to b gets a mover down off a cliff face, or a
+   * slope too steep for it (see tooSteep), that it's stuck on (shoved
+   * there, or the ground reshaped under it): anywhere it could be but for
+   * the slope, no steeper than where it is.
    */
   offCliff(ax: number, az: number, bx: number, bz: number): boolean {
     const f = this.field;
-    if (!f.cliffs || this.rules.scales || this.rules.flies || !f.contains(bx, bz) || !f.cliffAt(ax, az)) return false;
+    if (this.rules.scales || this.rules.flies || !f.contains(bx, bz)) return false;
+    if (!(f.cliffs && f.cliffAt(ax, az)) && !(f.contains(ax, az) && this.faceAt(ax, az) && !f.isWater(ax, az))) return false;
     if (f.slopeAt(bx, bz) > f.slopeAt(ax, az)) return false;
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(bx, bz), 0);
+  }
+
+  /**
+   * Whether a step from a to b gets a land mover stranded in water it
+   * can't be in (shoved off a shore, the ground sunk under it) no deeper
+   * in: it wades back out the shallowest way rather than stand there for good.
+   */
+  outOfWater(ax: number, az: number, bx: number, bz: number): boolean {
+    const f = this.field;
+    if (this.rules.flies || this.rules.minDepth > 0 || !f.contains(bx, bz) || this.standsAt(ax, az)) return false;
+    return f.seaLevel - f.heightAt(bx, bz) <= f.seaLevel - f.heightAt(ax, az);
   }
 
   /**
@@ -807,7 +1040,7 @@ export class NavGrid {
   costAt(x: number, z: number): number {
     const [i, j] = this.cellOf(x, z);
     const k = j * this.cols + i;
-    return this.cost[k] + this.traffic[k];
+    return this.cost[k] + this.traffic[k] + this.hazard[k];
   }
 
   /**
@@ -829,7 +1062,7 @@ export class NavGrid {
       const [i, j] = this.cellOf(x, z);
       if (!this.fits(i, j, radius)) return false;
       const k = j * this.cols + i;
-      if (this.cost[k] + this.traffic[k] > maxCost + 1e-6) return false;
+      if (this.cost[k] + this.traffic[k] + this.hazard[k] > maxCost + 1e-6) return false;
       // Not over a bridge's railings, even where it's no dearer than the rest of the way.
       if (walls && k !== prev && this.overRail(prev, k)) return false;
       // Nor off a deck's side into water too deep to wade.
@@ -909,9 +1142,26 @@ export class NavGrid {
     // In a city, the tighter fit still keeps out of the alleys (half a cell of room).
     const city = wide && this.samples.hasCity;
     const tighter = city ? Math.max(radius * 0.5, this.cellSize * 0.5) : radius * 0.5;
-    for (const r of wide ? [radius, tighter] : []) {
-      const route = this.route(from, to, r);
-      if (route?.found) return route.points;
+    if (wide) {
+      // First with room to spare: room is measured between cell middles, and a building's edge can
+      // be most of a cell nearer than its nearest blocked cell's middle (see BIG_SLACK).
+      if (radius > this.cellSize) {
+        const roomy = this.route(from, to, radius + BIG_SLACK);
+        if (roomy?.found) return roomy.points;
+      }
+      const full = this.route(from, to, radius);
+      if (full?.found) return full.points;
+      // No way there at all at its full width (not just a search cut short): a tighter route
+      // would only take it into a gap between buildings it can't get through, since they push
+      // a unit out by its whole radius, and it would wedge there for good. As near as it does
+      // fit instead, so long as that gets it somewhere (a unit already wedged has to squeeze out).
+      if (full && full.closed && full.points.length > 0) {
+        const end = full.points[full.points.length - 1];
+        const left = D.hypot(to.x - end.x, to.z - end.z);
+        if (left < Math.max(NEAR_ENOUGH, radius * 3) || left < D.hypot(to.x - from.x, to.z - from.z) - this.cellSize) return full.points;
+      }
+      const half = this.route(from, to, tighter);
+      if (half?.found) return half.points;
     }
     // A wide vehicle that squeezes down an alley sticks there: in a city it settles for the nearest spot it fits to
     // the goal (looking a little further round it), on the avenues, rather than take any open cell.
@@ -922,7 +1172,7 @@ export class NavGrid {
     return this.route(from, to, 0)?.points ?? null;
   }
 
-  private route(from: Point, to: Point, radius: number, goalRing = radius > 0 ? 6 : 12): { points: Point[]; found: boolean } | null {
+  private route(from: Point, to: Point, radius: number, goalRing = radius > 0 ? 6 : 12): { points: Point[]; found: boolean; closed: boolean } | null {
     // A wide unit standing somewhere tight starts by backing out to the nearest roomy spot,
     // rather than planning onward through a gap it can't fit.
     // Not over a railing, though: from beside a bridge, the deck is no nearer than the ramp.
@@ -961,7 +1211,7 @@ export class NavGrid {
     let closestH = Infinity;
     // The search's inner loop, with fits() and blocked() written out over the raw arrays (same answers, far fewer calls).
     const rows = this.rows;
-    const { terrain, occupied, clearance, cost, traffic, closed, stamp, g, f, parent, open } = this;
+    const { terrain, occupied, clearance, cost, traffic, hazard, closed, stamp, g, f, parent, open } = this;
     if (radius > 0) this.updateClearance();
     const need = radius + CLEARANCE_MARGIN;
     const isBlocked = (ci: number, cj: number) => ci < 0 || cj < 0 || ci >= cols || cj >= rows || terrain[cj * cols + ci] === 1 || occupied[cj * cols + ci] > 0;
@@ -998,7 +1248,7 @@ export class NavGrid {
         if (closed[nk] === id) continue;
         if (walls && ((deck[k] === 1 && rail[nk] === 1) || (rail[k] === 1 && deck[nk] === 1))) continue;
         if (sides && deckEdge[k] + deckEdge[nk] > 0 && !this.sideStep(k, n, nk)) continue;
-        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk]);
+        const ng = g[k] + NEIGHBOUR_STEP[n] * (cost[nk] + traffic[nk] + hazard[nk]);
         if (stamp[nk] === id && ng >= g[nk]) continue;
         stamp[nk] = id;
         g[nk] = ng;
@@ -1015,7 +1265,7 @@ export class NavGrid {
     cells.reverse();
     const points = cells.map((k) => this.center(k % cols, Math.floor(k / cols)));
     if (found) points[points.length - 1] = this.fitsAt(reach.x, reach.z, radius) ? reach : points[points.length - 1];
-    return { points: this.smooth(from, points, radius), found };
+    return { points: this.smooth(from, points, radius), found, closed: !found && open.size === 0 };
   }
 
   /**

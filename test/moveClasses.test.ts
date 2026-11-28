@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { Rng } from '../src/core/rng';
+import { hashSeed, Rng } from '../src/core/rng';
+import { settingsFromParams } from '../src/ui/settingsUrl';
+import { battlefieldConfig, defaultSettings } from '../src/game/settings';
 import { Ai, Armed, Mover, Transform } from '../src/game/components';
 import { Game } from '../src/game/game';
-import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { effectiveRange } from '../src/game/systems/targeting';
 import { UNIT_DEFS, UnitDef } from '../src/game/units';
 import { generateBattlefield } from '../src/world/battlefield';
-import { MOVE_RULES, terrainAllows } from '../src/world/moveClasses';
+import { MOVE_RULES, terrainAllows, terrainAllowsFace } from '../src/world/moveClasses';
 import { NavGrid, NavGrids } from '../src/world/navGrid';
 
 const DT = 1 / 30;
@@ -193,9 +194,54 @@ describe('roles', () => {
     expect(wheeled.steepSpeed).toBeLessThan(tracked.steepSpeed);
     expect(wheeled.steep).toBeGreaterThan(tracked.steep);
     expect(wheeled.town).toBeLessThan(tracked.town);
+    expect(wheeled.climb).toBeLessThan(tracked.climb);
+    expect(wheeled.climbHeight).toBeLessThan(tracked.climbHeight);
     // The trucks, buggies and carts are wheeled; tanks stay tracked.
     for (const id of ['mgTruck', 'buggy', 'rocketTruck', 'hackVan', 'chariot', 'trebuchet'] as const) expect(UNIT_DEFS[id].move).toBe('wheeled');
     for (const id of ['tank', 'lightTank', 'flakTank', 'fabricator'] as const) expect(UNIT_DEFS[id].move).toBe('tracked');
+  });
+
+  it("support trucks don't trail spiders to the water's edge, and rally points keep off the shore", () => {
+    // The islands map where Hive's fabricators used to pile up against the shore by their base.
+    const q = 'seed=druaqc&mode=conquest&size=small&terrain=islands&tsize=small&water=0.46&hills=0.92&forest=0.24&towns=2&sides=3&doc1=hive&doc2=mirage&team3=1';
+    const s = settingsFromParams(new URLSearchParams(q));
+    const game = new Game(hashSeed(s.seed), { settings: s, populate: false, autoSpawn: false });
+    const f = game.field;
+    const land = game.ctx.navs.land;
+    // Every side's rally points have dry ground all round them that its tanks can get to.
+    for (let from = 0; from < f.baseSites.length; from++) {
+      for (let to = 0; to < f.baseSites.length; to++) {
+        if (to === from) continue;
+        game.ctx.lanes.lanes(from, to).forEach((_l, lane) => {
+          const r = game.ctx.lanes.rally(from, to, lane);
+          expect(land.connected(f.baseSites[from], r)).toBe(true);
+          for (let a = 0; a < 8; a++) expect(land.terrainAllowsAt(r.x + Math.cos((a / 8) * Math.PI * 2) * 4.5, r.z + Math.sin((a / 8) * Math.PI * 2) * 4.5)).toBe(true);
+        });
+      }
+    }
+    // A spot on the shore near the first base, and one well inland.
+    const home = f.baseSites[0];
+    let shore: { x: number; z: number } | null = null;
+    for (let r = home.radius + 2; r < 40 && !shore; r += 1) {
+      for (let a = 0; a < 64 && !shore; a++) {
+        const x = home.x + Math.cos((a / 64) * Math.PI * 2) * r;
+        const z = home.z + Math.sin((a / 64) * Math.PI * 2) * r;
+        if (!f.contains(x, z, 4) || !land.terrainAllowsAt(x, z) || !land.connected(home, { x, z })) continue;
+        if ([0, 1, 2, 3, 4, 5, 6, 7].some((k) => f.isWater(x + Math.cos(k * 0.785) * 2, z + Math.sin(k * 0.785) * 2))) shore = { x, z };
+      }
+    }
+    expect(shore).not.toBeNull();
+    const mite = spawnUnit(game.world, game.ctx, UNIT_DEFS.mite, 0, shore!.x, shore!.z);
+    game.world.remove(mite, Ai);
+    const fab = spawnUnit(game.world, game.ctx, UNIT_DEFS.fabricator, 0, home.x, home.z);
+    run(game, 1);
+    expect(game.world.req(fab, Ai).escort).not.toBe(mite);
+    // Well inland, it's a lead like any other.
+    const mt = game.world.req(mite, Transform);
+    mt.x = home.x + 3;
+    mt.z = home.z;
+    run(game, 1);
+    expect(game.world.req(fab, Ai).escort).toBe(mite);
   });
 
   it('gives weapons on high ground a little more reach', () => {
@@ -215,5 +261,62 @@ describe('roles', () => {
     expect(effectiveRange(game.world, tank, armed, other)).toBeCloseTo(range * 1.15);
     ty.y = oy.y - 5;
     expect(effectiveRange(game.world, tank, armed, other)).toBeCloseTo(range);
+  });
+  it('stops a class on a slope too steep for it only where the slope is tall, not on a short bank', () => {
+    const { tracked, walker, foot, hover, climber } = MOVE_RULES;
+    // Gentle ground goes, however tall; a steep face goes only while it's short.
+    expect(terrainAllowsFace(tracked, 0.9, 20)).toBe(true);
+    expect(terrainAllowsFace(tracked, 1.4, 1)).toBe(true);
+    expect(terrainAllowsFace(tracked, 1.4, 4)).toBe(false);
+    expect(terrainAllowsFace(walker, 1.4, 4)).toBe(true);
+    expect(terrainAllowsFace(foot, 1.8, 5)).toBe(true);
+    expect(terrainAllowsFace(climber, 9, 99)).toBe(true);
+    // Tanks climb more than hovers, less than walkers, which climb less than infantry.
+    expect(hover.climb).toBeLessThan(tracked.climb);
+    expect(tracked.climb).toBeLessThan(walker.climb);
+    expect(walker.climb).toBeLessThan(foot.climb);
+    expect(tracked.climbHeight).toBeLessThan(walker.climbHeight);
+    expect(walker.climbHeight).toBeLessThan(foot.climbHeight);
+
+    // On a hilly map, a hillside's face reads taller than a bump's; walkers get up some tanks can't.
+    const s = defaultSettings();
+    s.map = { ...s.map, hills: 2, water: 0 };
+    const field = generateBattlefield(new Rng(3), battlefieldConfig(s));
+    const navs = new NavGrids(field);
+    let walkerOnly = 0;
+    for (let x = field.bounds.minX + 2; x < field.bounds.maxX - 2; x += 1.5) {
+      for (let z = field.bounds.minZ + 2; z < field.bounds.maxZ - 2; z += 1.5) {
+        const slope = field.slopeAt(x, z);
+        if (slope <= tracked.climb) continue;
+        expect(field.faceHeight(x, z, tracked.climb)).toBeGreaterThan(0);
+        if (!navs.land.terrainAllowsAt(x, z) && navs.for('walker').terrainAllowsAt(x, z)) walkerOnly++;
+      }
+    }
+    expect(walkerOnly).toBeGreaterThan(20);
+  });
+
+  it('a tank left on a slope too steep for it can still get down off it', () => {
+    const s = defaultSettings();
+    s.map = { ...s.map, hills: 3, water: 0 };
+    const game = new Game(5, { settings: s, populate: false, autoSpawn: false });
+    const f = game.field;
+    const nav = game.ctx.navs.land;
+    let spot: { x: number; z: number } | null = null;
+    for (let x = f.bounds.minX + 6; x < f.bounds.maxX - 6 && !spot; x += 1.5) {
+      for (let z = f.bounds.minZ + 6; z < f.bounds.maxZ - 6 && !spot; z += 1.5) {
+        if (!nav.terrainAllowsAt(x, z) && !f.isWater(x, z) && f.baseSites.every((b) => Math.hypot(b.x - x, b.z - z) > b.radius + 6)) spot = { x, z };
+      }
+    }
+    expect(spot).not.toBeNull();
+    const tank = spawnUnit(game.world, game.ctx, UNIT_DEFS.tank, 0, spot!.x, spot!.z);
+    const t = game.world.req(tank, Transform);
+    t.x = spot!.x;
+    t.z = spot!.z;
+    const m = game.world.req(tank, Mover);
+    const home = f.baseSites[0];
+    m.targetX = home.x;
+    m.targetZ = home.z;
+    run(game, 20);
+    expect(Math.hypot(t.x - spot!.x, t.z - spot!.z)).toBeGreaterThan(3);
   });
 });
