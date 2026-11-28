@@ -45,6 +45,18 @@ describe('readiness', () => {
     expect(offensive.plan(0).target).toBe(1);
   });
 
+  it("goes with what it has once it's waited very long (a side that can't train enough troops still attacks)", () => {
+    const game = emptyGame();
+    const { offensive } = game.ctx;
+    army(game, 0, 10);
+    expect(offensive.armyShare(0)).toBe(offensive.armyShare(300));
+    expect(offensive.armyShare(900)).toBeLessThan(offensive.armyShare(300));
+    run(game, 240);
+    expect(offensive.plan(0).state).toBe('massing');
+    run(game, 400);
+    expect(offensive.attacking(0, game.world.time)).toBe(true);
+  }, 60_000);
+
   it('waits while the enemy base is as strong, but grows impatient', () => {
     const game = emptyGame();
     const { offensive } = game.ctx;
