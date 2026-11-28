@@ -38,7 +38,7 @@ const LOUDNESS: Record<SoundId, number> = {
 const STIR = { bullet: 0.06, flame: 0.05, shell: 0.35, missile: 0.3, artillery: 0.9, blast: 1.6, wreck: 0.8, collapse: 2 };
 
 /** How windy each biome sounds, 0 to 1. */
-const WIND: Record<BiomeId, number> = { temperate: 0.45, desert: 0.7, snow: 0.85, forest: 0.3 };
+const WIND: Record<BiomeId, number> = { temperate: 0.45, desert: 0.7, snow: 0.85, forest: 0.3, jungle: 0.2, steppe: 0.8, tundra: 0.9, ash: 0.65, scrap: 0.55, crystal: 0.5 };
 
 /** Cut-off of the muffled path that far-away sounds go through, in Hz (recorded distant blasts have almost nothing above 1 kHz). */
 const FAR_CUTOFF = 600;

@@ -6,11 +6,16 @@ import { Transform } from '../src/game/components';
 import { UNIT_DEFS } from '../src/game/units';
 import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 import { generateBattlefield } from '../src/world/battlefield';
-import { Rng } from '../src/core/rng';
+import { hashSeed, Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
+import { GIANT, MAP_TRAIT_IDS } from '../src/world/traits';
+import { landReach, vertexAt } from '../src/world/waterways';
+import { groundCode } from '../src/world/ground';
+import { Building, Faction, Health, RELIC } from '../src/game/components';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
+import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
 
 const DT = 1 / 30;
 
@@ -142,7 +147,19 @@ describe('maps', () => {
     expect(kinds('desert').has('cactus')).toBe(true);
     expect(kinds('forest').has('pine')).toBe(true);
     expect(emptyGame(9, (s) => (s.map.biome = 'forest')).props.length).toBeGreaterThan(emptyGame(9).props.length * 2);
-    // Same seed, same ground under every biome.
+    // The newer biomes bring their own scenery, and every biome has a town style of its own.
+    const of = (biome: BiomeId) => new Set(emptyGame(9, (s) => (s.map.biome = biome)).props.map((p) => p.kind));
+    expect(of('crystal').has('crystal')).toBe(true);
+    expect(of('scrap').has('junk')).toBe(true);
+    for (const b of BIOME_IDS) expect(TOWN_STYLE_IDS).toContain(BIOMES[b].town);
+    expect(new Set(BIOME_IDS.map((b) => BIOMES[b].town)).size).toBeGreaterThanOrEqual(8);
+    // A town style can be picked apart from the biome, and it's looks only.
+    const s = defaultSettings();
+    s.map.townStyle = 'yurt';
+    expect(settingsFromParams(settingsToParams(s)).map.townStyle).toBe('yurt');
+    expect(settingsFromParams(new URLSearchParams('townstyle=igloo')).map.townStyle).toBe('biome');
+    expect(Array.from(emptyGame(9, (s) => (s.map.townStyle = 'dome')).field.heights)).toEqual(Array.from(emptyGame(9).field.heights));
+        // Same seed, same ground under every biome.
     expect(Array.from(emptyGame(9, (s) => (s.map.biome = 'snow')).field.heights)).toEqual(Array.from(emptyGame(9).field.heights));
   });
 
@@ -405,5 +422,95 @@ describe('maps', () => {
       }
     }
     expect(bridges).toBeGreaterThan(16);
+  });
+  it('never puts a town on top of a base, even on a small map crowded with sides', () => {
+    // A small map with three sides: one base sits on the middle line, where the first town goes.
+    const q = 'seed=aw52vo&size=small&biome=steppe&water=0&hills=1.46&shape=0.76&forest=0&towns=2&sides=3';
+    const game = new Game(hashSeed('aw52vo'), { settings: settingsFromParams(new URLSearchParams(q)), populate: false, autoSpawn: false });
+    let towns = game.field.townSites.length;
+    const clear = (f: typeof game.field) => {
+      for (const t of f.townSites) for (const b of f.baseSites) expect(Math.hypot(t.x - b.x, t.z - b.z)).toBeGreaterThanOrEqual(t.radius + b.radius);
+    };
+    clear(game.field);
+    for (let seed = 0; seed < 16; seed++) {
+      const s = defaultSettings();
+      s.map = { ...s.map, size: 'small', towns: 2 };
+      s.factions = Array.from({ length: 3 + (seed % 3) }, (_, i) => defaultFaction(i));
+      const f = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      clear(f);
+      towns += f.townSites.length;
+    }
+    // Most still get their towns, clear of the bases.
+    expect(towns).toBeGreaterThan(16);
+  });
+
+  it('every map trait lays out its features on contested ground, and keeps the bases in reach', () => {
+    for (const trait of MAP_TRAIT_IDS) {
+      let placed = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const s = defaultSettings();
+        s.map.traits = [trait];
+        // (Tidal flats need water to lay their bars across.)
+        if (trait === 'tidal') s.map.water = 0.7;
+        const f = generateBattlefield(new Rng(seed * 101), battlefieldConfig(s));
+        const reach = landReach(f);
+        for (const b of f.baseSites) expect(reach[vertexAt(f, b.x, b.z)]).toBe(1);
+        if (f.traits.sites.some((t) => t.kind === trait)) placed++;
+        // Relics stand clear of the bases, towns and outposts.
+        for (const r of f.traits.relics) {
+          for (const b of f.baseSites) expect(Math.hypot(b.x - r.x, b.z - r.z)).toBeGreaterThan(b.radius * 1.35);
+          for (const o of f.outpostSites) expect(Math.hypot(o.x - r.x, o.z - r.z)).toBeGreaterThan(o.radius);
+        }
+      }
+      expect(placed, trait).toBeGreaterThanOrEqual(5);
+    }
+    const oil = defaultSettings();
+    oil.map.traits = ['oil'];
+    const f = generateBattlefield(new Rng(202), battlefieldConfig(oil));
+    expect(f.traits.relics.filter((r) => r.building === 'derrick').length).toBeGreaterThan(1);
+    expect([...f.ground].filter((g) => g === groundCode('oil')).length).toBeGreaterThan(10);
+    const grove = defaultSettings();
+    grove.map.traits = ['grove'];
+    expect(generateBattlefield(new Rng(202), battlefieldConfig(grove)).woods.trees.filter((t) => t.size >= GIANT).length).toBeGreaterThan(10);
+  });
+
+  it('a map with no traits is the map as it always was, and traits round-trip through the link', () => {
+    const plain = generateBattlefield(new Rng(77), battlefieldConfig(defaultSettings()));
+    expect(plain.traits.sites.length + plain.traits.relics.length + plain.traits.vents.length).toBe(0);
+    const s = defaultSettings();
+    s.map.traits = ['ruins', 'oil'];
+    const back = settingsFromParams(settingsToParams(s));
+    expect(back.map.traits).toEqual(['oil', 'ruins']);
+    expect(settingsFromParams(new URLSearchParams('traits=volcano,grove')).map.traits).toEqual(['grove']);
+    expect(settingsToParams(defaultSettings()).has('traits')).toBe(false);
+  });
+
+  it('traits come alive in battle: relics are nobody’s, oil burns everyone, geysers steam, the hulk’s scrap stays', () => {
+    const s = defaultSettings();
+    s.map.traits = ['oil', 'geysers', 'hulk', 'ruins'];
+    const game = new Game(12, { settings: s });
+    const relics = [...game.world.query(Building, Faction)].filter((e) => game.world.req(e, Faction).id === RELIC);
+    expect(relics.length).toBe(game.field.traits.relics.length);
+    expect(game.ctx.sides.hostile(RELIC, 0) || game.ctx.sides.hostile(0, RELIC) || game.ctx.sides.allied(RELIC, 0)).toBe(false);
+    // Set a pool alight: the fire spreads across it and burns whoever's in it.
+    const pool = game.ctx.traits.pools[0];
+    const cols = game.field.config.cols;
+    const x = game.field.bounds.minX + ((pool % cols) + 0.5) * game.field.config.cellSize;
+    const z = game.field.bounds.minZ + (Math.floor(pool / cols) + 0.5) * game.field.config.cellSize;
+    const soldier = spawnUnit(game.world, game.ctx, UNIT_DEFS.trooper, 0, x, z);
+    const hp = game.world.req(soldier, Health).hp;
+    game.ctx.traits.strike(x, z, 1);
+    let most = 0;
+    let steam = 0;
+    for (let n = 0; n < 40 * 30; n++) {
+      game.step(1 / 30);
+      most = Math.max(most, game.ctx.traits.burning.size);
+      for (const v of game.field.traits.vents) if (game.ctx.smoke.nobodysAt(v.x, v.z)) steam++;
+    }
+    expect(most).toBeGreaterThan(2);
+    expect(!game.world.isAlive(soldier) || game.world.req(soldier, Health).hp < hp).toBe(true);
+    expect(steam).toBeGreaterThan(0);
+    const hulk = game.field.traits.relics.find((r) => r.building === 'crashedHulk')!;
+    expect(game.ctx.wreckage.massNear(hulk.x, hulk.z, 7.5)).toBeGreaterThan(50);
   });
 });

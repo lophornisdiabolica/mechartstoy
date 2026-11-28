@@ -9,6 +9,7 @@ import { spawnSpot } from './systems/production';
 import { spawnBuilding, spawnUnit } from './spawn';
 import * as D from '../core/dmath';
 import { forEachArm } from './arsenal';
+import { spawnWaveAt } from './systems/reinforcements';
 
 /**
  * Outposts: small forts in no-man's land that any side can capture. Each
@@ -31,7 +32,9 @@ export type OutpostBonus =
   /** Holder's aircraft cap goes up by this many. */
   | { kind: 'airCap'; amount: number }
   /** Holder's team gets impatient this much faster while massing for an attack (0.4 = 40% sooner), so readiness attacks set out sooner. */
-  | { kind: 'readiness'; amount: number };
+  | { kind: 'readiness'; amount: number }
+  /** Holder's aircraft and drops (Zenith's pods) come this much faster (0.35 = 35% faster), see systems/production.ts. */
+  | { kind: 'air'; amount: number };
 
 /**
  * A kind of outpost: what it gives its holder, and the building it has on
@@ -47,6 +50,20 @@ export interface OutpostKindDef {
   building?: BuildingId;
   /** Ruined factory: turns out one of the holder's factory batches this often (seconds, before production speed). */
   salvage?: number;
+  /** Guards its bunkers keep about the post (GUARDS if not given). */
+  guards?: number;
+  /** Shipyard: launches a missile boat for its holder this often (seconds), up to SHIPYARD_BOATS of its own afloat. */
+  launches?: number;
+  /** Signal fire: calls in a relief column for its holder this often (seconds). */
+  relief?: number;
+  /** Repair yard: mends the holder's (and allies') vehicles within REPAIR_REACH, this share of their health a second. */
+  repairs?: number;
+  /** Drawbridge: its holder raises the bridge by it against enemies, and lowers it for its own (see bridges.ts). */
+  draws?: boolean;
+  /** Dam control: its holder can open the dam's sluices and flood the valley, once (see flood.ts). */
+  sluices?: boolean;
+  /** Rail station: puts an armoured train on the line for its holder this long after it's taken, and again this long after the train's lost (see rail.ts). */
+  trains?: number;
 }
 
 export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
@@ -55,8 +72,17 @@ export const OUTPOST_KINDS: Record<OutpostKind, OutpostKindDef> = {
   gun: { id: 'gun', name: 'Hilltop gun', blurb: 'A long-range gun on the highest ground, firing for whoever holds it', bonus: null, building: 'bigGun' },
   relay: { id: 'relay', name: 'Comms relay', blurb: 'Attacks set out sooner, and its mast spots for the holder’s guns', bonus: { kind: 'readiness', amount: 0.4 }, building: 'relayMast' },
   fuel: { id: 'fuel', name: 'Fuel depot', blurb: 'Faster production, but its tanks blow up when destroyed', bonus: { kind: 'production', amount: 0.1 }, building: 'fuelTanks' },
-  hill: { id: 'hill', name: 'The hill', blurb: 'King of the hill: the first team to hold it long enough wins', bonus: null, building: 'hillBeacon' },
   factory: { id: 'factory', name: 'Ruined factory', blurb: 'Patched up to turn out the odd vehicle for its holder', bonus: null, building: 'ruinedFactory', salvage: 75 },
+  shipyard: { id: 'shipyard', name: 'Shipyard', blurb: 'Launches a missile boat now and then for its holder, even a side with no navy', bonus: null, building: 'slipway', launches: 80 },
+  sensor: { id: 'sensor', name: 'Sensor station', blurb: 'Picks out stealthy units in a wide ring, and spots for the holder’s guns', bonus: null, building: 'sensorStation' },
+  repair: { id: 'repair', name: 'Repair yard', blurb: 'Mends the holder’s vehicles and walkers that come by it', bonus: null, building: 'repairYard', repairs: 0.025 },
+  signal: { id: 'signal', name: 'Signal fire', blurb: 'Calls in a relief column for its holder every couple of minutes', bonus: null, building: 'signalFire', relief: 120 },
+  hill: { id: 'hill', name: 'The hill', blurb: 'King of the hill: the first team to hold it long enough wins', bonus: null, building: 'hillBeacon' },
+  citadel: { id: 'citadel', name: 'Citadel', blurb: 'A walled fortress with a strong garrison: faster production for whoever cracks it', bonus: { kind: 'production', amount: 0.2 }, building: 'keep', guards: 8 },
+  drawbridge: { id: 'drawbridge', name: 'Drawbridge', blurb: 'Its holder raises the bridge by it when enemies come, and lowers it for its own', bonus: null, building: 'winchHouse', draws: true },
+  sluice: { id: 'sluice', name: 'Dam control', blurb: 'Its holder can open the dam’s sluices and flood the valley under enemies in it', bonus: null, building: 'sluiceHouse', sluices: true },
+  station: { id: 'station', name: 'Rail station', blurb: 'Puts an armoured train on the line for its holder', bonus: null, building: 'stationHouse', trains: 60 },
+  landing: { id: 'landing', name: 'Landing field', blurb: 'Aircraft and drops come faster for its holder', bonus: { kind: 'air', amount: 0.35 }, building: 'flightTower' },
 };
 
 /** Player-facing description of an outpost's bonus at a given strength (the settings' outpost bonus multiplier). */
@@ -72,6 +98,8 @@ export function describeBonus(kind: OutpostKindDef, strength: number): string {
       return `+${Math.round(bonus.amount * strength)} aircraft`;
     case 'readiness':
       return `attacks set out ${pct(bonus.amount)} sooner`;
+    case 'air':
+      return `aircraft and drops ${pct(bonus.amount)} faster`;
   }
 }
 
@@ -125,6 +153,10 @@ export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rn
   world.remove(post, Health);
   world.remove(post, Targetable);
   if (hill) return;
+  if (outpost.kind.id === 'citadel') {
+    buildCitadel(world, ctx, outpost, a, at);
+    return;
+  }
   for (const angle of [0, Math.PI]) {
     const p = at(angle, 4.6);
     spawnOutpostPart(world, ctx, ctx.buildings.tower, outpost, p.x, p.z, -(a + angle), false);
@@ -138,6 +170,35 @@ export function buildOutpost(world: World, ctx: SimContext, outpost: Outpost, rn
     spawnOutpostPart(world, ctx, def, outpost, q.x, q.z, -(a - Math.PI / 2), false);
   }
 }
+
+/**
+ * The citadel: a ring of walls with four gates, a tower at each corner
+ * between them, two bunkers, and the keep in the middle beside the post.
+ */
+function buildCitadel(world: World, ctx: SimContext, outpost: Outpost, a: number, at: (angle: number, dist: number) => { x: number; z: number }): void {
+  const wall = ctx.buildings.citadelWall;
+  const ring = CITADEL_RING;
+  // A length of wall either side of each gate, the gate wide enough for a tank.
+  for (let side = 0; side < 4; side++) {
+    for (const off of [-0.43, 0.43]) {
+      const angle = (side * Math.PI) / 2 + off;
+      const p = at(angle, ring);
+      spawnOutpostPart(world, ctx, wall, outpost, p.x, p.z, -(a + angle), false);
+    }
+    const t = at((side * Math.PI) / 2 + Math.PI / 4, ring);
+    spawnOutpostPart(world, ctx, ctx.buildings.tower, outpost, t.x, t.z, -(a + (side * Math.PI) / 2 + Math.PI / 4), false);
+  }
+  for (const angle of [Math.PI / 2, -Math.PI / 2]) {
+    const p = at(angle, 4.4);
+    spawnOutpostPart(world, ctx, ctx.buildings.bunker, outpost, p.x, p.z, -(a + angle), false);
+  }
+  const keep = ctx.buildings.keep;
+  const q = at(Math.PI, 2.2 + keep.radius);
+  spawnOutpostPart(world, ctx, keep, outpost, q.x, q.z, -a, false);
+}
+
+/** How far from the post a citadel's walls stand. */
+const CITADEL_RING = 8;
 
 /** Create one of an outpost's buildings, for its current owner. */
 export function spawnOutpostPart(world: World, ctx: SimContext, def: BuildingDef, outpost: Outpost, x: number, z: number, heading: number, construct: boolean): Entity {
@@ -280,7 +341,7 @@ export function garrisonSystem(ctx: SimContext): System {
         const outpost = world.req(e, OutpostPart).outpost;
         const faction = world.req(e, Faction).id;
         const key = `${outpost}:${faction}`;
-        if ((guards.get(key) ?? 0) >= GUARDS) continue;
+        if ((guards.get(key) ?? 0) >= (ctx.outposts[outpost].kind.guards ?? GUARDS)) continue;
         const g = world.req(e, Garrison);
         g.timer -= dt;
         if (g.timer > 0) continue;
@@ -297,4 +358,113 @@ export function garrisonSystem(ctx: SimContext): System {
       }
     },
   };
+}
+
+/** Missile boats a shipyard keeps afloat for its holder at most (it launches no more while that many of its own are about). */
+const SHIPYARD_BOATS = 2;
+/** How near a repair yard's post a vehicle has to be to be mended. */
+export const REPAIR_REACH = 11;
+/** Picks (as in a reinforcement wave) a signal fire's relief column brings. */
+const RELIEF_PICKS = 3;
+
+/**
+ * What the working outposts do for their holders, every TICK:
+ *
+ * - a shipyard launches a missile boat now and then, onto the water by it;
+ * - a repair yard mends the holder's team's vehicles round it;
+ * - a signal fire calls in a relief column every couple of minutes, which
+ *   marches in from the edge of the map nearest the fire.
+ *
+ * Held by their garrison, they do nothing. Timers start when an outpost
+ * changes hands, so taking one doesn't pay out at once.
+ */
+export function outpostWorksSystem(ctx: SimContext): System {
+  const working = ctx.outposts.filter((o) => o.kind.launches || o.kind.relief || o.kind.repairs);
+  const due = new Map<number, number>();
+  const boats = new Map<number, Entity[]>();
+  const owners = new Map<number, number>();
+  let acc = 0;
+  return {
+    name: 'outpostWorks',
+    update(world, dt) {
+      if (working.length === 0) return;
+      acc += dt;
+      if (acc < TICK) return;
+      const step = acc;
+      acc = 0;
+      for (const o of working) {
+        if (owners.get(o.index) !== o.owner) {
+          owners.set(o.index, o.owner);
+          due.set(o.index, world.time + (o.kind.launches ?? o.kind.relief ?? 0));
+        }
+        if (o.owner < 0 || ctx.outcome) continue;
+        if (o.kind.repairs) mend(world, ctx, o, o.kind.repairs * step);
+        if (world.time < (due.get(o.index) ?? Infinity)) continue;
+        if (o.kind.launches) {
+          const mine = (boats.get(o.index) ?? []).filter((e) => world.isAlive(e) && world.get(e, Faction)?.id === o.owner);
+          boats.set(o.index, mine);
+          if (mine.length < SHIPYARD_BOATS) {
+            const boat = launchBoat(world, ctx, o);
+            if (boat !== null) mine.push(boat);
+          }
+          due.set(o.index, world.time + o.kind.launches);
+        } else if (o.kind.relief) {
+          callRelief(world, ctx, o);
+          due.set(o.index, world.time + o.kind.relief);
+        }
+      }
+    },
+  };
+}
+
+/** Mend the holder's team's vehicles (not soldiers, not aircraft) round a repair yard by `share` of their health. */
+function mend(world: World, ctx: SimContext, o: Outpost, share: number): void {
+  ctx.grid.forEachNear(o.x, o.z, REPAIR_REACH, (other) => {
+    const unit = world.get(other, Unit);
+    if (!unit || unit.def.class === 'infantry' || unit.def.category === 'air') return;
+    if (!ctx.sides.allied(world.req(other, Faction).id, o.owner)) return;
+    const h = world.get(other, Health);
+    if (h && h.hp > 0 && h.hp < h.max) h.hp = Math.min(h.max, h.hp + h.max * share);
+  });
+}
+
+/** Put a missile boat on the water by a shipyard, for its holder. Null if there's no water to launch into. */
+function launchBoat(world: World, ctx: SimContext, o: Outpost): Entity | null {
+  const def = ctx.units.missileBoat;
+  const naval = ctx.navs.for('naval');
+  for (let r = 8; r <= 18; r += 2) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const x = o.x + D.cos(a) * r;
+      const z = o.z + D.sin(a) * r;
+      if (!ctx.field.contains(x, z, 2) || !naval.terrainAllowsAt(x, z) || !naval.fitsAt(x, z, def.radius)) continue;
+      const boat = spawnUnit(world, ctx, def, o.owner, x, z);
+      ctx.events.emit('outpostLaunch', { outpost: o.index, faction: o.owner, x, z });
+      return boat;
+    }
+  }
+  return null;
+}
+
+/** A signal fire's relief column: a few picks from the holder's wave table, marching in from the map's edge nearest the fire. */
+function callRelief(world: World, ctx: SimContext, o: Outpost): void {
+  const b = ctx.field.bounds;
+  // The nearest edge, then in until the land takes a soldier.
+  const edges = [
+    { x: b.minX + 3, z: o.z, d: o.x - b.minX },
+    { x: b.maxX - 3, z: o.z, d: b.maxX - o.x },
+    { x: o.x, z: b.minZ + 3, d: o.z - b.minZ },
+    { x: o.x, z: b.maxZ - 3, d: b.maxZ - o.z },
+  ].sort((p, q) => p.d - q.d);
+  for (const e of edges) {
+    const len = D.hypot(o.x - e.x, o.z - e.z) || 1;
+    for (let s = 0; s < len - 6; s += 2) {
+      const x = e.x + ((o.x - e.x) * s) / len;
+      const z = e.z + ((o.z - e.z) * s) / len;
+      if (!ctx.nav.terrainAllowsAt(x, z) || ctx.nav.builtAt(x, z)) continue;
+      spawnWaveAt(world, ctx, o.owner, RELIEF_PICKS, x, z, 4);
+      ctx.events.emit('outpostRelief', { outpost: o.index, faction: o.owner, x, z });
+      return;
+    }
+  }
 }

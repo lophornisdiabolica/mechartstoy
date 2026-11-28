@@ -1,7 +1,9 @@
 import type { Style } from './commander/advice';
 import { TerrainStyle } from '../world/terrainStyles';
 import { MapOutline } from '../world/outlines';
-import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OUTPOST_KIND_IDS, OutpostKind, seatsFit } from '../world/battlefield';
+import { MapTrait } from '../world/traits';
+import { TownStyle } from '../world/biomes';
+import { BattlefieldConfig, DEFAULT_BATTLEFIELD, OutpostKind, seatsFit } from '../world/battlefield';
 import { BiomeId } from '../world/biomes';
 import { BUILDING_DEFS, BuildingDef, BuildingId } from './buildings';
 import { FACTIONS, FactionDef, MAX_FACTIONS } from './factions';
@@ -105,6 +107,10 @@ export interface BattleSettings {
     terrain: TerrainStyle;
     /** The outline of the land, sea beyond it (see world/outlines.ts): 'full' for land edge to edge. */
     outline: MapOutline;
+    /** How civilian buildings look: 'biome' for the biome's own style (see world/biomes.ts). Looks only. */
+    townStyle: TownStyle | 'biome';
+    /** Special features laid over the map, a headline each (see world/traits.ts): none for the usual map. */
+    traits: MapTrait[];
     /**
      * Width over depth, relative to the size's usual shape: above 1 is wider
      * and shallower, below 1 narrower and deeper, with about the same area.
@@ -130,6 +136,12 @@ export interface BattleSettings {
     waterways: boolean;
     /** Dense forest, 0 (none) to 1: patches of big trees that block shots and slow vehicles until they're knocked down (see woods.ts). */
     forest: number;
+    /**
+     * Wildfire, 0 (off) to 1: fire that gets going in the woods spreads
+     * through them, slowly, burning everyone in it (see wildfire.ts).
+     * Missing in settings saved before it existed.
+     */
+    wildfire?: number;
     /** Wrecked vehicles pile up into scrap that's hard going for tracks and hovers (see scrap.ts). */
     scrap: boolean;
     /** How much junk a wrecked vehicle leaves on the ground, 0 (none) to 2; 1 is the usual (see wreckage.ts). */
@@ -138,6 +150,8 @@ export interface BattleSettings {
     wreckageLife: number;
     /** Super units leave a small crater where they blow up, so long battles slowly reshape the ground (see craters.ts). */
     craters: boolean;
+    /** The map's bridges come down under heavy fire, for good (see bridges.ts). Missing in settings saved before it existed. */
+    bridgesFall?: boolean;
     /** Capturable outposts in no-man's land: a number, or 'auto' for one per side. */
     outposts: number | 'auto';
     /** The kinds of outpost to deal out (see OUTPOST_KINDS in outposts.ts); empty means supply depots only. */
@@ -236,7 +250,8 @@ export interface BattleSettings {
  * (attacks set out sooner) belongs to the readiness rule that Commander AI
  * is going to replace.
  */
-export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = OUTPOST_KIND_IDS.filter((k) => k !== 'relay');
+// The newer kinds (shipyard, sensor station, repair yard, signal fire) are off by default, like the relay, so the usual battles stay as they were.
+export const DEFAULT_OUTPOST_KINDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'fuel', 'factory'];
 
 /** Town radius per size. */
 /** A city: none, one in place of the first town, or one over the whole map (see BattleSettings.map.city). */
@@ -292,6 +307,7 @@ export const LIMITS = {
   hillHold: { min: 30, max: 900 },
   outposts: { min: 0, max: 12 },
   forest: { min: 0, max: 1 },
+  wildfire: { min: 0, max: 1 },
   wreckage: { min: 0, max: 2 },
   wreckageLife: { min: 0.25, max: 3 },
   outpostBonus: { min: 0, max: 3 },
@@ -311,7 +327,7 @@ export function defaultSettings(): BattleSettings {
   return {
     seed: '',
     mode: 'eternal',
-    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', outline: 'full', shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
+    map: { size: 'medium', water: 0.5, hills: 1, mountains: 0, cliffs: 0, terrain: 'rolling', outline: 'full', townStyle: 'biome', traits: [], shape: 1, biome: 'temperate', layout: 'ring', towns: 1, townSize: 'medium', city: 'off', townLife: true, waterways: true, forest: 0.2, scrap: true, wreckage: 1, wreckageLife: 1, craters: true, outposts: 'auto', outpostKinds: [...DEFAULT_OUTPOST_KINDS], placed: { bases: null, towns: null, outposts: null } },
     armies: {
       caps: { infantry: 45, vehicle: 15, air: 4, super: 1 },
       superGrowth: 'tide',
@@ -494,6 +510,8 @@ export function battlefieldConfig(s: BattleSettings): BattlefieldConfig {
     cliffs: s.map.cliffs,
     terrain: s.map.terrain,
     outline: s.map.outline,
+    townStyle: s.map.townStyle,
+    traits: [...(s.map.traits ?? [])],
   };
 }
 

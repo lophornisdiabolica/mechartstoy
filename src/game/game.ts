@@ -13,7 +13,15 @@ import { defaultOrders, Stance } from './orders';
 import { Offensive, offensiveSystem } from './offensive';
 import { scrapSystem } from './scrap';
 import { Towns, townSystem } from './towns';
-import { buildOutpost, createOutposts, garrisonSystem, outpostSystem } from './outposts';
+import { buildOutpost, createOutposts, garrisonSystem, outpostSystem, outpostWorksSystem } from './outposts';
+import { raiseRelics, traitSystem, TraitState } from './traits';
+import { railSystem } from './rail';
+import { wildfireOn, wildfireSystem } from './wildfire';
+import { BridgeWear, drawbridgeSystem, sinkingSystem } from './bridges';
+import { Tide, tideSystem } from './tides';
+import { Flood, floodSystem } from './flood';
+import { Ice, iceSystem } from './ice';
+import { nearRail } from '../world/traits';
 import { BattleSettings, battlefieldConfig, defaultSettings, tunedBuildings, tunedUnits } from './settings';
 import { BattleStats } from './stats';
 import { newSquad, spawnBuilding, spawnUnit } from './spawn';
@@ -155,10 +163,15 @@ export class Game {
       tangle: new FrostField(this.field, TANGLE_RULES),
       wreckage: new WreckageField(this.field, settings.map.wreckageLife ?? 1),
       smoke: new SmokeField(this.field),
+      traits: new TraitState({ field: this.field }, seed),
       strikes: new Strikes(),
       camps: [],
       groves: new Groves(),
       towns: new Towns(this.field.townSites, seed, !!this.field.config.citySprawl),
+      bridges: new BridgeWear(!!settings.map.bridgesFall),
+      tidal: this.field.traits.flats.length > 0 ? new Tide(this.field.traits.flats) : null,
+      ice: this.field.traits.ice ? new Ice(this.field.traits.ice, this.field.config.cols, this.field.config.rows) : null,
+      flood: this.field.traits.flood ? new Flood(this.field.traits.flood, this.field.config.cols, this.field.config.rows) : null,
       traffic: new Traffic(nav),
     };
 
@@ -176,7 +189,7 @@ export class Game {
       defenceSystem(ctx),
       offensiveSystem(ctx),
       navObstacles,
-      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
+      ...(autoSpawn ? [productionSystem(ctx), dropPodSystem(ctx), engineerSystem(ctx), reinforcementSystem(ctx), garrisonSystem(ctx), outpostWorksSystem(ctx), territorySystem(ctx), carrierSystem(ctx), hiveSystem(ctx), nomadSystem(ctx), mirageSystem(ctx), lodestarSystem(ctx), leviathanSystem(ctx)] : []),
       targetingSystem(ctx),
       retreatSystem(ctx),
       aiSystem(ctx),
@@ -194,6 +207,16 @@ export class Game {
       // Before projectiles, so a bomb let go this tick starts falling at once (and does nothing unless a power was used).
       godSystem(ctx),
       projectileSystem(ctx),
+      // Oil fires, geysers and the like, only on a map with traits that do something.
+      ...(ctx.traits.active ? [traitSystem(ctx)] : []),
+      ...(ctx.field.traits.rail ? [railSystem(ctx)] : []),
+      ...(ctx.outposts.some((o) => o.kind.draws) ? [drawbridgeSystem(ctx)] : []),
+      ...(ctx.tidal ? [tideSystem(ctx)] : []),
+      ...(ctx.flood ? [floodSystem(ctx)] : []),
+      ...(ctx.ice ? [iceSystem(ctx)] : []),
+      ...(ctx.bridges.on || ctx.tidal || ctx.flood || ctx.ice ? [sinkingSystem(ctx)] : []),
+      // Nobody's fire: wildfire in the woods, and everyone keeping clear of it and of burning oil.
+      ...(wildfireOn(ctx) || ctx.traits.pools.length > 0 ? [wildfireSystem(ctx, seed)] : []),
       fireSystem(ctx),
       frostSystem(ctx),
       smokeSystem(ctx),
@@ -326,11 +349,15 @@ export class Game {
       ...this.field.townSites.flatMap((site) => layoutTown(this.field, site, rng)),
     ];
     for (const p of placements) {
+      // A rail line runs through a town: nothing's built on the track.
+      if (this.field.traits.rail && nearRail(this.field, p.x, p.z, this.ctx.buildings[p.building].radius + 1.5)) continue;
       spawnBuilding(this.world, this.ctx, this.ctx.buildings[p.building], p.faction, p.x, p.z, p.heading);
     }
     // Outposts on their own stream, so adding them doesn't reshuffle the bases and town.
     const outpostRng = new Rng(this.seed ^ 0x6f7574);
     for (const outpost of this.ctx.outposts) buildOutpost(this.world, this.ctx, outpost, outpostRng);
+    // Map traits' relics (old walls, hulks, columns), nobody's.
+    raiseRelics(this.world, this.ctx);
   }
 
   /** Opening armies form up where they'll mass for the first attack, so the first clash comes quickly. */
