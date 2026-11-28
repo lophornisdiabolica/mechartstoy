@@ -6,6 +6,8 @@ import { Rng } from '../src/core/rng';
 import { BattleSettings, defaultFaction, defaultSettings, DEFAULT_OUTPOST_KINDS } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
+import { DOCTRINES } from '../src/game/doctrines';
+import { airShare } from '../src/game/systems/production';
 import { OutpostKind, SHIPYARD_REACH } from '../src/world/battlefield';
 import { System } from '../src/core/ecs';
 
@@ -183,5 +185,24 @@ describe('citadel and landing field traits', () => {
     capture(game.world, game.ctx, landing, 0);
     expect(outpostBonus(game.ctx, 0, 'air')).toBeGreaterThan(0);
     expect(outpostBonus(game.ctx, 1, 'air')).toBe(0);
+  });
+
+  it('the air bonus speeds up what flies or drops: all of an airpad, a drop side’s drops, only the scout drones from a vehicle factory', () => {
+    const s = defaultSettings();
+    s.factions = [{ ...defaultFaction(0), doctrine: 'armour' }, { ...defaultFaction(1), doctrine: 'zenith' }];
+    const { ctx } = new Game(3, { settings: s });
+    const factory = DOCTRINES.armour.production.factory!.table;
+    const drones = airShare(ctx, 'factory', factory, 0);
+    expect(drones).toBeGreaterThan(0.05);
+    expect(drones).toBeLessThan(0.2);
+    expect(airShare(ctx, 'airpad', DOCTRINES.skyline.production.airpad!.table, 0)).toBe(1);
+    expect(airShare(ctx, 'dropControl', [{ unit: 'trooper', weight: 1 }], 1)).toBe(1);
+    // The factory works 1 + air × share faster and its drones are 1 + air likelier: air more drones, as many of the rest.
+    const air = 0.35;
+    const lift = 1 + air * drones;
+    const flying = (1 + air) * drones;
+    const total = flying + (1 - drones);
+    expect(lift * (flying / total)).toBeCloseTo(drones * (1 + air), 10);
+    expect(lift * ((1 - drones) / total)).toBeCloseTo(1 - drones, 10);
   });
 });
