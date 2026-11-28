@@ -44,6 +44,16 @@ const WAYPOINT_ROOM = 1.6;
 const FAVOURED_FLANK = 0.7;
 /** A site counts as "between" two bases if going through it is at most this much longer than going straight. */
 const MAX_DETOUR = 1.5;
+/** How far out toward a lane's first waypoint its rally point is, as a share of the way (see Lanes.rally). */
+const RALLY_OUT = 0.5;
+/** How many steps back toward the base a rally point may be pulled to get it off the shore. */
+const RALLY_STEPS = 6;
+/** How far round a rally point there has to be dry ground: about as far as units spread round it (see rallyOffset in spawn.ts). */
+const RALLY_ROOM = 5;
+/** A rally point follows the way out by land instead of the straight line where that's this much longer. */
+const RALLY_DETOUR = 1.25;
+/** A waypoint this close to its lane's outpost or town is the site's own (see onTheWay). */
+const SITE_KEPT = 5;
 /** Sites closer than this to the straight line are on the centre lane already. */
 const ON_CENTRE = 9;
 /** At most this many lanes through sites per pair of bases, the most direct first. */
@@ -88,6 +98,44 @@ export class Lanes {
   }
 
   private build(from: number, to: number): Route[] {
+    const a = this.field.baseSites[from];
+    const b = this.field.baseSites[to];
+    return this.lay(from, to).map((r) => {
+      const site = r.via && (r.via.kind === 'outpost' ? this.field.outpostSites[r.via.index] : this.field.townSites[r.via.index]);
+      return { points: this.onTheWay(a, b, r.points, site ?? null), via: r.via };
+    });
+  }
+
+  /**
+   * Waypoints worth going by: those that bring a squad nearer by land to
+   * the one after (or the enemy base). A waypoint half way along the
+   * straight line between bases on islands can be out on a headland
+   * pointing at the enemy, with the way on round the other side of the
+   * bay: a squad sent out to it only has to turn back, and a big one jams
+   * doing so. Where the land way is about straight, this drops nothing.
+   * The lane's own outpost or town, `site`, is always kept: it's what the lane is for.
+   */
+  private onTheWay(a: Point, b: Point, points: Point[], site: Point | null): Point[] {
+    const by = (p: Point, q: Point) => {
+      const route = this.nav.findPath(p, q);
+      return route ? pathLength(p, route) : Infinity;
+    };
+    const kept = [...points];
+    for (let k = 0; k < kept.length; ) {
+      const prev = k === 0 ? a : kept[k - 1];
+      const next = k === kept.length - 1 ? b : kept[k + 1];
+      const direct = by(prev, next);
+      const own = site !== null && D.hypot(kept[k].x - site.x, kept[k].z - site.z) < SITE_KEPT;
+      // Out in the water, on no land either base is on (a station on the straight line across a sound
+      // with no bridge under it): it only draws squads to the shore nearest it.
+      const adrift = !this.nav.connected(a, kept[k]) && !this.nav.connected(b, kept[k]);
+      if (!own && (adrift || (Number.isFinite(direct) && by(kept[k], next) >= direct))) kept.splice(k, 1);
+      else k++;
+    }
+    return kept.length > 0 ? kept : points.slice(-1);
+  }
+
+  private lay(from: number, to: number): Route[] {
     const a = this.field.baseSites[from];
     const b = this.field.baseSites[to];
     const length = D.hypot(b.x - a.x, b.z - a.z);
@@ -177,11 +225,44 @@ export class Lanes {
     return this.lanes(from, to)[lane].find((p) => this.progress(from, to, p.x, p.z) > here + 0.03) ?? null;
   }
 
-  /** Where a squad forms up before attacking `to` down this lane: in front of its base, leaning toward the lane. */
+  /**
+   * Where a squad forms up before attacking `to` down this lane: in front of
+   * its base, leaning toward the lane. On a coast or an island, halfway out
+   * to the lane can be at the water's edge or in it, and land units sent to
+   * spots round it all pile up against the shore: it's pulled back toward
+   * the base until there's dry ground all round it.
+   */
   rally(from: number, to: number, lane: LaneId): Point {
+    const key = `${from}-${to}-${lane}`;
+    const known = this.rallies.get(key);
+    if (known) return known;
     const base = this.field.baseSites[from];
     const first = this.lanes(from, to)[lane][0];
-    return { x: base.x + (first.x - base.x) * 0.5, z: base.z + (first.z - base.z) * 0.5 };
+    // Along the way there by land, where that's much longer than straight (round a bay, back off a
+    // headland to a bridge): halfway out in a straight line could be a dead end pointing at the enemy,
+    // and a big squad that forms up there jams turning back through itself to set out.
+    const straight = D.hypot(first.x - base.x, first.z - base.z);
+    const route = this.nav.findPath(base, first);
+    const way = route && pathLength(base, route) > straight * RALLY_DETOUR ? [base, ...route] : null;
+    const at = (k: number) => (way ? alongPath(way, straight * k) : { x: base.x + (first.x - base.x) * k, z: base.z + (first.z - base.z) * k });
+    let spot = at(RALLY_OUT);
+    for (let n = 1; !this.roomAround(base, spot) && n <= RALLY_STEPS; n++) spot = at(RALLY_OUT * (1 - n / (RALLY_STEPS + 1)));
+    this.rallies.set(key, spot);
+    return spot;
+  }
+
+  /** Rally points as worked out (see rally), by from, to and lane. */
+  private readonly rallies = new Map<string, Point>();
+
+  /** Whether land units can get to a rally point from their base, and spread out round it on dry ground. */
+  private roomAround(base: Point, p: Point): boolean {
+    if (!this.nav.terrainAllowsAt(p.x, p.z) || !this.nav.connected(base, p)) return false;
+    for (let a = 0; a < 8; a++) {
+      const x = p.x + D.cos((a / 8) * Math.PI * 2) * RALLY_ROOM;
+      const z = p.z + D.sin((a / 8) * Math.PI * 2) * RALLY_ROOM;
+      if (!this.nav.terrainAllowsAt(x, z)) return false;
+    }
+    return true;
   }
 
   /**
@@ -202,4 +283,28 @@ export class Lanes {
     const other = roll.int(1, count - 2);
     return other >= favoured ? other + 1 : other;
   }
+}
+
+/** How long a line of points is, from `from` on. */
+function pathLength(from: Point, points: Point[]): number {
+  let length = 0;
+  let prev = from;
+  for (const p of points) {
+    length += D.hypot(p.x - prev.x, p.z - prev.z);
+    prev = p;
+  }
+  return length;
+}
+
+/** The point `distance` along a line of points from its first (its last, if it's shorter). */
+function alongPath(points: Point[], distance: number): Point {
+  let left = distance;
+  for (let k = 1; k < points.length; k++) {
+    const a = points[k - 1];
+    const b = points[k];
+    const step = D.hypot(b.x - a.x, b.z - a.z);
+    if (step >= left && step > 0) return { x: a.x + ((b.x - a.x) * left) / step, z: a.z + ((b.z - a.z) * left) / step };
+    left -= step;
+  }
+  return points[points.length - 1];
 }

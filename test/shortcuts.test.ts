@@ -42,7 +42,7 @@ describe('shortcuts', () => {
     });
     const eng = game.ctx.commander.engineers;
     let most = 0;
-    for (let t = 0; t < 200 && most === 0; t += 5) {
+    for (let t = 0; t < 300 && most === 0; t += 5) {
       run(game, 5);
       most = Math.max(most, eng.shortcutsOf(0));
     }

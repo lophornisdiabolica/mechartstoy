@@ -379,18 +379,39 @@ export function vertexAt(field: Battlefield, x: number, z: number): number {
   return j * (cols + 1) + i;
 }
 
+/** Longest stretch of water a route over the water likes one bridge to span, on maps from the newer generator (see hopRoute). */
+export const BRIDGE_REACH = 24;
+/** A crossing longer than this is split by islets into stretches no longer than BRIDGE_REACH (a little over it isn't worth an islet). */
+const ISLET_PAST = 32;
+/** What a crossing costs per unit past BRIDGE_REACH, on top of its length, when choosing a route over the water. */
+const LONG_COST = 4;
+/** What each extra bridge costs a route (in units of bridge length): an island hop is worth it to save more than this. */
+const HOP_COST = 10;
+/** What walking over an island costs a route, per unit, against bridging. */
+const WALK_COST = 0.3;
+/** Fewest vertices a piece of land needs to be an island a route hops over (room to land a bridge on). */
+const STONE_LEAST = 30;
+/** An islet raised to split a long crossing: flat top radius, how far its shore slopes down, and how far above the sea it stands. */
+const ISLET_RADIUS = 4.5;
+const ISLET_SHORE = 3;
+const ISLET_TOP = 0.8;
+
 /**
  * Make sure every base (and any points in `also`) can be reached by land:
  * while one is cut off, bridge the shortest stretch of water between the
- * land the first base reaches and the land the cut-off one is on. Returns
- * the number of bridges built.
+ * land the first base reaches and the land the cut-off one is on. On maps
+ * from the newer generator, a route may hop over islands on the way, and
+ * a stretch longer than ISLET_PAST is split by islets (see hopRoute and
+ * spanWater), so an archipelago is joined by chains of short bridges, not
+ * one across the map. Returns the number of bridges built.
  */
 export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] = []): number {
   const g = grid(field);
   const vx = (k: number) => field.vertexX(k % g.stride);
   const vz = (k: number) => field.vertexZ(Math.floor(k / g.stride));
   let built = 0;
-  for (let round = 0; round < (field.baseSites.length + also.length) * 2; round++) {
+  const rounds = (field.baseSites.length + also.length) * (field.styled ? 4 : 2);
+  for (let round = 0; round < rounds; round++) {
     const reach = landReach(field);
     const cut = field.baseSites.find((s) => !reach[vertexAt(field, s.x, s.z)]) ?? also.find((s) => !reach[vertexAt(field, s.x, s.z)]);
     if (!cut) return built;
@@ -408,41 +429,43 @@ export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] 
         }
       }
     }
-    // Shortest crossing: from every reachable shore vertex, spread over water until the island. On maps from the
-    // newer generator, keep clear of the bridges already there, so a new one doesn't start from another's side (where
-    // its railing would wall the way off) or run across it; only if there's no other way is it let through.
-    const clear = (k: number) => !field.nearBridge(vx(k), vz(k), BRIDGE_WIDTH * 0.5 + 1.5);
+    if (field.styled) {
+      const route = hopRoute(field, g, reach, island);
+      if (!route) return built;
+      let made = 0;
+      for (const [a, b] of route) made += spanWater(field, { x: vx(a), z: vz(a) }, { x: vx(b), z: vz(b) });
+      if (made === 0) return built;
+      built += made;
+      continue;
+    }
+    // Shortest crossing: from every reachable shore vertex, spread over water until the island.
+    const origin = new Int32Array(g.count).fill(-1);
+    const dist = new Float64Array(g.count).fill(Infinity);
+    const heap = new Heap(dist);
     let landing = -1;
-    let origin = new Int32Array(0);
-    for (const keepClear of field.styled && field.bridges.length > 0 ? [true, false] : [false]) {
-      origin = new Int32Array(g.count).fill(-1);
-      const dist = new Float64Array(g.count).fill(Infinity);
-      const heap = new Heap(dist);
-      for (let k = 0; k < g.count; k++) {
-        if (reach[k] && neighbours(g, k).some((n) => !reach[n]) && (!keepClear || clear(k))) {
-          dist[k] = 0;
-          origin[k] = k;
-          heap.push(k);
+    for (let k = 0; k < g.count; k++) {
+      if (reach[k] && neighbours(g, k).some((n) => !reach[n])) {
+        dist[k] = 0;
+        origin[k] = k;
+        heap.push(k);
+      }
+    }
+    while (heap.size > 0) {
+      const k = heap.pop();
+      if (island[k]) {
+        landing = k;
+        break;
+      }
+      for (const nk of neighbours(g, k)) {
+        if (reach[nk]) continue;
+        // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
+        const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
+        if (d < dist[nk]) {
+          dist[nk] = d;
+          origin[nk] = origin[k];
+          heap.push(nk);
         }
       }
-      while (heap.size > 0) {
-        const k = heap.pop();
-        if (island[k]) {
-          landing = k;
-          break;
-        }
-        for (const nk of neighbours(g, k)) {
-          if (reach[nk] || (keepClear && !clear(nk))) continue;
-          // Straight-line distance from where the crossing started, so the bridge is as short as it can be.
-          const d = D.hypot(vx(nk) - vx(origin[k]), vz(nk) - vz(origin[k]));
-          if (d < dist[nk]) {
-            dist[nk] = d;
-            origin[nk] = origin[k];
-            heap.push(nk);
-          }
-        }
-      }
-      if (landing >= 0) break;
     }
     if (landing < 0) return built;
     const a = { x: vx(origin[landing]), z: vz(origin[landing]) };
@@ -454,6 +477,149 @@ export function bridgeLand(field: Battlefield, also: { x: number; z: number }[] 
     built++;
   }
   return built;
+}
+
+/**
+ * The cheapest way over the water from the land the first base reaches to
+ * `island`, as the crossings to bridge (each from a vertex on one shore to
+ * one on the next), in order. A route may land on islands on the way and
+ * walk across them, so long as each hop saves more than HOP_COST; a
+ * crossing longer than BRIDGE_REACH costs LONG_COST extra per unit, so
+ * a route hops wherever there are islands to hop over. Keeps clear of the
+ * bridges already there, so a new one doesn't start from another's side
+ * (where its railing would wall the way off) or run across it; only if
+ * there's no other way is it let through. Null if there's no way at all.
+ */
+function hopRoute(field: Battlefield, g: Grid, reach: Uint8Array, island: Uint8Array): [number, number][] | null {
+  const vx = (k: number) => field.vertexX(k % g.stride);
+  const vz = (k: number) => field.vertexZ(Math.floor(k / g.stride));
+  const sea = field.seaLevel;
+  const ground = (k: number) => field.heights[k] >= sea && !cliffBeside(field, vx(k), vz(k)) && !wetBeside(field, vx(k), vz(k));
+  // The size of the piece of land each unreached vertex is on (0 for water), to tell islands from specks.
+  const mass = new Int32Array(g.count);
+  for (let k = 0; k < g.count; k++) {
+    if (mass[k] || reach[k] || island[k] || !ground(k)) continue;
+    const piece = [k];
+    mass[k] = -1;
+    for (let n = 0; n < piece.length; n++) {
+      for (const nk of neighbours(g, piece[n])) {
+        if (!mass[nk] && !reach[nk] && !island[nk] && ground(nk)) {
+          mass[nk] = -1;
+          piece.push(nk);
+        }
+      }
+    }
+    for (const p of piece) mass[p] = piece.length;
+  }
+  const stone = (k: number) => island[k] === 1 || mass[k] >= STONE_LEAST;
+  const span = (d: number) => (d <= BRIDGE_REACH ? d : d + (d - BRIDGE_REACH) * LONG_COST);
+  const clear = (k: number) => !field.nearBridge(vx(k), vz(k), BRIDGE_WIDTH * 0.5 + 1.5);
+  for (const keepClear of field.bridges.length > 0 ? [true, false] : [false]) {
+    const cost = new Float64Array(g.count).fill(Infinity);
+    /** Per vertex: on land, the vertex itself; over water, the land vertex the crossing set out from. */
+    const origin = new Int32Array(g.count).fill(-1);
+    /** Per land vertex: the one before it on the route (the last step over land, or where the bridge to it starts). */
+    const back = new Int32Array(g.count).fill(-1);
+    const bridged = new Uint8Array(g.count);
+    const done = new Uint8Array(g.count);
+    const heap = new Heap(cost);
+    for (let k = 0; k < g.count; k++) {
+      if (reach[k] && neighbours(g, k).some((n) => !reach[n]) && (!keepClear || clear(k))) {
+        cost[k] = 0;
+        origin[k] = k;
+        heap.push(k);
+      }
+    }
+    let landing = -1;
+    while (heap.size > 0) {
+      const k = heap.pop();
+      if (done[k]) continue;
+      done[k] = 1;
+      if (island[k]) {
+        landing = k;
+        break;
+      }
+      const onLand = origin[k] === k;
+      const from = onLand ? k : origin[k];
+      for (const nk of neighbours(g, k)) {
+        if (reach[nk] || done[nk] || (keepClear && !clear(nk))) continue;
+        let c: number;
+        if (stone(nk)) {
+          // Walking on over an island, or landing on one.
+          c = onLand ? cost[k] + D.hypot(vx(nk) - vx(k), vz(nk) - vz(k)) * WALK_COST : cost[from] + span(D.hypot(vx(nk) - vx(from), vz(nk) - vz(from))) + HOP_COST;
+          if (c < cost[nk]) {
+            cost[nk] = c;
+            origin[nk] = nk;
+            back[nk] = onLand ? k : from;
+            bridged[nk] = onLand ? 0 : 1;
+            heap.push(nk);
+          }
+        } else {
+          // Over the water (or a speck of land) from the last shore: straight-line distance, so the bridge is as short as it can be.
+          c = cost[from] + span(D.hypot(vx(nk) - vx(from), vz(nk) - vz(from)));
+          if (c < cost[nk]) {
+            cost[nk] = c;
+            origin[nk] = from;
+            heap.push(nk);
+          }
+        }
+      }
+    }
+    if (landing < 0) continue;
+    const route: [number, number][] = [];
+    for (let v = landing; v >= 0 && !reach[v]; v = back[v]) if (bridged[v]) route.unshift([back[v], v]);
+    return route;
+  }
+  return null;
+}
+
+/**
+ * Bridge the water from shore vertex `a` to shore vertex `b`: one bridge,
+ * or, if it's further than ISLET_PAST, a chain of them no longer than
+ * BRIDGE_REACH, with an islet raised between each two. Returns the number of bridges built.
+ */
+function spanWater(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }): number {
+  const len = Math.max(0.1, D.hypot(b.x - a.x, b.z - a.z));
+  const ux = (b.x - a.x) / len;
+  const uz = (b.z - a.z) / len;
+  const parts = len > ISLET_PAST ? Math.ceil(len / BRIDGE_REACH) : 1;
+  const at = (n: number) => ({ x: a.x + (ux * len * n) / parts, z: a.z + (uz * len * n) / parts });
+  for (let n = 1; n < parts; n++) raiseIslet(field, at(n).x, at(n).z);
+  // Each bridge reaches onto the bank at the map's shores, and a little way onto each islet.
+  const onto = ISLET_RADIUS - 1.5;
+  let built = 0;
+  for (let n = 0; n < parts; n++) {
+    const p = at(n);
+    const q = at(n + 1);
+    const back = n === 0 ? BRIDGE_LANDING : -onto;
+    const on = n === parts - 1 ? BRIDGE_LANDING : -onto;
+    if (placeBridge(field, { x: p.x - ux * back, z: p.z - uz * back }, { x: q.x + ux * on, z: q.z + uz * on }, true)) built++;
+  }
+  return built;
+}
+
+/** Raise a small round islet out of the sea at (x, z): flat on top, ISLET_TOP above the water, its shore sloping down to the seabed. */
+function raiseIslet(field: Battlefield, x: number, z: number): void {
+  const g = grid(field);
+  const top = field.seaLevel + ISLET_TOP;
+  const out = ISLET_RADIUS + ISLET_SHORE;
+  const { cellSize } = field.config;
+  const i0 = Math.max(0, Math.floor((x - out - field.bounds.minX) / cellSize));
+  const i1 = Math.min(g.cols, Math.ceil((x + out - field.bounds.minX) / cellSize));
+  const j0 = Math.max(0, Math.floor((z - out - field.bounds.minZ) / cellSize));
+  const j1 = Math.min(g.rows, Math.ceil((z + out - field.bounds.minZ) / cellSize));
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const k = j * g.stride + i;
+      const h = field.heights[k];
+      if (h >= top) continue;
+      const d = D.hypot(field.vertexX(i) - x, field.vertexZ(j) - z);
+      if (d >= out) continue;
+      const f = d <= ISLET_RADIUS ? 1 : 1 - (d - ISLET_RADIUS) / ISLET_SHORE;
+      const t = f * f * (3 - 2 * f);
+      field.heights[k] = h + (top - h) * t;
+    }
+  }
 }
 
 /**
@@ -500,6 +666,25 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
   const gb = field.heightAt(B.x, B.z);
   const low = sea + BRIDGE_CLEARANCE;
   const bridge: Bridge = { ax: A.x, az: A.z, bx: B.x, bz: B.z, width: BRIDGE_WIDTH, level: Math.max(low, Math.min(ga, gb, low + MAX_RAISE)), ...extra };
+  cutBanks(field, bridge);
+  field.addBridge(bridge);
+  return true;
+}
+
+/**
+ * Put a bridge over a dry chasm, from rim a to rim b (engineers', see
+ * Engineers.chasmBridge): the deck level with the lower rim, the higher cut
+ * down to meet it (cutBanks). Unlike placeBridge, the ends stay where
+ * they're put: there's no water to carry them past. False (and nothing
+ * built) if it would overlap another bridge.
+ */
+export function spanChasm(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, extra: Partial<Bridge> = {}): boolean {
+  const len = D.hypot(b.x - a.x, b.z - a.z);
+  if (len < 0.1) return false;
+  const half = BRIDGE_WIDTH / 2;
+  for (let t = 0; t <= 1; t += 0.1) if (field.nearBridge(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, half)) return false;
+  const level = Math.max(field.seaLevel + BRIDGE_CLEARANCE, Math.min(field.heightAt(a.x, a.z), field.heightAt(b.x, b.z)));
+  const bridge: Bridge = { ax: a.x, az: a.z, bx: b.x, bz: b.z, width: BRIDGE_WIDTH, level, ...extra };
   cutBanks(field, bridge);
   field.addBridge(bridge);
   return true;

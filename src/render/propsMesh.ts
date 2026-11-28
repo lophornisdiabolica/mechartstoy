@@ -37,6 +37,41 @@ export function treeGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
   return mergeNonIndexed([paint(canopy, 0xffffff), paint(trunk, 0x6b4a32)]).scale(0.65, 0.65, 0.65);
 }
 
+/**
+ * A jungle tree: a tall bare trunk under a broad, lumpy crown of three
+ * flattened blobs, the big one on top and two lower ones off to the sides,
+ * so a jungle reads as a canopy rather than a stand of cones. Coloured here
+ * (so its instance colour is near white, as a pine's), so the trunk stays brown. Far off and in its shadow, the two side
+ * blobs go and the top one has fewer facets.
+ */
+export function jungleTreeGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  const trunk = paint(new THREE.CylinderGeometry(0.1, 0.16, 1.5, near ? 5 : 3, 1, !near).translate(0, 0.75, 0), 0x6b4a32);
+  const blob = (r: number, x: number, y: number, z: number, spin: number) =>
+    paint(new THREE.IcosahedronGeometry(r, 0).scale(1, 0.55, 1).rotateY(spin).translate(x, y, z), 0x3f7f34);
+  const parts = [trunk, blob(0.8, 0, 1.75, 0, 0.3)];
+  if (near) parts.push(blob(0.5, 0.42, 1.38, 0.2, 1.1), blob(0.46, -0.36, 1.42, -0.3, 2.3));
+  return mergeNonIndexed(parts).scale(0.65, 0.65, 0.65);
+}
+
+/**
+ * A crystal monolith: a tall six-sided spire with a pointed tip, leaning a
+ * little, and two shorter ones leaning out from its foot. Crystal fields'
+ * "trees". Coloured by its instance colour. Far off and in its shadow, just
+ * the big spire.
+ */
+export function monolithGeometry(detail: Detail = 'near'): THREE.BufferGeometry {
+  const near = detail === 'near';
+  const spire = (r: number, h: number, tilt: number, turn: number, x: number, z: number) => {
+    const body = paint(new THREE.CylinderGeometry(r, r * 1.1, h, 6, 1, true).translate(0, h / 2, 0), 0xffffff);
+    const tip = paint(new THREE.ConeGeometry(r, r * 1.6, 6, 1, true).translate(0, h + r * 0.8, 0), 0xffffff);
+    return mergeNonIndexed([body, tip]).rotateZ(tilt).rotateY(turn).translate(x, -0.05, z);
+  };
+  const parts = [spire(0.34, 1.55, 0.08, 0.2, 0, 0)];
+  if (near) parts.push(spire(0.2, 0.75, 0.45, 0.9, 0.3, 0.15), spire(0.17, 0.6, -0.5, 2.6, -0.25, -0.2));
+  return mergeNonIndexed(parts).scale(0.65, 0.65, 0.65);
+}
+
 /** Bake one colour into a geometry's vertex colours, so merged parts keep their own colours in one instanced mesh. */
 function paint(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   g = ensureNonIndexed(g);

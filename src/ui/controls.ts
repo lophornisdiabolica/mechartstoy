@@ -52,6 +52,7 @@ export interface MatchControls {
 const MOVE_LABELS: Record<MoveClass, string> = {
   foot: 'On foot',
   tracked: 'Tracked',
+  wheeled: 'Wheeled (fast on roads, slow up slopes)',
   walker: 'Walker (climbs slopes, wades shallows)',
   hover: 'Hover (crosses water)',
   amphibious: 'Amphibious',

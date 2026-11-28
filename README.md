@@ -317,8 +317,18 @@ hills, steep going most of the way up with sheer crags near the top;
 cliffs are flat-topped mesas with sheer sides and a ramp or two up (the
 first facing one of the bases). A sheer face is a wall to everything on the
 ground except spider walkers, which climb it; aircraft fly over. Only high
-ground has sheer faces, so the steepest ordinary hillside is still just
-slow going, and maps with neither setting are the same maps as before. High
+ground has sheer faces, and maps with neither setting are the same maps as
+before.
+
+Off high ground, a slope stops a unit only when it's both too steep and too
+tall for it: each kind of mover gets up slopes to a steepness of its own
+whatever their size, and steeper ones only while the face is short (a
+crater's lip, a terrace's step, a bank). Hovercraft climb least, then tanks
+and trucks, then walkers, then infantry; spiders climb anything. On rolling
+hills that's only the odd hillside, but tall hills (2× and up) have whole
+slopes tanks go round. Where steep slopes would cut a base, town or
+outpost off from a class that could otherwise reach it, the easiest way up
+counts as a track it can take. High
 ground keeps clear of the base pads, and is taken back off if it would cut a
 base off or leave a mesa top out of reach (counting only ways wide enough
 for a super unit); towns, cities and outposts keep their own ground level.
@@ -334,7 +344,8 @@ first sides (north to south when the bases are west and east):
 - *Canyon:* a deep dry gorge with sheer walls, cut through a raised tableland,
   with two or three places where the walls ease into slopes to cross by.
 - *Archipelago:* islands in a shallow sea. Bridges join the bases' islands
-  and any town's.
+  and any town's, hopping island to island in short spans; where open sea
+  is too wide for one, a small islet is raised mid-way to carry two.
 - *Coastline:* one long side of the map runs down into the sea.
 - *Terraced hills:* hillsides stepped into flat terraces.
 - *Salt flats:* nearly flat open ground.
@@ -934,7 +945,7 @@ src/
     biomes.ts        biomes: colours, scenery mix and town style
     props.ts         scenery placement (the biome's trees, cacti, rocks...)
     settlements.ts   base and town layouts (building placements as data)
-    moveClasses.ts   movement classes (foot, tracked, walker, climber, hover, amphibious, naval, air) and their terrain rules
+    moveClasses.ts   movement classes (foot, tracked, wheeled, walker, climber, hover, amphibious, naval, air) and their terrain rules
     navGrid.ts       route-planning grid per movement class (terrain, slopes, towns, buildings) and A*
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
@@ -1131,14 +1142,17 @@ outposts and the light scenery are still placed once, at the start.
   (walkers wade shallows, hovers and amphibious units cross any water,
   boats stay in it), whether it can climb steep ground, and what slopes,
   water and towns cost it. Infantry find towns and outposts cheap, tanks
-  and mechs find them dear, and walkers take slopes easily. A straight line
+  and mechs find them dear, and walkers take slopes easily. Wheeled
+  vehicles (trucks, buggies, carts) are tanks' quicker, fussier cousins:
+  faster on roads, but slower up steep ground and through rough ground,
+  and routes take them further round both. A straight line
   to the goal is only taken if it keeps to plain ground, and route
   smoothing never shortcuts across ground the route went round, so the
   costs show up as routes. A goal a class can't get to at all (a boat
   sent inland, or across a lake with no way round) becomes the nearest spot it can
   reach (`NavGrid.nearestInRegion`). The **ground layer** (`world/ground.ts`)
   adds a cost and a speed per class on top: roads are a little quicker for
-  wheels and tracks, scrap is a slog for tanks and hovers but easy for long
+  tracks and a good deal quicker for wheels, scrap is a slog for tanks and hovers but easy for long
   legs, dense forest slows vehicles. Bridge decks count as dry, level ground
   for every class but boats, which see the water underneath. Aircraft fly straight at `altitude`, only bump
   into other aircraft, and can only be shot by weapons whose `targets` is
