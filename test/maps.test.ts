@@ -15,6 +15,7 @@ import { landReach, vertexAt } from '../src/world/waterways';
 import { groundCode } from '../src/world/ground';
 import { Building, Faction, Health, RELIC } from '../src/game/components';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
+import { BRIDGE_REACH } from '../src/world/waterways';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
 
 const DT = 1 / 30;
@@ -399,6 +400,25 @@ describe('maps', () => {
     const game = emptyGame(8, (s) => ((s.map.outline = 'ring'), (s.map.water = 0)));
     expect(game.field.isWater(0, 0)).toBe(true);
     expect(settingsFromParams(new URLSearchParams('outline=crescent')).map.outline).toBe('crescent');
+  });
+
+  it('joins an archipelago with chains of short bridges, island to island, not one across the sea', () => {
+    let longest = 0;
+    let bridges = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const game = emptyGame(seed * 53 + 11, (s) => {
+        s.map = { ...s.map, size: 'huge', terrain: 'islands', towns: 2 };
+        s.factions = Array.from({ length: seed % 2 ? 2 : 4 }, (_, i) => defaultFaction(i));
+      });
+      const f = game.field;
+      for (const b of f.bridges) longest = Math.max(longest, Math.hypot(b.bx - b.ax, b.bz - b.az));
+      bridges += f.bridges.length;
+      const nav = game.ctx.navs.for('tracked');
+      for (const p of [...f.baseSites, ...f.townSites]) expect(nav.connected(f.baseSites[0], p)).toBe(true);
+    }
+    // Before, a huge archipelago's bases were often joined by one bridge 100-170 long.
+    expect(longest).toBeLessThan(BRIDGE_REACH * 2);
+    expect(bridges).toBeGreaterThan(6 * 3);
   });
 
   it('a bridge out to cut-off land starts clear of the bridges already there, not from one’s side', () => {

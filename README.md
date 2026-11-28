@@ -334,7 +334,8 @@ first sides (north to south when the bases are west and east):
 - *Canyon:* a deep dry gorge with sheer walls, cut through a raised tableland,
   with two or three places where the walls ease into slopes to cross by.
 - *Archipelago:* islands in a shallow sea. Bridges join the bases' islands
-  and any town's.
+  and any town's, hopping island to island in short spans; where open sea
+  is too wide for one, a small islet is raised mid-way to carry two.
 - *Coastline:* one long side of the map runs down into the sea.
 - *Terraced hills:* hillsides stepped into flat terraces.
 - *Salt flats:* nearly flat open ground.
