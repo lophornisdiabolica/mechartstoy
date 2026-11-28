@@ -14,7 +14,7 @@ import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
 import { GIANT, MAP_TRAIT_IDS } from '../src/world/traits';
 import { landReach, vertexAt } from '../src/world/waterways';
 import { groundCode } from '../src/world/ground';
-import { Building, Faction, Health, RELIC } from '../src/game/components';
+import { Ai, Building, Faction, Health, RELIC } from '../src/game/components';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
 import { BRIDGE_REACH } from '../src/world/waterways';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
@@ -507,6 +507,35 @@ describe('maps', () => {
     expect(generateBattlefield(new Rng(202), battlefieldConfig(grove)).woods.trees.filter((t) => t.size >= GIANT).length).toBeGreaterThan(10);
   });
 
+  it('traits take the middle, ahead of towns and outposts: a lane runs through each, and they keep some of the land’s scenery', () => {
+    let off = 0;
+    let n = 0;
+    for (const trait of ['oldField', 'hulk', 'oil', 'geysers', 'ruins', 'grove'] as const) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const s = defaultSettings();
+        s.map.traits = [trait];
+        const game = new Game(seed * 7, { settings: s });
+        const f = game.field;
+        const site = f.traits.sites.find((t) => t.kind === trait)!;
+        expect(site, `${trait} ${seed}`).toBeDefined();
+        // Towns and outposts keep round it.
+        for (const t of f.townSites) expect(Math.hypot(t.x - site.x, t.z - site.z)).toBeGreaterThan(site.radius);
+        for (const o of f.outpostSites) expect(Math.hypot(o.x - site.x, o.z - site.z)).toBeGreaterThan(site.radius * 0.5 + o.radius);
+        // On the way between the bases, with a lane through it.
+        const [a, b] = f.baseSites;
+        off += Math.abs((site.x - a.x) * -(b.z - a.z) + (site.z - a.z) * (b.x - a.x)) / Math.hypot(b.x - a.x, b.z - a.z);
+        n++;
+        expect(game.ctx.lanes.routes(0, 1).some((r) => r.via?.kind === 'trait'), `${trait} ${seed}`).toBe(true);
+        // The land's own scenery: none on an oil field or in ruins, some (about half as much) elsewhere.
+        const own = new Set(f.traits.props.map((p) => `${p.x},${p.z}`));
+        const land = game.props.filter((p) => !own.has(`${p.x},${p.z}`) && Math.hypot(p.x - site.x, p.z - site.z) < site.radius).length;
+        if (trait === 'oil' || trait === 'ruins') expect(land, `${trait} ${seed}`).toBe(0);
+        else if (trait === 'oldField' || trait === 'geysers') expect(land, `${trait} ${seed}`).toBeGreaterThan(0);
+      }
+    }
+    expect(off / n).toBeLessThan(12);
+  });
+
   it('a map with no traits is the map as it always was, and traits round-trip through the link', () => {
     const plain = generateBattlefield(new Rng(77), battlefieldConfig(defaultSettings()));
     expect(plain.traits.sites.length + plain.traits.relics.length + plain.traits.vents.length).toBe(0);
@@ -531,6 +560,8 @@ describe('maps', () => {
     const x = game.field.bounds.minX + ((pool % cols) + 0.5) * game.field.config.cellSize;
     const z = game.field.bounds.minZ + (Math.floor(pool / cols) + 0.5) * game.field.config.cellSize;
     const soldier = spawnUnit(game.world, game.ctx, UNIT_DEFS.trooper, 0, x, z);
+    // Standing in it (not off down a lane, which may now run through the oil field).
+    game.world.remove(soldier, Ai);
     const hp = game.world.req(soldier, Health).hp;
     game.ctx.traits.strike(x, z, 1);
     let most = 0;

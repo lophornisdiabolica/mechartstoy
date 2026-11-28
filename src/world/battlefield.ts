@@ -11,7 +11,7 @@ import { CLIFF_SLOPE } from './moveClasses';
 import { raiseHighground } from './highground';
 import { SHEER_STYLES, shapeTerrain, TerrainStyle } from './terrainStyles';
 import { MapOutline, shapeOutline } from './outlines';
-import { emptyTraits, MapTrait, placeTraits, TraitLayout } from './traits';
+import { emptyTraits, MapTrait, placeTraits, planTraits, TraitLayout, TraitSite } from './traits';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -1098,6 +1098,13 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
 
   // King of the hill: the hill takes the fairest ground first, and towns keep off it.
   const hill = config.hill ? placeHill(field, rng.fork(0x68696c6c)) : null;
+  // Map traits (an oil field, ruins...) pick their spots next, near the middle where the lanes run, and the
+  // towns and outposts keep round them; on their own stream, so a map with none doesn't change. A city
+  // takes the middle instead, and the traits fit round it at the end.
+  const cityMap = config.citySprawl || (config.cityRadius > 0 && config.towns > 0);
+  const traitSites: TraitSite[] = config.traits.length > 0 && !cityMap ? planTraits(field, config.traits, rng.fork(0x74726169), hill ? [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }] : []) : [];
+  // (A citadel or landing field keeps well clear of the other outposts; the rest can have one by them.)
+  const traitRoom = traitSites.map((t) => ({ x: t.x, z: t.z, r: t.kind === 'citadel' || t.kind === 'landing' ? t.radius + 1 : t.radius * 0.5 }));
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = config.townRadius;
@@ -1117,6 +1124,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     // Nor against high ground, where levelling would steepen a slope into a cliff.
     if (townReach) for (let a = 0; a < 8; a++) if (field.sheerAt(x + D.cos((a / 8) * Math.PI * 2) * townRadius * 1.4, z + D.sin((a / 8) * Math.PI * 2) * townRadius * 1.4)) score += 15;
     if (hill && D.hypot(hill.x - x, hill.z - z) < OUTPOST_RADIUS + townRadius + 6) score += 100;
+    for (const t of traitSites) if (D.hypot(t.x - x, t.z - z) < t.radius + townRadius + 3) score += 100;
     return score;
   };
   let best: { x: number; z: number; score: number } | null = null;
@@ -1273,7 +1281,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     ? config.outpostPlaces.map((p) => placedAt(p, OUTPOST_RADIUS))
     : square && config.outposts > 0
       ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
-      : placeOutposts(field, rng, config.outposts);
+      : placeOutposts(field, rng, config.outposts, traitRoom);
   const dealable = config.outpostKinds.filter((k) => OUTPOST_KIND_IDS.includes(k));
   // A drawbridge needs a bridge to work: one outpost moves to the end of a map bridge.
   if (dealable.includes('drawbridge') && !config.outpostPlaces) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0);
@@ -1282,7 +1290,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   if (hill) {
     if (!config.outpostPlaces) {
       // Re-place the others round it, so none sits on top of it.
-      const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : [])];
+      const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : []), ...traitRoom];
       const rest = square && config.outposts > 0 ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng.fork(0x72657374), config.outposts - 1, taken)] : placeOutposts(field, rng.fork(0x72657374), config.outposts, taken);
       spots.splice(0, spots.length, ...rest.filter((p) => D.hypot(p.x - hill.x, p.z - hill.z) > OUTPOST_RADIUS * 2.5));
       if (dealable.includes('drawbridge')) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0, [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }]);
@@ -1303,9 +1311,10 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
   });
-  // Map traits (an oil field, ruins...) last of all, round everything else, on their own stream.
+  // The traits are built last of all, round everything else (at the spots they picked, if they did).
   const traitOutposts = field.outpostSites.length;
-  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten);
+  // (Their random stream forks here, as it always has, so a trait that planned nothing, the rail line say, comes out as before.)
+  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten, traitSites);
   // Outposts that traits added (a citadel, a landing field...) get bridged out to if they're cut off.
   const held = field.outpostSites.slice(traitOutposts);
   // Levelling towns and outposts may have filled in the water under a bridge: take it away

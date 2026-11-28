@@ -2,11 +2,12 @@ import { hashSeed, Rng } from '../core/rng';
 import { Battlefield } from '../world/battlefield';
 import { NavGrid, Point } from '../world/navGrid';
 import * as D from '../core/dmath';
+import type { MapTrait } from '../world/traits';
 
 /**
  * Lanes are the routes armies attack along: one straight from base to base,
- * and one through each outpost or town that lies roughly between the two
- * bases. Each attack, a side splits its squads between the centre and the
+ * and one through each outpost, town or map trait (an oil field, ruins...)
+ * that lies roughly between the two bases, the traits first. Each attack, a side splits its squads between the centre and the
  * other lanes, so fighting spreads across the map and the outposts and
  * towns become the places armies meet. Where nothing lies to one side of the
  * line between two bases, a lane swings wide on that side instead.
@@ -17,8 +18,8 @@ export type LaneId = number;
 
 /** A place a lane goes through. */
 export interface Via {
-  kind: 'outpost' | 'town';
-  /** Index in the battlefield's outpostSites or townSites. */
+  kind: 'outpost' | 'town' | 'trait';
+  /** Index in the battlefield's outpostSites, townSites or traits.sites. */
   index: number;
 }
 
@@ -57,6 +58,10 @@ const SITE_KEPT = 5;
 const ON_CENTRE = 9;
 /** At most this many lanes through sites per pair of bases, the most direct first. */
 const MAX_SITE_LANES = 4;
+/** A map trait counts as this much more direct than it is, so lanes go through it ahead of towns and outposts. */
+const TRAIT_PULL = 0.2;
+/** Traits that aren't lane sites of their own: outposts already, or a line right across. */
+const NOT_SITES: ReadonlySet<MapTrait> = new Set(['citadel', 'landing', 'rail']);
 
 /**
  * The lanes between every pair of bases. Routes are worked out the first
@@ -139,19 +144,22 @@ export class Lanes {
     const nz = (b.x - a.x) / length;
     const straight = (t: number, offset: number) => this.place(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, nx, nz, offset, a);
 
-    // Outposts and towns roughly between the bases, the most direct first.
+    // Outposts, towns and traits roughly between the bases, the most direct first (traits ahead).
     const sites: (Via & { x: number; z: number; detour: number; side: number })[] = [];
     const consider = (kind: Via['kind'], index: number, x: number, z: number) => {
       const t = ((x - a.x) * (b.x - a.x) + (z - a.z) * (b.z - a.z)) / (length * length);
       const detour = (D.hypot(x - a.x, z - a.z) + D.hypot(b.x - x, b.z - z)) / length;
-      if (t > 0.12 && t < 0.88 && detour <= MAX_DETOUR) sites.push({ kind, index, x, z, detour, side: (x - a.x) * nx + (z - a.z) * nz });
+      if (t > 0.12 && t < 0.88 && detour <= MAX_DETOUR) sites.push({ kind, index, x, z, detour: detour - (kind === 'trait' ? TRAIT_PULL : 0), side: (x - a.x) * nx + (z - a.z) * nz });
     };
     this.field.outpostSites.forEach((o) => consider('outpost', o.index, o.x, o.z));
     this.field.townSites.forEach((t, i) => consider('town', i, t.x, t.z));
+    // (Not the fortified line or the rail line: they run right across, so every lane crosses them. Nor a citadel or landing field: they're outposts.)
+    this.field.traits.sites.forEach((t, i) => t.radius > 0 && !NOT_SITES.has(t.kind) && consider('trait', i, t.x, t.z));
     sites.sort((p, q) => p.detour - q.detour);
 
-    // The centre lane; if a site sits on the straight line, the centre lane is its lane.
-    const centreSite = sites.find((p) => Math.abs(p.side) < ON_CENTRE) ?? null;
+    // The centre lane; if a site sits on the straight line, the centre lane is its lane (a trait's first).
+    const onCentre = (p: (typeof sites)[number]) => Math.abs(p.side) < ON_CENTRE;
+    const centreSite = sites.find((p) => p.kind === 'trait' && onCentre(p)) ?? sites.find(onCentre) ?? null;
     const centre: Route = { points: STATIONS.map((t) => straight(t, 0)), via: centreSite && { kind: centreSite.kind, index: centreSite.index } };
     const off = sites.filter((p) => p !== centreSite).slice(0, MAX_SITE_LANES);
     const room = Math.min(this.field.depth, length * 1.2);

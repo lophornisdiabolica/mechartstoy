@@ -8,9 +8,11 @@ import { landReach } from './waterways';
 /**
  * Map traits: one or two special features laid over a map's style, each a
  * headline for the battle ("ridge line, with an oil field"). Each is placed
- * on contested ground (about as far from one side as from the other) once
- * everything else is built, on its own random stream, so a map with no
- * traits is the same map as ever.
+ * on contested ground (about as far from one side as from the other), near
+ * the middle where the lanes run: its spot is picked before the towns and
+ * outposts, which keep round it (see planTraits), and it's built once
+ * everything else is, on its own random stream, so a map with no traits is
+ * the same map as ever.
  *
  * A trait is mostly what it leaves standing: relics (see RELICS in
  * game/buildings.ts), nobody's buildings that stop shots and block the way
@@ -213,48 +215,90 @@ const STREAMS: MapTrait[] = ['hulk', 'grove', 'ruins', 'oil', 'oldField', 'geyse
 /** Order traits are placed in: the outposts of their own, then the biggest first, the line across everything last. */
 const ORDER: MapTrait[] = ['citadel', 'landing', 'rail', 'tidal', 'dam', 'frozen', 'hulk', 'grove', 'ruins', 'oil', 'oldField', 'geysers', 'fortLine'];
 
-/** Lay out the traits on a finished map (see generateBattlefield). */
-export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
+/** Room a trait plans round (the hill, say), given before anything else is placed. */
+export interface Taken {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/**
+ * Pick the traits' spots before the towns and outposts go down (see
+ * generateBattlefield), so the traits get the middle of the map, where the
+ * lanes run, and the towns and outposts keep round them. Not on maps with
+ * a city: the city takes the middle, and the traits are placed last, round
+ * it (see placeTraits). The fortified line and the rail line aren't
+ * planned: they run across everything (the rail keeps off what's planned:
+ * see railLine). Nor are the watery ones (tidal flats, dam, frozen lake),
+ * which go where the map's water is. A citadel or landing field (an outpost of its own) plans
+ * first, the citadel taking the very middle.
+ */
+export function planTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, taken: readonly Taken[]): TraitSite[] {
+  const planned: TraitSite[] = [];
+  const scale = traitScale(field);
+  for (const kind of ORDER) {
+    if (!traits.includes(kind) || kind === 'fortLine' || kind === 'rail' || kind === 'tidal' || kind === 'dam' || kind === 'frozen') continue;
+    const r = rng.fork(0x7400 + STREAMS.indexOf(kind));
+    const at = kind === 'citadel' || kind === 'landing' ? heldSpot(field, planned, kind, r, taken) : spotFor(field, planned, kind, scale, r, taken);
+    if (at) planned.push(at);
+  }
+  return planned;
+}
+
+/** Lay out the traits on a finished map (see generateBattlefield), at the spots planned for them, or wherever they fit now. */
+export function placeTraits(field: Battlefield, traits: readonly MapTrait[], rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void, planned: readonly TraitSite[] = []): void {
   const out = field.traits;
-  const scale = Math.max(0.8, Math.min(1.7, Math.sqrt((field.config.cols * field.config.rows) / PER_AREA)));
+  const scale = traitScale(field);
   for (const kind of ORDER) {
     if (!traits.includes(kind)) continue;
-    const r = rng.fork(0x7400 + STREAMS.indexOf(kind));
+    const index = STREAMS.indexOf(kind);
     if (kind === 'fortLine') {
-      fortLine(field, out, r);
+      fortLine(field, out, rng.fork(0x7400 + index));
       continue;
     }
     if (kind === 'citadel' || kind === 'landing') {
-      held(field, out, kind, r, flatten);
+      held(field, out, kind, rng.fork(0x7400 + index), flatten, planned);
       continue;
     }
     if (kind === 'rail') {
-      railLine(field, out, r, flatten);
+      railLine(field, out, rng.fork(0x7400 + index), flatten, planned);
       continue;
     }
     if (kind === 'tidal') {
-      tidalFlats(field, out, r, scale);
+      tidalFlats(field, out, rng.fork(0x7400 + index), scale);
       continue;
     }
     if (kind === 'dam') {
-      damFlood(field, out, r, flatten);
+      damFlood(field, out, rng.fork(0x7400 + index), flatten);
       continue;
     }
     if (kind === 'frozen') {
-      frozenLake(field, out, r);
+      frozenLake(field, out, rng.fork(0x7400 + index));
       continue;
     }
-    // Smaller if it doesn't fit (a crowded map, or a second trait).
-    let radius = RADII[kind] * scale;
-    let at = findSpot(field, out, radius, r);
-    if (!at) at = findSpot(field, out, (radius *= 0.7), r);
-    if (!at) continue;
-    out.sites.push({ kind, x: at.x, z: at.z, radius });
-    BUILDERS[kind](field, out, at.x, at.z, radius, r, scale);
+    const site = planned.find((p) => p.kind === kind) ?? spotFor(field, [...out.sites, ...planned], kind, scale, rng.fork(0x7400 + index), []);
+    if (!site) continue;
+    out.sites.push(site);
+    BUILDERS[kind](field, out, site.x, site.z, site.radius, rng.fork(0x7480 + index), scale);
   }
 }
 
-const RADII: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
+function traitScale(field: Battlefield): number {
+  return Math.max(0.8, Math.min(1.7, Math.sqrt((field.config.cols * field.config.rows) / PER_AREA)));
+}
+
+/** A spot for a trait, smaller if it doesn't fit at full size (a crowded map, or a second trait). */
+function spotFor(field: Battlefield, sites: readonly TraitSite[], kind: SpotTrait, scale: number, rng: Rng, taken: readonly Taken[]): TraitSite | null {
+  let radius = RADII[kind] * scale;
+  let at = findSpot(field, sites, radius, rng, taken);
+  if (!at) at = findSpot(field, sites, (radius *= 0.7), rng, taken);
+  return at && { kind, x: at.x, z: at.z, radius };
+}
+
+/** The traits laid out round a spot of their own (the rest find their own way across the map: see placeTraits). */
+type SpotTrait = Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'rail' | 'tidal' | 'dam' | 'frozen'>;
+
+const RADII: Record<SpotTrait, number> = { oldField: 17, hulk: 10, oil: 13, geysers: 18, ruins: 11, grove: 12.5 };
 
 type Builder = (field: Battlefield, out: TraitLayout, x: number, z: number, radius: number, rng: Rng, scale: number) => void;
 
@@ -287,16 +331,16 @@ const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'r
     const heights = field.heights;
     eachVertex(field, x, z, length + 4, (k, vx, vz) => {
       const along = (vx - x) * ux + (vz - z) * uz;
-      if (along < 2 || along > length) return;
+      if (along < 2 || along > length || nearRail(field, vx, vz, RAIL_CLEAR)) return;
       const off = Math.abs((vx - x) * -uz + (vz - z) * ux);
       const fade = 1 - along / length;
       const half = 1.6 + 1.2 * fade;
       if (off < half) heights[k] -= 1.1 * fade * (1 - (off / half) * (off / half));
       else if (off < half * 2) heights[k] += 0.45 * fade * (1 - (off - half) / half);
     });
-    // Half buried where it stopped.
+    // Half buried where it stopped (not on a rail line, should one run through).
     level(field, x, z, 5.5, field.heightAt(x, z) - 0.4, 0.8);
-    out.relics.push({ building: 'crashedHulk', x, z, heading });
+    if (!nearRail(field, x, z, RELIC_RADIUS.crashedHulk + 2)) out.relics.push({ building: 'crashedHulk', x, z, heading });
     field.paint(x, z, radius * 0.75, 'scrap', (g, cx, cz) => g === 'plain' && !field.isWater(cx, cz));
     scatter(field, out, rng, x, z, radius, 12, 'junk', 0.7, 1.3);
   },
@@ -395,7 +439,7 @@ const BUILDERS: Record<Exclude<MapTrait, 'fortLine' | 'citadel' | 'landing' | 'r
         if (Math.abs(d - ring) > band) continue;
         const a = D.atan2(cz - z, cx - x);
         if (gaps.some((g) => Math.abs(D.atan2(D.sin(a - g), D.cos(a - g))) < 2.4 / ring)) continue;
-        if (!dry(field, cx, cz) || field.slopeAt(cx, cz) > 0.6 || field.roadCell[j * cols + i] || field.nearBridge(cx, cz, 3)) continue;
+        if (!dry(field, cx, cz) || field.slopeAt(cx, cz) > 0.6 || field.roadCell[j * cols + i] || field.nearBridge(cx, cz, 3) || nearRail(field, cx, cz, RAIL_CLEAR)) continue;
         if (relicNear(out, cx, cz, 1.5)) continue;
         cells.push(j * cols + i);
         if (rng.chance(0.85)) field.woods.add(cx + rng.range(-0.3, 0.3) * cellSize, cz + rng.range(-0.3, 0.3) * cellSize, rng.range(GIANT + 0.2, GIANT + 0.9));
@@ -485,16 +529,23 @@ export const HELD_RADIUS: Record<'citadel' | 'landing', number> = { citadel: 9.5
  * ground); the landing field anywhere contested. The landing field's pad is
  * paved.
  */
-function held(field: Battlefield, out: TraitLayout, kind: 'citadel' | 'landing', rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
+function held(field: Battlefield, out: TraitLayout, kind: 'citadel' | 'landing', rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void, planned: readonly TraitSite[]): void {
   const radius = HELD_RADIUS[kind];
-  // Clear of the outposts already there (they were placed first).
-  const at = findSpot(field, out, radius + 3, rng, kind === 'citadel' ? 1.2 : 0.25, true);
+  // Where it planned to go (the outposts kept clear), or clear of the outposts already there and the other traits' ground.
+  const at = planned.find((p) => p.kind === kind) ?? heldSpot(field, [...out.sites, ...planned], kind, rng, []);
   if (!at) return;
   const height = Math.max(field.seaLevel + 1, field.heightAt(at.x, at.z));
   flatten(at.x, at.z, radius, height);
   field.outpostSites.push({ index: field.outpostSites.length, kind, x: at.x, z: at.z, radius, height });
   out.sites.push({ kind, x: at.x, z: at.z, radius: radius + 2 });
   if (kind === 'landing') field.paint(at.x, at.z, radius * 0.9, 'apron', (g, cx, cz) => g === 'plain' && !field.isWater(cx, cz));
+}
+
+/** A spot for a citadel or landing field (its site's radius takes in its walls or apron). */
+function heldSpot(field: Battlefield, sites: readonly TraitSite[], kind: 'citadel' | 'landing', rng: Rng, taken: readonly Taken[]): TraitSite | null {
+  const radius = HELD_RADIUS[kind];
+  const at = findSpot(field, sites, radius + 3, rng, taken, kind === 'citadel' ? 1.2 : 0.25, true);
+  return at && { kind, x: at.x, z: at.z, radius: radius + 2 };
 }
 
 /** Outpost radius for a rail station, and how far from the track its middle stands (its towers clear the trains). */
@@ -510,9 +561,11 @@ const RAIL_BED = 1.6;
  * with the longest dry, clear run (at least most of the way across) over
  * the gentlest ground. Then a station a third of the way in from each end,
  * set back from the track, and the bed graded to an easy slope under the
- * track, laid with ballast.
+ * track, laid with ballast. It would rather go round the ground other
+ * traits planned (see planTraits), and they keep their relics, pools and
+ * digging off it where it doesn't (see free).
  */
-function railLine(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void): void {
+function railLine(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: number, z: number, radius: number, height: number) => void, planned: readonly TraitSite[]): void {
   if (field.baseSites.length < 2) return;
   const [a, b] = field.baseSites;
   const axis = D.atan2(b.z - a.z, b.x - a.x);
@@ -551,7 +604,9 @@ function railLine(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
     // Contested: the run's middle about as far from either base.
     const mid = longest[Math.floor(longest.length / 2)];
     const contest = Math.abs(D.hypot(mid.x - a.x, mid.z - a.z) - D.hypot(mid.x - b.x, mid.z - b.z));
-    const score = rough + contest - length * 0.25 + rng.range(0, 2);
+    // Through another trait's planned ground only if there's no good way round.
+    const through = longest.filter((p) => planned.some((t) => t.kind !== 'citadel' && t.kind !== 'landing' && D.hypot(t.x - p.x, t.z - p.z) < t.radius * 0.6 + 2.5)).length;
+    const score = rough + contest - length * 0.25 + through * 1.5 + rng.range(0, 2);
     if (score < bestScore) {
       bestScore = score;
       best = longest;
@@ -585,7 +640,7 @@ function railLine(field: Battlefield, out: TraitLayout, rng: Rng, flatten: (x: n
       for (const side of rng.next() < 0.5 ? [1, -1] : [-1, 1]) {
         const x = p.x - ((q.z - o.z) / len) * STATION_OFFSET * side;
         const z = p.z + ((q.x - o.x) / len) * STATION_OFFSET * side;
-        if (stationFits(field, out, [...stations], points, x, z)) {
+        if (stationFits(field, out, [...stations], points, x, z) && !planned.some((t) => D.hypot(t.x - x, t.z - z) < t.radius * 0.6 + STATION_RADIUS)) {
           at = { x, z };
           break;
         }
@@ -699,7 +754,7 @@ export function railNearest(rail: RailLine, x: number, z: number, every = 1): { 
 }
 
 /** A spot for a trait of this radius: on contested ground, as near the middle as it can be, mostly dry and clear. */
-function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng, middle = 0.25, apart = false): { x: number; z: number } | null {
+function findSpot(field: Battlefield, sites: readonly TraitSite[], radius: number, rng: Rng, taken: readonly Taken[], middle = 0.15, apart = false): { x: number; z: number } | null {
   let best: { x: number; z: number } | null = null;
   let bestScore = Infinity;
   const hw = field.width / 2 - radius - 3;
@@ -711,7 +766,8 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
     // A trait can spread toward a base or a town; its relics and ground keep clear of them (see free).
     if (field.baseSites.some((b) => D.hypot(b.x - x, b.z - z) < b.radius * 1.35 + radius * 0.5 + 4)) continue;
     // (A rail line's bits of track only keep the trait off the track itself.)
-    if (out.sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < (t.kind === 'rail' ? t.radius + radius * 0.6 : t.radius + radius + 4))) continue;
+    if (sites.some((t) => t.radius > 0 && D.hypot(t.x - x, t.z - z) < (t.kind === 'rail' ? t.radius + radius * 0.6 : t.radius + radius + 4))) continue;
+    if (taken.some((t) => D.hypot(t.x - x, t.z - z) < t.r + radius)) continue;
     // An outpost of its own (a citadel, a landing field) keeps well clear of the others; anything else can sit by one.
     if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + (apart ? radius + 4 : radius * 0.6))) continue;
     if (!field.config.citySprawl && field.townSites.some((t) => D.hypot(t.x - x, t.z - z) < t.radius + radius * 0.6)) continue;
@@ -728,15 +784,21 @@ function findSpot(field: Battlefield, out: TraitLayout, radius: number, rng: Rng
       }
     }
     if (open < total * 0.7) continue;
-    // Contested: about as far from one side as from the next.
-    const d = field.baseSites.map((b) => D.hypot(b.x - x, b.z - z)).sort((p, q) => p - q);
-    const score = Math.abs(d[0] - d[1]) + middle * D.hypot(x, z) + rng.range(0, 6);
+    // Contested: about as far from one side as from the next, and on the way between them, where the lanes run.
+    const near = field.baseSites.map((b) => ({ b, d: D.hypot(b.x - x, b.z - z) })).sort((p, q) => p.d - q.d);
+    const score = Math.abs(near[0].d - near[1].d) + 0.6 * offLine(x, z, near[0].b, near[1].b) + middle * D.hypot(x, z) + rng.range(0, 4);
     if (score < bestScore) {
       bestScore = score;
       best = { x, z };
     }
   }
   return best;
+}
+
+/** How far a point is from the straight way between two bases. */
+function offLine(x: number, z: number, a: { x: number; z: number }, b: { x: number; z: number }): number {
+  const len = D.hypot(b.x - a.x, b.z - a.z) || 1;
+  return Math.abs((x - a.x) * -(b.z - a.z) + (z - a.z) * (b.x - a.x)) / len;
 }
 
 /** Whether a relic of this radius can stand at a point: dry, gentle ground clear of bases, towns, outposts, roads, bridges and other relics. */
@@ -747,7 +809,7 @@ function free(field: Battlefield, out: TraitLayout, x: number, z: number, r: num
   if (field.townSites.some((t) => field.inTown(t, x, z) || (!t.city && D.hypot(t.x - x, t.z - z) < t.radius + r + 1.5))) return false;
   if (field.inCity(x, z, r + 1)) return false;
   if (field.outpostSites.some((o) => D.hypot(o.x - x, o.z - z) < o.radius + r + 2)) return false;
-  if (field.nearBridge(x, z, r + 2)) return false;
+  if (field.nearBridge(x, z, r + 2) || nearRail(field, x, z, r + 2)) return false;
   const [i, j] = field.cellAt(x, z);
   if (field.roadCell[j * field.config.cols + i] || field.groundAt(x, z).id === 'road') return false;
   for (const [dx, dz] of [[r + 1, 0], [-r - 1, 0], [0, r + 1], [0, -r - 1]]) {
@@ -778,10 +840,13 @@ function within(rng: Rng, x: number, z: number, radius: number): { x: number; z:
 function scatter(field: Battlefield, out: TraitLayout, rng: Rng, x: number, z: number, radius: number, count: number, kind: PropKind, min: number, max: number): void {
   for (let n = 0; n < count; n++) {
     const p = within(rng, x, z, radius);
-    if (!dry(field, p.x, p.z) || relicNear(out, p.x, p.z, 0.4) || field.groundAt(p.x, p.z).id === 'road') continue;
+    if (!dry(field, p.x, p.z) || relicNear(out, p.x, p.z, 0.4) || field.groundAt(p.x, p.z).id === 'road' || nearRail(field, p.x, p.z, 1.5)) continue;
     out.props.push({ kind, x: p.x, z: p.z, scale: rng.range(min, max), rotation: rng.range(0, Math.PI * 2) });
   }
 }
+
+/** How far from a rail line's track traits leave the ground (its graded bed) alone. */
+const RAIL_CLEAR = 2.5;
 
 /** Tidal flats: how long a crossing can be, how wide a bar is, and how far apart two are. */
 const FLAT_MAX = 46;
@@ -1537,6 +1602,7 @@ function eachVertex(field: Battlefield, x: number, z: number, reach: number, vis
 function dent(field: Battlefield, x: number, z: number, radius: number, depth: number): void {
   const heights = field.heights;
   eachVertex(field, x, z, radius * 1.6, (k, vx, vz) => {
+    if (nearRail(field, vx, vz, RAIL_CLEAR)) return;
     const t = D.hypot(vx - x, vz - z) / radius;
     if (t < 1) heights[k] -= depth * (1 - t * t);
     else if (t < 1.6) heights[k] += depth * 0.35 * (1 - (t - 1) / 0.6);
@@ -1550,7 +1616,7 @@ function level(field: Battlefield, x: number, z: number, radius: number, height:
   eachVertex(field, x, z, radius * 1.3, (k, vx, vz) => {
     const d = D.hypot(vx - x, vz - z);
     const t = strength * (1 - smoothstep(radius * 0.7, radius * 1.3, d));
-    if (t <= 0 || heights[k] < floor) return;
+    if (t <= 0 || heights[k] < floor || nearRail(field, vx, vz, RAIL_CLEAR)) return;
     heights[k] += (Math.max(floor, height) - heights[k]) * t;
   });
 }
