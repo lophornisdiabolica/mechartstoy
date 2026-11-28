@@ -1139,6 +1139,9 @@ export class NavGrid {
     // Every open cell has at least a cell's width of room, so small units need no special treatment,
     // except in a city, where an alley has only half that (see capAlleys).
     const wide = radius + CLEARANCE_MARGIN > (this.samples.hasCity ? this.cellSize * 0.5 : this.cellSize);
+    // In a city, the tighter fit still keeps out of the alleys (half a cell of room).
+    const city = wide && this.samples.hasCity;
+    const tighter = city ? Math.max(radius * 0.5, this.cellSize * 0.5) : radius * 0.5;
     if (wide) {
       // First with room to spare: room is measured between cell middles, and a building's edge can
       // be most of a cell nearer than its nearest blocked cell's middle (see BIG_SLACK).
@@ -1157,13 +1160,19 @@ export class NavGrid {
         const left = D.hypot(to.x - end.x, to.z - end.z);
         if (left < Math.max(NEAR_ENOUGH, radius * 3) || left < D.hypot(to.x - from.x, to.z - from.z) - this.cellSize) return full.points;
       }
-      const half = this.route(from, to, radius * 0.5);
+      const half = this.route(from, to, tighter);
       if (half?.found) return half.points;
+    }
+    // A wide vehicle that squeezes down an alley sticks there: in a city it settles for the nearest spot it fits to
+    // the goal (looking a little further round it), on the avenues, rather than take any open cell.
+    if (city) {
+      const near = this.route(from, to, tighter, 12);
+      if (near) return near.points;
     }
     return this.route(from, to, 0)?.points ?? null;
   }
 
-  private route(from: Point, to: Point, radius: number): { points: Point[]; found: boolean; closed: boolean } | null {
+  private route(from: Point, to: Point, radius: number, goalRing = radius > 0 ? 6 : 12): { points: Point[]; found: boolean; closed: boolean } | null {
     // A wide unit standing somewhere tight starts by backing out to the nearest roomy spot,
     // rather than planning onward through a gap it can't fit.
     // Not over a railing, though: from beside a bridge, the deck is no nearer than the ramp.
@@ -1175,7 +1184,7 @@ export class NavGrid {
     // A goal this class can't get to at all (a boat sent inland, a hover past a cliff) becomes the
     // nearest spot it can: the shore closest to the enemy base, say.
     const reach = this.nearestInRegion(to.x, to.z, start ? this.region[start[1] * this.cols + start[0]] : -1);
-    const goal = this.nearestOpen(reach.x, reach.z, radius > 0 ? 6 : 12, radius);
+    const goal = this.nearestOpen(reach.x, reach.z, goalRing, radius);
     if (!start || !goal) return null;
     const cols = this.cols;
     const sk = start[1] * cols + start[0];

@@ -3,7 +3,7 @@
  * nav grid for a class (see NavGrid) and the movement system read these
  * rules, so a new kind of mover is a new entry here.
  */
-export type MoveClass = 'foot' | 'tracked' | 'walker' | 'climber' | 'hover' | 'amphibious' | 'naval' | 'air';
+export type MoveClass = 'foot' | 'tracked' | 'wheeled' | 'walker' | 'climber' | 'hover' | 'amphibious' | 'naval' | 'air';
 
 export interface MoveRules {
   /** Deepest water (below sea level) it can enter: 0 keeps it on dry land, Infinity lets it go anywhere wet. */
@@ -12,6 +12,8 @@ export interface MoveRules {
   minDepth: number;
   /** Route cost multiplier on steep ground; Infinity means it can't climb it at all. */
   steep: number;
+  /** Speed multiplier on steep ground (above STEEP_SLOPE): wheels spin and labour up a slope that tracks grind up. */
+  steepSpeed: number;
   /** Route cost multiplier inside towns and outposts (below 1 means it prefers them). */
   town: number;
   /** Route cost multiplier on bridge decks (above 1: it would rather go round by land). */
@@ -75,6 +77,7 @@ const land: MoveRules = {
   maxDepth: 0,
   minDepth: 0,
   steep: 3,
+  steepSpeed: 1,
   town: 1,
   bridge: 1,
   rail: 40,
@@ -93,11 +96,18 @@ export const MOVE_RULES: Record<MoveClass, MoveRules> = {
   /** Infantry: happy on slopes, and prefer moving through towns and outposts, where there's cover. */
   foot: { ...land, steep: 1.6, town: 0.5, rail: 3, queues: false, climb: 2, climbHeight: 6 },
   /**
-   * Tanks and trucks: the baseline. Slopes are slow going and towns are
-   * cramped, so they go round them. They roll over a steep bank but not a
-   * steep hillside.
+   * Tanks and other tracked vehicles: the baseline. Slopes are slow going
+   * and towns are cramped, so they go round them. They roll over a steep
+   * bank but not a steep hillside.
    */
   tracked: { ...land, steep: 3, town: 1.8 },
+  /**
+   * Trucks, buggies and carts: quicker than tracks on roads, but worse on
+   * slopes (slower up them, and routes go further round) and in rough
+   * ground (see GROUND_DEFS), and a steep bank stops them sooner. Narrow
+   * enough for town streets, so they mind towns less than tanks do.
+   */
+  wheeled: { ...land, steep: 4, steepSpeed: 0.75, town: 1.4, climb: 1, climbHeight: 2 },
   /**
    * Mechs: long legs take slopes in stride and wade through shallow water,
    * but big ones keep out of towns, and take a bridge only when going round

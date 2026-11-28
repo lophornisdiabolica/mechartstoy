@@ -942,7 +942,7 @@ src/
     biomes.ts        biomes: colours, scenery mix and town style
     props.ts         scenery placement (the biome's trees, cacti, rocks...)
     settlements.ts   base and town layouts (building placements as data)
-    moveClasses.ts   movement classes (foot, tracked, walker, climber, hover, amphibious, naval, air) and their terrain rules
+    moveClasses.ts   movement classes (foot, tracked, wheeled, walker, climber, hover, amphibious, naval, air) and their terrain rules
     navGrid.ts       route-planning grid per movement class (terrain, slopes, towns, buildings) and A*
   game/      simulation
     components.ts    component definitions (Transform, Mover, Armed, ...)
@@ -1139,14 +1139,17 @@ outposts and the light scenery are still placed once, at the start.
   (walkers wade shallows, hovers and amphibious units cross any water,
   boats stay in it), whether it can climb steep ground, and what slopes,
   water and towns cost it. Infantry find towns and outposts cheap, tanks
-  and mechs find them dear, and walkers take slopes easily. A straight line
+  and mechs find them dear, and walkers take slopes easily. Wheeled
+  vehicles (trucks, buggies, carts) are tanks' quicker, fussier cousins:
+  faster on roads, but slower up steep ground and through rough ground,
+  and routes take them further round both. A straight line
   to the goal is only taken if it keeps to plain ground, and route
   smoothing never shortcuts across ground the route went round, so the
   costs show up as routes. A goal a class can't get to at all (a boat
   sent inland, or across a lake with no way round) becomes the nearest spot it can
   reach (`NavGrid.nearestInRegion`). The **ground layer** (`world/ground.ts`)
   adds a cost and a speed per class on top: roads are a little quicker for
-  wheels and tracks, scrap is a slog for tanks and hovers but easy for long
+  tracks and a good deal quicker for wheels, scrap is a slog for tanks and hovers but easy for long
   legs, dense forest slows vehicles. Bridge decks count as dry, level ground
   for every class but boats, which see the water underneath. Aircraft fly straight at `altitude`, only bump
   into other aircraft, and can only be shot by weapons whose `targets` is

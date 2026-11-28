@@ -87,7 +87,7 @@ export function arsenalFor(ctx: SimContext, mounts: readonly WeaponMountDef[] | 
 }
 
 /** Movement classes whose hulls tilt with the ground (see tiltSystem). */
-const TILTS = new Set<MoveClass>(['tracked', 'hover', 'amphibious']);
+const TILTS = new Set<MoveClass>(['tracked', 'wheeled', 'hover', 'amphibious']);
 
 /** A fresh squad id, for a group of units that should move together. */
 export function newSquad(ctx: SimContext): number {
