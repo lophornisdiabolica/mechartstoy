@@ -85,7 +85,13 @@ export interface BaseExtras {
  */
 export function layoutBase(field: Battlefield, site: BaseSite, rng: Rng, extras: BaseExtras = {}): BuildingPlacement[] {
   const layout = new Layout(field);
-  const forward = site.faction === 0 ? 0 : Math.PI; // heading toward the enemy
+  // Heading toward the enemy: toward the middle of the map, squared to it. On a two-sided map that's the
+  // first side's base facing east and the second's west; with more sides, a base on the far side of the
+  // map from where that would put it no longer turns its back (houses, mechbay) toward the way out.
+  const cx = (field.bounds.minX + field.bounds.maxX) / 2;
+  const cz = (field.bounds.minZ + field.bounds.maxZ) / 2;
+  const quarter = (((Math.round(D.atan2(-(cz - site.z), cx - site.x) / (Math.PI / 2)) % 4) + 4) % 4);
+  const forward = quarter * (Math.PI / 2);
   const f = site.faction;
   // Position in base-local polar coordinates: angle relative to forward, distance from centre.
   const at = (angle: number, dist: number) => ({

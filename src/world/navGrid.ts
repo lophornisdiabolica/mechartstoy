@@ -10,12 +10,23 @@ export interface Point {
 
 /** Cap on A* node expansions per search, so a hopeless search can't stall a tick. */
 const MAX_EXPANSIONS = 8000;
+/** A wide unit that can't fit all the way to its goal settles for getting this near (see findPath). */
+const NEAR_ENOUGH = 8;
+/**
+ * How much more room than its radius a big unit (wider than a cell) looks
+ * for first: the clearance map measures to the middles of blocked cells,
+ * and a big unit routed down a street with only its radius to spare grinds
+ * along the buildings either side (they push it out by its whole radius).
+ */
+const BIG_SLACK = 0.6;
 /**
  * Extra room a unit wants beyond its radius, measured from the centre of the
  * nearest blocked cell. Obstacles are already marked a little larger than
  * the buildings, so this stays small.
  */
 const CLEARANCE_MARGIN = 0.1;
+/** How much deeper than a land class may go it still can, in a cell it can be in (see standsAt). */
+const PUDDLE = 0.3;
 /** Route cost multiplier on a bridge deck's edge cells, for vehicles: they keep to the middle. */
 const DECK_EDGE = 1.6;
 /** How finely offSideClear reads the ground between a deck and the strip beside it. */
@@ -551,6 +562,59 @@ export class NavGrid {
     return this.obstacles.version;
   }
 
+  /**
+   * Whether a building of this radius at (x, z) would cut `from` off from
+   * any of `to` that it can get to now, round the buildings already up: a
+   * wall across the only neck of land out of a base, say. Flood fills over
+   * the cells this class can be in, square-wise, with the buildings in.
+   * Cells `fleeting` says are going away (an engineer's bridge that comes
+   * down in a minute or two) don't count as a way round.
+   */
+  sealsOff(x: number, z: number, radius: number, from: Point, to: Point[], fleeting?: (x: number, z: number) => boolean): boolean {
+    const { cols, rows, cellSize, terrain, occupied } = this;
+    const under = (k: number) => {
+      const c = this.center(k % cols, Math.floor(k / cols));
+      return Math.abs(c.x - x) <= radius + cellSize * 0.5 && Math.abs(c.z - z) <= radius + cellSize * 0.5 && D.hypot(c.x - x, c.z - z) <= radius + cellSize * 0.71;
+    };
+    const gone = (k: number) => {
+      if (!fleeting) return false;
+      const c = this.center(k % cols, Math.floor(k / cols));
+      return fleeting(c.x, c.z);
+    };
+    const fill = (without: boolean): Uint8Array => {
+      const seen = new Uint8Array(cols * rows);
+      // From the nearest open cell (a base's middle is its HQ).
+      const open = this.nearestOpen(from.x, from.z);
+      if (!open) return seen;
+      const start = open[1] * cols + open[0];
+      if (without && under(start)) return seen;
+      const stack = [start];
+      seen[start] = 1;
+      while (stack.length > 0) {
+        const k = stack.pop()!;
+        const i = k % cols;
+        const j = (k - i) / cols;
+        for (const nk of [i + 1 < cols ? k + 1 : -1, i > 0 ? k - 1 : -1, j + 1 < rows ? k + cols : -1, j > 0 ? k - cols : -1]) {
+          if (nk < 0 || seen[nk] || terrain[nk] === 1 || occupied[nk] > 0 || (without && under(nk)) || gone(nk)) continue;
+          seen[nk] = 1;
+          stack.push(nk);
+        }
+      }
+      return seen;
+    };
+    // A place counts as reached when the fill gets within a cell of it (it may sit in a building itself, a base's HQ say).
+    const reached = (seen: Uint8Array, p: Point) => {
+      const [pi, pj] = this.cellOf(p.x, p.z);
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (pi + di >= 0 && pj + dj >= 0 && pi + di < cols && pj + dj < rows && seen[(pj + dj) * cols + pi + di]) return true;
+      return false;
+    };
+    const now = fill(false);
+    const goals = to.filter((p) => reached(now, p));
+    if (goals.length === 0) return false;
+    const then = fill(true);
+    return goals.some((p) => !reached(then, p));
+  }
+
   /** True if passable terrain connects the two points (ignoring buildings). */
   connected(a: Point, b: Point): boolean {
     const [ai, aj] = this.cellOf(a.x, a.z);
@@ -599,6 +663,23 @@ export class NavGrid {
   }
 
   /**
+   * Whether a mover of this class may stand at a point (what movement and
+   * shoves go by): where terrainAllowsAt says, and for land classes also
+   * the shallow edge of any cell its routes go through, so that a dip just
+   * under the sea between two dry cell middles doesn't box infantry into a
+   * sliver of shore. Not by a bridge deck's sides, which are read strictly
+   * point by point (see offSideClear).
+   */
+  standsAt(x: number, z: number): boolean {
+    if (this.terrainAllowsAt(x, z)) return true;
+    const f = this.field;
+    if (this.rules.flies || this.rules.minDepth > 0 || !f.contains(x, z) || f.seaLevel - f.heightAt(x, z) > this.rules.maxDepth + PUDDLE) return false;
+    const [i, j] = this.cellOf(x, z);
+    const k = j * this.cols + i;
+    return this.terrain[k] === 0 && this.deckEdge[k] === 0;
+  }
+
+  /**
    * Whether a step from a to b gets a mover down off a cliff face it's
    * stuck on (shoved there, or the ground reshaped under it): anywhere it
    * could be but for the slope, no steeper than where it is.
@@ -608,6 +689,17 @@ export class NavGrid {
     if (!f.cliffs || this.rules.scales || this.rules.flies || !f.contains(bx, bz) || !f.cliffAt(ax, az)) return false;
     if (f.slopeAt(bx, bz) > f.slopeAt(ax, az)) return false;
     return terrainAllows(this.rules, f.seaLevel - f.heightAt(bx, bz), 0);
+  }
+
+  /**
+   * Whether a step from a to b gets a land mover stranded in water it
+   * can't be in (shoved off a shore, the ground sunk under it) no deeper
+   * in: it wades back out the shallowest way rather than stand there for good.
+   */
+  outOfWater(ax: number, az: number, bx: number, bz: number): boolean {
+    const f = this.field;
+    if (this.rules.flies || this.rules.minDepth > 0 || !f.contains(bx, bz) || this.standsAt(ax, az)) return false;
+    return f.seaLevel - f.heightAt(bx, bz) <= f.seaLevel - f.heightAt(ax, az);
   }
 
   /**
@@ -916,14 +1008,31 @@ export class NavGrid {
     // Every open cell has at least a cell's width of room, so small units need no special treatment,
     // except in a city, where an alley has only half that (see capAlleys).
     const wide = radius + CLEARANCE_MARGIN > (this.samples.hasCity ? this.cellSize * 0.5 : this.cellSize);
-    for (const r of wide ? [radius, radius * 0.5] : []) {
-      const route = this.route(from, to, r);
-      if (route?.found) return route.points;
+    if (wide) {
+      // First with room to spare: room is measured between cell middles, and a building's edge can
+      // be most of a cell nearer than its nearest blocked cell's middle (see BIG_SLACK).
+      if (radius > this.cellSize) {
+        const roomy = this.route(from, to, radius + BIG_SLACK);
+        if (roomy?.found) return roomy.points;
+      }
+      const full = this.route(from, to, radius);
+      if (full?.found) return full.points;
+      // No way there at all at its full width (not just a search cut short): a tighter route
+      // would only take it into a gap between buildings it can't get through, since they push
+      // a unit out by its whole radius, and it would wedge there for good. As near as it does
+      // fit instead, so long as that gets it somewhere (a unit already wedged has to squeeze out).
+      if (full && full.closed && full.points.length > 0) {
+        const end = full.points[full.points.length - 1];
+        const left = D.hypot(to.x - end.x, to.z - end.z);
+        if (left < Math.max(NEAR_ENOUGH, radius * 3) || left < D.hypot(to.x - from.x, to.z - from.z) - this.cellSize) return full.points;
+      }
+      const half = this.route(from, to, radius * 0.5);
+      if (half?.found) return half.points;
     }
     return this.route(from, to, 0)?.points ?? null;
   }
 
-  private route(from: Point, to: Point, radius: number): { points: Point[]; found: boolean } | null {
+  private route(from: Point, to: Point, radius: number): { points: Point[]; found: boolean; closed: boolean } | null {
     // A wide unit standing somewhere tight starts by backing out to the nearest roomy spot,
     // rather than planning onward through a gap it can't fit.
     // Not over a railing, though: from beside a bridge, the deck is no nearer than the ramp.
@@ -1016,7 +1125,7 @@ export class NavGrid {
     cells.reverse();
     const points = cells.map((k) => this.center(k % cols, Math.floor(k / cols)));
     if (found) points[points.length - 1] = this.fitsAt(reach.x, reach.z, radius) ? reach : points[points.length - 1];
-    return { points: this.smooth(from, points, radius), found };
+    return { points: this.smooth(from, points, radius), found, closed: !found && open.size === 0 };
   }
 
   /**

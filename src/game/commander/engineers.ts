@@ -671,8 +671,45 @@ export class Engineers {
     const nav = ctx.navs.land;
     if (!field.contains(x, z, 2) || field.isWater(x, z) || !nav.terrainAllowsAt(x, z) || !nav.fitsAt(x, z, def.radius) || field.nearBridge(x, z, def.radius + 1)) return null;
     if (!this.safe(world, ctx, side, x, z)) return null;
+    if (this.seals(ctx, side, def, x, z)) return null;
     return { kind: 'build', def, x, z, heading, standX: x - dx * STAND_BACK, standZ: z - dz * STAND_BACK };
   }
+
+  /**
+   * Whether a building here would cut the side's base off by land from
+   * another base, an outpost, a town or a waypoint of its lanes it can
+   * reach now (see NavGrid.sealsOff): a wall line across
+   * a neck of land with buildings either side, or a tower in the one gap
+   * left. Remembered until a building goes up or down or the ground changes.
+   */
+  private seals(ctx: SimContext, side: number, def: BuildingDef, x: number, z: number): boolean {
+    const nav = ctx.navs.land;
+    const foot = ctx.navs.for('foot');
+    const version = (nav.obstacles.blockVersion * 100003 + nav.passableVersion) * 7919 + foot.passableVersion;
+    if (this.sealedAt !== version) {
+      this.sealed.clear();
+      this.sealedAt = version;
+    }
+    const key = `${side}:${def.radius}:${Math.round(x * 4)},${Math.round(z * 4)}`;
+    let seals = this.sealed.get(key);
+    if (seals === undefined) {
+      const { baseSites, outpostSites, townSites } = ctx.field;
+      // And the side's own lanes: a wall across the neck of land its flank lane goes out by sends the squads down it to the water's edge.
+      const lanes = baseSites.flatMap((_, k) => (k === side ? [] : ctx.lanes.lanes(side, k).flat()));
+      const places = [...baseSites.filter((_, k) => k !== side), ...outpostSites, ...townSites, ...lanes];
+      // Infantry and vehicles get through different gaps (shallows, slopes): neither may be shut in.
+      // Not counting a way round over an engineer's bridge that comes down again: walls outlast it.
+      const fleeting = new Set(this.spans.filter((sp) => Number.isFinite(sp.until)).map((sp) => sp.index));
+      const gone = fleeting.size > 0 ? (px: number, pz: number) => fleeting.has(ctx.field.bridgeAt(px, pz)) : undefined;
+      seals = nav.sealsOff(x, z, def.radius, baseSites[side], places, gone) || foot.sealsOff(x, z, def.radius, baseSites[side], places, gone);
+      this.sealed.set(key, seals);
+    }
+    return seals;
+  }
+
+  /** Spots looked at by seals, and the obstacles' and ground's version they were looked at for. */
+  private readonly sealed = new Map<string, boolean>();
+  private sealedAt = -1;
 
   /** The places a side fortifies, best first: choke points, held outposts out front, behind a push, then the rally points. */
   private sites(world: World, ctx: SimContext, side: number): Site[] {
@@ -1684,7 +1721,8 @@ export class Engineers {
                 : job.def.lasts
                   ? this.walls[side] >= WALLS_MOST
                   : false;
-      if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius)) continue;
+      // Looked at again as it goes up: the rest of its line may have gone up since it was planned.
+      if (full || !ctx.navs.land.fitsAt(job.x, job.z, job.def.radius) || this.seals(ctx, side, job.def, job.x, job.z)) continue;
       const b = spawnBuilding(world, ctx, job.def, side, job.x, job.z, job.heading, true);
       if (job.def.lasts) this.crumbling.push(b);
       if (isFieldTower(id)) this.towers[side]++;

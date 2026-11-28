@@ -398,12 +398,7 @@ export function aiSystem(ctx: SimContext): System {
               continue;
             }
           }
-          let rx = rally.x + ai.rallyOffsetX;
-          let rz = rally.z + ai.rallyOffsetZ;
-          if (!ctx.navs.for(mover.move).terrainAllowsAt(rx, rz)) {
-            rx = rally.x;
-            rz = rally.z;
-          }
+          const { x: rx, z: rz } = spread(ctx.navs.for(mover.move), rally, ai.rallyOffsetX, ai.rallyOffsetZ, RALLY_SPREAD);
           // Hold near the rally point facing the next enemy; small tolerance so units settle rather than jostle.
           moveTo(mover, t, rx, rz, facing.x, facing.z);
           continue;
@@ -459,9 +454,10 @@ export function aiSystem(ctx: SimContext): System {
         // March down the lane, then into the enemy base.
         const waypoint = naval ? null : ctx.lanes.nextWaypoint(faction, target, ai.lane, t.x, t.z);
         if (waypoint) {
-          // Squads spread out a little around the waypoint rather than queueing for one spot.
-          mover.targetX = waypoint.x + ai.rallyOffsetX * 0.6;
-          mover.targetZ = waypoint.z + ai.rallyOffsetZ * 0.6;
+          // Squads spread out a little around the waypoint rather than queueing for one spot (on dry ground: see spread).
+          const at = naval || MOVE_RULES[mover.move].flies ? { x: waypoint.x + ai.rallyOffsetX * 0.6, z: waypoint.z + ai.rallyOffsetZ * 0.6 } : spread(ctx.navs.for(mover.move), waypoint, ai.rallyOffsetX, ai.rallyOffsetZ, WAYPOINT_SPREAD);
+          mover.targetX = at.x;
+          mover.targetZ = at.z;
           mover.faceX = mover.targetX;
           mover.faceZ = mover.targetZ;
           continue;
@@ -632,6 +628,26 @@ function outreaches(a: MoveClass, b: MoveClass): boolean {
   const rb = MOVE_RULES[b];
   return (ra.flies && !rb.flies) || ra.maxDepth > rb.maxDepth || (ra.scales && !rb.scales);
 }
+
+/**
+ * A unit's own spot round a squad's point: its offset from the point at the
+ * first of `shares` that's ground it can stand on, else the point itself.
+ * Round a rally point or waypoint by the water, a spot out in it would send
+ * the unit to the nearest shore it could reach instead, and the squad would
+ * line the water's edge; drawn in toward the point, it stays with the rest.
+ */
+function spread(grid: NavGrid, p: { x: number; z: number }, ox: number, oz: number, shares: readonly number[]): { x: number; z: number } {
+  for (const k of shares) {
+    const x = p.x + ox * k;
+    const z = p.z + oz * k;
+    if (grid.terrainAllowsAt(x, z)) return { x, z };
+  }
+  return { x: p.x, z: p.z };
+}
+
+/** How far out a unit's spot round its rally point and round a lane waypoint is, as shares of its offset, tried in turn (see spread). */
+const RALLY_SPREAD = [1, 0.6, 0.3] as const;
+const WAYPOINT_SPREAD = [0.6, 0.3] as const;
 
 /** Whether a class can be at a point and everywhere round it out to `room` (8 points on the circle). */
 function clearAround(grid: NavGrid, x: number, z: number, room: number): boolean {
