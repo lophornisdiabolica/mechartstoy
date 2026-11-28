@@ -672,6 +672,25 @@ export function placeBridge(field: Battlefield, a: { x: number; z: number }, b: 
 }
 
 /**
+ * Put a bridge over a dry chasm, from rim a to rim b (engineers', see
+ * Engineers.chasmBridge): the deck level with the lower rim, the higher cut
+ * down to meet it (cutBanks). Unlike placeBridge, the ends stay where
+ * they're put: there's no water to carry them past. False (and nothing
+ * built) if it would overlap another bridge.
+ */
+export function spanChasm(field: Battlefield, a: { x: number; z: number }, b: { x: number; z: number }, extra: Partial<Bridge> = {}): boolean {
+  const len = D.hypot(b.x - a.x, b.z - a.z);
+  if (len < 0.1) return false;
+  const half = BRIDGE_WIDTH / 2;
+  for (let t = 0; t <= 1; t += 0.1) if (field.nearBridge(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, half)) return false;
+  const level = Math.max(field.seaLevel + BRIDGE_CLEARANCE, Math.min(field.heightAt(a.x, a.z), field.heightAt(b.x, b.z)));
+  const bridge: Bridge = { ax: a.x, az: a.z, bx: b.x, bz: b.z, width: BRIDGE_WIDTH, level, ...extra };
+  cutBanks(field, bridge);
+  field.addBridge(bridge);
+  return true;
+}
+
+/**
  * Cut the ground down wherever it rises above a bridge's deck or its
  * approaches: under the deck, and in a cutting at each end that climbs back
  * to the ground no steeper than APPROACH_GRADE, with sides no steeper than
