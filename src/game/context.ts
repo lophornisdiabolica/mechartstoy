@@ -102,7 +102,7 @@ export type GameEvents = {
   godUsed: { power: Power | { kind: 'drop'; unit: UnitId; count: number; faction: number }; x: number; z: number };
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
   /** Engineers finished digging (or heaping up) a stretch of canal, trench or berm (see commander/engineers.ts). */
-  earthwork: { kind: 'canal' | 'trench' | 'berm' | 'fill'; faction: number; x: number; z: number };
+  earthwork: { kind: 'canal' | 'trench' | 'berm' | 'fill' | 'grade'; faction: number; x: number; z: number };
   /** An engineer repairing a vehicle: sparks where it's working (see commander/engineers.ts). */
   repair: { faction: number; x: number; y: number; z: number };
   /** A side's Commander sent squads to hunt a long-range gun shelling it, or they killed it (`done`; see commander/hunts.ts). */
