@@ -11,7 +11,7 @@ import { CLIFF_SLOPE } from './moveClasses';
 import { raiseHighground } from './highground';
 import { SHEER_STYLES, shapeTerrain, TerrainStyle } from './terrainStyles';
 import { MapOutline, shapeOutline } from './outlines';
-import { emptyTraits, MapTrait, placeTraits, TraitLayout } from './traits';
+import { emptyTraits, MapTrait, placeTraits, planTraits, TraitLayout, TraitSite } from './traits';
 
 /**
  * The battlefield is pure data: a heightmap plus the sites where factions
@@ -129,6 +129,8 @@ export const OUTPOST_RADIUS = 7;
 
 /** Clear ground between neighbouring base pads, on top of their radii. */
 const BASE_GAP = 12;
+/** Steps of half a cell that Battlefield.faceHeight follows a slope each way: 18 m on the usual cells, as tall as a hillside gets. */
+const FACE_STEPS = 24;
 
 /**
  * Nominal centre of base seat `k` of `n`. Seats are spread evenly round a
@@ -186,7 +188,7 @@ export interface TownSite {
  * hill, the citadel, the landing field and rail stations are placed on
  * their own (king of the hill, and map traits: see traits.ts).
  */
-export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station' | 'drawbridge';
+export type OutpostKind = 'supply' | 'airstrip' | 'gun' | 'relay' | 'fuel' | 'factory' | 'shipyard' | 'sensor' | 'repair' | 'signal' | 'hill' | 'citadel' | 'landing' | 'station' | 'drawbridge' | 'sluice';
 /** The kinds a map deals out to ordinary outposts. */
 export const OUTPOST_KIND_IDS: OutpostKind[] = ['supply', 'airstrip', 'gun', 'relay', 'fuel', 'factory', 'shipyard', 'sensor', 'repair', 'signal', 'drawbridge'];
 
@@ -997,6 +999,37 @@ export class Battlefield {
     return D.hypot(dx, dz) / (2 * d);
   }
 
+  /**
+   * How tall the face of ground steeper than a slope is through a point:
+   * the height between its foot and its top, found by following the slope
+   * straight uphill and straight downhill from the point for as long as
+   * it stays that steep (up to FACE_REACH each way). Small for a crater's
+   * lip, a terrace's step or a bank, large for a hillside. Stops counting
+   * once it's over `enough`, all a caller wants to know.
+   */
+  faceHeight(x: number, z: number, slope: number, enough = Infinity): number {
+    const d = this.config.cellSize * 0.5;
+    const here = this.heightAt(x, z);
+    let top = here;
+    let foot = here;
+    for (const sign of [1, -1]) {
+      let px = x;
+      let pz = z;
+      for (let n = 0; n < FACE_STEPS; n++) {
+        const gx = this.heightAt(px + d, pz) - this.heightAt(px - d, pz);
+        const gz = this.heightAt(px, pz + d) - this.heightAt(px, pz - d);
+        const g = D.hypot(gx, gz);
+        if (g === 0 || g / (2 * d) <= slope) break;
+        px += ((sign * gx) / g) * d;
+        pz += ((sign * gz) / g) * d;
+        if (sign > 0) top = this.heightAt(px, pz);
+        else foot = this.heightAt(px, pz);
+        if (top - foot > enough) return top - foot;
+      }
+    }
+    return top - foot;
+  }
+
   contains(x: number, z: number, margin = 0): boolean {
     const b = this.bounds;
     return x >= b.minX + margin && x <= b.maxX - margin && z >= b.minZ + margin && z <= b.maxZ - margin;
@@ -1130,6 +1163,13 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
 
   // King of the hill: the hill takes the fairest ground first, and towns keep off it.
   const hill = config.hill ? placeHill(field, rng.fork(0x68696c6c)) : null;
+  // Map traits (an oil field, ruins...) pick their spots next, near the middle where the lanes run, and the
+  // towns and outposts keep round them; on their own stream, so a map with none doesn't change. A city
+  // takes the middle instead, and the traits fit round it at the end.
+  const cityMap = config.citySprawl || (config.cityRadius > 0 && config.towns > 0);
+  const traitSites: TraitSite[] = config.traits.length > 0 && !cityMap ? planTraits(field, config.traits, rng.fork(0x74726169), hill ? [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }] : []) : [];
+  // (A citadel or landing field keeps well clear of the other outposts; the rest can have one by them.)
+  const traitRoom = traitSites.map((t) => ({ x: t.x, z: t.z, r: t.kind === 'citadel' || t.kind === 'landing' ? t.radius + 1 : t.radius * 0.5 }));
 
   // A civilian town in no-man's land: pick the gentlest dry spot near the middle.
   const townRadius = config.townRadius;
@@ -1149,6 +1189,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     // Nor against high ground, where levelling would steepen a slope into a cliff.
     if (townReach) for (let a = 0; a < 8; a++) if (field.sheerAt(x + D.cos((a / 8) * Math.PI * 2) * townRadius * 1.4, z + D.sin((a / 8) * Math.PI * 2) * townRadius * 1.4)) score += 15;
     if (hill && D.hypot(hill.x - x, hill.z - z) < OUTPOST_RADIUS + townRadius + 6) score += 100;
+    for (const t of traitSites) if (D.hypot(t.x - x, t.z - z) < t.radius + townRadius + 3) score += 100;
     return score;
   };
   let best: { x: number; z: number; score: number } | null = null;
@@ -1158,6 +1199,20 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     const score = townSpot(x, z);
     if (!best || score < best.score) best = { x, z, score };
   }
+  // On a crowded map (three or more bases on a small one) the middle can be all base pads (or the
+  // hill): look further out, on a stream of its own so other maps don't change, and if there's
+  // still nowhere clear of them, no first town at all rather than one on top of a base.
+  const widerTownSpot = (from: { x: number; z: number; score: number }) => {
+    const wider = rng.fork(0x77696465);
+    let pick = from;
+    for (let n = 0; n < 80; n++) {
+      const x = wider.range(-width / 2 + townRadius + 3, width / 2 - townRadius - 3);
+      const z = wider.range(-depth / 2 + townRadius + 3, depth / 2 - townRadius - 3);
+      const score = townSpot(x, z);
+      if (score < pick.score) pick = { x, z, score };
+    }
+    return pick.score < 100 ? pick : null;
+  };
   // Candidates are always rolled so the rest of the map doesn't change with the number of towns.
   const townRng = rng.fork(0x746f776e);
   // A spot given as fractions of the half-width and half-depth, kept far enough in for a pad of this radius.
@@ -1221,7 +1276,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     }
   } else if (city) {
     // The city took the first town's place.
-  } else if (best && config.towns > 0) {
+  } else if (best && config.towns > 0 && (best.score < 100 || (best = widerTownSpot(best)) !== null)) {
     const height = Math.max(seaLevel + 1, field.heightAt(best.x, best.z));
     townSites.push({ x: best.x, z: best.z, radius: townRadius, height, angle: townRng.range(0, Math.PI / 2) });
     flatten(best.x, best.z, townRadius, height);
@@ -1291,7 +1346,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     ? config.outpostPlaces.map((p) => placedAt(p, OUTPOST_RADIUS))
     : square && config.outposts > 0
       ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng, config.outposts - 1, [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }])]
-      : placeOutposts(field, rng, config.outposts);
+      : placeOutposts(field, rng, config.outposts, traitRoom);
   const dealable = config.outpostKinds.filter((k) => OUTPOST_KIND_IDS.includes(k));
   // A drawbridge needs a bridge to work: one outpost moves to the end of a map bridge.
   if (dealable.includes('drawbridge') && !config.outpostPlaces) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0);
@@ -1300,7 +1355,7 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
   if (hill) {
     if (!config.outpostPlaces) {
       // Re-place the others round it, so none sits on top of it.
-      const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : [])];
+      const taken = [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }, ...(square && config.outposts > 0 ? [{ x: square.x, z: square.z, r: OUTPOST_RADIUS }] : []), ...traitRoom];
       const rest = square && config.outposts > 0 ? [{ x: square.x, z: square.z }, ...placeOutposts(field, rng.fork(0x72657374), config.outposts - 1, taken)] : placeOutposts(field, rng.fork(0x72657374), config.outposts, taken);
       spots.splice(0, spots.length, ...rest.filter((p) => D.hypot(p.x - hill.x, p.z - hill.z) > OUTPOST_RADIUS * 2.5));
       if (dealable.includes('drawbridge')) besideBridge(field, spots, square && config.outposts > 0 ? 1 : 0, [{ x: hill.x, z: hill.z, r: OUTPOST_RADIUS + 6 }]);
@@ -1321,9 +1376,10 @@ export function generateBattlefield(rng: Rng, config: BattlefieldConfig = DEFAUL
     field.outpostSites.push({ index: field.outpostSites.length, kind: kinds[k], x: p.x, z: p.z, radius: OUTPOST_RADIUS, height });
     flatten(p.x, p.z, OUTPOST_RADIUS, height);
   });
-  // Map traits (an oil field, ruins...) last of all, round everything else, on their own stream.
+  // The traits are built last of all, round everything else (at the spots they picked, if they did).
   const traitOutposts = field.outpostSites.length;
-  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten);
+  // (Their random stream forks here, as it always has, so a trait that planned nothing, the rail line say, comes out as before.)
+  if (config.traits.length > 0) placeTraits(field, config.traits, rng.fork(0x74726169), flatten, traitSites);
   // Outposts that traits added (a citadel, a landing field...) get bridged out to if they're cut off.
   const held = field.outpostSites.slice(traitOutposts);
   // Levelling towns and outposts may have filled in the water under a bridge: take it away

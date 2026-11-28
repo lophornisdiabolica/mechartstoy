@@ -35,8 +35,19 @@ const START_MARGIN = 1.6;
 const LEAST_MARGIN = 0.8;
 /** Seconds (on a medium map) for a team's patience to run out. */
 const PATIENCE = 150;
-/** Share of the team's unit cap it has to field before attacking at all, so it attacks in force. */
+/** Share of the team's unit cap it has to field before attacking at all, so it attacks in force... */
 const MIN_ARMY = 0.7;
+/**
+ * ...falling to nothing between ARMY_PATIENCE and twice that, in seconds
+ * waited since its last attack (on a medium map), long after the usual
+ * wait: after that a team goes whenever it's strong enough, however few its
+ * units. A side that's lost its HQ can't train troops, so a few super units
+ * and boats are all it'll ever field. However much stronger than the enemy
+ * it was, it never attacked, and an enemy team breaking itself on those
+ * supers time after time made a battle that never ended.
+ */
+const LEAST_ARMY = 0;
+const ARMY_PATIENCE = 300;
 /** An attack is spent once the units that set out are down to this share of their strength. */
 const SPENT = 0.45;
 /** Longest an attack goes on (on a medium map), so an army can't grind away somewhere for ever. */
@@ -167,6 +178,12 @@ export class Offensive {
     return this.plans.get(this.sides.teams[faction])!;
   }
 
+  /** Share of its unit cap a team has to field to attack, after waiting `waited` seconds since its last attack (see LEAST_ARMY). */
+  armyShare(waited: number): number {
+    const k = Math.max(0, Math.min(1, waited / (ARMY_PATIENCE * this.scale) - 1));
+    return MIN_ARMY - (MIN_ARMY - LEAST_ARMY) * k;
+  }
+
   /** Army needed, as a multiple of the defence, after waiting `waited` seconds. */
   margin(waited: number): number {
     const k = Math.min(1, waited / (PATIENCE * this.scale));
@@ -269,9 +286,9 @@ export class Offensive {
       const urgency = hillUrgency(ctx, members[0]);
       plan.need = this.defence(world, ctx, target, members[0]) * this.margin((time - plan.since) * (1 + relays)) * style * (1 - 0.5 * urgency);
       const units = members.reduce((s, f) => s + count[f], 0);
-      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0) * (1 - 0.5 * urgency);
-      plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, units / (cap * MIN_ARMY));
-      if (units >= cap * MIN_ARMY && plan.army >= plan.need) {
+      const cap = members.reduce((s, f) => s + armyCap(ctx, f), 0) * (1 - 0.5 * urgency) * this.armyShare(time - plan.since);
+      plan.ready = Math.min(1, plan.need > 0 ? plan.army / plan.need : 1, cap > 0 ? units / cap : 1);
+      if (units >= cap && plan.army >= plan.need) {
         plan.state = 'attacking';
         plan.since = time;
         plan.target = target;

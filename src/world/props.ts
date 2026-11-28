@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import { Battlefield } from './battlefield';
 import { BIOMES, PropKind } from './biomes';
+import type { MapTrait } from './traits';
 import * as D from '../core/dmath';
 
 export type { PropKind } from './biomes';
@@ -31,6 +32,9 @@ function weighted(rng: Rng, weights: Partial<Record<PropKind, number>>): PropKin
  * towns, outposts and bridges, with trees on gentle slopes and rocks on
  * steep ones. How much depends on the biome and the map's area.
  */
+/** Traits that clear the land's own scenery from their ground (see scatterProps): the built-up ones. */
+const BARE_TRAITS: ReadonlySet<MapTrait> = new Set(['oil', 'ruins', 'citadel', 'landing', 'rail']);
+
 export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
   const biome = BIOMES[field.config.biome];
   const count = Math.round((biome.props.density * field.width * field.depth) / 1000);
@@ -44,8 +48,12 @@ export function scatterProps(field: Battlefield, rng: Rng): Prop[] {
     const y = field.heightAt(x, z);
     if (y < field.seaLevel + 0.3) continue;
     if ([...field.baseSites, ...field.townSites, ...field.outpostSites].some((s) => D.hypot(x - s.x, z - s.z) < s.radius * 1.1)) continue;
-    // Traits bring their own scenery (see traits.ts).
-    if (traits && (field.traits.sites.some((s) => D.hypot(x - s.x, z - s.z) < s.radius) || field.traits.relics.some((r) => D.hypot(x - r.x, z - r.z) < 2.5))) continue;
+    // Traits bring their own scenery (see traits.ts): an oil field or ruins none of the land's, the rest half of it.
+    if (traits) {
+      const site = field.traits.sites.find((s) => D.hypot(x - s.x, z - s.z) < s.radius);
+      if (site && (BARE_TRAITS.has(site.kind) || rng.chance(0.5))) continue;
+      if (field.traits.relics.some((r) => D.hypot(x - r.x, z - r.z) < 2.5)) continue;
+    }
     // Roads stay clear, and dense forest has trees of its own (see woods.ts).
     if (field.deckAt(x, z) !== null || field.groundAt(x, z).id !== 'plain') continue;
     const slope = field.slopeAt(x, z);

@@ -11,7 +11,7 @@ import { MoveClass } from './moveClasses';
  * class not listed), and a colour the terrain mesh blends in. A new kind is a
  * new entry here.
  */
-export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron' | 'ballast' | 'burnt';
+export type GroundId = 'plain' | 'road' | 'scrap' | 'thicket' | 'trench' | 'earth' | 'felled' | 'oil' | 'paving' | 'apron' | 'ballast' | 'burnt' | 'flats' | 'ice';
 
 export interface GroundDef {
   id: GroundId;
@@ -27,8 +27,8 @@ export interface GroundDef {
 
 export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   plain: { id: 'plain', label: 'Open ground', cost: {}, speed: {}, color: 0x000000, tint: 0 },
-  /** Packed roads: wheels and tracks take them a little faster; feet and legs don't care. */
-  road: { id: 'road', label: 'Road', cost: { tracked: 0.8, amphibious: 0.8, hover: 0.8 }, speed: { tracked: 1.15, amphibious: 1.15 }, color: 0x8b8578, tint: 0.6 },
+  /** Packed roads: tracks take them a little faster and wheels a good deal faster; feet and legs don't care. */
+  road: { id: 'road', label: 'Road', cost: { tracked: 0.8, wheeled: 0.65, amphibious: 0.8, hover: 0.8 }, speed: { tracked: 1.15, wheeled: 1.3, amphibious: 1.15 }, color: 0x8b8578, tint: 0.6 },
   /**
    * Twisted metal from wrecked vehicles and rubble: a slog for tracks and
    * hovers, awkward on foot, and easy for long legs.
@@ -36,8 +36,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   scrap: {
     id: 'scrap',
     label: 'Scrap',
-    cost: { tracked: 3, amphibious: 3, hover: 4, foot: 1.4, walker: 1.3, climber: 1 },
-    speed: { tracked: 0.55, amphibious: 0.55, hover: 0.5, foot: 0.8, walker: 0.85 },
+    cost: { tracked: 3, wheeled: 3.5, amphibious: 3, hover: 4, foot: 1.4, walker: 1.3, climber: 1 },
+    speed: { tracked: 0.55, wheeled: 0.45, amphibious: 0.55, hover: 0.5, foot: 0.8, walker: 0.85 },
     color: 0x5d5853,
     tint: 0.75,
   },
@@ -49,8 +49,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   thicket: {
     id: 'thicket',
     label: 'Dense forest',
-    cost: { tracked: 4, amphibious: 4, hover: 4, walker: 2.5, foot: 1.1, climber: 1.1 },
-    speed: { tracked: 0.5, amphibious: 0.5, hover: 0.5, walker: 0.7, foot: 0.9 },
+    cost: { tracked: 4, wheeled: 5, amphibious: 4, hover: 4, walker: 2.5, foot: 1.1, climber: 1.1 },
+    speed: { tracked: 0.5, wheeled: 0.4, amphibious: 0.5, hover: 0.5, walker: 0.7, foot: 0.9 },
     color: 0x3c5a2c,
     tint: 0.5,
   },
@@ -62,8 +62,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   trench: {
     id: 'trench',
     label: 'Trench',
-    cost: { tracked: 2.5, amphibious: 2.5, hover: 2.5, walker: 1.2 },
-    speed: { tracked: 0.6, amphibious: 0.6, hover: 0.6, walker: 0.9 },
+    cost: { tracked: 2.5, wheeled: 3, amphibious: 2.5, hover: 2.5, walker: 1.2 },
+    speed: { tracked: 0.6, wheeled: 0.5, amphibious: 0.6, hover: 0.6, walker: 0.9 },
     color: 0x463224,
     tint: 0.85,
   },
@@ -71,8 +71,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   earth: {
     id: 'earth',
     label: 'Earth berm',
-    cost: { tracked: 1.4, amphibious: 1.4, hover: 1.4 },
-    speed: { tracked: 0.85, amphibious: 0.85, hover: 0.85 },
+    cost: { tracked: 1.4, wheeled: 1.6, amphibious: 1.4, hover: 1.4 },
+    speed: { tracked: 0.85, wheeled: 0.75, amphibious: 0.85, hover: 0.85 },
     color: 0x8f6c45,
     tint: 0.75,
   },
@@ -84,8 +84,8 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
   felled: {
     id: 'felled',
     label: 'Fallen forest',
-    cost: { tracked: 1.6, amphibious: 1.6, hover: 1.8, walker: 1.15, foot: 1.05 },
-    speed: { tracked: 0.8, amphibious: 0.8, hover: 0.75, walker: 0.95 },
+    cost: { tracked: 1.6, wheeled: 1.9, amphibious: 1.6, hover: 1.8, walker: 1.15, foot: 1.05 },
+    speed: { tracked: 0.8, wheeled: 0.7, amphibious: 0.8, hover: 0.75, walker: 0.95 },
     color: 0x4f4a30,
     tint: 0.45,
   },
@@ -141,10 +141,32 @@ export const GROUND_DEFS: Record<GroundId, GroundDef> = {
     color: 0x7a6f62,
     tint: 0.75,
   },
+  /** Tidal flats' wet sand and mud (see world/traits.ts), under the sea at high tide: heavy going for wheels and tracks. */
+  flats: {
+    id: 'flats',
+    label: 'Tidal flats',
+    cost: { tracked: 1.4, amphibious: 1.2, walker: 1.1, foot: 1.2 },
+    speed: { tracked: 0.8, amphibious: 0.9, walker: 0.95, foot: 0.85 },
+    color: 0x9c8a68,
+    tint: 0.75,
+  },
+  /**
+   * A frozen lake's ice (see world/traits.ts): smooth going, but heavy
+   * machines keep off it where they can, since it gives way under them
+   * (see game/ice.ts).
+   */
+  ice: {
+    id: 'ice',
+    label: 'Ice',
+    cost: { tracked: 1.8, amphibious: 1.2, walker: 3 },
+    speed: { tracked: 0.9, walker: 0.9, foot: 0.95 },
+    color: 0xcfe2ee,
+    tint: 0.9,
+  },
 };
 
 /** Ground kinds by their code in Battlefield.ground (the order is fixed: codes are stored per cell). */
-export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron', 'ballast', 'burnt'];
+export const GROUND_IDS: GroundId[] = ['plain', 'road', 'scrap', 'thicket', 'trench', 'earth', 'felled', 'oil', 'paving', 'apron', 'ballast', 'burnt', 'flats', 'ice'];
 
 export function groundCode(id: GroundId): number {
   return GROUND_IDS.indexOf(id);

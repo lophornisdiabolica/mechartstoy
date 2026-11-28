@@ -110,6 +110,20 @@ export class Ticker {
       if (this.game !== game || !e.up || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([this.side(e.faction), ' raised the drawbridge', this.direction(e.x, e.z, ' in the ')]);
     });
+    events.on('tide', (e) => {
+      if (this.game !== game) return;
+      this.say([e.phase === 'ebbing' ? `The tide's going out over the flats${this.direction(e.x, e.z, ' in the ')}: a way across` : `The tide's turning over the flats${this.direction(e.x, e.z, ' in the ')}: everyone off`]);
+    });
+    events.on('flood', (e) => {
+      if (this.game !== game) return;
+      const where = this.direction(e.x, e.z, ' in the ');
+      if (e.faction >= 0 && e.faction < this.factions.length) this.say([this.side(e.faction), ` opened the sluices of the dam${where}: the valley's flooding`]);
+      else this.say([`The dam${where} has burst: the valley's flooding`]);
+    });
+    events.on('iceBroke', (e) => {
+      if (this.game !== game) return;
+      this.say([`The ice on the lake${this.direction(e.x, e.z, ' in the ')} gave way`, e.drowned > 1 ? `: ${e.drowned} went through` : ': one went through']);
+    });
     events.on('militia', (e) => {
       if (this.game !== game || e.faction < 0 || e.faction >= this.factions.length) return;
       this.say([`The townsfolk${this.direction(e.x, e.z, ' in the ')} take up arms against `, this.side(e.faction)]);

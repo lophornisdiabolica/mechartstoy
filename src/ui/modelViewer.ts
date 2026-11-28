@@ -95,7 +95,7 @@ export function viewerList(doctrine: ViewerOptions['doctrine']): ({ kind: 'unit'
 }
 
 /** Movement classes whose hulls lie along the ground (as in spawn.ts). */
-const TILTS = new Set<MoveClass>(['tracked', 'hover', 'amphibious']);
+const TILTS = new Set<MoveClass>(['tracked', 'wheeled', 'hover', 'amphibious']);
 /** Ground between models, world units, on top of their size. */
 const GAP = 3.5;
 /** Turntable speed, radians a second. */

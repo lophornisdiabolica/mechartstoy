@@ -1,5 +1,8 @@
 import type { TraitState } from './traits';
 import type { BridgeWear } from './bridges';
+import type { Tide } from './tides';
+import type { Flood } from './flood';
+import type { Ice } from './ice';
 import { Traffic } from './traffic';
 import { Entity } from '../core/ecs';
 import { EventBus } from '../core/events';
@@ -64,6 +67,12 @@ export type GameEvents = {
   outpostRelief: { outpost: number; faction: number; x: number; z: number };
   /** A map bridge came down under fire, for good (see bridges.ts). */
   bridgeFell: { x: number; z: number };
+  /** The tide's turning over a Tidal flats bar: going out (ebbing), or about to come in (turning). See tides.ts. */
+  tide: { phase: 'ebbing' | 'turning'; x: number; z: number };
+  /** The dam broke (faction -1) or a side opened its sluices, and the valley's flooding (see flood.ts). */
+  flood: { faction: number; x: number; z: number };
+  /** The ice on a frozen lake gave way, and units went through (see ice.ts). */
+  iceBroke: { x: number; z: number; drowned: number };
   /** A drawbridge outpost's holder raised (up) or lowered its bridge (see bridges.ts). */
   drawbridge: { outpost: number; faction: number; up: boolean; x: number; z: number };
   /** A rail station put an armoured train on the line for whoever holds it (see rail.ts). */
@@ -93,7 +102,7 @@ export type GameEvents = {
   godUsed: { power: Power | { kind: 'drop'; unit: UnitId; count: number; faction: number }; x: number; z: number };
   power: { kind: 'quake' | 'bigBomb' | 'bless' | 'curse' | 'bridge' | 'grow'; x: number; z: number; radius: number; faction: number; strength?: number };
   /** Engineers finished digging (or heaping up) a stretch of canal, trench or berm (see commander/engineers.ts). */
-  earthwork: { kind: 'canal' | 'trench' | 'berm' | 'fill'; faction: number; x: number; z: number };
+  earthwork: { kind: 'canal' | 'trench' | 'berm' | 'fill' | 'grade'; faction: number; x: number; z: number };
   /** An engineer repairing a vehicle: sparks where it's working (see commander/engineers.ts). */
   repair: { faction: number; x: number; y: number; z: number };
   /** A side's Commander sent squads to hunt a long-range gun shelling it, or they killed it (`done`; see commander/hunts.ts). */
@@ -226,6 +235,12 @@ export interface SimContext {
   towns: Towns;
   /** The map's own bridges' wear, and those that have fallen (see bridges.ts). */
   bridges: BridgeWear;
+  /** The tide over the Tidal flats trait's sand bars, or null without them (see tides.ts). */
+  tidal: Tide | null;
+  /** The Dam trait's valley and its flood, or null without one (see flood.ts). */
+  flood: Flood | null;
+  /** The Frozen lake trait's ice, or null without one (see ice.ts). */
+  ice: Ice | null;
   /** Narrow passages (bridges) and the vehicles taking turns on them (see traffic.ts). */
   traffic: Traffic;
 }

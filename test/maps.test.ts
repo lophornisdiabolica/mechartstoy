@@ -6,15 +6,17 @@ import { Transform } from '../src/game/components';
 import { UNIT_DEFS } from '../src/game/units';
 import { settingsFromParams, settingsToParams } from '../src/ui/settingsUrl';
 import { generateBattlefield } from '../src/world/battlefield';
-import { Rng } from '../src/core/rng';
+import { hashSeed, Rng } from '../src/core/rng';
 import { NavGrid } from '../src/world/navGrid';
+import { MOVE_RULES, MoveClass } from '../src/world/moveClasses';
 import { layoutTown } from '../src/world/settlements';
 import { TERRAIN_STYLE_IDS } from '../src/world/terrainStyles';
 import { GIANT, MAP_TRAIT_IDS } from '../src/world/traits';
 import { landReach, vertexAt } from '../src/world/waterways';
 import { groundCode } from '../src/world/ground';
-import { Building, Faction, Health, RELIC } from '../src/game/components';
+import { Ai, Building, Faction, Health, RELIC } from '../src/game/components';
 import { MAP_OUTLINE_IDS } from '../src/world/outlines';
+import { BRIDGE_REACH } from '../src/world/waterways';
 import { BIOME_IDS, BIOMES, BiomeId, TOWN_STYLE_IDS } from '../src/world/biomes';
 
 const DT = 1 / 30;
@@ -263,18 +265,30 @@ describe('maps', () => {
     const off = cells.find((c) => Math.hypot(c.x - face.x, c.z - face.z) < 3 && tracked.terrainAllowsAt(c.x, c.z));
     expect(off && tracked.offCliff(face.x, face.z, off.x, off.z)).toBe(true);
 
-    // Without mountains or cliffs, even the steepest hills (and the tallest) are only slow going.
+    // Without mountains or cliffs there are no sheer cliffs, but a slope too steep for a class at
+    // a large scale still stops it: tanks least of all, then walkers, then infantry; spiders never.
     const hilly = emptyGame(11, (s) => ((s.map.hills = 3), (s.map.water = 0)));
     const g = hilly.field;
     expect(g.cliffs).toBe(false);
     expect(g.sheer.every((v) => v === 0)).toBe(true);
-    let steepest = 0;
+    const stopped: Record<string, number> = { tracked: 0, walker: 0, foot: 0, climber: 0 };
+    let bumps = 0;
     for (const c of cells) {
       if (!g.contains(c.x, c.z)) continue;
-      steepest = Math.max(steepest, g.slopeAt(c.x, c.z));
-      expect(hilly.ctx.navs.for('tracked').terrainAllowsAt(c.x, c.z)).toBe(true);
+      for (const cls of Object.keys(stopped)) if (!hilly.ctx.navs.for(cls as MoveClass).terrainAllowsAt(c.x, c.z)) stopped[cls]++;
+      // A short steep bank, steeper than tanks climb at a large scale, they still roll over.
+      if (g.slopeAt(c.x, c.z) > MOVE_RULES.tracked.climb && hilly.ctx.navs.for('tracked').terrainAllowsAt(c.x, c.z)) bumps++;
     }
-    expect(steepest).toBeGreaterThan(2);
+    expect(stopped.tracked).toBeGreaterThan(stopped.walker);
+    expect(stopped.walker).toBeGreaterThan(stopped.foot);
+    expect(stopped.foot).toBeGreaterThan(0);
+    expect(stopped.climber).toBe(0);
+    expect(bumps).toBeGreaterThan(0);
+    // However steep, every base is still in reach of everything on the ground.
+    for (const cls of ['tracked', 'walker', 'foot', 'hover'] as const) {
+      const nav = hilly.ctx.navs.for(cls);
+      for (const p of [...g.baseSites, ...g.townSites, ...g.outpostSites]) expect(nav.connected(g.baseSites[0], p)).toBe(true);
+    }
   });
 
   it('mountains and mesas keep every base, town and outpost in reach, and mesa tops reachable', () => {
@@ -401,6 +415,25 @@ describe('maps', () => {
     expect(settingsFromParams(new URLSearchParams('outline=crescent')).map.outline).toBe('crescent');
   });
 
+  it('joins an archipelago with chains of short bridges, island to island, not one across the sea', () => {
+    let longest = 0;
+    let bridges = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const game = emptyGame(seed * 53 + 11, (s) => {
+        s.map = { ...s.map, size: 'huge', terrain: 'islands', towns: 2 };
+        s.factions = Array.from({ length: seed % 2 ? 2 : 4 }, (_, i) => defaultFaction(i));
+      });
+      const f = game.field;
+      for (const b of f.bridges) longest = Math.max(longest, Math.hypot(b.bx - b.ax, b.bz - b.az));
+      bridges += f.bridges.length;
+      const nav = game.ctx.navs.for('tracked');
+      for (const p of [...f.baseSites, ...f.townSites]) expect(nav.connected(f.baseSites[0], p)).toBe(true);
+    }
+    // Before, a huge archipelago's bases were often joined by one bridge 100-170 long.
+    expect(longest).toBeLessThan(BRIDGE_REACH * 2);
+    expect(bridges).toBeGreaterThan(6 * 3);
+  });
+
   it('a bridge out to cut-off land starts clear of the bridges already there, not from one’s side', () => {
     let bridges = 0;
     for (let seed = 1; seed <= 16; seed++) {
@@ -423,6 +456,26 @@ describe('maps', () => {
     }
     expect(bridges).toBeGreaterThan(16);
   });
+  it('never puts a town on top of a base, even on a small map crowded with sides', () => {
+    // A small map with three sides: one base sits on the middle line, where the first town goes.
+    const q = 'seed=aw52vo&size=small&biome=steppe&water=0&hills=1.46&shape=0.76&forest=0&towns=2&sides=3';
+    const game = new Game(hashSeed('aw52vo'), { settings: settingsFromParams(new URLSearchParams(q)), populate: false, autoSpawn: false });
+    let towns = game.field.townSites.length;
+    const clear = (f: typeof game.field) => {
+      for (const t of f.townSites) for (const b of f.baseSites) expect(Math.hypot(t.x - b.x, t.z - b.z)).toBeGreaterThanOrEqual(t.radius + b.radius);
+    };
+    clear(game.field);
+    for (let seed = 0; seed < 16; seed++) {
+      const s = defaultSettings();
+      s.map = { ...s.map, size: 'small', towns: 2 };
+      s.factions = Array.from({ length: 3 + (seed % 3) }, (_, i) => defaultFaction(i));
+      const f = generateBattlefield(new Rng(seed), battlefieldConfig(s));
+      clear(f);
+      towns += f.townSites.length;
+    }
+    // Most still get their towns, clear of the bases.
+    expect(towns).toBeGreaterThan(16);
+  });
 
   it('every map trait lays out its features on contested ground, and keeps the bases in reach', () => {
     for (const trait of MAP_TRAIT_IDS) {
@@ -430,6 +483,8 @@ describe('maps', () => {
       for (let seed = 1; seed <= 6; seed++) {
         const s = defaultSettings();
         s.map.traits = [trait];
+        // (Tidal flats need water to lay their bars across.)
+        if (trait === 'tidal') s.map.water = 0.7;
         const f = generateBattlefield(new Rng(seed * 101), battlefieldConfig(s));
         const reach = landReach(f);
         for (const b of f.baseSites) expect(reach[vertexAt(f, b.x, b.z)]).toBe(1);
@@ -450,6 +505,35 @@ describe('maps', () => {
     const grove = defaultSettings();
     grove.map.traits = ['grove'];
     expect(generateBattlefield(new Rng(202), battlefieldConfig(grove)).woods.trees.filter((t) => t.size >= GIANT).length).toBeGreaterThan(10);
+  });
+
+  it('traits take the middle, ahead of towns and outposts: a lane runs through each, and they keep some of the land’s scenery', () => {
+    let off = 0;
+    let n = 0;
+    for (const trait of ['oldField', 'hulk', 'oil', 'geysers', 'ruins', 'grove'] as const) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const s = defaultSettings();
+        s.map.traits = [trait];
+        const game = new Game(seed * 7, { settings: s });
+        const f = game.field;
+        const site = f.traits.sites.find((t) => t.kind === trait)!;
+        expect(site, `${trait} ${seed}`).toBeDefined();
+        // Towns and outposts keep round it.
+        for (const t of f.townSites) expect(Math.hypot(t.x - site.x, t.z - site.z)).toBeGreaterThan(site.radius);
+        for (const o of f.outpostSites) expect(Math.hypot(o.x - site.x, o.z - site.z)).toBeGreaterThan(site.radius * 0.5 + o.radius);
+        // On the way between the bases, with a lane through it.
+        const [a, b] = f.baseSites;
+        off += Math.abs((site.x - a.x) * -(b.z - a.z) + (site.z - a.z) * (b.x - a.x)) / Math.hypot(b.x - a.x, b.z - a.z);
+        n++;
+        expect(game.ctx.lanes.routes(0, 1).some((r) => r.via?.kind === 'trait'), `${trait} ${seed}`).toBe(true);
+        // The land's own scenery: none on an oil field or in ruins, some (about half as much) elsewhere.
+        const own = new Set(f.traits.props.map((p) => `${p.x},${p.z}`));
+        const land = game.props.filter((p) => !own.has(`${p.x},${p.z}`) && Math.hypot(p.x - site.x, p.z - site.z) < site.radius).length;
+        if (trait === 'oil' || trait === 'ruins') expect(land, `${trait} ${seed}`).toBe(0);
+        else if (trait === 'oldField' || trait === 'geysers') expect(land, `${trait} ${seed}`).toBeGreaterThan(0);
+      }
+    }
+    expect(off / n).toBeLessThan(12);
   });
 
   it('a map with no traits is the map as it always was, and traits round-trip through the link', () => {
@@ -476,6 +560,8 @@ describe('maps', () => {
     const x = game.field.bounds.minX + ((pool % cols) + 0.5) * game.field.config.cellSize;
     const z = game.field.bounds.minZ + (Math.floor(pool / cols) + 0.5) * game.field.config.cellSize;
     const soldier = spawnUnit(game.world, game.ctx, UNIT_DEFS.trooper, 0, x, z);
+    // Standing in it (not off down a lane, which may now run through the oil field).
+    game.world.remove(soldier, Ai);
     const hp = game.world.req(soldier, Health).hp;
     game.ctx.traits.strike(x, z, 1);
     let most = 0;
