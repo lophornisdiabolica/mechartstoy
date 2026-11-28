@@ -761,9 +761,19 @@ function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number
     // A sheet of corrugated iron, laid on a slant from front to back, high enough that its low
     // edge clears the top of the wall (a big block's sheet drops further over its depth).
     const run = w + 0.3;
-    const sheet = box(run, 0.08, sides(0.3), color, 0, h + (w / 2) * Math.tan(SHEET_TILT) + 0.06, 0);
+    const lift = h + (w / 2) * Math.tan(SHEET_TILT) + 0.06;
+    const sheet = box(run, SHEET_THICK, sides(0.3), color, 0, lift, 0);
     sheet.rotation.z = SHEET_TILT;
     g.add(sheet);
+    // Propped up on the high side (+x) by a post at each corner, from the wall top to just under
+    // the sheet: the underside's height over the post's lower edge, so the post never pokes through.
+    const x = w / 2 - SHEET_POST / 2;
+    const under = lift + (x - SHEET_POST / 2 - (SHEET_THICK / 2) * Math.sin(SHEET_TILT)) * Math.tan(SHEET_TILT) - (SHEET_THICK / 2) * Math.cos(SHEET_TILT) - 0.01;
+    const tall = under - h;
+    if (tall > 0.05) {
+      const edge = d / 2 - SHEET_POST / 2;
+      for (const z of [edge, -edge]) g.add(box(SHEET_POST, tall, SHEET_POST, TOWN_COLORS.shanty.trim, x, h + tall / 2, z));
+    }
     return;
   }
   if (style === 'dome') {
@@ -785,8 +795,10 @@ function roofOn(g: THREE.Group, w: number, d: number, h: number, faction: number
   g.add(gableRoof(w + eaves, sides(eaves + 0.05), pitch, color, h));
 }
 
-/** How steeply a shanty's iron sheet roof slants, radians. */
+/** How steeply a shanty's iron sheet roof slants, radians, how thick the sheet is, and how thick the posts propping its high side are. */
 const SHEET_TILT = 0.2;
+const SHEET_THICK = 0.08;
+const SHEET_POST = 0.08;
 
 registerModel('bld:house', (faction) => {
   const g = new THREE.Group();
