@@ -4,6 +4,7 @@ import { Game } from '../src/game/game';
 import { defaultSettings } from '../src/game/settings';
 import { spawnUnit } from '../src/game/spawn';
 import { UNIT_DEFS } from '../src/game/units';
+import { deckLine, RAMP_FLARE } from '../src/world/battlefield';
 import { placeBridge } from '../src/world/waterways';
 
 const DT = 1 / 30;
@@ -222,6 +223,65 @@ describe('bridge ramps', () => {
     expect(boardedAt).not.toBeNull();
     expect(boardedAt!).toBeLessThan(field.bridges[1].ax + ea + 1);
   }, 60000);
+});
+
+describe('bridge decks', () => {
+  /** A flat, empty map with a channel right across it between a bank `low` above the water (x < 0) and one `high` above it (x > 0). */
+  function banks(low: number, high: number): Game {
+    const s = defaultSettings();
+    s.map.hills = 0;
+    s.map.water = 0;
+    s.map.towns = 0;
+    s.map.outposts = 0;
+    s.map.forest = 0;
+    s.armies.taskForces = 0;
+    const game = new Game(4, { settings: s, populate: false, autoSpawn: false });
+    const f = game.field;
+    const { cols, rows } = f.config;
+    for (let j = 0; j <= rows; j++) {
+      for (let i = 0; i <= cols; i++) {
+        const x = f.vertexX(i);
+        f.heights[j * (cols + 1) + i] = f.seaLevel + (Math.abs(x) < 3.5 ? -1.5 : x < 0 ? low : high);
+      }
+    }
+    f.changed({ i0: 0, j0: 0, i1: cols - 1, j1: rows - 1 });
+    expect(placeBridge(f, { x: -6, z: 0 }, { x: 6, z: 0 }, true)).toBe(true);
+    return game;
+  }
+
+  it('slope from a low bank up to a high one, meeting each, rather than cutting into the high one', () => {
+    const game = banks(1.3, 2.8);
+    const f = game.field;
+    const b = f.bridges[0];
+    expect(b.rise).toBeGreaterThan(1);
+    expect(f.deckAlong(b, 0.25)).toBeLessThan(f.deckAlong(b, 0.75) - 0.5);
+    // Each end level with its own bank, which keeps its height.
+    expect(f.deckAlong(b, 0)).toBeCloseTo(f.heightAt(b.ax, b.az), 1);
+    expect(f.deckAlong(b, 1)).toBeCloseTo(f.heightAt(b.bx, b.bz), 1);
+    expect(f.heightAt(b.bx + 3, 0) - f.seaLevel).toBeCloseTo(2.8, 1);
+    // Still clear of the water all the way over.
+    for (let t = 0; t <= 1; t += 0.1) expect(deckLine(b, t)).toBeGreaterThan(f.seaLevel + 1.2);
+  });
+
+  it('run level between banks of a height, and keep a steep crossing to a gentle slope by cutting the high bank down', () => {
+    const level = banks(1.6, 1.65).field.bridges[0];
+    expect(level.rise ?? 0).toBe(0);
+    const game = banks(1.3, 3.8);
+    const f = game.field;
+    const b = f.bridges[0];
+    const length = Math.hypot(b.bx - b.ax, b.bz - b.az);
+    expect(Math.abs(b.rise!) / length).toBeLessThanOrEqual(0.15 + 1e-9);
+    expect(f.heightAt(b.bx, b.bz) - f.seaLevel).toBeLessThan(3.8 - 0.3);
+  });
+
+  it("have ramps' wings only as wide as it takes to meet the ground beside them", () => {
+    // Banks level with the deck: the ramps hardly climb, so their wings are small.
+    const flat = banks(1.3, 1.3).field;
+    for (const w of flat.rampFlares(flat.bridges[0])) expect(w).toBeLessThan(RAMP_FLARE * 0.6);
+    // Low banks under a deck at its usual clearance: they climb, so they're wide.
+    const low = banks(0.3, 0.3).field;
+    for (const w of low.rampFlares(low.bridges[0])) expect(w).toBeGreaterThan(RAMP_FLARE * 0.6);
+  });
 });
 
 describe('bridge traffic', () => {

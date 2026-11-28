@@ -216,6 +216,12 @@ export interface Bridge {
   width: number;
   /** Deck height in the middle; the ends ramp down to meet the banks, no steeper than DECK_GRADE. */
   level: number;
+  /**
+   * How much higher the deck stands at its b end than at its a end (see
+   * deckLine): a crossing between a low bank and a high one slopes, rather
+   * than running level and cutting into the high bank. Level if left out.
+   */
+  rise?: number;
   /** Thrown across by a side's engineers (see commander/engineers.ts): it can come down. The side that built it. */
   builtBy?: number;
   /** Frozen water rather than timber (Rime's engineers): it melts away sooner, and fire melts it fast. */
@@ -228,6 +234,16 @@ export interface Bridge {
 
 /** Room under a bridge deck, above the water. */
 export const BRIDGE_CLEARANCE = 1.3;
+
+/** The line a bridge's deck runs along, `t` along it (0 at a, 1 at b), before its ends ramp down to the ground: level, or sloping by its rise. */
+export function deckLine(b: Bridge, t: number): number {
+  return b.level + (b.rise ?? 0) * (t - 0.5);
+}
+
+/** The highest a bridge's deck line gets (at its higher end, for a sloped one). */
+export function deckTop(b: Bridge): number {
+  return b.level + Math.abs(b.rise ?? 0) / 2;
+}
 /** Steepest a bridge's ramps get (rise over run). */
 export const DECK_GRADE = 0.35;
 /**
@@ -239,16 +255,21 @@ export const RAIL_REACH = 1.6;
 export const RAIL_DROP = 0.3;
 /**
  * A bridge's ramps are open (no railing) from each end until the deck stands
- * WING_DROP above the ground under it, reaches its level or meets the water,
+ * WING_DROP above the ground under it, reaches its line or meets the water,
  * but at least RAMP_MIN along, so even a bridge that's level with its banks
  * gets a ramp to meet ground that slopes across it. Along an open ramp,
- * wings slope from the deck's edges down to the ground, RAMP_FLARE out to
- * each side at its foot and narrowing to nothing where the railing starts:
- * a funnel that steers vehicles onto the middle (see wingAt).
+ * wings slope from the deck's edges down to the ground, out to each side at
+ * its foot and narrowing to nothing where the railing starts: a funnel that
+ * steers vehicles onto the middle (see wingAt). They reach only as far out
+ * as it takes to meet the ground beside them no steeper than WING_GRADE
+ * (between WING_MIN and RAMP_FLARE), so a deck that sits on its banks gets
+ * small wings and a tall ramp wide ones (see rampFlares).
  */
 export const WING_DROP = 0.8;
-export const RAMP_MIN = 3;
+export const RAMP_MIN = 1;
 export const RAMP_FLARE = 1.6;
+export const WING_MIN = 0.4;
+export const WING_GRADE = 0.5;
 
 /**
  * A paved road: a strip of road ground along a line of points (see
@@ -328,7 +349,7 @@ export class Battlefield {
   /** Per cell: the index of the bridge whose ramp wings might be over it (see wingAt), or -1. */
   private readonly wingCell: Int16Array;
   /** Each bridge's open ramp lengths, as of a map version (see openRamps). */
-  private readonly rampCache = new WeakMap<Bridge, { version: number; ends: [number, number] }>();
+  private readonly rampCache = new WeakMap<Bridge, { version: number; ends: [number, number]; flares: [number, number] }>();
   private readonly listeners: MapChangeListener[] = [];
   /** Bumps on every change, for anything that caches what the map looked like. */
   version = 0;
@@ -613,10 +634,10 @@ export class Battlefield {
     if (t < 0 || t > 1) return null;
     const off = Math.abs((x - b.ax) * dz - (z - b.az) * dx) / length;
     if (off > b.width / 2) return null;
-    // Level in the middle, ramping down to meet the ground at each end (wherever it is now).
+    // Along its line (level, or sloping), ramping down to meet the ground at each end (wherever it is now).
     const ha = this.heightAt(b.ax, b.az);
     const hb = this.heightAt(b.bx, b.bz);
-    return Math.min(b.level, ha + DECK_GRADE * t * length, hb + DECK_GRADE * (1 - t) * length);
+    return Math.min(deckLine(b, t), ha + DECK_GRADE * t * length, hb + DECK_GRADE * (1 - t) * length);
   }
 
   /**
@@ -675,29 +696,72 @@ export class Battlefield {
    * (see WING_DROP): no railing there, and wings to the sides.
    */
   openRamps(b: Bridge): [number, number] {
+    return this.ramps(b).ends;
+  }
+
+  /**
+   * How far out to each side the wings of a bridge's ramps reach at their
+   * feet, at its a end and its b end (see WING_GRADE): as far as it takes to
+   * meet the ground beside the ramp, which is little where the deck sits on
+   * its bank.
+   */
+  rampFlares(b: Bridge): [number, number] {
+    return this.ramps(b).flares;
+  }
+
+  private ramps(b: Bridge): { ends: [number, number]; flares: [number, number] } {
     const hit = this.rampCache.get(b);
-    if (hit && hit.version === this.version) return hit.ends;
-    const length = D.hypot(b.bx - b.ax, b.bz - b.az);
+    if (hit && hit.version === this.version) return hit;
+    const dx = b.bx - b.ax;
+    const dz = b.bz - b.az;
+    const length = D.hypot(dx, dz);
     const open = (end: 0 | 1) => {
       for (let s = 0; s < length / 2; s += 0.5) {
         const t = end === 0 ? s / length : 1 - s / length;
-        const x = b.ax + (b.bx - b.ax) * t;
-        const z = b.az + (b.bz - b.az) * t;
+        const x = b.ax + dx * t;
+        const z = b.az + dz * t;
         if (this.isWater(x, z)) return s;
         if (s < RAMP_MIN) continue;
-        const deck = this.deckOf(b, x, z) ?? b.level;
-        if (deck >= b.level - 0.05 || deck - this.heightAt(x, z) >= WING_DROP) return s;
+        const line = deckLine(b, t);
+        const deck = this.deckOf(b, x, z) ?? line;
+        if (deck >= line - 0.05 || deck - this.heightAt(x, z) >= WING_DROP) return s;
       }
       return length / 2;
     };
     const ends: [number, number] = [open(0), open(1)];
-    this.rampCache.set(b, { version: this.version, ends });
-    return ends;
+    // Along the foot half of each open ramp, how wide a wing has to be to meet the ground beside it no steeper than WING_GRADE.
+    const flare = (end: 0 | 1) => {
+      const opened = ends[end];
+      if (opened <= 0) return 0;
+      let foot = WING_MIN;
+      for (let s = 0; s <= opened / 2; s += 0.5) {
+        const t = end === 0 ? s / length : 1 - s / length;
+        const x = b.ax + dx * t;
+        const z = b.az + dz * t;
+        const deck = this.deckOf(b, x, z);
+        if (deck === null) continue;
+        // The wing narrows towards the railing, so further up it takes that much more at the foot.
+        const left = 1 - s / opened;
+        for (const side of [-1, 1]) {
+          let w = WING_MIN;
+          for (; w < RAMP_FLARE; w += 0.2) {
+            const reach = (b.width / 2 + w) / length;
+            const ground = Math.max(this.heightAt(x + dz * reach * side, z - dx * reach * side), this.seaLevel);
+            if (Math.abs(deck - ground) <= WING_GRADE * w) break;
+          }
+          foot = Math.max(foot, w / left);
+        }
+      }
+      return Math.min(RAMP_FLARE, foot);
+    };
+    const entry = { version: this.version, ends, flares: [flare(0), flare(1)] as [number, number] };
+    this.rampCache.set(b, entry);
+    return entry;
   }
 
   /** A bridge's deck height on its centreline, `t` along it (0 at a, 1 at b). */
   deckAlong(b: Bridge, t: number): number {
-    return this.deckOf(b, b.ax + (b.bx - b.ax) * t, b.az + (b.bz - b.az) * t) ?? b.level;
+    return this.deckOf(b, b.ax + (b.bx - b.ax) * t, b.az + (b.bz - b.az) * t) ?? deckLine(b, t);
   }
 
   /** How far a point is out beside a bridge deck's edge (negative on the deck; Infinity off either end). */
@@ -732,10 +796,11 @@ export class Battlefield {
     const out = Math.abs(signed) - b.width / 2;
     if (out <= 0) return null;
     const [ea, eb] = this.openRamps(b);
+    const [fa, fb] = this.rampFlares(b);
     // Along whichever ramp the point is beside, from that ramp's foot.
-    const [s, open] = t * length < ea ? [t * length, ea] : (1 - t) * length < eb ? [(1 - t) * length, eb] : [0, 0];
+    const [s, open, foot] = t * length < ea ? [t * length, ea, fa] : (1 - t) * length < eb ? [(1 - t) * length, eb, fb] : [0, 0, 0];
     if (open <= 0) return null;
-    const flare = RAMP_FLARE * (1 - s / open);
+    const flare = foot * (1 - s / open);
     if (out >= flare) return null;
     const cx = b.ax + dx * t;
     const cz = b.az + dz * t;
